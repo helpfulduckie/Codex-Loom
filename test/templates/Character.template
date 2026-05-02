@@ -1,0 +1,14 @@
+## {$name}
+~~~
+triggers: [{$triggers}]
+encapsulate: {$encapsulate}
+notes: {if $known}[e]{/if}
+~~~
+{$name} - {$fields.Tagline}
+Physical Traits: {join("; ", $fields.Physical Traits.gender, $fields.Physical Traits.age, $fields.Physical Traits.hair, $fields.Physical Traits.eyes, $fields.Physical Traits.build, $fields.Physical Traits.other)}
+Personality: {$fields.Personality.keywords}
+{if $fields.Personality.expanded}{$fields.Personality.expanded}
+{/if}{if $fields.Magic}Magic: {join("; ", $fields.Magic.affinity, $fields.Magic.effect)}
+{/if}{if $fields.Background}Background:
+{$fields.Background}
+{/if}{if $known}{else}\]{/if}

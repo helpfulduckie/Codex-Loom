@@ -1,0 +1,15 @@
+{
+  "name": "aid-card-compiler",
+  "version": "2.0.0",
+  "description": "Compiles YAML card definitions into Velvet Lattice story card format for AI Dungeon scenarios.",
+  "main": "compile.js",
+  "bin": {
+    "compile-cards": "./compile.js"
+  },
+  "scripts": {
+    "test": "node compile.js test/compile.yaml"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.1"
+  }
+}

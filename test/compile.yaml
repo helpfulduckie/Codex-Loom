@@ -1,0 +1,12 @@
+canon: ./canon
+output: ./output
+templates: ./templates
+cards: ./cards
+protagonist: Aness
+branches:
+  subject:
+    protagonist: Aness
+  researcher:
+    protagonist: Veyrn
+  felix:
+    protagonist: Aness

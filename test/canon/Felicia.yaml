@@ -1,0 +1,36 @@
+- id: Felicia
+  name: Felicia Grayls
+  type: Character
+  template: Character
+  encapsulate: true
+  known: true
+  pronouns: female
+  triggers: Felicia, Grayls
+  fields:
+    Tagline: Academy researcher; minor nobility
+    Physical Traits:
+      gender: female
+      age: early 40s
+      hair: platinum blond hair in a controlled bun
+      eyes: cold blue eyes
+      build: slender, bird-like features
+    Personality:
+      keywords: sharp, intelligent, cheerful, sadistic
+      expanded: |
+        - Does not view research subjects as people deserving dignity; they are materials
+        - Genuinely enjoys {$her~} work
+    Magic:
+      affinity: moderate water-affinity; minor growth-affinity
+      effect: water whip attacks, minor water shields, small healing spells
+    Background: |
+      one of the top Academy mages; has built {$her~} reputation through research
+      that requires things most researchers won't do to their subjects
+  variants:
+    Felix:
+      name: Felix Grayls
+      pronouns: male
+      triggers: Felix, Grayls
+      fields:
+        Physical Traits:
+          gender: male
+          hair: -{in a controlled bun}

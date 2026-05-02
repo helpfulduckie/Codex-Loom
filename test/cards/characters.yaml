@@ -1,0 +1,43 @@
+# Local card — Kaiden defined only in this project
+- id: Kaiden
+  name: Kaiden Ventus
+  type: Character
+  template: Character
+  encapsulate: true
+  known: true
+  triggers: Kaiden, Ventus
+  fields:
+    Tagline: knight; master swordsman
+    Physical Traits:
+      gender: male
+      age: mid 20s
+      hair: short brown hair
+      eyes: silver eyes
+      build: tall broad build
+    Personality:
+      keywords: honorable, disciplined, protective, warm
+      expanded: |
+        - Instinctively takes on a guardian role
+        - Affection expressed through presence, acts of service, and protection rather than words
+        - Beneath his composure is a tightly controlled temper
+    Magic:
+      affinity: no affinity
+      effect: magicless
+    Background: |
+      - master swordsman; rich merchant's younger son who made his name with the blade
+      - Excessively loyal to the Crown; volunteered for the Fused-Squad project
+
+# Import Aness from canon with networked variant, branch variant for subject path
+- import: Aness/networked
+  variants:
+    subject:
+      fields:
+        Tagline: +{; Fused-Squad Subject}
+
+# Import Felicia from canon.
+# felix branch applies Felix variant via import-variant.
+# Top-level import-variant tested here: same as felix branch but applied globally.
+- import: Felicia
+  variants:
+    felix:
+      import-variant: [Felix]

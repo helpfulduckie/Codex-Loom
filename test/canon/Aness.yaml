@@ -1,0 +1,32 @@
+- id: Aness
+  name: Aness Rozen
+  type: Character
+  template: Character
+  encapsulate: true
+  known: true
+  pronouns: female
+  protagonist: Aness
+  triggers: Aness, Rozen
+  fields:
+    Tagline: Journeyman Healer; Magic Researcher
+    Physical Traits:
+      gender: female
+      age: mid 20s
+      hair: black hair, braided, waist-length
+      eyes: brown eyes
+      build: tall, willowy build
+    Personality:
+      keywords: inquisitive, polite, sarcastic, compassionate
+      expanded: |
+        - $Aness love[s] magic research — $she instinctively leap[s] to explore theoretical implications
+        - $Her~ polite nature is a social shield; behind it is a biting sarcasm $she deploy[s] when frustrated
+    Magic:
+      affinity: high ice-affinity; moderate growth-affinity
+      effect: |
+        - {$Her~} growth-affinity powers strong healing magic; $she is a trained Healer first
+        - $She knows basic ice combat magic but is a poor combat mage who flinches under pressure
+  variants:
+    networked:
+      fields:
+        Physical Traits:
+          other: a blue interface crystal implanted at the base of {$her~} skull
