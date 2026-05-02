@@ -29,7 +29,7 @@ function getTemplate(card, templates) {
  * One .md file per card type per branch leaf.
  */
 function writeOutput(outputDir, type, renderedCards) {
-  const typeDir = path.join(outputDir, type);
+  const typeDir = path.join(outputDir, 'Story Cards', type);
   fs.mkdirSync(typeDir, { recursive: true });
   const outputPath = path.join(typeDir, `${type}.md`);
   fs.writeFileSync(outputPath, renderedCards.join('\n\n') + '\n', 'utf8');
@@ -143,8 +143,9 @@ function compile(configPath) {
     ).toLowerCase() || null;
 
     // Output dir for this branch
+    // Velvet Lattice format: Branches/A/Branches/X/Story Cards/Type
     const branchOutputDir = branchPath.length > 0
-      ? path.join(config._resolvedOutput, ...branchPath)
+      ? path.join(config._resolvedOutput, ...branchPath.flatMap(b => ['Branches', b]))
       : config._resolvedOutput;
 
     const written = compileBranch(
