@@ -278,7 +278,7 @@ function compile(configPath) {
 // CLI entry point
 const args = process.argv.slice(2);
 if (args.length === 0) {
-  console.error('Usage: compile-cards <path/to/compile.yaml or path/to/project/>');
+  console.error('Usage: codex-loom <path/to/compile.yaml or path/to/project/>');
   process.exit(1);
 }
 
