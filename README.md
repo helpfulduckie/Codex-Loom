@@ -10,6 +10,7 @@ npm install -g .
 Run from anywhere:
 ```
 compile-cards path/to/compile.yaml
+compile-cards path/to/project/        ← directory form, looks for compile.yaml inside
 ```
 
 ---
@@ -29,12 +30,18 @@ compile-cards path/to/compile.yaml
     Location.template
   compile.yaml
   /output             ← compiler writes here (one folder per branch leaf)
-    /subject
+    /Story Cards
       /Character
         Character.md
-    /researcher
-      /Character
-        Character.md
+    /Branches
+      /subject
+        /Story Cards
+          /Character
+            Character.md
+      /researcher
+        /Story Cards
+          /Character
+            Character.md
 ```
 
 Cards and templates are loaded recursively from their folders. Any `.yaml` file under `cards/` or `canon/` is loaded. Any `.template` file under `templates/` is loaded. Duplicate template filenames across subfolders are an error.
@@ -56,7 +63,7 @@ branches:                 # optional branch tree
   researcher:
     protagonist: Veyrn
   A:
-    branches:             # nested branches
+    branches:             # nested branches require the 'branches:' key
       X: {}
       Y: {}
   B:
@@ -65,7 +72,11 @@ branches:                 # optional branch tree
       Q: {}
 ```
 
-The compiler enumerates all leaf nodes (nodes with no `branches:` key) and produces one output folder per leaf. A project with no `branches:` produces a single root-level output.
+The compiler enumerates all leaf nodes (nodes with no `branches:` key) and produces one output folder per leaf. A project with no `branches:` produces a single root-level output. Each leaf's output follows Velvet Lattice folder structure:
+
+```
+Branches/A/Branches/X/Story Cards/Character/Character.md
+```
 
 ---
 
@@ -132,12 +143,12 @@ Used in `variants`, `import-variant` deltas, and scenario-level `fields:` overri
 | Operation | Syntax | Notes |
 |---|---|---|
 | **Replace** | `field: new value` | Replaces the field entirely. |
-| **Remove field** | `field:` (empty/null) | Removes the field or subfield entirely. |
+| **Remove field** | `field:` (empty/null) | Removes the field or subfield entirely. `field: ~` is equivalent. |
 | **Append** | `field: "+{value to add}"` | Appends to scalar with `; ` separator, or to block scalar with newline. If value starts with a separator character, no extra separator is added. |
 | **Remove substring** | `field: "-{text to remove}"` | Removes all occurrences of the substring. |
 | **Swap substring** | `field: "/{old}/{new}"` | Replaces all occurrences of `old` with `new`. |
 | **Subfield replace** | nested key with new value | Replaces that subfield only. |
-| **Subfield remove** | nested key with `"-"` | Removes that subfield only. |
+| **Subfield remove** | nested key with empty/null value | Removes that subfield only. |
 
 ### Examples
 
@@ -145,9 +156,10 @@ Used in `variants`, `import-variant` deltas, and scenario-level `fields:` overri
 # Replace
 tagline: count of monwynd, shadow mage
 
-# Remove field (empty/null value)
+# Remove field (empty value)
 alternate form:
-# or equivalently
+
+# Remove field (explicit null — both forms work)
 alternate form: ~
 
 # Append to single-line field
@@ -171,7 +183,30 @@ background: /{her}/{his}
 # Subfield operations
 physical traits:
   gender: male          # replace subfield
-  other:               # remove subfield (empty/null value)
+  other:                # remove subfield (empty value)
+```
+
+---
+
+## Including Canon Files
+
+To include all cards from a canonical file without listing them individually:
+
+```yaml
+- include: Characters/Grayls.yaml
+- include: Locations/OssianHall.yaml
+```
+
+Paths are relative to the canon folder declared in `compile.yaml`. All cards in the file are loaded and compiled as-is. If a card from an included file is also explicitly imported elsewhere in the project, the explicit import takes precedence and the included version is silently skipped.
+
+```yaml
+# Felicia from Grayls.yaml will be skipped — the explicit import below wins
+- include: Characters/Grayls.yaml
+
+- import: Felicia
+  variants:
+    felix:
+      import-variant: [Felix]
 ```
 
 ---
@@ -182,7 +217,7 @@ Import a card from the canonical registry and optionally apply variants and over
 
 ```yaml
 - import: Zephon/human/noble      # ID, then slash-separated variant path
-  import-variant: [sci-fi/near-future, Felix/a/b/c]   # additional variant chains, applied in order
+  import-variant: [sci-fi/near-future, Felix/a/b/c]   # additional canon variant chains, applied in order
   fields:                         # scenario-level field overrides
     tagline: /{shadow mage}/{arcane scholar}
   variants:                       # branch-structured variants (same format as local cards)
@@ -201,7 +236,7 @@ Import a card from the canonical registry and optionally apply variants and over
 
 1. Canonical base card
 2. Primary import path variants (`Zephon` → `human` → `noble`)
-3. Additional `import-variant:` list entries in order (`sci-fi` → `near-future`, then `Felix` → `a` → `b` → `c`)
+3. Top-level `import-variant:` list entries in order (`sci-fi` → `near-future`, then `Felix` → `a` → `b` → `c`)
 4. Scenario-level `fields:` overrides
 5. Branch variant `import-variant:` chains (always sourced from the canonical card's variant tree)
 6. Branch variant `fields:`
@@ -211,17 +246,24 @@ Import a card from the canonical registry and optionally apply variants and over
 
 ### import-variant
 
-Branch variants can pull variant chains from the canonical card before applying their own local changes:
+Pulls named variant chains from the canonical card's variant tree and applies them to the card in progress. Available at both the top level of an import and inside branch variants.
 
 ```yaml
-variants:
-  A:
-    import-variant: [human/noble, sci-fi/near-future]   # list of variant paths from canon
-    fields:
-      background: a student of astronomy
+# Top level — applied after primary import path, before scenario fields
+- import: Zephon
+  import-variant: [human/noble, sci-fi/near-future]
+  fields:
+    tagline: arcane scholar
+
+# Branch level — applied before that branch's local fields
+  variants:
+    A:
+      import-variant: [human/noble]
+      fields:
+        background: a student of astronomy
 ```
 
-`import-variant` always sources from the original canonical card's variant tree, not the partially resolved card.
+`import-variant` always sources from the original canonical card's variant tree, not the partially resolved card. `variants:` at any level means branch-structured child variants, never a list of variant chains.
 
 ---
 
@@ -241,7 +283,7 @@ variants:
         hair: -{in a controlled bun}
   sci-fi:
     fields:
-      magic: ~
+      magic:             # remove field — empty value
       background: works for Helix Industries in bio-engineering
     variants:
       near-future:
@@ -250,8 +292,6 @@ variants:
 ```
 
 Variants can modify any card field including top-level fields (`name`, `pronouns`, `triggers`, `encapsulate`, `known`).
-
-Multiple sibling variants can be applied in sequence using the variant list syntax. `[Felix, sci-fi]` and `[sci-fi, Felix]` apply the same deltas in different orders and may produce different results.
 
 ---
 
@@ -485,6 +525,54 @@ A card's bare `$` markers are you-mode when the branch protagonist matches the c
 | `Duplicate template name "x"` | Two `.template` files in different subfolders share the same filename. |
 | `Import failed: no card with id "x"` | `import:` references an id not found in the registry. |
 | `No template found for card "x"` | Neither `template:` nor `type:` on the card matches any loaded template file. |
+| `WARN: include path not found` | An `include:` path does not exist relative to the canon folder. |
 | `WARN: variant "x" not found` | A variant path references a variant name that doesn't exist in the variant tree. |
 | `WARN: bare $word found on card "x" which has no protagonist field` | Bare `$` pronoun marker used on a card with no `protagonist:` declared. |
 | `WARN: unrecognized bare $word` | `$word` doesn't match any known protagonist ID or pronoun keyword. Likely a stray `$` in field text. |
+
+---
+
+## Branch Filtering
+
+By default, every card compiles for every branch leaf. Use `only` or `except` to restrict which branches a card or include appears on. Only one may be set on a given entry — not both.
+
+### only
+
+Compile this card only for leaves whose path starts with one of the listed prefixes:
+
+```yaml
+- import: Zephon
+  only: [A/X, B]
+```
+
+- `A/X` → included
+- `A/X/deeper/leaf` → included (downstream of A/X)
+- `A/Y` → excluded (sibling of X, not downstream)
+- `B` → included
+- `B/Z` → included (downstream of B)
+- `C` → excluded
+
+### except
+
+Compile this card for all leaves except those whose path starts with one of the listed prefixes:
+
+```yaml
+- id: Kaiden
+  except: [felix]
+  ...
+```
+
+### On include directives
+
+`only` and `except` work the same way on `include:` — all cards loaded from the file inherit the filter:
+
+```yaml
+- include: Characters/Zephon.yaml
+  only: [A/X, B]
+```
+
+### Prefix matching rules
+
+- Matching is case-insensitive
+- A prefix matches a leaf if the leaf path equals the prefix exactly, or starts with the prefix followed by `/`
+- Prefixes do not need to be full leaf paths — `B` matches `B`, `B/Z`, `B/Z/deep`, etc.

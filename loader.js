@@ -98,7 +98,7 @@ function loadCompileConfig(configPath) {
  */
 function buildRegistry(cards, context) {
   // Filter out import definitions — they are compile instructions, not registry entries
-  cards = cards.filter(c => !c.import);
+  cards = cards.filter(c => !c.import && !c.include);
   const registry = new Map();
   for (const card of cards) {
     const id = (card.id || card.name || '').toLowerCase();

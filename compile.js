@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const {
   loadCardsFromDir, loadTemplates, loadCompileConfig,
-  buildRegistry, mergeRegistries,
+  buildRegistry, mergeRegistries, loadYaml,
 } = require('./loader');
 const { resolveCard, enumerateLeaves, getBranchConfig } = require('./resolver');
 const { applyPronounPasses } = require('./pronouns');
@@ -37,6 +37,98 @@ function writeOutput(outputDir, type, renderedCards) {
 }
 
 /**
+ * Resolve include directives from project card definitions.
+ * Returns additional card definitions loaded from canon files.
+ *
+ * For each `- include: path/to/file.yaml` entry:
+ *   - Loads all cards from that file (relative to canonDir)
+ *   - Skips any whose ID matches an explicitly imported/defined card
+ *
+ * Explicit imports/definitions always win — included cards are supplemental.
+ */
+function resolveIncludes(cardDefs, canonDir) {
+  // Collect IDs of all explicitly imported or locally defined cards
+  const explicitIds = new Set();
+  const includeDefs = [];
+
+  for (const def of cardDefs) {
+    if (def.include) {
+      includeDefs.push(def);
+    } else if (def.import) {
+      // Extract base ID from import path (e.g. "Zephon/human/noble" → "zephon")
+      const baseId = def.import.split('/')[0].toLowerCase();
+      explicitIds.add(baseId);
+    } else if (def.id || def.name) {
+      const id = (def.id || def.name).toLowerCase();
+      explicitIds.add(id);
+    }
+  }
+
+  if (includeDefs.length === 0) return [];
+
+  const included = [];
+  for (const def of includeDefs) {
+    const includePath = def.include;
+    const fullPath = path.resolve(canonDir, includePath);
+    if (!fs.existsSync(fullPath)) {
+      console.warn(`  WARN: include path not found: ${fullPath}`);
+      continue;
+    }
+
+    const raw = loadYaml(fullPath);
+    const cards = Array.isArray(raw) ? raw : [raw];
+
+    for (const card of cards) {
+      const id = ((card.id || card.name) || '').toLowerCase();
+      if (explicitIds.has(id)) {
+        // Explicit import takes precedence — skip included version
+        continue;
+      }
+      // Stamp only/except from the include directive onto the card
+      const stamped = { ...card, _source: fullPath };
+      if (def.only !== undefined && def.only !== null) stamped.only = def.only;
+      if (def.except !== undefined && def.except !== null) stamped.except = def.except;
+      included.push(stamped);
+    }
+  }
+
+  return included;
+}
+
+/**
+ * Check whether a card definition should be compiled for a given branch leaf path.
+ * 
+ * If 'only' is set: include if the leaf path starts with any listed prefix.
+ * If 'except' is set: exclude if the leaf path starts with any listed prefix.
+ * If neither is set: always include.
+ * Prefix matching is case-insensitive.
+ */
+function cardAppliesTo(cardDef, branchPath) {
+  const only = cardDef.only;
+  const except = cardDef.except;
+
+  // Normalise branchPath to a slash-joined lowercase string for prefix matching
+  const leafStr = branchPath.map(p => p.toLowerCase()).join('/');
+
+  function matchesAnyPrefix(prefixList) {
+    const prefixes = Array.isArray(prefixList) ? prefixList : [prefixList];
+    return prefixes.some(prefix => {
+      const p = prefix.toLowerCase();
+      // Leaf starts with prefix, and either exact match or next char is '/'
+      return leafStr === p || leafStr.startsWith(p + '/');
+    });
+  }
+
+  if (only !== undefined && only !== null) {
+    return matchesAnyPrefix(only);
+  }
+  if (except !== undefined && except !== null) {
+    return !matchesAnyPrefix(except);
+  }
+  return true;
+}
+
+/**
  * Compile all cards for a single branch leaf.
  */
 function compileBranch(cardDefs, registry, templates, outputDir, branchPath, branchConfig) {
@@ -47,6 +139,12 @@ function compileBranch(cardDefs, registry, templates, outputDir, branchPath, bra
   const grouped = new Map();
 
   for (const cardDef of cardDefs) {
+    // Skip include directives — already resolved into cardDefs by caller
+    if (cardDef.include) continue;
+
+    // Apply only/except branch filter
+    if (!cardAppliesTo(cardDef, branchPath)) continue;
+
     let card;
     try {
       card = resolveCard(cardDef, registry, branchPath);
@@ -117,9 +215,23 @@ function compile(configPath) {
     }
   }
 
-  // Load project cards
-  const projectCards = loadCardsFromDir(config._resolvedCards);
-  const projectRegistry = buildRegistry(projectCards, 'project');
+  // Load project cards (includes include directives and explicit imports/definitions)
+  const rawProjectCards = loadCardsFromDir(config._resolvedCards);
+
+  // Resolve includes — load additional canon cards not explicitly imported
+  const includedCards = config._resolvedCanon
+    ? resolveIncludes(rawProjectCards, config._resolvedCanon)
+    : [];
+
+  if (includedCards.length > 0) {
+    console.log(`Loaded ${includedCards.length} included canonical card(s).`);
+  }
+
+  // All card definitions to compile: explicit project defs + included canon cards
+  const allCardDefs = [...rawProjectCards, ...includedCards];
+
+  // Build project registry from locally defined cards only (not imports/includes)
+  const projectRegistry = buildRegistry(rawProjectCards, 'project');
   console.log(`Loaded ${projectRegistry.size} project card definition(s).`);
 
   // Merge registries — errors on collision
@@ -149,7 +261,7 @@ function compile(configPath) {
       : config._resolvedOutput;
 
     const written = compileBranch(
-      projectCards,
+      allCardDefs,
       registry,
       templates,
       branchOutputDir,
