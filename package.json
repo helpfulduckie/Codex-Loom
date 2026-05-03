@@ -2,9 +2,9 @@
   "name": "codex-loom",
   "version": "2.0.0",
   "description": "Codex Loom — compiles YAML card definitions into Velvet Lattice story card format for AI Dungeon scenarios.",
-  "main": "compile.js",
+  "main": "./src/compile.js",
   "bin": {
-    "codex-loom": ".src/compile.js"
+    "codex-loom": "./src/compile.js"
   },
   "scripts": {
     "test": "node src/compile.js test/compile.yaml"
