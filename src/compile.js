@@ -10,6 +10,7 @@ const {
 const { resolveCard, enumerateLeaves, getBranchConfig } = require('./resolver');
 const { applyPronounPasses } = require('./pronouns');
 const { render, applyFieldInterpolation } = require('./template');
+const { loadPEConfig, compilePE, writePE } = require('./pe');
 
 /**
  * Get the template for a card. Checks card.template first, then card.type.
@@ -203,6 +204,12 @@ function compile(configPath) {
   const templates = loadTemplates(config._resolvedTemplates);
   console.log(`Loaded ${templates.size} template(s).`);
 
+  // Load plot-essentials.yaml if present
+  const peBlocks = loadPEConfig(config._base);
+  if (peBlocks.length > 0) {
+    console.log(`Loaded ${peBlocks.length} plot essentials block(s).`);
+  }
+
   // Load canon registry
   let canonRegistry = new Map();
   if (config._resolvedCanon) {
@@ -260,6 +267,7 @@ function compile(configPath) {
       ? path.join(config._resolvedOutput, ...branchPath.flatMap(b => ['Branches', b]))
       : config._resolvedOutput;
 
+    // Compile story cards
     const written = compileBranch(
       allCardDefs,
       registry,
@@ -268,8 +276,17 @@ function compile(configPath) {
       branchPath,
       { ...branchConfig, protagonist: branchProtagonist },
     );
-
     totalFiles += written.length;
+
+    // Compile plot essentials
+    if (peBlocks.length > 0) {
+      const peContent = compilePE(peBlocks, registry, templates, branchPath, branchProtagonist);
+      const pePath = writePE(branchOutputDir, peContent);
+      if (pePath) {
+        console.log(`    OK: PlotEssentials → ${pePath}`);
+        totalFiles++;
+      }
+    }
   }
 
   console.log(`\nDone. Wrote ${totalFiles} file(s).`);

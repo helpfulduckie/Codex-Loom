@@ -29,6 +29,7 @@ compile-cards path/to/project/        ← directory form, looks for compile.yaml
     Character.template
     Location.template
   compile.yaml
+  plot-essentials.yaml              ← optional; plot essentials block definitions
   /output             ← compiler writes here (one folder per branch leaf)
     /Story Cards
       /Character
@@ -38,10 +39,14 @@ compile-cards path/to/project/        ← directory form, looks for compile.yaml
         /Story Cards
           /Character
             Character.md
+        /Components
+          PlotEssentials.md
       /researcher
         /Story Cards
           /Character
             Character.md
+        /Components
+          PlotEssentials.md
 ```
 
 Cards and templates are loaded recursively from their folders. Any `.yaml` file under `cards/` or `canon/` is loaded. Any `.template` file under `templates/` is loaded. Duplicate template filenames across subfolders are an error.
@@ -76,6 +81,7 @@ The compiler enumerates all leaf nodes (nodes with no `branches:` key) and produ
 
 ```
 Branches/A/Branches/X/Story Cards/Character/Character.md
+Branches/A/Branches/X/Components/PlotEssentials.md
 ```
 
 ---
@@ -305,6 +311,8 @@ After full card resolution, the compiler applies these passes in order before te
 4. **Bare `$` markers** — `$Aness`, `$she`, `$her~` etc. resolved against protagonist context
 5. **Template rendering**
 
+The same passes apply to PE block content — both freeform `text:` and card-body blocks.
+
 ---
 
 ## Template Syntax
@@ -517,24 +525,126 @@ A card's bare `$` markers are you-mode when the branch protagonist matches the c
 
 ---
 
-## Errors and Warnings
+## Plot Essentials
 
-| Message | Cause |
+`plot-essentials.yaml` sits alongside `compile.yaml` and defines the content of `Components/PlotEssentials.md` for each branch. The file is a YAML sequence; blocks compile in the order they appear.
+
+If `plot-essentials.yaml` is absent, no `Components/` folder is written — existing projects are unaffected.
+
+### Block fields
+
+| Field | Description |
 |---|---|
-| `Duplicate card ID "x"` | Two cards share the same id in the same context (canon, project) or across canon/project boundary. |
-| `Duplicate template name "x"` | Two `.template` files in different subfolders share the same filename. |
-| `Import failed: no card with id "x"` | `import:` references an id not found in the registry. |
-| `No template found for card "x"` | Neither `template:` nor `type:` on the card matches any loaded template file. |
-| `WARN: include path not found` | An `include:` path does not exist relative to the canon folder. |
-| `WARN: variant "x" not found` | A variant path references a variant name that doesn't exist in the variant tree. |
-| `WARN: bare $word found on card "x" which has no protagonist field` | Bare `$` pronoun marker used on a card with no `protagonist:` declared. |
-| `WARN: unrecognized bare $word` | `$word` doesn't match any known protagonist ID or pronoun keyword. Likely a stray `$` in field text. |
+| `wrapper` | Required. `square` → `[ ... ]`, `curly` → `{ ... }`, `none` → raw text. |
+| `text` | Freeform block content. Used when `import:` is absent. Goes through pronoun and conjugation passes. |
+| `import` | Import a card from the registry using the same syntax as card imports, including slash-separated variant paths. When present, the block renders via a template instead of `text:`. |
+| `strip_fence` | Boolean. When `true`, everything up to and including the last `~~~` line is stripped from the rendered output, leaving only the card body. Defaults to `false`. |
+| `template` | Template override for card-body blocks. Falls back to the card's own `template` field, then `type`, same as Story Card compilation. |
+| `pronouns` | For freeform blocks only: declares the pronoun set for token resolution within `text:`. Not needed for card-body blocks — the card carries its own `pronouns:`. |
+| `protagonist` | For freeform blocks only: declares the protagonist for bare `$` marker resolution. Not needed for card-body blocks. |
+| `only` | Compile this block only for branches whose path starts with one of the listed prefixes. Same semantics as `only` on card definitions. |
+| `except` | Compile this block for all branches except those whose path starts with one of the listed prefixes. |
+
+`only` and `except` are mutually exclusive — set one or neither, not both.
+
+### Freeform blocks
+
+Used for genre, setting, mechanics, format instructions, and any other prose that isn't drawn from a card definition. The `text:` field supports the full pronoun and conjugation syntax: `$Aness`, `[s]`, `{$she}`, etc. Declare `pronouns:` and `protagonist:` on the block if you use those tokens.
+
+```yaml
+- wrapper: square
+  text: |
+    Genre: Psychological Thriller | Dark Character Study
+    Psychological Thriller — The horror is not what you do to them. It is how little it costs you.
+
+- wrapper: square
+  only: [subject]
+  protagonist: Aness
+  pronouns: female
+  text: |
+    You are $Aness, a journeyman healer assigned to the Zenus subproject against {$her~} will.
+```
+
+### Card-body blocks
+
+Used for character blocks in PE. The card is resolved through the full import pipeline — canonical base, variant paths, `import-variant` chains, branch variants — then rendered via a template. Set `strip_fence: true` to drop the `## Name` / `~~~...~~~` header and keep only the card body.
+
+The you-block (the player character entry) is a card-body block whose imported card matches the branch protagonist. You-mode pronoun resolution activates automatically — no special configuration needed.
+
+```yaml
+# Full character block — strip the Story Card header, wrap in curly braces
+- wrapper: curly
+  strip_fence: true
+  import: Aness/networked
+  only: [subject]
+
+# Same card, different variant for a different branch
+- wrapper: curly
+  strip_fence: true
+  import: Aness
+  only: [researcher]
+
+# Quick-reference NPC using a compact template
+- wrapper: curly
+  strip_fence: true
+  import: Kaiden
+  template: pe-character
+  except: [subject]
+```
+
+### Template authoring for PE
+
+PE card-body blocks work with any template. For full character blocks, the existing `Character.template` works as-is — `strip_fence: true` removes everything above the last `~~~` line, leaving the card body.
+
+For compact NPC quick-reference lines, write a dedicated template (e.g. `pe-character.template`) that produces a single dense line:
+
+```
+{$name} ({join("; ", $fields.Physical Traits.hair, $fields.Physical Traits.eyes, $fields.Physical Traits.gender)}) - {$fields.Tagline}
+```
+
+### Example plot-essentials.yaml
+
+```yaml
+# Genre block — applies to all branches
+- wrapper: square
+  text: |
+    Genre: Psychological Thriller | Dark Character Study
+    Psychological Thriller — The horror is not what you do to them. It is how little it costs you.
+    Dark Character Study — You are not cruel. You are consumed.
+
+# Setting — applies to all branches
+- wrapper: square
+  text: |
+    Setting: Steampunk Fantasy Feudal Europe; the Royal Academy
+    - Research subjects are generally called by their Unit Designation rather than their names.
+
+# NPC blocks — apply to all branches
+- wrapper: curly
+  strip_fence: true
+  import: Kaiden
+  template: pe-character
+
+- wrapper: curly
+  strip_fence: true
+  import: Prime
+
+# You-block — one per branch, filtered by only:
+- wrapper: curly
+  strip_fence: true
+  import: Aness
+  only: [subject]
+
+- wrapper: curly
+  strip_fence: true
+  import: Veyrn
+  only: [researcher]
+```
 
 ---
 
 ## Branch Filtering
 
-By default, every card compiles for every branch leaf. Use `only` or `except` to restrict which branches a card or include appears on. Only one may be set on a given entry — not both.
+By default, every card compiles for every branch leaf. Use `only` or `except` to restrict which branches a card or include appears on. Only one may be set on a given entry — not both. The same filtering applies to PE blocks.
 
 ### only
 
@@ -576,3 +686,22 @@ Compile this card for all leaves except those whose path starts with one of the 
 - Matching is case-insensitive
 - A prefix matches a leaf if the leaf path equals the prefix exactly, or starts with the prefix followed by `/`
 - Prefixes do not need to be full leaf paths — `B` matches `B`, `B/Z`, `B/Z/deep`, etc.
+
+---
+
+## Errors and Warnings
+
+| Message | Cause |
+|---|---|
+| `Duplicate card ID "x"` | Two cards share the same id in the same context (canon, project) or across canon/project boundary. |
+| `Duplicate template name "x"` | Two `.template` files in different subfolders share the same filename. |
+| `Import failed: no card with id "x"` | `import:` references an id not found in the registry. |
+| `No template found for card "x"` | Neither `template:` nor `type:` on the card matches any loaded template file. |
+| `WARN: include path not found` | An `include:` path does not exist relative to the canon folder. |
+| `WARN: variant "x" not found` | A variant path references a variant name that doesn't exist in the variant tree. |
+| `WARN: bare $word found on card "x" which has no protagonist field` | Bare `$` pronoun marker used on a card with no `protagonist:` declared. |
+| `WARN: unrecognized bare $word` | `$word` doesn't match any known protagonist ID or pronoun keyword. Likely a stray `$` in field text. |
+| `WARN [PE]: freeform block has no text field` | A PE block has no `import:` and no `text:` — nothing to render. |
+| `ERR [PE]: resolving import "x"` | A PE card-body block's `import:` path failed to resolve. |
+| `ERR [PE]: template "x" not found` | The `template:` override on a PE block doesn't match any loaded template file. |
+| `ERR [PE]: no template found for card "x"` | A PE card-body block has no `template:` override and the card's own `template`/`type` doesn't match any loaded template. |
