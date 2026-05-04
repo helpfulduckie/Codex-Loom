@@ -292,28 +292,31 @@ function compile(configPath) {
   console.log(`\nDone. Wrote ${totalFiles} file(s).`);
 }
 
-// CLI entry point
-const args = process.argv.slice(2);
-if (args.length === 0) {
-  console.error('Usage: codex-loom <path/to/compile.yaml or path/to/project/>');
-  process.exit(1);
-}
+module.exports = { compile, compileBranch, cardAppliesTo, getTemplate, writeOutput, resolveIncludes };
 
-let configPath = args[0];
-
-// If a directory is given, look for compile.yaml inside it
-try {
-  const stat = fs.statSync(configPath);
-  if (stat.isDirectory()) {
-    configPath = path.join(configPath, 'compile.yaml');
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  if (args.length === 0) {
+    console.error('Usage: codex-loom <path/to/compile.yaml or path/to/project/>');
+    process.exit(1);
   }
-} catch (err) {
-  // statSync failed — path doesn't exist, let compile() surface the error
-}
 
-try {
-  compile(configPath);
-} catch (err) {
-  console.error(`\nFatal: ${err.message}`);
-  process.exit(1);
+  let configPath = args[0];
+
+  // If a directory is given, look for compile.yaml inside it
+  try {
+    const stat = fs.statSync(configPath);
+    if (stat.isDirectory()) {
+      configPath = path.join(configPath, 'compile.yaml');
+    }
+  } catch (err) {
+    // statSync failed — path doesn't exist, let compile() surface the error
+  }
+
+  try {
+    compile(configPath);
+  } catch (err) {
+    console.error(`\nFatal: ${err.message}`);
+    process.exit(1);
+  }
 }

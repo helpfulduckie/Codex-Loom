@@ -211,4 +211,4 @@ function render(template, data) {
   return result;
 }
 
-module.exports = { render, resolveField, applyFieldInterpolation };
+module.exports = { render, resolveField, applyFieldInterpolation, processConditionals, processInline, evaluateJoin, isTruthy };

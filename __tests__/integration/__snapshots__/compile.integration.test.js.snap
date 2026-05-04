@@ -1,0 +1,41 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`snapshot regression subject Character.md matches snapshot 1`] = `
+"## Felicia Grayls
+~~~
+triggers: [Felicia, Grayls]
+encapsulate: true
+notes: [e]
+~~~
+Felicia Grayls - Academy researcher; minor nobility
+Physical Traits: female; early 40s; platinum blond hair in a controlled bun; cold blue eyes; slender, bird-like features
+Personality: sharp, intelligent, cheerful, sadistic
+- Does not view research subjects as people deserving dignity; they are materials
+- Genuinely enjoys her work
+Background:
+one of the top Academy mages; has built her reputation through research
+that requires things most researchers won't do to their subjects
+
+## Aness Rozen
+~~~
+triggers: [Aness, Rozen]
+encapsulate: true
+notes: [e]
+~~~
+Aness Rozen - Journeyman Healer; Magic Researcher; Fused-Squad Subject
+Physical Traits: female; mid 20s; black hair, braided, waist-length; brown eyes; tall, willowy build; a blue interface crystal implanted at the base of her skull
+Personality: inquisitive, polite, sarcastic, compassionate
+- you love magic research — you instinctively leap to explore theoretical implications
+- Your polite nature is a social shield; behind it is a biting sarcasm you deploy when frustrated
+
+## Kaiden Ventus
+~~~
+triggers: [Kaiden, Ventus]
+encapsulate: true
+notes: [e]
+~~~
+Kaiden Ventus - knight; master swordsman
+Physical Traits: male; mid 20s; short brown hair; silver eyes; tall broad build
+Personality: honorable, disciplined, protective, warm
+"
+`;

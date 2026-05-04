@@ -7,9 +7,25 @@
     "codex-loom": "./src/compile.js"
   },
   "scripts": {
-    "test": "node src/compile.js test/compile.yaml"
+    "test": "jest",
+    "test:unit": "jest __tests__/unit",
+    "test:integration": "jest __tests__/integration",
+    "test:coverage": "jest --coverage",
+    "compile": "node src/compile.js test/compile.yaml"
   },
   "dependencies": {
     "js-yaml": "^4.1.1"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/__tests__/**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.js"
+    ]
   }
 }

@@ -439,4 +439,5 @@ module.exports = {
   deepClone,
   applyFieldsDelta,
   collectVariantDeltas,
+  applyFieldOp,
 };
