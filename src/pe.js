@@ -89,7 +89,7 @@ function blockAppliesTo(blockDef, branchPath) {
 
 /**
  * Compile all applicable PE blocks for a single branch leaf.
- * Returns the full PlotEssentials.md content string, or null if no blocks apply.
+ * Returns the full Plot Essentials.md content string, or null if no blocks apply.
  *
  * @param {object[]} peBlocks   - raw block definitions from plot-essentials.yaml
  * @param {Map}      registry   - full merged card registry
@@ -106,18 +106,18 @@ function compilePE(peBlocks, registry, templates, branchPath, branchProtagonist)
     const wrapper   = blockDef.wrapper || 'none';
     const stripFence = !!blockDef.strip_fence;
 
-    // ── Freeform block ──────────────────────────────────────────────────────
-    if (!blockDef.import) {
-      if (!blockDef.text && blockDef.text !== '') {
-        console.warn('  WARN [PE]: freeform block has no text field — skipping');
-        continue;
-      }
+    // ── Detect block type ────────────────────────────────────────────────────
+    const isImport   = !!blockDef.import;
+    const isFreeform = !isImport &&
+                       (blockDef.text !== undefined && blockDef.text !== null);
+    const isTemplate = !isImport && !isFreeform &&
+                       !!(blockDef.template || blockDef.type);
 
-      // Run pronoun/conjugation passes on freeform text.
-      // We need a minimal card-like object for the pass.
+    // ── Freeform block ──────────────────────────────────────────────────────
+    if (isFreeform) {
       // Freeform blocks can declare pronouns/protagonist directly on the block.
       const fakeCard = {
-        name: blockDef.id || '(pe block)',
+        name:        blockDef.id || '(pe block)',
         pronouns:    blockDef.pronouns    || null,
         protagonist: blockDef.protagonist || null,
         fields: { _text: blockDef.text },
@@ -130,7 +130,50 @@ function compilePE(peBlocks, registry, templates, branchPath, branchProtagonist)
       continue;
     }
 
+    // ── Template block ──────────────────────────────────────────────────────
+    // Inline card definition rendered through a named template; no registry import.
+    // Uses resolveCard so branch variants are applied (same pipeline as Story Cards).
+    if (isTemplate) {
+      let card;
+      try {
+        card = resolveCard(blockDef, registry, branchPath);
+      } catch (err) {
+        console.error(
+          `  ERR [PE]: resolving template block "${blockDef.name || blockDef.id}": ${err.message}`
+        );
+        continue;
+      }
+
+      const templateContent = getTemplate(card, templates);
+      if (!templateContent) {
+        const label = blockDef.template || blockDef.type;
+        console.error(`  ERR [PE]: template "${label}" not found for template block`);
+        continue;
+      }
+
+      applyFieldInterpolation(card);
+      applyPronounPasses(card, registry, branchProtagonist);
+
+      let renderedCard;
+      try {
+        renderedCard = render(templateContent, card);
+      } catch (err) {
+        console.error(
+          `  ERR [PE]: rendering template block "${card.name}": ${err.message}`
+        );
+        continue;
+      }
+
+      const body = stripFence ? stripAboveLastFence(renderedCard) : renderedCard.trim();
+      rendered.push(applyWrapper(body, wrapper));
+      continue;
+    }
+
     // ── Card-body block (import: syntax) ────────────────────────────────────
+    if (!isImport) {
+      console.warn('  WARN [PE]: block has no import, text, or template — skipping');
+      continue;
+    }
     let card;
     try {
       card = resolveCard(blockDef, registry, branchPath);
@@ -179,16 +222,16 @@ function compilePE(peBlocks, registry, templates, branchPath, branchProtagonist)
 }
 
 /**
- * Write PlotEssentials.md to the Components folder for a branch.
+ * Write Plot Essentials.md to the Components folder for a branch.
  * Creates the directory if needed. Does nothing if content is null.
  */
 function writePE(branchOutputDir, content) {
   if (!content) return null;
   const dir = path.join(branchOutputDir, 'Components');
   fs.mkdirSync(dir, { recursive: true });
-  const outPath = path.join(dir, 'PlotEssentials.md');
+  const outPath = path.join(dir, 'Plot Essentials.md');
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }
 
-module.exports = { loadPEConfig, compilePE, writePE };
+module.exports = { loadPEConfig, compilePE, writePE, blockAppliesTo };

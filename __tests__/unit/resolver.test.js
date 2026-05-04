@@ -38,11 +38,11 @@ describe('applyFieldOp', () => {
   });
 
   test('swap substring: replaces first occurrence', () => {
-    expect(applyFieldOp('red fox', '/red/blue')).toBe('blue fox');
+    expect(applyFieldOp('red fox', '/{red}/{blue}')).toBe('blue fox');
   });
 
   test('object op recursion: applies ops to subfields', () => {
-    const result = applyFieldOp({ gender: 'male' }, { gender: '/male/female' });
+    const result = applyFieldOp({ gender: 'male' }, { gender: '/{male}/{female}' });
     expect(result).toEqual({ gender: 'female' });
   });
 
@@ -50,6 +50,46 @@ describe('applyFieldOp', () => {
     const result = applyFieldOp({ a: 'x', b: 'y' }, { a: '-' });
     expect(result).not.toHaveProperty('a');
     expect(result.b).toBe('y');
+  });
+
+  describe('array of operations', () => {
+    test('empty array returns current unchanged', () => {
+      expect(applyFieldOp('hello', [])).toBe('hello');
+    });
+    test('single-element array behaves like the scalar op', () => {
+      expect(applyFieldOp('red fox', ['/{red}/{blue}'])).toBe('blue fox');
+    });
+    test('two swap ops applied in sequence', () => {
+      expect(applyFieldOp('She said her name', [
+        '/{She}/{He}',
+        '/{her}/{his}',
+      ])).toBe('He said his name');
+    });
+    test('mixed ops: swap then append', () => {
+      expect(applyFieldOp('Hello world', [
+        '/{world}/{there}',
+        '+{!}',
+      ])).toBe('Hello there; !');
+    });
+    test('mixed ops: append then swap', () => {
+      expect(applyFieldOp('foo', ['+{bar}', '/{bar}/{baz}'])).toBe('foo; baz');
+    });
+    test('delete step short-circuits remaining ops', () => {
+      expect(applyFieldOp('hello', ['-', '/{hello}/{goodbye}'])).toBe('__DELETE__');
+    });
+    test('replace op inside array', () => {
+      expect(applyFieldOp('old', ['new value'])).toBe('new value');
+    });
+    test('null step inside array deletes field', () => {
+      expect(applyFieldOp('hello', [null])).toBe('__DELETE__');
+    });
+    test('array op on subfield via object recursion', () => {
+      const result = applyFieldOp(
+        { gender: 'She is strong' },
+        { gender: ['/{She}/{He}', '/{is}/{was}'] }
+      );
+      expect(result).toEqual({ gender: 'He was strong' });
+    });
   });
 });
 
@@ -174,5 +214,132 @@ describe('resolveCard', () => {
     const card = resolveCard(cardDef, registry, []);
     expect(card).not.toHaveProperty('variants');
     expect(card).not.toHaveProperty('_source');
+  });
+
+  describe('import-level field operations on top-level fields', () => {
+    const baseCard = {
+      id: 'outfit',
+      name: 'Outfit',
+      type: 'Item',
+      triggers: 'clothing, style',
+      known: 'base knowledge',
+      pronouns: 'they/them',
+    };
+    const reg = new Map([['outfit', baseCard]]);
+
+    test('triggers: plain string replaces', () => {
+      const card = resolveCard({ import: 'outfit', triggers: 'uniform' }, reg, []);
+      expect(card.triggers).toBe('uniform');
+    });
+
+    test('triggers: +{} appends to existing triggers', () => {
+      const card = resolveCard({ import: 'outfit', triggers: '+{, uniform}' }, reg, []);
+      expect(card.triggers).toBe('clothing, style, uniform');
+    });
+
+    test('triggers: -{} removes substring from triggers', () => {
+      const card = resolveCard({ import: 'outfit', triggers: '-{, style}' }, reg, []);
+      expect(card.triggers).toBe('clothing');
+    });
+
+    test('triggers: - deletes the field', () => {
+      const card = resolveCard({ import: 'outfit', triggers: '-' }, reg, []);
+      expect(card).not.toHaveProperty('triggers');
+    });
+
+    test('known: +{} appends', () => {
+      const card = resolveCard({ import: 'outfit', known: '+{ and more}' }, reg, []);
+      expect(card.known).toBe('base knowledge and more');
+    });
+
+    test('name: /{old}/{new} swaps substring', () => {
+      const card = resolveCard({ import: 'outfit', name: '/{Outfit}/{Uniform}' }, reg, []);
+      expect(card.name).toBe('Uniform');
+    });
+
+    test('name: array of swaps applies all in sequence', () => {
+      const base = { id: 'char', name: 'She said her name was Sarah', type: 'Character' };
+      const r = new Map([['char', base]]);
+      const card = resolveCard(
+        { import: 'char', name: ['/{She}/{He}', '/{her}/{his}', '/{Sarah}/{Sam}'] },
+        r,
+        []
+      );
+      expect(card.name).toBe('He said his name was Sam');
+    });
+
+    test('pronouns: plain string replaces', () => {
+      const card = resolveCard({ import: 'outfit', pronouns: 'she/her' }, reg, []);
+      expect(card.pronouns).toBe('she/her');
+    });
+  });
+
+  describe('named group variants', () => {
+    const canonCard = {
+      id: 'spirit',
+      name: 'Spirit',
+      type: 'Character',
+      fields: { form: 'incorporeal', origin: 'unknown' },
+    };
+    const reg = new Map([['spirit', canonCard]]);
+
+    test('group fields apply before inner branch fields', () => {
+      const cardDef = {
+        import: 'spirit',
+        variants: {
+          Transformed: {
+            name: 'Prime',
+            fields: { form: 'artificial' },
+            variants: {
+              'Branch A': { fields: { origin: 'scientist A' } },
+              'Branch B': { fields: { origin: 'scientist B' } },
+            },
+          },
+        },
+      };
+
+      const cardA = resolveCard(cardDef, reg, ['Branch A']);
+      expect(cardA.name).toBe('Prime');
+      expect(cardA.fields.form).toBe('artificial');
+      expect(cardA.fields.origin).toBe('scientist A');
+
+      const cardB = resolveCard(cardDef, reg, ['Branch B']);
+      expect(cardB.name).toBe('Prime');
+      expect(cardB.fields.form).toBe('artificial');
+      expect(cardB.fields.origin).toBe('scientist B');
+    });
+
+    test('direct branch match takes priority over group containing same name', () => {
+      const cardDef = {
+        import: 'spirit',
+        variants: {
+          'Branch A': { fields: { form: 'direct' } },
+          Group: {
+            variants: {
+              'Branch A': { fields: { form: 'via group' } },
+            },
+          },
+        },
+      };
+      const card = resolveCard(cardDef, reg, ['Branch A']);
+      expect(card.fields.form).toBe('direct');
+    });
+
+    test('branch not in any group yields base card', () => {
+      const cardDef = {
+        import: 'spirit',
+        variants: {
+          Group: {
+            fields: { form: 'artificial' },
+            variants: {
+              'Branch A': { fields: { origin: 'a' } },
+            },
+          },
+        },
+      };
+      const card = resolveCard(cardDef, reg, ['Branch C']);
+      expect(card.fields.form).toBe('incorporeal');
+      expect(card.fields.origin).toBe('unknown');
+    });
   });
 });

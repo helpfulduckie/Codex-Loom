@@ -46,6 +46,28 @@ describe('resolveProunounToken', () => {
     });
   });
 
+  describe('verb_is role', () => {
+    test('is → is for female', () => expect(resolveProunounToken('is', 'female')).toBe('is'));
+    test('is → is for male', () => expect(resolveProunounToken('is', 'male')).toBe('is'));
+    test('is → are for they', () => expect(resolveProunounToken('is', 'they')).toBe('are'));
+    test('is → are for you', () => expect(resolveProunounToken('is', 'you')).toBe('are'));
+    test('are → are for they', () => expect(resolveProunounToken('are', 'they')).toBe('are'));
+    test('are → is for female', () => expect(resolveProunounToken('are', 'female')).toBe('is'));
+    test('Is (capital) → Is for female', () => expect(resolveProunounToken('Is', 'female')).toBe('Is'));
+    test('Is (capital) → Are for you', () => expect(resolveProunounToken('Is', 'you')).toBe('Are'));
+  });
+
+  describe('verb_was role', () => {
+    test('was → was for female', () => expect(resolveProunounToken('was', 'female')).toBe('was'));
+    test('was → was for male', () => expect(resolveProunounToken('was', 'male')).toBe('was'));
+    test('was → were for they', () => expect(resolveProunounToken('was', 'they')).toBe('were'));
+    test('was → were for you', () => expect(resolveProunounToken('was', 'you')).toBe('were'));
+    test('were → were for they', () => expect(resolveProunounToken('were', 'they')).toBe('were'));
+    test('were → was for female', () => expect(resolveProunounToken('were', 'female')).toBe('was'));
+    test('Was (capital) → Was for female', () => expect(resolveProunounToken('Was', 'female')).toBe('Was'));
+    test('Was (capital) → Were for you', () => expect(resolveProunounToken('Was', 'you')).toBe('Were'));
+  });
+
   describe('unknown set fallback', () => {
     test('returns bare word for unknown set', () => {
       expect(resolveProunounToken('she', 'unknown')).toBe('she');
@@ -99,6 +121,26 @@ describe('processVerbConjugation', () => {
   test('multiple [s] markers in one string', () => {
     expect(processVerbConjugation('she run[s] and jump[s]', 'female')).toBe('she runs and jumps');
   });
+
+  test('[es] → es for female (singular)', () => {
+    expect(processVerbConjugation('she flinch[es]', 'female')).toBe('she flinches');
+  });
+
+  test('[es] → empty for they (plural)', () => {
+    expect(processVerbConjugation('they flinch[es]', 'they')).toBe('they flinch');
+  });
+
+  test('[es] → empty for you (plural)', () => {
+    expect(processVerbConjugation('you flinch[es]', 'you')).toBe('you flinch');
+  });
+
+  test('mixed [es] and [s] in one string', () => {
+    expect(processVerbConjugation('she flinch[es] and love[s] it', 'female')).toBe('she flinches and loves it');
+  });
+
+  test('mixed [es] and [s] stripped for plural', () => {
+    expect(processVerbConjugation('you flinch[es] and love[s] it', 'you')).toBe('you flinch and love it');
+  });
 });
 
 describe('processBareMarkers', () => {
@@ -131,5 +173,41 @@ describe('processBareMarkers', () => {
     const card = { name: 'Aness', protagonist: 'aness', fields: {} };
     const ctx = { card, registry, branchProtagonist: 'aness' };
     expect(processBareMarkers('$her~ choice', ctx)).toBe('your choice');
+  });
+
+  test('$is → "are" for active protagonist (you set)', () => {
+    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
+    const ctx = { card, registry, branchProtagonist: 'aness' };
+    expect(processBareMarkers('$is ready', ctx)).toBe('are ready');
+  });
+
+  test('$is → "is" when protagonist uses female pronouns and is not active', () => {
+    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
+    const ctx = { card, registry, branchProtagonist: 'veyrn' };
+    expect(processBareMarkers('$is ready', ctx)).toBe('is ready');
+  });
+
+  test('$Is (capital) → "Are" for active protagonist', () => {
+    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
+    const ctx = { card, registry, branchProtagonist: 'aness' };
+    expect(processBareMarkers('$Is ready', ctx)).toBe('Are ready');
+  });
+
+  test('$was → "were" for active protagonist (you set)', () => {
+    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
+    const ctx = { card, registry, branchProtagonist: 'aness' };
+    expect(processBareMarkers('$was there', ctx)).toBe('were there');
+  });
+
+  test('$was → "was" when protagonist uses female pronouns and is not active', () => {
+    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
+    const ctx = { card, registry, branchProtagonist: 'veyrn' };
+    expect(processBareMarkers('$was there', ctx)).toBe('was there');
+  });
+
+  test('$Was (capital) → "Were" for active protagonist', () => {
+    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
+    const ctx = { card, registry, branchProtagonist: 'aness' };
+    expect(processBareMarkers('$Was there', ctx)).toBe('Were there');
   });
 });

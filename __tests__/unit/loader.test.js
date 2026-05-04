@@ -1,6 +1,83 @@
 'use strict';
 
-const { buildRegistry, mergeRegistries } = require('../../src/loader');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { buildRegistry, mergeRegistries, loadTemplates } = require('../../src/loader');
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function makeTmpDir() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'cl-test-'));
+}
+
+function writeTemplate(dir, name, content) {
+  fs.writeFileSync(path.join(dir, `${name}.template`), content, 'utf8');
+}
+
+function writeTemplateIn(dir, subdir, name, content) {
+  const full = path.join(dir, subdir);
+  fs.mkdirSync(full, { recursive: true });
+  fs.writeFileSync(path.join(full, `${name}.template`), content, 'utf8');
+}
+
+// ---------------------------------------------------------------------------
+// loadTemplates
+// ---------------------------------------------------------------------------
+
+describe('loadTemplates', () => {
+  test('single directory — loads templates by lowercase name', () => {
+    const dir = makeTmpDir();
+    writeTemplate(dir, 'Character', 'hello {$name}');
+    const map = loadTemplates(dir);
+    expect(map.has('character')).toBe(true);
+    expect(map.get('character').content).toBe('hello {$name}');
+  });
+
+  test('single directory — errors on intra-directory duplicate', () => {
+    const dir = makeTmpDir();
+    writeTemplateIn(dir, 'A', 'character', 'version A');
+    writeTemplateIn(dir, 'B', 'character', 'version B');
+    expect(() => loadTemplates(dir)).toThrow(/Duplicate template name "character"/);
+  });
+
+  test('multiple directories — all templates loaded when no collision', () => {
+    const dir1 = makeTmpDir();
+    const dir2 = makeTmpDir();
+    writeTemplate(dir1, 'Character', 'char v1');
+    writeTemplate(dir2, 'Location', 'loc v1');
+    const map = loadTemplates([dir1, dir2]);
+    expect(map.has('character')).toBe(true);
+    expect(map.has('location')).toBe(true);
+  });
+
+  test('multiple directories — later directory overrides earlier on name collision', () => {
+    const dir1 = makeTmpDir();
+    const dir2 = makeTmpDir();
+    writeTemplate(dir1, 'Location', 'base location');
+    writeTemplate(dir2, 'Location', 'project location');
+    const map = loadTemplates([dir1, dir2]);
+    expect(map.get('location').content).toBe('project location');
+  });
+
+  test('multiple directories — intra-directory duplicate still throws', () => {
+    const dir1 = makeTmpDir();
+    const dir2 = makeTmpDir();
+    writeTemplateIn(dir1, 'X', 'character', 'version A');
+    writeTemplateIn(dir1, 'Y', 'character', 'version B');
+    writeTemplate(dir2, 'Location', 'loc');
+    expect(() => loadTemplates([dir1, dir2])).toThrow(/Duplicate template name "character"/);
+  });
+
+  test('single string still works (no regression)', () => {
+    const dir = makeTmpDir();
+    writeTemplate(dir, 'Faction', 'faction content');
+    const map = loadTemplates(dir);
+    expect(map.get('faction').content).toBe('faction content');
+  });
+});
 
 describe('buildRegistry', () => {
   test('normalizes id keys to lowercase and backfills id from name', () => {

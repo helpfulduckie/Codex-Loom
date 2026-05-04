@@ -51,24 +51,31 @@ function loadCardsFromDir(dir) {
 }
 
 /**
- * Load all templates from a directory recursively.
+ * Load all templates from one or more directories recursively.
  * Returns a map of lowercase template name → template string.
- * Errors on duplicate template names.
+ * Errors on duplicate template names within the same directory.
+ * When multiple directories are given, later directories override earlier ones.
  */
-function loadTemplates(dir) {
-  const files = findFiles(dir, '.template');
+function loadTemplates(dirs) {
+  if (!Array.isArray(dirs)) dirs = [dirs];
   const templates = new Map();
-  for (const file of files) {
-    const name = path.basename(file, '.template').toLowerCase();
-    if (templates.has(name)) {
-      throw new Error(
-        `Duplicate template name "${name}" found at:\n  ${templates.get(name)._source}\n  ${file}`
-      );
+  for (const dir of dirs) {
+    const dirTemplates = new Map();
+    for (const file of findFiles(dir, '.template')) {
+      const name = path.basename(file, '.template').toLowerCase();
+      if (dirTemplates.has(name)) {
+        throw new Error(
+          `Duplicate template name "${name}" found in ${dir}:\n  ${dirTemplates.get(name)._source}\n  ${file}`
+        );
+      }
+      dirTemplates.set(name, {
+        content: fs.readFileSync(file, 'utf8'),
+        _source: file,
+      });
     }
-    templates.set(name, {
-      content: fs.readFileSync(file, 'utf8'),
-      _source: file,
-    });
+    for (const [name, tpl] of dirTemplates) {
+      templates.set(name, tpl);
+    }
   }
   return templates;
 }
@@ -85,7 +92,9 @@ function loadCompileConfig(configPath) {
     _base: base,
     _resolvedCanon: config.canon ? path.resolve(base, config.canon) : null,
     _resolvedOutput: path.resolve(base, config.output),
-    _resolvedTemplates: path.resolve(base, config.templates),
+    _resolvedTemplates: Array.isArray(config.templates)
+      ? config.templates.map(t => path.resolve(base, t))
+      : path.resolve(base, config.templates),
     _resolvedCards: path.resolve(base, config.cards),
   };
 }

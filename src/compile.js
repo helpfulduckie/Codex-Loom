@@ -10,7 +10,7 @@ const {
 const { resolveCard, enumerateLeaves, getBranchConfig } = require('./resolver');
 const { applyPronounPasses } = require('./pronouns');
 const { render, applyFieldInterpolation } = require('./template');
-const { loadPEConfig, compilePE, writePE } = require('./pe');
+const { loadPEConfig, compilePE, writePE, blockAppliesTo } = require('./pe');
 
 /**
  * Get the template for a card. Checks card.template first, then card.type.
@@ -132,7 +132,7 @@ function cardAppliesTo(cardDef, branchPath) {
 /**
  * Compile all cards for a single branch leaf.
  */
-function compileBranch(cardDefs, registry, templates, outputDir, branchPath, branchConfig) {
+function compileBranch(cardDefs, registry, templates, outputDir, branchPath, branchConfig, peCardIds = new Set(), includedFilePaths = new Set()) {
   const branchProtagonist = (
     branchConfig.protagonist || ''
   ).toLowerCase() || null;
@@ -145,6 +145,12 @@ function compileBranch(cardDefs, registry, templates, outputDir, branchPath, bra
 
     // Apply only/except branch filter
     if (!cardAppliesTo(cardDef, branchPath)) continue;
+
+    // Skip cards that are in PE and arrived via a full include (not an explicit import)
+    const baseId = ((cardDef.id || cardDef.name) || '').toLowerCase();
+    if (baseId && peCardIds.has(baseId) && cardDef._source && includedFilePaths.has(cardDef._source)) {
+      continue;
+    }
 
     let card;
     try {
@@ -234,6 +240,16 @@ function compile(configPath) {
     console.log(`Loaded ${includedCards.length} included canonical card(s).`);
   }
 
+  // Track which canon files are being fully included (for PE dedup later)
+  const includedFilePaths = new Set(
+    config._resolvedCanon
+      ? rawProjectCards
+          .filter(d => d.include)
+          .map(d => path.resolve(config._resolvedCanon, d.include))
+          .filter(p => fs.existsSync(p))
+      : []
+  );
+
   // All card definitions to compile: explicit project defs + included canon cards
   const allCardDefs = [...rawProjectCards, ...includedCards];
 
@@ -267,6 +283,13 @@ function compile(configPath) {
       ? path.join(config._resolvedOutput, ...branchPath.flatMap(b => ['Branches', b]))
       : config._resolvedOutput;
 
+    // Compute which PE card IDs apply to this branch (for Story Card dedup)
+    const peCardIds = new Set(
+      peBlocks
+        .filter(b => blockAppliesTo(b, branchPath) && b.import)
+        .map(b => b.import.split('/')[0].toLowerCase())
+    );
+
     // Compile story cards
     const written = compileBranch(
       allCardDefs,
@@ -275,6 +298,8 @@ function compile(configPath) {
       branchOutputDir,
       branchPath,
       { ...branchConfig, protagonist: branchProtagonist },
+      peCardIds,
+      includedFilePaths,
     );
     totalFiles += written.length;
 
@@ -290,33 +315,99 @@ function compile(configPath) {
   }
 
   console.log(`\nDone. Wrote ${totalFiles} file(s).`);
+
+  if (config.overview) {
+    const { runLeavesMode } = require('./overview');
+    const overviewDir = path.resolve(config._base, config.overview);
+    fs.mkdirSync(overviewDir, { recursive: true });
+    console.log(`\nGenerating overview files → ${overviewDir}`);
+    try {
+      const written = runLeavesMode(config._resolvedOutput, overviewDir);
+      console.log(`Generated ${written.length} overview file(s).`);
+    } catch (err) {
+      console.warn(`  WARN: overview generation failed: ${err.message}`);
+    }
+  }
 }
 
 module.exports = { compile, compileBranch, cardAppliesTo, getTemplate, writeOutput, resolveIncludes };
 
 if (require.main === module) {
-  const args = process.argv.slice(2);
-  if (args.length === 0) {
-    console.error('Usage: codex-loom <path/to/compile.yaml or path/to/project/>');
-    process.exit(1);
-  }
+  const rawArgs = process.argv.slice(2);
 
-  let configPath = args[0];
+  const overviewIdx = rawArgs.findIndex(a => a === '--overview' || a === '-o');
+  if (overviewIdx !== -1) {
+    // ── Standalone overview mode ─────────────────────────────────────────────
+    const { runLeavesMode } = require('./overview');
+    const rest = rawArgs.filter((_, i) => i !== overviewIdx);
 
-  // If a directory is given, look for compile.yaml inside it
-  try {
-    const stat = fs.statSync(configPath);
-    if (stat.isDirectory()) {
-      configPath = path.join(configPath, 'compile.yaml');
+    let scenarioRoot;
+    let outputDir;
+
+    if (rest.length === 0) {
+      // No args: load compile.yaml from cwd
+      const cfgPath = path.join(process.cwd(), 'compile.yaml');
+      if (!fs.existsSync(cfgPath)) {
+        console.error('No compile.yaml in current directory and no path given.');
+        process.exit(1);
+      }
+      const { loadCompileConfig } = require('./loader');
+      const cfg = loadCompileConfig(cfgPath);
+      scenarioRoot = cfg._resolvedOutput;
+      if (!cfg.overview) {
+        console.error('compile.yaml has no "overview:" key — cannot determine output dir.');
+        process.exit(1);
+      }
+      outputDir = path.resolve(path.dirname(cfgPath), cfg.overview);
+    } else {
+      scenarioRoot = path.resolve(rest[0]);
+      outputDir    = path.resolve(rest[1] || 'overview');
     }
-  } catch (err) {
-    // statSync failed — path doesn't exist, let compile() surface the error
-  }
 
-  try {
-    compile(configPath);
-  } catch (err) {
-    console.error(`\nFatal: ${err.message}`);
-    process.exit(1);
+    if (!fs.existsSync(scenarioRoot)) {
+      console.error(`Scenario root not found: ${scenarioRoot}`);
+      process.exit(1);
+    }
+
+    fs.mkdirSync(outputDir, { recursive: true });
+    console.log(`\nOverview mode`);
+    console.log(`Scenario root : ${scenarioRoot}`);
+    console.log(`Output dir    : ${outputDir}\n`);
+
+    try {
+      const written = runLeavesMode(scenarioRoot, outputDir);
+      console.log(`\nDone. Wrote ${written.length} overview file(s) to:\n  ${outputDir}\n`);
+    } catch (err) {
+      console.error(`\nFatal: ${err.message}`);
+      process.exit(1);
+    }
+
+  } else {
+    // ── Normal compile mode ──────────────────────────────────────────────────
+    if (rawArgs.length === 0) {
+      console.error(
+        'Usage: codex-loom <path/to/compile.yaml or path/to/project/>\n' +
+        '       codex-loom --overview|-o [<scenario-root>] [<output-dir>]'
+      );
+      process.exit(1);
+    }
+
+    let configPath = rawArgs[0];
+
+    try {
+      const stat = fs.statSync(configPath);
+      if (stat.isDirectory()) {
+        configPath = path.join(configPath, 'compile.yaml');
+      }
+    } catch (err) {
+      // statSync failed — path doesn't exist, let compile() surface the error
+    }
+
+    try {
+      compile(configPath);
+    } catch (err) {
+      console.error(`\nFatal: ${err.message}`);
+      process.exit(1);
+    }
   }
 }

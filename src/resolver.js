@@ -80,6 +80,16 @@ function deleteCI(obj, key) {
  * If current is a mapping and op is also a mapping, recurse into subfields.
  */
 function applyFieldOp(current, op) {
+  // Array of operations — apply each in sequence to the running value
+  if (Array.isArray(op)) {
+    let value = current;
+    for (const step of op) {
+      if (value === '__DELETE__') break;
+      value = applyFieldOp(value, step);
+    }
+    return value;
+  }
+
   // Both are mappings — recurse into subfields
   if (op !== null && typeof op === 'object' && !Array.isArray(op)) {
     const result = typeof current === 'object' && current !== null
@@ -141,7 +151,7 @@ function applyFieldOp(current, op) {
   }
 
   // Swap: /{old}/{new}
-  const swapMatch = opStr.match(/^\/([^/]*)\/([^/]*)$/);
+  const swapMatch = opStr.match(/^\/\{([\s\S]*?)\}\/\{([\s\S]*?)\}$/);
   if (swapMatch) {
     return currentStr.split(swapMatch[1]).join(swapMatch[2]).trim();
   }
@@ -284,10 +294,16 @@ function resolveCard(cardDef, registry, branchPath) {
     }
 
     // Apply top-level overrides from import def (name, pronouns, etc.)
+    // Use applyFieldOp so field operation syntax (+{}, -{}, /{}/{}) works here too.
     for (const key of ['name', 'type', 'template', 'pronouns', 'protagonist',
-      'encapsulate', 'known', 'triggers']) {
+      'encapsulate', 'known', 'triggers', 'id']) {
       if (cardDef[key] !== undefined) {
-        card[key] = cardDef[key];
+        const newVal = applyFieldOp(card[key], cardDef[key]);
+        if (newVal === '__DELETE__') {
+          delete card[key];
+        } else {
+          card[key] = newVal;
+        }
       }
     }
 
@@ -304,7 +320,33 @@ function resolveCard(cardDef, registry, branchPath) {
 }
 
 /**
+ * Apply a single variant block's import-variant chains, fields, and top-level overrides.
+ */
+function applyVariantBlock(card, variant, canonCard) {
+  if (variant['import-variant'] && canonCard) {
+    for (const vPath of parseVariantsList(variant['import-variant'])) {
+      for (const delta of collectVariantDeltas(canonCard, vPath)) {
+        applyDelta(card, delta, canonCard);
+      }
+    }
+  }
+
+  if (variant.fields) {
+    applyFieldsDelta(card, variant.fields);
+  }
+
+  for (const key of ['name', 'type', 'template', 'pronouns', 'protagonist',
+    'encapsulate', 'known', 'triggers']) {
+    if (variant[key] !== undefined) {
+      card[key] = variant[key];
+    }
+  }
+}
+
+/**
  * Apply branch variant deltas by walking the branch path.
+ * Supports named group variants: a key whose nested variants contain the branch match
+ * will have its fields applied before the inner branch variant.
  */
 function applyBranchVariants(card, cardDef, canonCard, branchPath) {
   let variantTree = cardDef.variants;
@@ -312,36 +354,37 @@ function applyBranchVariants(card, cardDef, canonCard, branchPath) {
   for (const branch of branchPath) {
     if (!variantTree || typeof variantTree !== 'object') break;
 
+    // Pass 1: direct branch name match
     const actualKey = Object.keys(variantTree).find(
       k => k.toLowerCase() === branch.toLowerCase()
     );
-    if (!actualKey) break;
 
-    const branchVariant = variantTree[actualKey];
+    if (actualKey) {
+      const branchVariant = variantTree[actualKey];
+      applyVariantBlock(card, branchVariant, canonCard);
+      variantTree = branchVariant.variants;
+      continue;
+    }
 
-    // Apply import-variant chains from canon
-    if (branchVariant['import-variant'] && canonCard) {
-      for (const vPath of parseVariantsList(branchVariant['import-variant'])) {
-        for (const delta of collectVariantDeltas(canonCard, vPath)) {
-          applyDelta(card, delta, canonCard);
-        }
+    // Pass 2: named group — a key whose nested variants contain this branch
+    let foundInGroup = false;
+    for (const groupKey of Object.keys(variantTree)) {
+      const groupVal = variantTree[groupKey];
+      if (!groupVal || !groupVal.variants) continue;
+      const innerKey = Object.keys(groupVal.variants).find(
+        k => k.toLowerCase() === branch.toLowerCase()
+      );
+      if (innerKey) {
+        applyVariantBlock(card, groupVal, canonCard);
+        const branchVariant = groupVal.variants[innerKey];
+        applyVariantBlock(card, branchVariant, canonCard);
+        variantTree = branchVariant.variants;
+        foundInGroup = true;
+        break;
       }
     }
 
-    // Apply local fields
-    if (branchVariant.fields) {
-      applyFieldsDelta(card, branchVariant.fields);
-    }
-
-    // Apply top-level overrides
-    for (const key of ['name', 'type', 'template', 'pronouns', 'protagonist',
-      'encapsulate', 'known', 'triggers']) {
-      if (branchVariant[key] !== undefined) {
-        card[key] = branchVariant[key];
-      }
-    }
-
-    variantTree = branchVariant.variants;
+    if (!foundInGroup) break;
   }
 }
 

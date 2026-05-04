@@ -9,9 +9,21 @@ npm install -g .
 
 Run from anywhere:
 ```
-compile-cards path/to/compile.yaml
-compile-cards path/to/project/        ← directory form, looks for compile.yaml inside
+codex-loom path/to/compile.yaml
+codex-loom path/to/project/          ← directory form, looks for compile.yaml inside
 ```
+
+To generate overview files from an already-compiled scenario folder (no `compile.yaml` needed):
+```
+codex-loom --overview path/to/output [output-dir]
+codex-loom -o path/to/output [output-dir]
+```
+
+If `output-dir` is omitted, files are written to `./overview/` relative to the directory you called the command from. When run inside a project directory that has a `compile.yaml` with an `overview:` key, you can also run:
+```
+codex-loom --overview
+```
+and it will use the configured paths.
 
 ---
 
@@ -25,7 +37,7 @@ compile-cards path/to/project/        ← directory form, looks for compile.yaml
   /cards              ← project-level card definitions and imports
     characters.yaml
     locations.yaml
-  /templates          ← one .template file per card type
+  /templates          ← one .template file per card type (or see multi-dir below)
     Character.template
     Location.template
   compile.yaml
@@ -40,16 +52,16 @@ compile-cards path/to/project/        ← directory form, looks for compile.yaml
           /Character
             Character.md
         /Components
-          PlotEssentials.md
+          Plot Essentials.md
       /researcher
         /Story Cards
           /Character
             Character.md
         /Components
-          PlotEssentials.md
+          Plot Essentials.md
 ```
 
-Cards and templates are loaded recursively from their folders. Any `.yaml` file under `cards/` or `canon/` is loaded. Any `.template` file under `templates/` is loaded. Duplicate template filenames across subfolders are an error.
+Cards and templates are loaded recursively from their folders. Any `.yaml` file under `cards/` or `canon/` is loaded. Any `.template` file under `templates/` is loaded. Duplicate template filenames within the same directory tree are an error; when multiple template directories are configured, later directories override earlier ones on name collision (see `templates:` below).
 
 ---
 
@@ -58,7 +70,7 @@ Cards and templates are loaded recursively from their folders. Any `.yaml` file 
 ```yaml
 canon: ../../_Canon       # path to canonical cards folder (relative or absolute)
 output: ./output          # where compiled output is written
-templates: ./templates    # where .template files live
+templates: ./templates    # where .template files live (see below for multi-dir form)
 cards: ./cards            # where project card files live
 protagonist: Aness        # optional global default protagonist ID
 
@@ -77,11 +89,35 @@ branches:                 # optional branch tree
       Q: {}
 ```
 
+### Overview output
+
+The optional `overview:` key tells Codex-Loom to generate a set of `.overview.md` files after compiling. Each leaf branch gets one file containing all of its inherited Story Cards plus any Opening / Plot Essentials Components resolved from the nearest ancestor. This mirrors what the compiled output looks like in AI Dungeon — one flat document per playable branch.
+
+```yaml
+overview: ./overview    # output dir for .overview.md files; omit to skip
+```
+
+Filenames follow the pattern `A - B - C.overview.md` (branch path joined by ` - `). For a project with no branches, the scenario root folder name is used.
+
+---
+
+### Multiple template directories
+
+`templates:` accepts a list of directories. Directories are loaded in order; if the same template name appears in more than one directory, the later directory wins. Duplicates within the same directory tree are still an error.
+
+```yaml
+templates:
+  - ../../_SharedTemplates   # base set — shared across all projects
+  - ./templates              # project overrides — same name here wins
+```
+
+This lets you maintain a canonical template library alongside project-specific overrides without copying files.
+
 The compiler enumerates all leaf nodes (nodes with no `branches:` key) and produces one output folder per leaf. A project with no `branches:` produces a single root-level output. Each leaf's output follows Velvet Lattice folder structure:
 
 ```
 Branches/A/Branches/X/Story Cards/Character/Character.md
-Branches/A/Branches/X/Components/PlotEssentials.md
+Branches/A/Branches/X/Components/Plot Essentials.md
 ```
 
 ---
@@ -153,6 +189,7 @@ Used in `variants`, `import-variant` deltas, and scenario-level `fields:` overri
 | **Append** | `field: "+{value to add}"` | Appends to scalar with `; ` separator, or to block scalar with newline. If value starts with a separator character, no extra separator is added. |
 | **Remove substring** | `field: "-{text to remove}"` | Removes all occurrences of the substring. |
 | **Swap substring** | `field: "/{old}/{new}"` | Replaces all occurrences of `old` with `new`. |
+| **Chained operations** | `field:` is a YAML sequence of ops | Applies each operation to the field in order. Any operation type may appear in the list. |
 | **Subfield replace** | nested key with new value | Replaces that subfield only. |
 | **Subfield remove** | nested key with empty/null value | Removes that subfield only. |
 
@@ -185,6 +222,17 @@ hair: -{in a controlled bun}
 
 # Swap substring
 background: /{her}/{his}
+
+# Multiple operations on one field — applied in order
+description:
+  - "/{She}/{He}"
+  - "/{she}/{he}"
+  - "/{her}/{his}"
+
+# Mix different operation types in a sequence
+title:
+  - "/{Apprentice}/{Master}"   # swap
+  - "+{, Guild Certified}"     # then append
 
 # Subfield operations
 physical traits:
@@ -527,7 +575,7 @@ A card's bare `$` markers are you-mode when the branch protagonist matches the c
 
 ## Plot Essentials
 
-`plot-essentials.yaml` sits alongside `compile.yaml` and defines the content of `Components/PlotEssentials.md` for each branch. The file is a YAML sequence; blocks compile in the order they appear.
+`plot-essentials.yaml` sits alongside `compile.yaml` and defines the content of `Components/Plot Essentials.md` for each branch. The file is a YAML sequence; blocks compile in the order they appear.
 
 If `plot-essentials.yaml` is absent, no `Components/` folder is written — existing projects are unaffected.
 
@@ -694,7 +742,7 @@ Compile this card for all leaves except those whose path starts with one of the 
 | Message | Cause |
 |---|---|
 | `Duplicate card ID "x"` | Two cards share the same id in the same context (canon, project) or across canon/project boundary. |
-| `Duplicate template name "x"` | Two `.template` files in different subfolders share the same filename. |
+| `Duplicate template name "x"` | Two `.template` files within the same template directory share the same filename. (Same name across different top-level directories is allowed — the later directory wins.) |
 | `Import failed: no card with id "x"` | `import:` references an id not found in the registry. |
 | `No template found for card "x"` | Neither `template:` nor `type:` on the card matches any loaded template file. |
 | `WARN: include path not found` | An `include:` path does not exist relative to the canon folder. |

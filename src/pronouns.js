@@ -22,6 +22,8 @@ const PRONOUN_SETS = {
     possessive: 'her',
     reflexive:  'herself',
     contraction:'she\'s',
+    verb_is:    'is',
+    verb_was:   'was',
   },
   male: {
     subject:    'he',
@@ -29,6 +31,8 @@ const PRONOUN_SETS = {
     possessive: 'his',
     reflexive:  'himself',
     contraction:'he\'s',
+    verb_is:    'is',
+    verb_was:   'was',
   },
   they: {
     subject:    'they',
@@ -36,6 +40,8 @@ const PRONOUN_SETS = {
     possessive: 'their',
     reflexive:  'themselves',
     contraction:'they\'re',
+    verb_is:    'are',
+    verb_was:   'were',
   },
   you: {
     subject:    'you',
@@ -43,6 +49,8 @@ const PRONOUN_SETS = {
     possessive: 'your',
     reflexive:  'yourself',
     contraction:'you\'re',
+    verb_is:    'are',
+    verb_was:   'were',
   },
 };
 
@@ -74,6 +82,12 @@ const PRONOUN_TOKEN_MAP = {
   "she's": 'contraction',
   "he's": 'contraction',
   "they're": 'contraction',
+  // verb to-be (present)
+  'is': 'verb_is',
+  'are': 'verb_is',
+  // verb to-be (past)
+  'was': 'verb_was',
+  'were': 'verb_was',
 };
 
 /**
@@ -136,7 +150,10 @@ function processVerbConjugation(str, pronounsField) {
   const setName = (pronounsField || '').toLowerCase();
   const plural = PLURAL_SETS.has(setName);
 
-  return str.replace(/\[s\]/g, () => plural ? '' : 's');
+  // [es] must come before [s] to avoid partial match inside [es]
+  return str
+    .replace(/\[es\]/g, () => plural ? '' : 'es')
+    .replace(/\[s\]/g,  () => plural ? '' : 's');
 }
 
 /**
