@@ -23,6 +23,10 @@ function writeTemplateIn(dir, subdir, name, content) {
   fs.writeFileSync(path.join(full, `${name}.template`), content, 'utf8');
 }
 
+function writePartial(dir, name, content) {
+  fs.writeFileSync(path.join(dir, `${name}.partial`), content, 'utf8');
+}
+
 // ---------------------------------------------------------------------------
 // loadTemplates
 // ---------------------------------------------------------------------------
@@ -31,7 +35,7 @@ describe('loadTemplates', () => {
   test('single directory — loads templates by lowercase name', () => {
     const dir = makeTmpDir();
     writeTemplate(dir, 'Character', 'hello {$name}');
-    const map = loadTemplates(dir);
+    const { templates: map } = loadTemplates(dir);
     expect(map.has('character')).toBe(true);
     expect(map.get('character').content).toBe('hello {$name}');
   });
@@ -40,7 +44,7 @@ describe('loadTemplates', () => {
     const dir = makeTmpDir();
     writeTemplateIn(dir, 'A', 'character', 'version A');
     writeTemplateIn(dir, 'B', 'character', 'version B');
-    expect(() => loadTemplates(dir)).toThrow(/Duplicate template name "character"/);
+    expect(() => loadTemplates(dir)).toThrow(/Duplicate .template name "character"/);
   });
 
   test('multiple directories — all templates loaded when no collision', () => {
@@ -48,7 +52,7 @@ describe('loadTemplates', () => {
     const dir2 = makeTmpDir();
     writeTemplate(dir1, 'Character', 'char v1');
     writeTemplate(dir2, 'Location', 'loc v1');
-    const map = loadTemplates([dir1, dir2]);
+    const { templates: map } = loadTemplates([dir1, dir2]);
     expect(map.has('character')).toBe(true);
     expect(map.has('location')).toBe(true);
   });
@@ -58,7 +62,7 @@ describe('loadTemplates', () => {
     const dir2 = makeTmpDir();
     writeTemplate(dir1, 'Location', 'base location');
     writeTemplate(dir2, 'Location', 'project location');
-    const map = loadTemplates([dir1, dir2]);
+    const { templates: map } = loadTemplates([dir1, dir2]);
     expect(map.get('location').content).toBe('project location');
   });
 
@@ -68,14 +72,39 @@ describe('loadTemplates', () => {
     writeTemplateIn(dir1, 'X', 'character', 'version A');
     writeTemplateIn(dir1, 'Y', 'character', 'version B');
     writeTemplate(dir2, 'Location', 'loc');
-    expect(() => loadTemplates([dir1, dir2])).toThrow(/Duplicate template name "character"/);
+    expect(() => loadTemplates([dir1, dir2])).toThrow(/Duplicate .template name "character"/);
   });
 
   test('single string still works (no regression)', () => {
     const dir = makeTmpDir();
     writeTemplate(dir, 'Faction', 'faction content');
-    const map = loadTemplates(dir);
+    const { templates: map } = loadTemplates(dir);
     expect(map.get('faction').content).toBe('faction content');
+  });
+
+  test('partials are loaded alongside templates', () => {
+    const dir = makeTmpDir();
+    writeTemplate(dir, 'Character', 'hello');
+    writePartial(dir, 'Header', 'HEADER');
+    const { templates, partials } = loadTemplates(dir);
+    expect(templates.has('character')).toBe(true);
+    expect(partials.has('header')).toBe(true);
+    expect(partials.get('header').content).toBe('HEADER');
+  });
+
+  test('partials errors on intra-directory duplicate', () => {
+    const dir = makeTmpDir();
+    const sub = path.join(dir, 'sub');
+    fs.mkdirSync(sub);
+    writePartial(dir, 'shared', 'v1');
+    writePartial(sub, 'shared', 'v2');
+    expect(() => loadTemplates(dir)).toThrow(/Duplicate .partial name "shared"/);
+  });
+
+  test('empty directory returns empty partials map', () => {
+    const dir = makeTmpDir();
+    const { partials } = loadTemplates(dir);
+    expect(partials.size).toBe(0);
   });
 });
 

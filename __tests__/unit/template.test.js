@@ -7,6 +7,7 @@ const {
   evaluateList,
   processConditionals,
   processInline,
+  processIncludes,
   render,
 } = require('../../src/template');
 
@@ -183,5 +184,50 @@ describe('render', () => {
 
   test('missing field resolves to empty string', () => {
     expect(render('{$missing}', {})).toBe('');
+  });
+});
+
+// ── processIncludes ──────────────────────────────────────────────────────────
+
+describe('processIncludes', () => {
+  test('expands a simple include', () => {
+    const partials = new Map([['header', { content: 'HEADER' }]]);
+    expect(processIncludes('{include header}', partials)).toBe('HEADER');
+  });
+
+  test('name lookup is case-insensitive', () => {
+    const partials = new Map([['footer', { content: 'FOOTER' }]]);
+    expect(processIncludes('{include Footer}', partials)).toBe('FOOTER');
+  });
+
+  test('expands nested partials depth-first', () => {
+    const partials = new Map([
+      ['outer', { content: 'A{include inner}B' }],
+      ['inner', { content: 'X' }],
+    ]);
+    expect(processIncludes('{include outer}', partials)).toBe('AXB');
+  });
+
+  test('throws on unknown partial', () => {
+    expect(() => processIncludes('{include ghost}', new Map())).toThrow(/Unknown partial "ghost"/);
+  });
+
+  test('throws on circular include', () => {
+    const partials = new Map([
+      ['a', { content: '{include b}' }],
+      ['b', { content: '{include a}' }],
+    ]);
+    expect(() => processIncludes('{include a}', partials)).toThrow(/Circular partial include/);
+  });
+
+  test('partial content participates in conditional processing via render', () => {
+    const partials = new Map([['cond', { content: '{if $show}yes{/if}' }]]);
+    expect(render('{include cond}', { show: 'true' }, partials)).toBe('yes');
+    expect(render('{include cond}', { show: 'false' }, partials)).toBe('');
+  });
+
+  test('literal braces in partial survive render', () => {
+    const partials = new Map([['lit', { content: '{{curly}}' }]]);
+    expect(render('{include lit}', {}, partials)).toBe('{curly}');
   });
 });

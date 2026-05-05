@@ -51,33 +51,46 @@ function loadCardsFromDir(dir) {
 }
 
 /**
- * Load all templates from one or more directories recursively.
- * Returns a map of lowercase template name → template string.
- * Errors on duplicate template names within the same directory.
+ * Load all files of a given extension from one or more directories recursively.
+ * Returns a Map of lowercase name → { content, _source }.
+ * Errors on duplicate names within the same directory.
  * When multiple directories are given, later directories override earlier ones.
  */
-function loadTemplates(dirs) {
+function loadNamedFiles(dirs, ext) {
   if (!Array.isArray(dirs)) dirs = [dirs];
-  const templates = new Map();
+  const result = new Map();
   for (const dir of dirs) {
-    const dirTemplates = new Map();
-    for (const file of findFiles(dir, '.template')) {
-      const name = path.basename(file, '.template').toLowerCase();
-      if (dirTemplates.has(name)) {
+    const dirEntries = new Map();
+    for (const file of findFiles(dir, ext)) {
+      const name = path.basename(file, ext).toLowerCase();
+      if (dirEntries.has(name)) {
         throw new Error(
-          `Duplicate template name "${name}" found in ${dir}:\n  ${dirTemplates.get(name)._source}\n  ${file}`
+          `Duplicate ${ext} name "${name}" found in ${dir}:\n  ${dirEntries.get(name)._source}\n  ${file}`
         );
       }
-      dirTemplates.set(name, {
+      dirEntries.set(name, {
         content: fs.readFileSync(file, 'utf8'),
         _source: file,
       });
     }
-    for (const [name, tpl] of dirTemplates) {
-      templates.set(name, tpl);
+    for (const [name, entry] of dirEntries) {
+      result.set(name, entry);
     }
   }
-  return templates;
+  return result;
+}
+
+/**
+ * Load all templates and partials from one or more directories recursively.
+ * Returns { templates: Map, partials: Map } where each Map is lowercase name → { content, _source }.
+ * Errors on duplicate names within the same directory.
+ * When multiple directories are given, later directories override earlier ones.
+ */
+function loadTemplates(dirs) {
+  return {
+    templates: loadNamedFiles(dirs, '.template'),
+    partials: loadNamedFiles(dirs, '.partial'),
+  };
 }
 
 /**

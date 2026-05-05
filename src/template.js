@@ -217,18 +217,47 @@ function processInline(template, data) {
 function removeBlankLines(str) {
   return str
     .split('\n')
-    .filter(function(line) { return line.trim() !== ''; })
+    .map(function(line) { return line.trim(); })
+    .filter(function(line) { return line !== ''; })
     .join('\n');
 }
 
 /**
- * Render a template string with the given card data.
+ * Expand {include partialName} directives depth-first.
+ * stack tracks the current include chain for circular-dependency detection.
  */
-function render(template, data) {
+function processIncludes(template, partials, stack) {
+  if (!stack) stack = [];
+  return template.replace(/\{include\s+(\S+)\}/g, function(match, name) {
+    const key = name.toLowerCase();
+    if (stack.indexOf(key) !== -1) {
+      throw new Error(
+        `Circular partial include detected: ${[...stack, key].join(' → ')}`
+      );
+    }
+    const partial = partials.get(key);
+    if (!partial) {
+      throw new Error(`Unknown partial "${name}" (no .partial file found with that name)`);
+    }
+    const expanded = processIncludes(partial.content, partials, [...stack, key]);
+    return expanded
+      .replace(/\{\{/g, '\x00LBRACE\x00')
+      .replace(/\}\}/g, '\x00RBRACE\x00');
+  });
+}
+
+/**
+ * Render a template string with the given card data.
+ * partials is an optional Map of lowercase name → { content } for {include} expansion.
+ */
+function render(template, data, partials) {
+  if (!partials) partials = new Map();
+
   let result = template
     .replace(/\{\{/g, '\x00LBRACE\x00')
     .replace(/\}\}/g, '\x00RBRACE\x00');
 
+  result = processIncludes(result, partials);
   result = processConditionals(result, data);
   result = processInline(result, data);
 
@@ -241,4 +270,4 @@ function render(template, data) {
   return result;
 }
 
-module.exports = { render, resolveField, applyFieldInterpolation, processConditionals, processInline, evaluateJoin, evaluateList, isTruthy };
+module.exports = { render, resolveField, applyFieldInterpolation, processConditionals, processInline, processIncludes, evaluateJoin, evaluateList, isTruthy };

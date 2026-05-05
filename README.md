@@ -45,9 +45,10 @@ If `output-dir` is omitted, the file is written to `./overview/`.
   /cards              ← project-level card definitions and imports
     characters.yaml
     locations.yaml
-  /templates          ← one .template file per card type (or see multi-dir below)
+  /templates          ← one .template file per card type; optional .partial files for shared chunks
     Character.template
     Location.template
+    Header.partial      ← partial — reusable fragment, included via {include Header}
   compile.yaml
   plot-essentials.yaml              ← optional; plot essentials block definitions
   /output             ← compiler writes here (one folder per branch leaf)
@@ -69,7 +70,7 @@ If `output-dir` is omitted, the file is written to `./overview/`.
           Plot Essentials.md
 ```
 
-Cards and templates are loaded recursively from their folders. Any `.yaml` file under `cards/` or `canon/` is loaded. Any `.template` file under `templates/` is loaded. Duplicate template filenames within the same directory tree are an error; when multiple template directories are configured, later directories override earlier ones on name collision (see `templates:` below).
+Cards and templates are loaded recursively from their folders. Any `.yaml` file under `cards/` or `canon/` is loaded. Any `.template` file under `templates/` is loaded; `.partial` files in the same directories are also loaded and available for `{include}` expressions. Duplicate template or partial filenames within the same directory tree are an error; when multiple template directories are configured, later directories override earlier ones on name collision (see `templates:` below).
 
 ---
 
@@ -511,6 +512,65 @@ Personality: {join(", ", $fields.Personality.keywords)}
 
 ---
 
+## Partials
+
+Partials are reusable template fragments stored in `.partial` files alongside your `.template` files. They let you factor out repeated layout chunks — a common header, a shared fenced block, a recurring section structure — without duplicating text across templates.
+
+### Defining a partial
+
+Create a file with a `.partial` extension anywhere under your template directory:
+
+```
+templates/
+  Character.template
+  StoryCard.partial      ← shared fenced-block header
+  TraitLine.partial      ← reusable trait formatting
+```
+
+The file contains plain template text. Any template syntax works inside a partial: field interpolation, `{join(...)}`, `{list(...)}`, `{if...}{/if}`, and even other `{include}` calls.
+
+### Using a partial
+
+Inside a `.template` or another `.partial`, write:
+
+```
+{include PartialName}
+```
+
+The partial's content is expanded in-place before any other template processing, so `{if}` blocks and field references inside the partial see the same card data as the outer template. The name is matched case-insensitively against the partial's filename (without `.partial`).
+
+### Nesting
+
+Partials can include other partials to any depth:
+
+```
+# StoryCard.partial
+## {$name}
+~~~
+{include FenceHeader}
+~~~
+```
+
+```
+# FenceHeader.partial
+triggers: [{$triggers}]
+encapsulate: {$encapsulate}
+notes: {if $known}[e]{/if}
+```
+
+### Multiple template directories
+
+When `templates:` lists multiple directories, partials follow the same override rules as templates: later directories win on name collision, duplicates within the same directory are an error.
+
+### Errors
+
+| Condition | Error |
+|---|---|
+| `{include Ghost}` — no `Ghost.partial` file found | `Unknown partial "Ghost" (no .partial file found with that name)` |
+| Circular include (`A` includes `B` includes `A`) | `Circular partial include detected: a → b → a` |
+
+---
+
 ## Field Interpolation
 
 Within field values, you can reference other fields on the same card using `{$...}` syntax:
@@ -818,6 +878,9 @@ Compile this card for all leaves except those whose path starts with one of the 
 |---|---|
 | `Duplicate card ID "x"` | Two cards share the same id in the same context (canon, project) or across canon/project boundary. |
 | `Duplicate template name "x"` | Two `.template` files within the same template directory share the same filename. (Same name across different top-level directories is allowed — the later directory wins.) |
+| `Duplicate partial name "x"` | Two `.partial` files within the same template directory share the same filename. Same override rules as templates across multiple directories. |
+| `Unknown partial "x"` | `{include x}` used in a template or partial, but no `x.partial` file was found. |
+| `Circular partial include detected: a → b → a` | A chain of `{include}` calls loops back to a partial already in the current expansion stack. |
 | `Import failed: no card with id "x"` | `import:` references an id not found in the registry. |
 | `No template found for card "x"` | Neither `template:` nor `type:` on the card matches any loaded template file. |
 | `WARN: include path not found` | An `include:` path does not exist relative to the canon folder. |

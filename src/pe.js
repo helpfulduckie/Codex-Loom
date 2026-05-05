@@ -97,7 +97,7 @@ function blockAppliesTo(blockDef, branchPath) {
  * @param {string[]} branchPath - active leaf path e.g. ['subject']
  * @param {string|null} branchProtagonist - lowercase protagonist ID for this branch
  */
-function compilePE(peBlocks, registry, templates, branchPath, branchProtagonist) {
+function compilePE(peBlocks, registry, templates, partials, branchPath, branchProtagonist) {
   const rendered = [];
 
   for (const blockDef of peBlocks) {
@@ -156,7 +156,7 @@ function compilePE(peBlocks, registry, templates, branchPath, branchProtagonist)
 
       let renderedCard;
       try {
-        renderedCard = render(templateContent, card);
+        renderedCard = render(templateContent, card, partials);
       } catch (err) {
         console.error(
           `  ERR [PE]: rendering template block "${card.name}": ${err.message}`
@@ -207,7 +207,7 @@ function compilePE(peBlocks, registry, templates, branchPath, branchProtagonist)
 
     let renderedCard;
     try {
-      renderedCard = render(templateContent, context);
+      renderedCard = render(templateContent, context, partials);
     } catch (err) {
       console.error(`  ERR [PE]: rendering card "${card.name}": ${err.message}`);
       continue;

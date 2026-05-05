@@ -132,7 +132,7 @@ function cardAppliesTo(cardDef, branchPath) {
 /**
  * Compile all cards for a single branch leaf.
  */
-function compileBranch(cardDefs, registry, templates, outputDir, branchPath, branchConfig, peCardIds = new Set(), includedFilePaths = new Set()) {
+function compileBranch(cardDefs, registry, templates, partials, outputDir, branchPath, branchConfig, peCardIds = new Set(), includedFilePaths = new Set()) {
   const branchProtagonist = (
     branchConfig.protagonist || ''
   ).toLowerCase() || null;
@@ -179,7 +179,7 @@ function compileBranch(cardDefs, registry, templates, outputDir, branchPath, bra
 
     let rendered;
     try {
-      rendered = render(template, context);
+      rendered = render(template, context, partials);
     } catch (err) {
       console.error(`  ERR rendering card "${card.name}": ${err.message}`);
       continue;
@@ -206,9 +206,9 @@ function compileBranch(cardDefs, registry, templates, outputDir, branchPath, bra
 function compile(configPath) {
   const config = loadCompileConfig(configPath);
 
-  // Load templates
-  const templates = loadTemplates(config._resolvedTemplates);
-  console.log(`Loaded ${templates.size} template(s).`);
+  // Load templates and partials
+  const { templates, partials } = loadTemplates(config._resolvedTemplates);
+  console.log(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
   // Load plot-essentials.yaml if present
   const peBlocks = loadPEConfig(config._base);
@@ -295,6 +295,7 @@ function compile(configPath) {
       allCardDefs,
       registry,
       templates,
+      partials,
       branchOutputDir,
       branchPath,
       { ...branchConfig, protagonist: branchProtagonist },
@@ -305,7 +306,7 @@ function compile(configPath) {
 
     // Compile plot essentials
     if (peBlocks.length > 0) {
-      const peContent = compilePE(peBlocks, registry, templates, branchPath, branchProtagonist);
+      const peContent = compilePE(peBlocks, registry, templates, partials, branchPath, branchProtagonist);
       const pePath = writePE(branchOutputDir, peContent);
       if (pePath) {
         console.log(`    OK: PlotEssentials → ${pePath}`);
