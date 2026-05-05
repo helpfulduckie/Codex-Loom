@@ -210,4 +210,24 @@ describe('processBareMarkers', () => {
     const ctx = { card, registry, branchProtagonist: 'aness' };
     expect(processBareMarkers('$Was there', ctx)).toBe('Were there');
   });
+
+  test("$Aness's → \"your\" when Aness is active protagonist", () => {
+    const ctx = { card: heroCard, registry, branchProtagonist: 'aness' };
+    expect(processBareMarkers("$Aness's voice", ctx)).toBe("your voice");
+  });
+
+  test("$Aness's → \"Aness's\" when Aness is not active protagonist", () => {
+    const ctx = { card: heroCard, registry, branchProtagonist: 'veyrn' };
+    expect(processBareMarkers("$Aness's voice", ctx)).toBe("Aness's voice");
+  });
+
+  test("$aness's (lowercase) → \"your\" when Aness is active protagonist", () => {
+    const ctx = { card: heroCard, registry, branchProtagonist: 'aness' };
+    expect(processBareMarkers("$aness's voice", ctx)).toBe("your voice");
+  });
+
+  test('$Aness (no suffix) still resolves to "you" — no regression', () => {
+    const ctx = { card: heroCard, registry, branchProtagonist: 'aness' };
+    expect(processBareMarkers('$Aness walked in', ctx)).toBe('you walked in');
+  });
 });

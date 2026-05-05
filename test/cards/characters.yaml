@@ -31,7 +31,11 @@
       eyes: silver eyes
       build: tall broad build
     Personality:
-      keywords: honorable, disciplined, protective, warm
+      keywords:
+        - honorable
+        - disciplined
+        - protective
+        - warm
     Magic:
       affinity: no affinity
       effect: magicless

@@ -80,14 +80,22 @@ function deleteCI(obj, key) {
  * If current is a mapping and op is also a mapping, recurse into subfields.
  */
 function applyFieldOp(current, op) {
-  // Array of operations — apply each in sequence to the running value
+  // Array — either sequential ops or a value array (replaces the field).
+  // Treated as ops if empty (no change) or every element is a string op prefix (+{, -{, /{).
+  // Anything else is a value array.
   if (Array.isArray(op)) {
-    let value = current;
-    for (const step of op) {
-      if (value === '__DELETE__') break;
-      value = applyFieldOp(value, step);
+    const isOpsArray = op.length === 0 || op.every(
+      el => typeof el === 'string' && /^\+\{|^-\{|^\/\{/.test(el.trim())
+    );
+    if (isOpsArray) {
+      let value = current;
+      for (const step of op) {
+        if (value === '__DELETE__') break;
+        value = applyFieldOp(value, step);
+      }
+      return value;
     }
-    return value;
+    return op;
   }
 
   // Both are mappings — recurse into subfields
@@ -122,6 +130,21 @@ function applyFieldOp(current, op) {
   // Remove entire field (quoted "-" form still supported for explicitness)
   if (opStr === '-') return '__DELETE__';
 
+  // --- Array-typed current value: apply op element-wise or push/filter ---
+  if (Array.isArray(current)) {
+    const appendMatch = opStr.match(/^\+\{([\s\S]*)\}$/);
+    if (appendMatch) return [...current, appendMatch[1]];
+
+    const removeMatch = opStr.match(/^-\{([\s\S]*)\}$/);
+    if (removeMatch) return current.filter(el => el !== removeMatch[1]);
+
+    const swapMatch = opStr.match(/^\/\{([\s\S]*?)\}\/\{([\s\S]*?)\}$/);
+    if (swapMatch) return current.map(el => String(el).split(swapMatch[1]).join(swapMatch[2]));
+
+    // Replace
+    return op;
+  }
+
   const currentStr = current !== null && current !== undefined
     ? String(current)
     : '';
@@ -129,6 +152,7 @@ function applyFieldOp(current, op) {
   // Append: +{value}
   // Use '; ' for single-line scalars, newline for multiline block scalars.
   // If toAdd already starts with a separator character, don't add another.
+  // If current is absent, start a new single-item array.
   const appendMatch = opStr.match(/^\+\{([\s\S]*)\}$/);
   if (appendMatch) {
     const toAdd = appendMatch[1];

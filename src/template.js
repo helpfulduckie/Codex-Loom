@@ -44,6 +44,7 @@ function resolveField(ref, data) {
 
   if (value === null || value === undefined) return null;
   if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (Array.isArray(value)) return value.length > 0 ? value : null;
   if (typeof value === 'object') return null;
 
   const str = String(value).trim();
@@ -56,6 +57,7 @@ function resolveField(ref, data) {
 function isTruthy(ref, data) {
   const val = resolveField(ref, data);
   if (val === null) return false;
+  if (Array.isArray(val)) return val.length > 0;
   if (val.toLowerCase() === 'false') return false;
   if (val === '0') return false;
   return true;
@@ -74,9 +76,24 @@ function evaluateJoin(inner, data) {
 
   const values = refs
     .map(ref => resolveField(ref, data))
-    .filter(v => v !== null);
+    .filter(v => v !== null)
+    .flatMap(v => Array.isArray(v) ? v : [v]);
 
   return values.join(separator);
+}
+
+/**
+ * Evaluate a {list($ref)} call — renders an array as "- item" lines.
+ * If the resolved value is already a plain string, returns it unchanged.
+ */
+function evaluateList(inner, data) {
+  const refMatch = inner.match(/^list\(\s*(\$[^)]+?)\s*\)$/s);
+  if (!refMatch) throw new Error('Malformed list(): ' + inner);
+
+  const val = resolveField(refMatch[1].trim(), data);
+  if (val === null) return '';
+  if (Array.isArray(val)) return val.map(item => '- ' + item).join('\n');
+  return val;
 }
 
 /**
@@ -150,6 +167,8 @@ function applyInterpolationRecursive(obj, card) {
     const val = obj[key];
     if (typeof val === 'string') {
       obj[key] = processFieldInterpolation(val, card);
+    } else if (Array.isArray(val)) {
+      obj[key] = val.map(item => typeof item === 'string' ? processFieldInterpolation(item, card) : item);
     } else if (typeof val === 'object' && val !== null) {
       applyInterpolationRecursive(val, card);
     }
@@ -172,9 +191,20 @@ function processInline(template, data) {
       }
     }
 
+    if (inner.startsWith('list(')) {
+      try {
+        return evaluateList(inner, data);
+      } catch (e) {
+        console.warn('  WARN: ' + e.message);
+        return '';
+      }
+    }
+
     if (inner.startsWith('$')) {
       const val = resolveField(inner, data);
-      return val === null ? '' : val;
+      if (val === null) return '';
+      if (Array.isArray(val)) return val.join('; ');
+      return val;
     }
 
     return match;
@@ -211,4 +241,4 @@ function render(template, data) {
   return result;
 }
 
-module.exports = { render, resolveField, applyFieldInterpolation, processConditionals, processInline, evaluateJoin, isTruthy };
+module.exports = { render, resolveField, applyFieldInterpolation, processConditionals, processInline, evaluateJoin, evaluateList, isTruthy };

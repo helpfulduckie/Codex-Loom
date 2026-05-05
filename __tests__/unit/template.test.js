@@ -4,6 +4,7 @@ const {
   resolveField,
   isTruthy,
   evaluateJoin,
+  evaluateList,
   processConditionals,
   processInline,
   render,
@@ -38,6 +39,16 @@ describe('resolveField', () => {
     expect(resolveField('$fields.Physical Traits', data)).toBeNull();
   });
 
+  test('returns array for array-valued field', () => {
+    const d = { fields: { tags: ['a', 'b', 'c'] } };
+    expect(resolveField('$fields.tags', d)).toEqual(['a', 'b', 'c']);
+  });
+
+  test('returns null for empty array', () => {
+    const d = { fields: { tags: [] } };
+    expect(resolveField('$fields.tags', d)).toBeNull();
+  });
+
   test('returns null for empty string value', () => {
     const d = { name: '' };
     expect(resolveField('$name', d)).toBeNull();
@@ -59,6 +70,14 @@ describe('isTruthy', () => {
 
   test('string "0" is falsy', () => {
     expect(isTruthy('$known', { known: '0' })).toBe(false);
+  });
+
+  test('non-empty array is truthy', () => {
+    expect(isTruthy('$fields.tags', { fields: { tags: ['a'] } })).toBe(true);
+  });
+
+  test('empty array is falsy', () => {
+    expect(isTruthy('$fields.tags', { fields: { tags: [] } })).toBe(false);
   });
 });
 
@@ -83,6 +102,32 @@ describe('evaluateJoin', () => {
   test('all missing returns empty string', () => {
     const result = evaluateJoin('join("; ", $fields.x, $fields.y)', data);
     expect(result).toBe('');
+  });
+
+  test('spreads array field into join', () => {
+    const d = { fields: { tags: ['x', 'y', 'z'] } };
+    expect(evaluateJoin('join(", ", $fields.tags)', d)).toBe('x, y, z');
+  });
+
+  test('mixes array and scalar refs in join', () => {
+    const d = { fields: { tags: ['x', 'y'], extra: 'z' } };
+    expect(evaluateJoin('join("; ", $fields.tags, $fields.extra)', d)).toBe('x; y; z');
+  });
+});
+
+describe('evaluateList', () => {
+  test('renders array as bullet lines', () => {
+    const d = { fields: { items: ['alpha', 'beta', 'gamma'] } };
+    expect(evaluateList('list($fields.items)', d)).toBe('- alpha\n- beta\n- gamma');
+  });
+
+  test('passes string value through unchanged', () => {
+    const d = { fields: { text: '- already\n- bulleted' } };
+    expect(evaluateList('list($fields.text)', d)).toBe('- already\n- bulleted');
+  });
+
+  test('returns empty string for missing field', () => {
+    expect(evaluateList('list($fields.missing)', {})).toBe('');
   });
 });
 

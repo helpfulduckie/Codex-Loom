@@ -181,16 +181,27 @@ function processBareMarkers(str, context) {
 
     const lower = token.toLowerCase();
 
+    // Detect and strip possessive suffix before registry lookup
+    let possessiveSuffix = '';
+    let lookupToken = token;
+    let lookupLower = lower;
+    if (lower.endsWith("'s")) {
+      possessiveSuffix = "'s";
+      lookupToken = token.slice(0, -2);
+      lookupLower = lower.slice(0, -2);
+    }
+
     // Check if it's a known protagonist ID
-    const isProtagonistId = registry.has(lower);
+    const isProtagonistId = registry.has(lookupLower);
     if (isProtagonistId) {
-      const referencedCard = registry.get(lower);
-      if (branchProtagonist && branchProtagonist === lower) {
+      const referencedCard = registry.get(lookupLower);
+      if (branchProtagonist && branchProtagonist === lookupLower) {
         // This character IS the active protagonist
-        return 'you';
+        return possessiveSuffix ? PRONOUN_SETS.you.possessive : 'you';
       } else {
         // Resolve to name field
-        return referencedCard.name || token;
+        const name = referencedCard.name || lookupToken;
+        return possessiveSuffix ? name + possessiveSuffix : name;
       }
     }
 

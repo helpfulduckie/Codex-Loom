@@ -317,15 +317,15 @@ function compile(configPath) {
   console.log(`\nDone. Wrote ${totalFiles} file(s).`);
 
   if (config.overview) {
-    const { runLeavesMode } = require('./overview');
+    const { runLeafReviewMode } = require('./overview');
     const overviewDir = path.resolve(config._base, config.overview);
     fs.mkdirSync(overviewDir, { recursive: true });
-    console.log(`\nGenerating overview files → ${overviewDir}`);
+    console.log(`\nGenerating leaf review files → ${overviewDir}`);
     try {
-      const written = runLeavesMode(config._resolvedOutput, overviewDir);
-      console.log(`Generated ${written.length} overview file(s).`);
+      const written = runLeafReviewMode(config._resolvedOutput, overviewDir);
+      console.log(`Generated ${written.length} leaf review file(s).`);
     } catch (err) {
-      console.warn(`  WARN: overview generation failed: ${err.message}`);
+      console.warn(`  WARN: leaf review generation failed: ${err.message}`);
     }
   }
 }
@@ -335,11 +335,13 @@ module.exports = { compile, compileBranch, cardAppliesTo, getTemplate, writeOutp
 if (require.main === module) {
   const rawArgs = process.argv.slice(2);
 
-  const overviewIdx = rawArgs.findIndex(a => a === '--overview' || a === '-o');
-  if (overviewIdx !== -1) {
-    // ── Standalone overview mode ─────────────────────────────────────────────
-    const { runLeavesMode } = require('./overview');
-    const rest = rawArgs.filter((_, i) => i !== overviewIdx);
+  const leafReviewIdx = rawArgs.findIndex(a => a === '--leafReview' || a === '-l');
+  const overviewIdx   = rawArgs.findIndex(a => a === '--overview'   || a === '-o');
+
+  if (leafReviewIdx !== -1) {
+    // ── Standalone leaf review mode (one file per leaf) ──────────────────────
+    const { runLeafReviewMode } = require('./overview');
+    const rest = rawArgs.filter((_, i) => i !== leafReviewIdx);
 
     let scenarioRoot;
     let outputDir;
@@ -361,8 +363,39 @@ if (require.main === module) {
       outputDir = path.resolve(path.dirname(cfgPath), cfg.overview);
     } else {
       scenarioRoot = path.resolve(rest[0]);
-      outputDir    = path.resolve(rest[1] || 'overview');
+      outputDir    = path.resolve(rest[1] || 'leaf-review');
     }
+
+    if (!fs.existsSync(scenarioRoot)) {
+      console.error(`Scenario root not found: ${scenarioRoot}`);
+      process.exit(1);
+    }
+
+    fs.mkdirSync(outputDir, { recursive: true });
+    console.log(`\nLeaf review mode`);
+    console.log(`Scenario root : ${scenarioRoot}`);
+    console.log(`Output dir    : ${outputDir}\n`);
+
+    try {
+      const written = runLeafReviewMode(scenarioRoot, outputDir);
+      console.log(`\nDone. Wrote ${written.length} leaf review file(s) to:\n  ${outputDir}\n`);
+    } catch (err) {
+      console.error(`\nFatal: ${err.message}`);
+      process.exit(1);
+    }
+
+  } else if (overviewIdx !== -1) {
+    // ── Standalone overview mode (one whole-tree file) ────────────────────────
+    const { runOverviewMode } = require('./overview');
+    const rest = rawArgs.filter((_, i) => i !== overviewIdx);
+
+    if (rest.length === 0) {
+      console.error('Usage: codex-loom --overview|-o <scenario-root> [<output-dir>]');
+      process.exit(1);
+    }
+
+    const scenarioRoot = path.resolve(rest[0]);
+    const outputDir    = path.resolve(rest[1] || 'overview');
 
     if (!fs.existsSync(scenarioRoot)) {
       console.error(`Scenario root not found: ${scenarioRoot}`);
@@ -375,8 +408,8 @@ if (require.main === module) {
     console.log(`Output dir    : ${outputDir}\n`);
 
     try {
-      const written = runLeavesMode(scenarioRoot, outputDir);
-      console.log(`\nDone. Wrote ${written.length} overview file(s) to:\n  ${outputDir}\n`);
+      runOverviewMode(scenarioRoot, outputDir);
+      console.log(`\nDone. Wrote overview file to:\n  ${outputDir}\n`);
     } catch (err) {
       console.error(`\nFatal: ${err.message}`);
       process.exit(1);
@@ -387,7 +420,8 @@ if (require.main === module) {
     if (rawArgs.length === 0) {
       console.error(
         'Usage: codex-loom <path/to/compile.yaml or path/to/project/>\n' +
-        '       codex-loom --overview|-o [<scenario-root>] [<output-dir>]'
+        '       codex-loom --leafReview|-l [<scenario-root>] [<output-dir>]\n' +
+        '       codex-loom --overview|-o <scenario-root> [<output-dir>]'
       );
       process.exit(1);
     }

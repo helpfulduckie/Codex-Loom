@@ -4,7 +4,7 @@ const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
 
-const { runLeavesMode } = require('../../src/overview');
+const { runLeafReviewMode } = require('../../src/overview');
 
 function write(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -13,7 +13,7 @@ function write(filePath, content) {
 
 // ── two-branch fixture ────────────────────────────────────────────────────────
 
-describe('runLeavesMode on two-branch fixture', () => {
+describe('runLeafReviewMode on two-branch fixture', () => {
   let tmp, outDir;
 
   beforeAll(() => {
@@ -37,7 +37,7 @@ describe('runLeavesMode on two-branch fixture', () => {
       'Researcher character content'
     );
 
-    runLeavesMode(tmp, outDir);
+    runLeafReviewMode(tmp, outDir);
   });
 
   afterAll(() => {
@@ -85,7 +85,7 @@ describe('runLeavesMode on two-branch fixture', () => {
 
 // ── single-leaf fixture ───────────────────────────────────────────────────────
 
-describe('runLeavesMode on single-leaf fixture', () => {
+describe('runLeafReviewMode on single-leaf fixture', () => {
   let tmp, outDir;
 
   beforeAll(() => {
@@ -95,7 +95,7 @@ describe('runLeavesMode on single-leaf fixture', () => {
 
     write(path.join(tmp, 'Story Cards', 'Char', 'Card.md'), 'Single branch card');
 
-    runLeavesMode(tmp, outDir);
+    runLeafReviewMode(tmp, outDir);
   });
 
   afterAll(() => {

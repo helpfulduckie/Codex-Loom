@@ -74,14 +74,23 @@ describe('applyFieldOp', () => {
     test('mixed ops: append then swap', () => {
       expect(applyFieldOp('foo', ['+{bar}', '/{bar}/{baz}'])).toBe('foo; baz');
     });
-    test('delete step short-circuits remaining ops', () => {
-      expect(applyFieldOp('hello', ['-', '/{hello}/{goodbye}'])).toBe('__DELETE__');
+    test('plain-string array is a value replacement, not ops', () => {
+      expect(applyFieldOp('old', ['new value'])).toEqual(['new value']);
     });
-    test('replace op inside array', () => {
-      expect(applyFieldOp('old', ['new value'])).toBe('new value');
+    test('array with mixed content is a value array', () => {
+      expect(applyFieldOp('old', ['a', 'b', 'c'])).toEqual(['a', 'b', 'c']);
     });
-    test('null step inside array deletes field', () => {
-      expect(applyFieldOp('hello', [null])).toBe('__DELETE__');
+    test('replaces an existing array field with a new array', () => {
+      expect(applyFieldOp(['x', 'y'], ['a', 'b', 'c'])).toEqual(['a', 'b', 'c']);
+    });
+    test('array-typed current: append pushes item', () => {
+      expect(applyFieldOp(['a', 'b'], '+{c}')).toEqual(['a', 'b', 'c']);
+    });
+    test('array-typed current: remove filters matching item', () => {
+      expect(applyFieldOp(['a', 'b', 'c'], '-{b}')).toEqual(['a', 'c']);
+    });
+    test('array-typed current: swap maps over elements', () => {
+      expect(applyFieldOp(['red fox', 'red dog'], '/{red}/{blue}')).toEqual(['blue fox', 'blue dog']);
     });
     test('array op on subfield via object recursion', () => {
       const result = applyFieldOp(

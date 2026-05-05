@@ -13,17 +13,25 @@ codex-loom path/to/compile.yaml
 codex-loom path/to/project/          ← directory form, looks for compile.yaml inside
 ```
 
-To generate overview files from an already-compiled scenario folder (no `compile.yaml` needed):
+To generate one leaf-review file per branch leaf from an already-compiled scenario folder:
+```
+codex-loom --leafReview path/to/output [output-dir]
+codex-loom -l path/to/output [output-dir]
+```
+
+If `output-dir` is omitted, files are written to `./leaf-review/`. When run inside a project directory that has a `compile.yaml` with an `overview:` key, you can also run:
+```
+codex-loom --leafReview
+```
+and it will use the configured paths.
+
+To generate a single whole-tree overview file covering every node:
 ```
 codex-loom --overview path/to/output [output-dir]
 codex-loom -o path/to/output [output-dir]
 ```
 
-If `output-dir` is omitted, files are written to `./overview/` relative to the directory you called the command from. When run inside a project directory that has a `compile.yaml` with an `overview:` key, you can also run:
-```
-codex-loom --overview
-```
-and it will use the configured paths.
+If `output-dir` is omitted, the file is written to `./overview/`.
 
 ---
 
@@ -89,15 +97,17 @@ branches:                 # optional branch tree
       Q: {}
 ```
 
-### Overview output
+### Leaf review output
 
-The optional `overview:` key tells Codex-Loom to generate a set of `.overview.md` files after compiling. Each leaf branch gets one file containing all of its inherited Story Cards plus any Opening / Plot Essentials Components resolved from the nearest ancestor. This mirrors what the compiled output looks like in AI Dungeon — one flat document per playable branch.
+The optional `overview:` key tells Codex-Loom to generate leaf review files after compiling. Each leaf branch gets one `.overview.md` file containing all of its inherited Story Cards plus any Opening / Plot Essentials Components resolved from the nearest ancestor. This mirrors what the compiled output looks like in AI Dungeon — one flat document per playable branch.
 
 ```yaml
-overview: ./overview    # output dir for .overview.md files; omit to skip
+overview: ./overview    # output dir for leaf review files; omit to skip
 ```
 
 Filenames follow the pattern `A - B - C.overview.md` (branch path joined by ` - `). For a project with no branches, the scenario root folder name is used.
+
+You can also generate a single whole-tree overview file (one section per node) via the `--overview`/`-o` CLI flag — this is not triggered automatically by a build.
 
 ---
 
@@ -135,7 +145,7 @@ Branches/A/Branches/X/Components/Plot Essentials.md
 | `encapsulate` | Boolean. Passed through to output as-is. |
 | `known` | Boolean. Controls `[e]` in notes and `\]` at end of entry. |
 | `triggers` | Plain string inserted as-is into the trigger line. |
-| `fields` | Mapping of card content. Values can be plain strings, block scalars, or nested mappings. |
+| `fields` | Mapping of card content. Values can be plain strings, block scalars, YAML sequences (arrays), or nested mappings. |
 | `variants` | Named child variants that layer changes on top of this card definition. |
 
 `type` and `template` are inherited from a canonical definition on import and do not need to be restated unless overriding.
@@ -163,7 +173,11 @@ Branches/A/Branches/X/Components/Plot Essentials.md
       eyes: brown eyes
       build: tall, willowy build
     Personality:
-      keywords: inquisitive, polite, sarcastic, compassionate
+      keywords:
+        - inquisitive
+        - polite
+        - sarcastic
+        - compassionate
       expanded: |
         - $Aness love[s] magic research — $she instinctively leap[s] to explore theoretical implications
         - $Her~ polite nature is a social shield; behind it is a biting sarcasm $she deploy[s] when frustrated
@@ -192,6 +206,31 @@ Used in `variants`, `import-variant` deltas, and scenario-level `fields:` overri
 | **Chained operations** | `field:` is a YAML sequence of ops | Applies each operation to the field in order. Any operation type may appear in the list. |
 | **Subfield replace** | nested key with new value | Replaces that subfield only. |
 | **Subfield remove** | nested key with empty/null value | Removes that subfield only. |
+
+When a field holds a YAML array (sequence), the string ops behave element-wise rather than on a joined string:
+
+| Operation on array field | Effect |
+|---|---|
+| `+{item}` | Appends `item` to the array |
+| `-{item}` | Removes elements equal to `item` |
+| `/{old}/{new}` | Applies the swap to every element |
+| `field: ~` | Removes the field entirely (same as any field) |
+| `field: [a, b, c]` | Replaces the array with `[a, b, c]` (see below) |
+
+**Distinguishing value arrays from op sequences:** A YAML sequence in a variant block is treated as a **value replacement** (sets the field to that array) unless every element is a string beginning with `+{`, `-{`, or `/{` — in which case it is treated as a sequential ops list. An empty sequence `[]` is always treated as an ops list (no ops = no change).
+
+```yaml
+# Op sequence — every element is an op prefix, applied in order
+description:
+  - "/{She}/{He}"
+  - "/{her}/{his}"
+
+# Value array — elements are plain strings, replaces the field
+keywords:
+  - a different
+  - personality
+  - here
+```
 
 ### Examples
 
@@ -387,6 +426,42 @@ Joins multiple values with a separator, omitting any that are missing or blank:
 
 If `age` is missing: `male; tall broad build` — no double separators.
 
+When a ref resolves to an array field, `join` spreads all its elements into the list rather than treating the whole array as one value:
+
+```
+{join(", ", $fields.Personality.keywords)}
+→  inquisitive, polite, sarcastic, compassionate
+```
+
+You can also mix array refs with scalar refs in a single call.
+
+### Array fields
+
+Fields can be stored as YAML sequences rather than semicolon-delimited strings. The rendering format is then a template decision, not a data decision:
+
+```yaml
+# In the card definition
+Personality:
+  keywords:
+    - inquisitive
+    - polite
+    - sarcastic
+    - compassionate
+```
+
+```
+{join(", ", $fields.Personality.keywords)}   →  inquisitive, polite, sarcastic, compassionate
+{join("; ", $fields.Personality.keywords)}   →  inquisitive; polite; sarcastic; compassionate
+{list($fields.Personality.keywords)}         →  - inquisitive
+                                                - polite
+                                                - sarcastic
+                                                - compassionate
+{$fields.Personality.keywords}               →  inquisitive; polite; sarcastic; compassionate  (default join, "; ")
+{if $fields.Personality.keywords}            →  truthy if the array is non-empty
+```
+
+`{list(...)}` takes a single field reference and renders each element on its own `- ` prefixed line. When passed a plain string instead of an array (for backwards compatibility with block scalars), it outputs the string unchanged.
+
 ### Conditionals
 
 ```
@@ -426,7 +501,7 @@ notes: {if $known}[e]{/if}
 ~~~
 {$name} - {$fields.Tagline}
 Physical Traits: {join("; ", $fields.Physical Traits.gender, $fields.Physical Traits.age, $fields.Physical Traits.hair, $fields.Physical Traits.eyes, $fields.Physical Traits.build, $fields.Physical Traits.other)}
-Personality: {$fields.Personality.keywords}
+Personality: {join(", ", $fields.Personality.keywords)}
 {if $fields.Personality.expanded}{$fields.Personality.expanded}
 {/if}{if $fields.Magic}Magic: {join("; ", $fields.Magic.affinity, $fields.Magic.effect)}
 {/if}{if $fields.Background}Background:

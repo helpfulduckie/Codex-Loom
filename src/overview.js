@@ -36,6 +36,14 @@ function sanitizeFilename(name) {
   return name.replace(/[<>:"/\\|?*]/g, '_').trim();
 }
 
+function shiftHeadings(content, shift) {
+  if (shift <= 0) return content;
+  return content.replace(/^(#{1,6})(?= )/gm, (_, hashes) => {
+    const newLevel = Math.min(hashes.length + shift, 6);
+    return '#'.repeat(newLevel);
+  });
+}
+
 // ── exported building blocks ─────────────────────────────────────────────────
 
 /**
@@ -86,7 +94,7 @@ function buildStoryCardsBlock(storyCardsDir, headingLevel) {
     if (groupName) lines.push(`${hashes} ${groupName}`);
     for (const file of groups[groupName]) {
       const content = readFile(file);
-      if (content) lines.push(content);
+      if (content) lines.push(shiftHeadings(content, headingLevel - 1));
     }
   }
   return lines.join('\n\n');
@@ -228,7 +236,7 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf) {
  * Run leaves mode on a scenario root: discover all leaves, compile each one.
  * Returns the list of output file paths written.
  */
-function runLeavesMode(scenarioRoot, outputDir) {
+function runLeafReviewMode(scenarioRoot, outputDir) {
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
   const leaves      = discoverLeaves(rootAbs, [], []);
@@ -278,6 +286,6 @@ module.exports = {
   discoverLeaves,
   collectOverviewSections,
   compileLeaf,
-  runLeavesMode,
+  runLeafReviewMode,
   runOverviewMode,
 };

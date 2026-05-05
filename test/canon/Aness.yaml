@@ -16,7 +16,11 @@
       eyes: brown eyes
       build: tall, willowy build
     Personality:
-      keywords: inquisitive, polite, sarcastic, compassionate
+      keywords:
+        - inquisitive
+        - polite
+        - sarcastic
+        - compassionate
       expanded: |
         - $Aness love[s] magic research — $she instinctively leap[s] to explore theoretical implications
         - $Her~ polite nature is a social shield; behind it is a biting sarcasm $she deploy[s] when frustrated
