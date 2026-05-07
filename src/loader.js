@@ -104,7 +104,9 @@ function loadCompileConfig(configPath) {
     ...config,
     _base: base,
     _resolvedCanon: config.canon ? path.resolve(base, config.canon) : null,
-    _resolvedOutput: path.resolve(base, config.output),
+    _resolvedOutputs: Array.isArray(config.output)
+      ? config.output.map(o => path.resolve(base, o))
+      : [path.resolve(base, config.output)],
     _resolvedTemplates: Array.isArray(config.templates)
       ? config.templates.map(t => path.resolve(base, t))
       : path.resolve(base, config.templates),

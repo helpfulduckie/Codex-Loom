@@ -242,3 +242,89 @@ describe('PE import suppresses Story Card for full-include cards', () => {
     expect(content).toContain('HeroCard');
   });
 });
+
+// ── Opening.md integration ────────────────────────────────────────────────────
+
+describe('Opening.md generation', () => {
+  let openingTmpDir;
+
+  beforeAll(() => {
+    openingTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-opening-int-'));
+
+    // Minimal card + template so compile has something to do
+    fs.mkdirSync(path.join(openingTmpDir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(openingTmpDir, 'templates'), { recursive: true });
+    fs.mkdirSync(path.join(openingTmpDir, 'openings'), { recursive: true });
+
+    fs.writeFileSync(path.join(openingTmpDir, 'cards', 'cards.yaml'), [
+      '- id: Widget',
+      '  name: Widget',
+      '  type: Item',
+      '  fields:',
+      '    Desc: a widget',
+    ].join('\n'), 'utf8');
+
+    fs.writeFileSync(path.join(openingTmpDir, 'templates', 'Item.template'), [
+      '## {$name}',
+      '~~~',
+      '{$fields.Desc}',
+    ].join('\n'), 'utf8');
+
+    // File-based opening content
+    fs.writeFileSync(path.join(openingTmpDir, 'openings', 'b-opening.md'), 'Leaf B from file\n', 'utf8');
+
+    fs.writeFileSync(path.join(openingTmpDir, 'compile.yaml'), [
+      `output: ${openingTmpDir}/output`,
+      `templates: ${openingTmpDir}/templates`,
+      `cards: ${openingTmpDir}/cards`,
+      'opening: "Root question"',
+      'branches:',
+      '  A:',
+      '    opening: "Leaf A inline"',
+      '  B:',
+      '    opening: ./openings/b-opening.md',
+      '  nested:',
+      '    opening: "Branch question"',
+      '    branches:',
+      '      X: {}',
+      '      Y: {}',
+    ].join('\n'), 'utf8');
+
+    compile(path.join(openingTmpDir, 'compile.yaml'));
+  });
+
+  afterAll(() => {
+    fs.rmSync(openingTmpDir, { recursive: true, force: true });
+  });
+
+  test('root-level opening written to output/Components/Opening.md', () => {
+    const p = path.join(openingTmpDir, 'output', 'Components', 'Opening.md');
+    expect(fs.existsSync(p)).toBe(true);
+    expect(fs.readFileSync(p, 'utf8')).toBe('Root question\n');
+  });
+
+  test('inline leaf opening written to branch Components/Opening.md', () => {
+    const p = path.join(openingTmpDir, 'output', 'Branches', 'A', 'Components', 'Opening.md');
+    expect(fs.existsSync(p)).toBe(true);
+    expect(fs.readFileSync(p, 'utf8')).toBe('Leaf A inline\n');
+  });
+
+  test('file-path leaf opening reads file content', () => {
+    const p = path.join(openingTmpDir, 'output', 'Branches', 'B', 'Components', 'Opening.md');
+    expect(fs.existsSync(p)).toBe(true);
+    expect(fs.readFileSync(p, 'utf8')).toBe('Leaf B from file\n');
+  });
+
+  test('branch-point opening written to intermediate node Components/', () => {
+    const p = path.join(openingTmpDir, 'output', 'Branches', 'nested', 'Components', 'Opening.md');
+    expect(fs.existsSync(p)).toBe(true);
+    expect(fs.readFileSync(p, 'utf8')).toBe('Branch question\n');
+  });
+
+  test('nested leaves without opening do not get Opening.md', () => {
+    const x = path.join(openingTmpDir, 'output', 'Branches', 'nested', 'Branches', 'X', 'Components', 'Opening.md');
+    const y = path.join(openingTmpDir, 'output', 'Branches', 'nested', 'Branches', 'Y', 'Components', 'Opening.md');
+    expect(fs.existsSync(x)).toBe(false);
+    expect(fs.existsSync(y)).toBe(false);
+  });
+});

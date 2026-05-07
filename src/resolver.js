@@ -360,7 +360,7 @@ function applyVariantBlock(card, variant, canonCard) {
   }
 
   for (const key of ['name', 'type', 'template', 'pronouns', 'protagonist',
-    'encapsulate', 'known', 'triggers']) {
+    'encapsulate', 'known', 'triggers', 'text']) {
     if (variant[key] !== undefined) {
       card[key] = variant[key];
     }
@@ -420,7 +420,7 @@ function applyDelta(card, delta, canonCard) {
   if (!delta) return;
 
   const topLevelFields = ['name', 'type', 'template', 'pronouns', 'protagonist',
-    'encapsulate', 'known', 'triggers'];
+    'encapsulate', 'known', 'triggers', 'text'];
 
   for (const [key, value] of Object.entries(delta)) {
     // Skip compiler/structural keys
@@ -507,4 +507,5 @@ module.exports = {
   applyFieldsDelta,
   collectVariantDeltas,
   applyFieldOp,
+  applyBranchVariants,
 };

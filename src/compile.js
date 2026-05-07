@@ -26,6 +26,53 @@ function getTemplate(card, templates) {
 }
 
 /**
+ * Resolve opening content: if the value is a path to an existing file, read it;
+ * otherwise treat it as inline text.
+ */
+function resolveOpeningContent(opening, base) {
+  const resolved = path.resolve(base, String(opening));
+  if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+    return fs.readFileSync(resolved, 'utf8').trimEnd();
+  }
+  return String(opening).trimEnd();
+}
+
+/**
+ * Write content to {outputDir}/Components/Opening.md.
+ */
+function writeOpening(outputDir, content) {
+  const dir = path.join(outputDir, 'Components');
+  fs.mkdirSync(dir, { recursive: true });
+  const outPath = path.join(dir, 'Opening.md');
+  fs.writeFileSync(outPath, content + '\n', 'utf8');
+  return outPath;
+}
+
+/**
+ * Recursively write Opening.md for every branch level that has an opening: key.
+ * nodeOpening is the opening value at this node (null if absent).
+ * branches is the sub-branches map at this node (may be null/undefined).
+ * outputBases is the array of absolute output dirs for this node.
+ * configBase is the compile.yaml directory (for relative path resolution).
+ */
+function writeOpenings(nodeOpening, branches, outputBases, configBase) {
+  if (nodeOpening != null) {
+    const content = resolveOpeningContent(nodeOpening, configBase);
+    for (const base of outputBases) {
+      const outPath = writeOpening(base, content);
+      console.log(`    OK: Opening → ${outPath}`);
+    }
+  }
+  if (!branches || typeof branches !== 'object') return;
+  for (const [name, branchConfig] of Object.entries(branches)) {
+    const childBases = outputBases.map(b => path.join(b, 'Branches', name));
+    const childOpening = branchConfig && branchConfig.opening != null ? branchConfig.opening : null;
+    const childBranches = branchConfig && branchConfig.branches ? branchConfig.branches : null;
+    writeOpenings(childOpening, childBranches, childBases, configBase);
+  }
+}
+
+/**
  * Write compiled cards to output directory.
  * One .md file per card type per branch leaf.
  */
@@ -277,11 +324,13 @@ function compile(configPath) {
       branchConfig.protagonist || config.protagonist || ''
     ).toLowerCase() || null;
 
-    // Output dir for this branch
+    // Output dirs for this branch (supports multiple output paths)
     // Velvet Lattice format: Branches/A/Branches/X/Story Cards/Type
-    const branchOutputDir = branchPath.length > 0
-      ? path.join(config._resolvedOutput, ...branchPath.flatMap(b => ['Branches', b]))
-      : config._resolvedOutput;
+    const branchOutputDirs = config._resolvedOutputs.map(base =>
+      branchPath.length > 0
+        ? path.join(base, ...branchPath.flatMap(b => ['Branches', b]))
+        : base
+    );
 
     // Compute which PE card IDs apply to this branch (for Story Card dedup)
     const peCardIds = new Set(
@@ -290,32 +339,40 @@ function compile(configPath) {
         .map(b => b.import.split('/')[0].toLowerCase())
     );
 
-    // Compile story cards
-    const written = compileBranch(
-      allCardDefs,
-      registry,
-      templates,
-      partials,
-      branchOutputDir,
-      branchPath,
-      { ...branchConfig, protagonist: branchProtagonist },
-      peCardIds,
-      includedFilePaths,
-    );
+    // Compile story cards (write to all output dirs)
+    let written = [];
+    for (const branchOutputDir of branchOutputDirs) {
+      written = compileBranch(
+        allCardDefs,
+        registry,
+        templates,
+        partials,
+        branchOutputDir,
+        branchPath,
+        { ...branchConfig, protagonist: branchProtagonist },
+        peCardIds,
+        includedFilePaths,
+      );
+    }
     totalFiles += written.length;
 
-    // Compile plot essentials
+    // Compile plot essentials (write to all output dirs)
     if (peBlocks.length > 0) {
       const peContent = compilePE(peBlocks, registry, templates, partials, branchPath, branchProtagonist);
-      const pePath = writePE(branchOutputDir, peContent);
-      if (pePath) {
-        console.log(`    OK: PlotEssentials → ${pePath}`);
-        totalFiles++;
+      for (const branchOutputDir of branchOutputDirs) {
+        const pePath = writePE(branchOutputDir, peContent);
+        if (pePath && branchOutputDir === branchOutputDirs[0]) {
+          console.log(`    OK: PlotEssentials → ${pePath}`);
+          totalFiles++;
+        }
       }
     }
   }
 
   console.log(`\nDone. Wrote ${totalFiles} file(s).`);
+
+  // Write Opening.md files for all levels that have an opening: key
+  writeOpenings(config.opening ?? null, config.branches, config._resolvedOutputs, config._base);
 
   if (config.overview) {
     const { runLeafReviewMode } = require('./overview');
@@ -323,7 +380,7 @@ function compile(configPath) {
     fs.mkdirSync(overviewDir, { recursive: true });
     console.log(`\nGenerating leaf review files → ${overviewDir}`);
     try {
-      const written = runLeafReviewMode(config._resolvedOutput, overviewDir);
+      const written = runLeafReviewMode(config._resolvedOutputs[0], overviewDir);
       console.log(`Generated ${written.length} leaf review file(s).`);
     } catch (err) {
       console.warn(`  WARN: leaf review generation failed: ${err.message}`);
@@ -331,7 +388,7 @@ function compile(configPath) {
   }
 }
 
-module.exports = { compile, compileBranch, cardAppliesTo, getTemplate, writeOutput, resolveIncludes };
+module.exports = { compile, compileBranch, cardAppliesTo, getTemplate, writeOutput, resolveIncludes, writeOpening, resolveOpeningContent };
 
 if (require.main === module) {
   const rawArgs = process.argv.slice(2);

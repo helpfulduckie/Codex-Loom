@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolveCard } = require('./resolver');
+const { resolveCard, applyBranchVariants } = require('./resolver');
 const { applyPronounPasses } = require('./pronouns');
 const { render, applyFieldInterpolation } = require('./template');
 
@@ -108,21 +108,28 @@ function compilePE(peBlocks, registry, templates, partials, branchPath, branchPr
 
     // ── Detect block type ────────────────────────────────────────────────────
     const isImport   = !!blockDef.import;
-    const isFreeform = !isImport &&
-                       (blockDef.text !== undefined && blockDef.text !== null);
+    const isFreeform = !isImport && !blockDef.template && !blockDef.type &&
+                       (blockDef.text != null || !!blockDef.variants);
     const isTemplate = !isImport && !isFreeform &&
                        !!(blockDef.template || blockDef.type);
 
     // ── Freeform block ──────────────────────────────────────────────────────
     if (isFreeform) {
-      // Freeform blocks can declare pronouns/protagonist directly on the block.
       const fakeCard = {
         name:        blockDef.id || '(pe block)',
         pronouns:    blockDef.pronouns    || null,
         protagonist: blockDef.protagonist || null,
-        fields: { _text: blockDef.text },
+        text:        blockDef.text        ?? null,
+        fields:      {},
       };
 
+      if (blockDef.variants) {
+        applyBranchVariants(fakeCard, blockDef, null, branchPath);
+      }
+
+      if (fakeCard.text == null) continue;
+
+      fakeCard.fields._text = fakeCard.text;
       applyPronounPasses(fakeCard, registry, branchProtagonist);
       const processedText = fakeCard.fields._text;
 

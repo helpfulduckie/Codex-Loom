@@ -61,12 +61,14 @@ If `output-dir` is omitted, the file is written to `./overview/`.
           /Character
             Character.md
         /Components
+          Opening.md
           Plot Essentials.md
       /researcher
         /Story Cards
           /Character
             Character.md
         /Components
+          Opening.md
           Plot Essentials.md
 ```
 
@@ -82,13 +84,17 @@ output: ./output          # where compiled output is written
 templates: ./templates    # where .template files live (see below for multi-dir form)
 cards: ./cards            # where project card files live
 protagonist: Aness        # optional global default protagonist ID
+opening: "Which role will you play?"  # optional; written to output/Components/Opening.md
 
 branches:                 # optional branch tree
   subject:
     protagonist: Aness    # optional per-branch protagonist override
+    opening: ./openings/subject.md  # optional; written to Branches/subject/Components/Opening.md
   researcher:
     protagonist: Veyrn
+    opening: "You are a researcher investigating the Fused-Squad program."
   A:
+    opening: "Choose a path."  # branch-point opening — written to Branches/A/Components/Opening.md
     branches:             # nested branches require the 'branches:' key
       X: {}
       Y: {}
@@ -705,6 +711,50 @@ branches:
 ```
 
 A card's bare `$` markers are you-mode when the branch protagonist matches the card's `protagonist:` field. All protagonist matching is case-insensitive.
+
+---
+
+## Opening
+
+`opening:` writes a `Components/Opening.md` file at any level of the branch tree. Velvet Lattice uses this file to populate the field in AID that prompts the player to select a branch — typically a question (to which the branch names are the answers) or a short description of what each branch represents.
+
+The value is either inline text or a path to a text file (relative to `compile.yaml`, or absolute). If the path resolves to an existing file, its contents are used; otherwise the string is used as-is.
+
+```yaml
+# Root-level opening — written to {output}/Components/Opening.md
+opening: "Who are you?"
+
+branches:
+  subject:
+    protagonist: Aness
+    # Inline leaf opening — written to Branches/subject/Components/Opening.md
+    opening: "You are a research subject."
+
+  researcher:
+    protagonist: Veyrn
+    # File-based leaf opening — reads the file and writes its content
+    opening: ./openings/researcher.md
+
+  tier2:
+    # Branch-point opening — written to Branches/tier2/Components/Opening.md,
+    # which neighbors its own Branches/ folder
+    opening: "Choose a specialisation."
+    branches:
+      alpha: {}
+      beta: {}
+```
+
+### Output locations
+
+| `opening:` placement | Output path |
+|---|---|
+| Top-level key in `compile.yaml` | `{output}/Components/Opening.md` |
+| On a leaf branch node | `{output}/Branches/…/leaf/Components/Opening.md` |
+| On a branch node with sub-branches | `{output}/Branches/…/node/Components/Opening.md` |
+
+For multiple output paths (`output:` as a list), every output path receives the file.
+
+If no `opening:` key is present at a given level, no `Opening.md` is written there — existing projects are unaffected.
 
 ---
 

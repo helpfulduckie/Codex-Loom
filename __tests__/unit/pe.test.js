@@ -151,6 +151,57 @@ describe('compilePE — template block', () => {
   });
 });
 
+// ── compilePE — freeform variants ───────────────────────────────────────────
+
+describe('compilePE — freeform block with variants', () => {
+  test('variant overrides top-level text for matching branch', () => {
+    const blocks = [{
+      text: 'Base text',
+      variants: { subject: { text: 'Subject text' } },
+    }];
+    const result = compilePE(blocks, registry, templates, new Map(), ['subject'], null);
+    expect(result).toBe('Subject text');
+  });
+
+  test('top-level text used when no matching variant', () => {
+    const blocks = [{
+      text: 'Base text',
+      variants: { researcher: { text: 'Researcher text' } },
+    }];
+    const result = compilePE(blocks, registry, templates, new Map(), ['subject'], null);
+    expect(result).toBe('Base text');
+  });
+
+  test('no top-level text, variant provides it for matching branch', () => {
+    const blocks = [{
+      variants: { subject: { text: 'Only for subject' } },
+    }];
+    const result = compilePE(blocks, registry, templates, new Map(), ['subject'], null);
+    expect(result).toBe('Only for subject');
+  });
+
+  test('no top-level text, no matching variant → block skipped', () => {
+    const blocks = [{
+      variants: { researcher: { text: 'Only for researcher' } },
+    }];
+    const result = compilePE(blocks, registry, templates, new Map(), ['subject'], null);
+    expect(result).toBeNull();
+  });
+
+  test('variant can override pronouns and protagonist', () => {
+    const blocks = [{
+      variants: {
+        subject: {
+          pronouns: 'female',
+          text: '{$She} is here.',
+        },
+      },
+    }];
+    const result = compilePE(blocks, registry, templates, new Map(), ['subject'], null);
+    expect(result).toBe('She is here.');
+  });
+});
+
 // ── compilePE — unknown blocks ───────────────────────────────────────────────
 
 describe('compilePE — unknown block', () => {
