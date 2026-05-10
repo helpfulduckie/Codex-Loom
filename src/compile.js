@@ -50,22 +50,22 @@ function writeOpening(outputDir, content) {
 
 /**
  * Recursively write Opening.md for every branch level that has an opening: key.
- * nodeOpening is the opening value at this node (null if absent).
- * branches is the sub-branches map at this node (may be null/undefined).
- * outputBases is the array of absolute output dirs for this node.
- * configBase is the compile.yaml directory (for relative path resolution).
+ * outputBases is now an array of { path, label } objects.
  */
 function writeOpenings(nodeOpening, branches, outputBases, configBase) {
   if (nodeOpening != null) {
     const content = resolveOpeningContent(nodeOpening, configBase);
     for (const base of outputBases) {
-      const outPath = writeOpening(base, content);
+      const outPath = writeOpening(base.path, content);
       console.log(`    OK: Opening → ${outPath}`);
     }
   }
   if (!branches || typeof branches !== 'object') return;
   for (const [name, branchConfig] of Object.entries(branches)) {
-    const childBases = outputBases.map(b => path.join(b, 'Branches', name));
+    const childBases = outputBases.map(b => ({
+      path: path.join(b.path, 'Branches', name),
+      label: b.label,
+    }));
     const childOpening = branchConfig && branchConfig.opening != null ? branchConfig.opening : null;
     const childBranches = branchConfig && branchConfig.branches ? branchConfig.branches : null;
     writeOpenings(childOpening, childBranches, childBases, configBase);
@@ -82,6 +82,40 @@ function writeOutput(outputDir, type, renderedCards) {
   const outputPath = path.join(typeDir, `${type}.md`);
   fs.writeFileSync(outputPath, renderedCards.join('\n\n') + '\n', 'utf8');
   return outputPath;
+}
+
+/**
+ * Check whether a card/block/include applies to a given output label.
+ *
+ * only_output: [labels]   → include only for these output labels
+ * except_output: [labels] → include for all outputs except these
+ *
+ * If the output has no label, only_output filters are ignored with a warning
+ * and except_output filters are ignored silently (unlabelled outputs always compile).
+ */
+function outputAppliesTo(def, outputLabel) {
+  const onlyOut  = def.only_output;
+  const exceptOut = def.except_output;
+
+  if (!onlyOut && !exceptOut) return true;
+
+  if (!outputLabel) {
+    if (onlyOut) {
+      console.warn('  WARN: only_output filter on a card/block targeting an unlabelled output — filter ignored, card will compile');
+    }
+    return true;
+  }
+
+  const label = outputLabel.toLowerCase();
+
+  function matchesAny(list) {
+    const arr = Array.isArray(list) ? list : [list];
+    return arr.some(l => String(l).toLowerCase() === label);
+  }
+
+  if (onlyOut  !== undefined && onlyOut  !== null) return  matchesAny(onlyOut);
+  if (exceptOut !== undefined && exceptOut !== null) return !matchesAny(exceptOut);
+  return true;
 }
 
 /**
@@ -132,10 +166,12 @@ function resolveIncludes(cardDefs, canonDir) {
         // Explicit import takes precedence — skip included version
         continue;
       }
-      // Stamp only/except from the include directive onto the card
+      // Stamp only/except and only_output/except_output from the include directive onto the card
       const stamped = { ...card, _source: fullPath };
-      if (def.only !== undefined && def.only !== null) stamped.only = def.only;
-      if (def.except !== undefined && def.except !== null) stamped.except = def.except;
+      if (def.only        !== undefined && def.only        !== null) stamped.only        = def.only;
+      if (def.except      !== undefined && def.except      !== null) stamped.except      = def.except;
+      if (def.only_output !== undefined && def.only_output !== null) stamped.only_output = def.only_output;
+      if (def.except_output !== undefined && def.except_output !== null) stamped.except_output = def.except_output;
       included.push(stamped);
     }
   }
@@ -145,7 +181,7 @@ function resolveIncludes(cardDefs, canonDir) {
 
 /**
  * Check whether a card definition should be compiled for a given branch leaf path.
- * 
+ *
  * If 'only' is set: include if the leaf path starts with any listed prefix.
  * If 'except' is set: exclude if the leaf path starts with any listed prefix.
  * If neither is set: always include.
@@ -177,9 +213,10 @@ function cardAppliesTo(cardDef, branchPath) {
 }
 
 /**
- * Compile all cards for a single branch leaf.
+ * Compile all cards for a single branch leaf into a single output directory.
+ * outputLabel is the label for this output (may be null for unlabelled outputs).
  */
-function compileBranch(cardDefs, registry, templates, partials, outputDir, branchPath, branchConfig, peCardIds = new Set(), includedFilePaths = new Set()) {
+function compileBranch(cardDefs, registry, templates, partials, outputDir, branchPath, branchConfig, outputLabel, peCardIds = new Set(), includedFilePaths = new Set()) {
   const branchProtagonist = (
     branchConfig.protagonist || ''
   ).toLowerCase() || null;
@@ -192,6 +229,9 @@ function compileBranch(cardDefs, registry, templates, partials, outputDir, branc
 
     // Apply only/except branch filter
     if (!cardAppliesTo(cardDef, branchPath)) continue;
+
+    // Apply only_output/except_output filter
+    if (!outputAppliesTo(cardDef, outputLabel)) continue;
 
     // Skip cards that are in PE and arrived via a full include (not an explicit import)
     const baseId = ((cardDef.id || cardDef.name) || '').toLowerCase();
@@ -309,7 +349,7 @@ function compile(configPath) {
 
   // Enumerate branch leaves
   const leaves = enumerateLeaves(config.branches);
-  console.log(`\nCompiling ${leaves.length} branch(es)...`);
+  console.log(`\nCompiling ${leaves.length} branch(es) × ${config._resolvedOutputs.length} output(s)...`);
 
   let totalFiles = 0;
 
@@ -324,25 +364,28 @@ function compile(configPath) {
       branchConfig.protagonist || config.protagonist || ''
     ).toLowerCase() || null;
 
-    // Output dirs for this branch (supports multiple output paths)
-    // Velvet Lattice format: Branches/A/Branches/X/Story Cards/Type
-    const branchOutputDirs = config._resolvedOutputs.map(base =>
-      branchPath.length > 0
-        ? path.join(base, ...branchPath.flatMap(b => ['Branches', b]))
-        : base
-    );
+    for (const outputEntry of config._resolvedOutputs) {
+      const outputBase = outputEntry.path;
+      const outputLabel = outputEntry.label;
 
-    // Compute which PE card IDs apply to this branch (for Story Card dedup)
-    const peCardIds = new Set(
-      peBlocks
-        .filter(b => blockAppliesTo(b, branchPath) && b.import)
-        .map(b => b.import.split('/')[0].toLowerCase())
-    );
+      if (outputLabel) {
+        console.log(`    Output: [${outputLabel}]`);
+      }
 
-    // Compile story cards (write to all output dirs)
-    let written = [];
-    for (const branchOutputDir of branchOutputDirs) {
-      written = compileBranch(
+      // Build the branch-specific output path (Velvet Lattice folder structure)
+      const branchOutputDir = branchPath.length > 0
+        ? path.join(outputBase, ...branchPath.flatMap(b => ['Branches', b]))
+        : outputBase;
+
+      // Compute which PE card IDs apply to this branch+output combo (for Story Card dedup)
+      const peCardIds = new Set(
+        peBlocks
+          .filter(b => blockAppliesTo(b, branchPath) && outputAppliesTo(b, outputLabel) && b.import)
+          .map(b => b.import.split('/')[0].toLowerCase())
+      );
+
+      // Compile story cards for this branch × output
+      const written = compileBranch(
         allCardDefs,
         registry,
         templates,
@@ -350,18 +393,17 @@ function compile(configPath) {
         branchOutputDir,
         branchPath,
         { ...branchConfig, protagonist: branchProtagonist },
+        outputLabel,
         peCardIds,
         includedFilePaths,
       );
-    }
-    totalFiles += written.length;
+      totalFiles += written.length;
 
-    // Compile plot essentials (write to all output dirs)
-    if (peBlocks.length > 0) {
-      const peContent = compilePE(peBlocks, registry, templates, partials, branchPath, branchProtagonist);
-      for (const branchOutputDir of branchOutputDirs) {
+      // Compile plot essentials for this branch × output
+      if (peBlocks.length > 0) {
+        const peContent = compilePE(peBlocks, registry, templates, partials, branchPath, branchProtagonist, outputLabel);
         const pePath = writePE(branchOutputDir, peContent);
-        if (pePath && branchOutputDir === branchOutputDirs[0]) {
+        if (pePath) {
           console.log(`    OK: PlotEssentials → ${pePath}`);
           totalFiles++;
         }
@@ -380,7 +422,7 @@ function compile(configPath) {
     fs.mkdirSync(overviewDir, { recursive: true });
     console.log(`\nGenerating leaf review files → ${overviewDir}`);
     try {
-      const written = runLeafReviewMode(config._resolvedOutputs[0], overviewDir);
+      const written = runLeafReviewMode(config._resolvedOutputs[0].path, overviewDir);
       console.log(`Generated ${written.length} leaf review file(s).`);
     } catch (err) {
       console.warn(`  WARN: leaf review generation failed: ${err.message}`);
@@ -388,7 +430,7 @@ function compile(configPath) {
   }
 }
 
-module.exports = { compile, compileBranch, cardAppliesTo, getTemplate, writeOutput, resolveIncludes, writeOpening, resolveOpeningContent };
+module.exports = { compile, compileBranch, cardAppliesTo, outputAppliesTo, getTemplate, writeOutput, resolveIncludes, writeOpening, resolveOpeningContent };
 
 if (require.main === module) {
   const rawArgs = process.argv.slice(2);
@@ -413,7 +455,7 @@ if (require.main === module) {
       }
       const { loadCompileConfig } = require('./loader');
       const cfg = loadCompileConfig(cfgPath);
-      scenarioRoot = cfg._resolvedOutput;
+      scenarioRoot = cfg._resolvedOutputs[0].path;
       if (!cfg.overview) {
         console.error('compile.yaml has no "overview:" key — cannot determine output dir.');
         process.exit(1);

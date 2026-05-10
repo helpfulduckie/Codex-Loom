@@ -118,6 +118,65 @@ You can also generate a single whole-tree overview file (one section per node) v
 
 ---
 
+### Output labels
+
+When compiling to multiple output directories you can assign each one a **label** and use that label to control which cards, includes, and PE blocks compile into which output.
+
+```yaml
+output:
+  - path: ./mod set 1
+    label: modset1
+  - path: ./mod set 2
+    label: modset2
+```
+
+Plain strings (`output: ./mod set 1` or a list of plain strings) remain valid — outputs declared that way have no label and are never matched by `only_output`/`except_output` filters (they always compile every applicable card).
+
+#### only_output / except_output
+
+These filters work exactly like `only`/`except` for branches, but match against the **output label** instead of the branch path. You can use them on card definitions, `import:` entries, `include:` directives, and PE blocks. Only one may be set on a given entry.
+
+```yaml
+# Story card — compiles only into the modset2 output
+- id: SettingsCard
+  name: Settings
+  type: Settings
+  only_output: [modset2]
+  fields:
+    ...
+
+# Import — compiles only into modset1
+- import: Zephon
+  only_output: [modset1]
+
+# Include — every card loaded from this file is restricted to modset2
+- include: Characters/ModSet2Only.yaml
+  only_output: [modset2]
+
+# PE block — appears in modset2 Plot Essentials only
+- wrapper: square
+  only_output: [modset2]
+  text: |
+    Mod: AdvancedPhysics v3
+
+# except_output: compile for all outputs except the listed ones
+- id: BasicCard
+  except_output: [modset2]
+  ...
+```
+
+`only_output` and `except_output` compose independently with `only`/`except` — a card must satisfy both its branch filter and its output filter to be compiled into a given branch × output combination.
+
+| Filter | Effect |
+|---|---|
+| `only_output: [label]` | Compile only into outputs whose label matches |
+| `except_output: [label]` | Compile into all outputs except those whose label matches |
+| Neither | Compile into all outputs (existing behaviour) |
+
+Labels are matched case-insensitively. If a filter references a label that doesn't exist in `compile.yaml`, the card simply never compiles for that label (no error is raised).
+
+---
+
 ### Multiple template directories
 
 `templates:` accepts a list of directories. Directories are loaded in order; if the same template name appears in more than one directory, the later directory wins. Duplicates within the same directory tree are still an error.

@@ -88,20 +88,51 @@ function blockAppliesTo(blockDef, branchPath) {
 }
 
 /**
- * Compile all applicable PE blocks for a single branch leaf.
+ * Check whether a PE block applies to the given output label.
+ * Mirrors outputAppliesTo in compile.js.
+ */
+function blockOutputAppliesTo(blockDef, outputLabel) {
+  const onlyOut   = blockDef.only_output;
+  const exceptOut = blockDef.except_output;
+
+  if (!onlyOut && !exceptOut) return true;
+
+  if (!outputLabel) {
+    if (onlyOut) {
+      console.warn('  WARN [PE]: only_output filter on a block targeting an unlabelled output — filter ignored');
+    }
+    return true;
+  }
+
+  const label = outputLabel.toLowerCase();
+
+  function matchesAny(list) {
+    const arr = Array.isArray(list) ? list : [list];
+    return arr.some(l => String(l).toLowerCase() === label);
+  }
+
+  if (onlyOut  !== undefined && onlyOut  !== null) return  matchesAny(onlyOut);
+  if (exceptOut !== undefined && exceptOut !== null) return !matchesAny(exceptOut);
+  return true;
+}
+
+/**
+ * Compile all applicable PE blocks for a single branch leaf × output.
  * Returns the full Plot Essentials.md content string, or null if no blocks apply.
  *
- * @param {object[]} peBlocks   - raw block definitions from plot-essentials.yaml
- * @param {Map}      registry   - full merged card registry
- * @param {Map}      templates  - loaded template map
- * @param {string[]} branchPath - active leaf path e.g. ['subject']
+ * @param {object[]} peBlocks        - raw block definitions from plot-essentials.yaml
+ * @param {Map}      registry        - full merged card registry
+ * @param {Map}      templates       - loaded template map
+ * @param {string[]} branchPath      - active leaf path e.g. ['subject']
  * @param {string|null} branchProtagonist - lowercase protagonist ID for this branch
+ * @param {string|null} outputLabel  - label of the current output (may be null)
  */
-function compilePE(peBlocks, registry, templates, partials, branchPath, branchProtagonist) {
+function compilePE(peBlocks, registry, templates, partials, branchPath, branchProtagonist, outputLabel) {
   const rendered = [];
 
   for (const blockDef of peBlocks) {
     if (!blockAppliesTo(blockDef, branchPath)) continue;
+    if (!blockOutputAppliesTo(blockDef, outputLabel)) continue;
 
     const wrapper   = blockDef.wrapper || 'none';
     const stripFence = !!blockDef.strip_fence;
@@ -138,8 +169,6 @@ function compilePE(peBlocks, registry, templates, partials, branchPath, branchPr
     }
 
     // ── Template block ──────────────────────────────────────────────────────
-    // Inline card definition rendered through a named template; no registry import.
-    // Uses resolveCard so branch variants are applied (same pipeline as Story Cards).
     if (isTemplate) {
       let card;
       try {
@@ -241,4 +270,4 @@ function writePE(branchOutputDir, content) {
   return outPath;
 }
 
-module.exports = { loadPEConfig, compilePE, writePE, blockAppliesTo };
+module.exports = { loadPEConfig, compilePE, writePE, blockAppliesTo, blockOutputAppliesTo };

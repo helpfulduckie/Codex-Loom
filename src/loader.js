@@ -95,18 +95,31 @@ function loadTemplates(dirs) {
 
 /**
  * Load compile.yaml and resolve all paths relative to it.
+ *
+ * output: accepts three forms:
+ *   - Plain string:  "./mod set 1"
+ *   - Array of strings: ["./mod set 1", "./mod set 2"]
+ *   - Array of objects: [{ path: "./mod set 1", label: "modset1" }, ...]
+ *
+ * _resolvedOutputs is always an array of { path: string, label: string|null }.
  */
 function loadCompileConfig(configPath) {
   const config = loadYaml(configPath);
   const base = path.dirname(path.resolve(configPath));
 
+  const rawOutputs = Array.isArray(config.output) ? config.output : [config.output];
+  const resolvedOutputs = rawOutputs.map(o => {
+    if (o && typeof o === 'object' && o.path) {
+      return { path: path.resolve(base, o.path), label: o.label || null };
+    }
+    return { path: path.resolve(base, String(o)), label: null };
+  });
+
   return {
     ...config,
     _base: base,
     _resolvedCanon: config.canon ? path.resolve(base, config.canon) : null,
-    _resolvedOutputs: Array.isArray(config.output)
-      ? config.output.map(o => path.resolve(base, o))
-      : [path.resolve(base, config.output)],
+    _resolvedOutputs: resolvedOutputs,
     _resolvedTemplates: Array.isArray(config.templates)
       ? config.templates.map(t => path.resolve(base, t))
       : path.resolve(base, config.templates),
