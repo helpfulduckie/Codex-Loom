@@ -172,6 +172,8 @@ function resolveIncludes(cardDefs, canonDir) {
       if (def.except      !== undefined && def.except      !== null) stamped.except      = def.except;
       if (def.only_output !== undefined && def.only_output !== null) stamped.only_output = def.only_output;
       if (def.except_output !== undefined && def.except_output !== null) stamped.except_output = def.except_output;
+      if (def['import-variant'] !== undefined && def['import-variant'] !== null) stamped._include_variants = def['import-variant'];
+      if (def.variants !== undefined && def.variants !== null) stamped._include_variant_tree = def.variants;
       included.push(stamped);
     }
   }

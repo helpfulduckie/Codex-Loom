@@ -351,4 +351,120 @@ describe('resolveCard', () => {
       expect(card.fields.origin).toBe('unknown');
     });
   });
+
+  describe('wildcard * variant key', () => {
+    const canonCard = {
+      id: 'spirit',
+      name: 'Spirit',
+      type: 'Character',
+      fields: { form: 'incorporeal', origin: 'unknown' },
+    };
+    const reg = new Map([['spirit', canonCard]]);
+
+    test('* matches any branch at that level', () => {
+      const cardDef = {
+        import: 'spirit',
+        variants: {
+          '*': {
+            variants: {
+              Aness: { fields: { origin: 'aness-shared' } },
+              Veryn: { fields: { origin: 'veryn-shared' } },
+            },
+          },
+        },
+      };
+
+      expect(resolveCard(cardDef, reg, ['Free Form', 'Aness']).fields.origin).toBe('aness-shared');
+      expect(resolveCard(cardDef, reg, ['Wyvern',    'Aness']).fields.origin).toBe('aness-shared');
+      expect(resolveCard(cardDef, reg, ['Free Form', 'Veryn']).fields.origin).toBe('veryn-shared');
+      expect(resolveCard(cardDef, reg, ['Wyvern',    'Veryn']).fields.origin).toBe('veryn-shared');
+    });
+
+    test('direct match layers on top of * (both fire, direct wins final value)', () => {
+      const cardDef = {
+        import: 'spirit',
+        variants: {
+          '*': { fields: { form: 'generic' } },
+          Wyvern: { fields: { form: 'draconic' } },
+        },
+      };
+
+      // Wyvern: * fires first (form=generic), then Wyvern fires (form=draconic)
+      expect(resolveCard(cardDef, reg, ['Wyvern']).fields.form).toBe('draconic');
+      // Free Form: only * fires
+      expect(resolveCard(cardDef, reg, ['Free Form']).fields.form).toBe('generic');
+    });
+
+    test('*/Aness applies as baseline for Wyvern/Aness; Wyvern/Aness layers on top', () => {
+      const cardDef = {
+        import: 'spirit',
+        variants: {
+          '*': {
+            variants: {
+              Aness: { fields: { origin: 'shared' } },
+              Veryn: { fields: { origin: 'shared-veryn' } },
+            },
+          },
+          Wyvern: {
+            variants: {
+              Aness: { fields: { origin: 'wyvern-specific' } },
+            },
+          },
+        },
+      };
+
+      // Free Form/Aness: only */Aness fires
+      expect(resolveCard(cardDef, reg, ['Free Form', 'Aness']).fields.origin).toBe('shared');
+      // Wyvern/Aness: */Aness fires first, then Wyvern/Aness overrides
+      expect(resolveCard(cardDef, reg, ['Wyvern', 'Aness']).fields.origin).toBe('wyvern-specific');
+      // Wyvern/Veryn: */Veryn fires (no Wyvern/Veryn override)
+      expect(resolveCard(cardDef, reg, ['Wyvern', 'Veryn']).fields.origin).toBe('shared-veryn');
+    });
+
+    test('* with no matching leaf yields base card', () => {
+      const cardDef = {
+        import: 'spirit',
+        variants: {
+          '*': {
+            variants: {
+              Aness: { fields: { origin: 'aness-shared' } },
+            },
+          },
+        },
+      };
+      expect(resolveCard(cardDef, reg, ['Free Form', 'Veryn']).fields.origin).toBe('unknown');
+    });
+
+    test('except on * prevents wildcard from firing for listed branches', () => {
+      const cardDef = {
+        import: 'spirit',
+        variants: {
+          '*': {
+            except: ['Wyvern'],
+            fields: { form: 'generic' },
+          },
+        },
+      };
+
+      // * is excepted for Wyvern → base value
+      expect(resolveCard(cardDef, reg, ['Wyvern']).fields.form).toBe('incorporeal');
+      // * fires for everyone else
+      expect(resolveCard(cardDef, reg, ['Free Form']).fields.form).toBe('generic');
+    });
+
+    test('except as a string works the same as a single-element array', () => {
+      const cardDef = {
+        import: 'spirit',
+        variants: {
+          '*': {
+            except: 'Wyvern',
+            fields: { form: 'generic' },
+          },
+        },
+      };
+
+      expect(resolveCard(cardDef, reg, ['Wyvern']).fields.form).toBe('incorporeal');
+      expect(resolveCard(cardDef, reg, ['Free Form']).fields.form).toBe('generic');
+    });
+  });
 });

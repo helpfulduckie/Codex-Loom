@@ -334,6 +334,31 @@ function resolveCard(cardDef, registry, branchPath) {
   } else {
     // --- Local card definition ---
     card = deepClone(stripMeta(cardDef));
+
+    // Determine effective import-variant for this branch, walking the include's variant tree
+    let effectiveIncludeVariants = cardDef._include_variants || null;
+    if (cardDef._include_variant_tree) {
+      let tree = cardDef._include_variant_tree;
+      for (const branch of branchPath) {
+        if (!tree || typeof tree !== 'object') break;
+        const actualKey = Object.keys(tree).find(k => k.toLowerCase() === branch.toLowerCase());
+        if (!actualKey) break;
+        const node = tree[actualKey];
+        if (node['import-variant'] !== undefined && node['import-variant'] !== null) {
+          effectiveIncludeVariants = node['import-variant'];
+        }
+        tree = node.variants || null;
+      }
+    }
+
+    if (effectiveIncludeVariants) {
+      for (const vPath of parseVariantsList(effectiveIncludeVariants)) {
+        for (const delta of collectVariantDeltas(cardDef, vPath)) {
+          applyDelta(card, delta, cardDef);
+        }
+      }
+    }
+
     canonCard = null;
   }
 
@@ -368,47 +393,75 @@ function applyVariantBlock(card, variant, canonCard) {
 }
 
 /**
+ * Returns true if the branch segment is listed in a variant's except field.
+ */
+function branchExcepted(variant, branch) {
+  const except = variant.except;
+  if (!except) return false;
+  const list = Array.isArray(except) ? except : [except];
+  return list.some(e => String(e).toLowerCase() === branch.toLowerCase());
+}
+
+/**
  * Apply branch variant deltas by walking the branch path.
- * Supports named group variants: a key whose nested variants contain the branch match
- * will have its fields applied before the inner branch variant.
+ *
+ * Multiple variant trees are tracked in parallel so that wildcard (*) sub-variants
+ * remain available alongside direct-match sub-variants at every depth.
+ *
+ * Per level, per tree, applied in order:
+ *   Pass 0: wildcard (*) — fires first as a baseline; skipped if branch is in its except list
+ *   Pass 1: direct branch name match — layers on top of the wildcard
+ *   Pass 2: named group — a key whose nested variants contain the branch name;
+ *           fires when no direct match exists (backward-compatible behaviour)
  */
 function applyBranchVariants(card, cardDef, canonCard, branchPath) {
-  let variantTree = cardDef.variants;
+  let trees = cardDef.variants ? [cardDef.variants] : [];
 
   for (const branch of branchPath) {
-    if (!variantTree || typeof variantTree !== 'object') break;
+    if (trees.length === 0) break;
+    const branchLower = branch.toLowerCase();
+    const nextTrees = [];
 
-    // Pass 1: direct branch name match
-    const actualKey = Object.keys(variantTree).find(
-      k => k.toLowerCase() === branch.toLowerCase()
-    );
+    for (const tree of trees) {
+      if (!tree || typeof tree !== 'object') continue;
 
-    if (actualKey) {
-      const branchVariant = variantTree[actualKey];
-      applyVariantBlock(card, branchVariant, canonCard);
-      variantTree = branchVariant.variants;
-      continue;
-    }
+      // Pass 0: wildcard baseline
+      const starVariant = tree['*'];
+      if (starVariant && !branchExcepted(starVariant, branch)) {
+        applyVariantBlock(card, starVariant, canonCard);
+        if (starVariant.variants) nextTrees.push(starVariant.variants);
+      }
 
-    // Pass 2: named group — a key whose nested variants contain this branch
-    let foundInGroup = false;
-    for (const groupKey of Object.keys(variantTree)) {
-      const groupVal = variantTree[groupKey];
-      if (!groupVal || !groupVal.variants) continue;
-      const innerKey = Object.keys(groupVal.variants).find(
-        k => k.toLowerCase() === branch.toLowerCase()
+      // Pass 1: direct match
+      const actualKey = Object.keys(tree).find(
+        k => k !== '*' && k.toLowerCase() === branchLower
       );
-      if (innerKey) {
-        applyVariantBlock(card, groupVal, canonCard);
-        const branchVariant = groupVal.variants[innerKey];
-        applyVariantBlock(card, branchVariant, canonCard);
-        variantTree = branchVariant.variants;
-        foundInGroup = true;
-        break;
+
+      if (actualKey) {
+        applyVariantBlock(card, tree[actualKey], canonCard);
+        if (tree[actualKey].variants) nextTrees.push(tree[actualKey].variants);
+        continue;
+      }
+
+      // Pass 2: named group — a key whose nested variants contain this branch
+      for (const groupKey of Object.keys(tree)) {
+        if (groupKey === '*') continue;
+        const groupVal = tree[groupKey];
+        if (!groupVal || !groupVal.variants) continue;
+        const innerKey = Object.keys(groupVal.variants).find(
+          k => k.toLowerCase() === branchLower
+        );
+        if (innerKey) {
+          applyVariantBlock(card, groupVal, canonCard);
+          const branchVariant = groupVal.variants[innerKey];
+          applyVariantBlock(card, branchVariant, canonCard);
+          if (branchVariant.variants) nextTrees.push(branchVariant.variants);
+          break;
+        }
       }
     }
 
-    if (!foundInGroup) break;
+    trees = nextTrees;
   }
 }
 
@@ -456,7 +509,7 @@ function applyDelta(card, delta, canonCard) {
  * Strip compiler-internal metadata from a card before cloning.
  */
 function stripMeta(card) {
-  const { variants, _source, ...rest } = card;
+  const { variants, _source, _include_variants, _include_variant_tree, ...rest } = card;
   return rest;
 }
 
