@@ -1,12 +1,18 @@
 - id: Felicia
-  name: Felicia Grayls
-  type: Character
-  template: Character
-  encapsulate: true
-  known: true
+  name:
+    display: Felicia
+    full: Felicia Grayls
   pronouns: female
-  triggers: Felicia, Grayls
-  fields:
+  aid:
+    title: Felicia Grayls
+    type: Character
+    triggers: [Felicia, Grayls]
+    encapsulate: true
+    known: true
+  render:
+    template: Character
+    wrapper: none
+  body:
     Tagline:
       - Academy researcher
       - minor nobility
@@ -36,10 +42,14 @@
       that requires things most researchers won't do to their subjects
   variants:
     Felix:
-      name: Felix Grayls
+      name:
+        display: Felix
+        full: Felix Grayls
       pronouns: male
-      triggers: Felix, Grayls
-      fields:
+      aid:
+        title: Felix Grayls
+        triggers: [Felix, Grayls]
+      body:
         Physical Traits:
           gender: male
           hair: -{in a controlled bun}

@@ -4,9 +4,9 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { compile } = require('../../src/compile');
+const { runLeafReviewMode } = require('../../src/overview');
 
 const FIXTURE_DIR = path.resolve(__dirname, '../../test');
-const FIXTURE_CONFIG = path.join(FIXTURE_DIR, 'compile.yaml');
 
 let tmpDir;
 let patchedConfigPath;
@@ -14,13 +14,18 @@ let patchedConfigPath;
 beforeAll(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-test-'));
 
-  // Write a patched compile.yaml that redirects output to tmpDir
-  // but keeps all other paths pointing at the real test fixtures
+  // Write a patched compile.yaml (v3 structure: format) that redirects output
+  // to a temp dir but uses the real test fixtures for everything else.
   const patchedConfig = [
-    `canon: ${FIXTURE_DIR}/canon`,
-    `output: ${tmpDir}/output`,
-    `templates: ${FIXTURE_DIR}/templates`,
-    `cards: ${FIXTURE_DIR}/cards`,
+    'structure:',
+    `  input:`,
+    `    cards:`,
+    `      - ${FIXTURE_DIR}/cards`,
+    `    canon:`,
+    `      main: ${FIXTURE_DIR}/canon`,
+    `    templates:`,
+    `      - ${FIXTURE_DIR}/templates`,
+    `  output: ${tmpDir}/output`,
     'protagonist: Aness',
     'branches:',
     '  subject:',
@@ -72,18 +77,16 @@ describe('branch filtering', () => {
 });
 
 describe('protagonist you-mode', () => {
-  test('subject branch (protagonist=Aness): bare $Her~ resolves to "Your" (you-mode)', () => {
+  test('subject branch (protagonist=Aness): {$Aness.her~} resolves to "your" (you-mode)', () => {
     const content = fs.readFileSync(branchCardFile('subject', 'Character'), 'utf8');
-    // Aness.Personality.expanded has bare $Her~ — in subject branch protagonist=Aness → you-mode
-    expect(content).toContain('Your polite nature');
+    expect(content).toContain('your polite nature');
     expect(content).toContain('you love magic research');
   });
 
-  test('researcher branch (protagonist=Veyrn): bare $Her~ resolves via female pronoun set', () => {
+  test('researcher branch (protagonist=Veyrn): {$Aness.her~} resolves via female pronoun set', () => {
     const content = fs.readFileSync(branchCardFile('researcher', 'Character'), 'utf8');
-    // protagonist is Veyrn, not Aness → Aness card uses female pronouns
-    expect(content).toContain('Her polite nature');
-    expect(content).toContain('Aness Rozen loves magic research');
+    expect(content).toContain('her polite nature');
+    expect(content).toContain('Aness loves magic research');
   });
 });
 
@@ -96,20 +99,23 @@ describe('snapshot regression', () => {
 
 // ── overview: key integration ─────────────────────────────────────────────────
 
-describe('overview key in compile.yaml', () => {
+describe('runLeafReviewMode after compile', () => {
   let overviewTmpDir;
-  let overviewConfigPath;
 
   beforeAll(() => {
     overviewTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-overview-int-'));
 
     const cfg = [
-      `canon: ${FIXTURE_DIR}/canon`,
-      `output: ${overviewTmpDir}/output`,
-      `templates: ${FIXTURE_DIR}/templates`,
-      `cards: ${FIXTURE_DIR}/cards`,
+      'structure:',
+      '  input:',
+      `    cards:`,
+      `      - ${FIXTURE_DIR}/cards`,
+      `    canon:`,
+      `      main: ${FIXTURE_DIR}/canon`,
+      `    templates:`,
+      `      - ${FIXTURE_DIR}/templates`,
+      `  output: ${overviewTmpDir}/output`,
       'protagonist: Aness',
-      `overview: ${overviewTmpDir}/overview`,
       'branches:',
       '  subject:',
       '    protagonist: Aness',
@@ -119,10 +125,14 @@ describe('overview key in compile.yaml', () => {
       '    protagonist: Aness',
     ].join('\n');
 
-    overviewConfigPath = path.join(overviewTmpDir, 'compile.yaml');
+    const overviewConfigPath = path.join(overviewTmpDir, 'compile.yaml');
     fs.writeFileSync(overviewConfigPath, cfg, 'utf8');
 
     compile(overviewConfigPath);
+
+    // In v3, overview is a separate step (not triggered by compile.yaml key)
+    fs.mkdirSync(path.join(overviewTmpDir, 'overview'), { recursive: true });
+    runLeafReviewMode(path.join(overviewTmpDir, 'output'), path.join(overviewTmpDir, 'overview'));
   });
 
   afterAll(() => {
@@ -153,93 +163,8 @@ describe('overview key in compile.yaml', () => {
     expect(content).not.toContain('Fused-Squad Subject');
   });
 
-  test('no overview dir created when overview: key absent', () => {
-    // The main tmpDir compile (patchedConfig) has no overview: key
-    // so no overview dir should appear next to it
+  test('compile alone does not create overview dir (overview is a separate step)', () => {
     expect(fs.existsSync(path.join(tmpDir, 'overview'))).toBe(false);
-  });
-});
-
-// ── PE + full-include dedup ───────────────────────────────────────────────────
-
-describe('PE import suppresses Story Card for full-include cards', () => {
-  let peTmpDir;
-
-  beforeAll(() => {
-    peTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-pe-dedup-'));
-
-    const write = (p, content) => {
-      fs.mkdirSync(path.dirname(p), { recursive: true });
-      fs.writeFileSync(p, content, 'utf8');
-    };
-
-    // Canon: two minimal Character cards
-    write(path.join(peTmpDir, 'canon', 'characters.yaml'), [
-      '- id: HeroCard',
-      '  name: HeroCard',
-      '  type: Character',
-      '  fields:',
-      '    Tagline: The chosen one',
-      '- id: SidekickCard',
-      '  name: SidekickCard',
-      '  type: Character',
-      '  fields:',
-      '    Tagline: Always there',
-    ].join('\n'));
-
-    // Project cards: full-file include (no explicit import)
-    write(path.join(peTmpDir, 'cards', 'project.yaml'), [
-      '- include: characters.yaml',
-    ].join('\n'));
-
-    // Plot Essentials: import only HeroCard
-    write(path.join(peTmpDir, 'plot-essentials.yaml'), [
-      '- import: HeroCard',
-    ].join('\n'));
-
-    // Minimal Character template
-    write(path.join(peTmpDir, 'templates', 'Character.template'), [
-      '## {$name}',
-      '~~~',
-      '{$name} - {$fields.Tagline}',
-    ].join('\n'));
-
-    // compile.yaml
-    write(path.join(peTmpDir, 'compile.yaml'), [
-      `canon: ${peTmpDir}/canon`,
-      `output: ${peTmpDir}/output`,
-      `templates: ${peTmpDir}/templates`,
-      `cards: ${peTmpDir}/cards`,
-      'branches:',
-      '  main: {}',
-    ].join('\n'));
-
-    compile(path.join(peTmpDir, 'compile.yaml'));
-  });
-
-  afterAll(() => {
-    fs.rmSync(peTmpDir, { recursive: true, force: true });
-  });
-
-  function peCardFile(branch, type) {
-    return path.join(peTmpDir, 'output', 'Branches', branch, 'Story Cards', type, `${type}.md`);
-  }
-
-  test('SidekickCard (not in PE) appears in Story Cards', () => {
-    const content = fs.readFileSync(peCardFile('main', 'Character'), 'utf8');
-    expect(content).toContain('SidekickCard');
-  });
-
-  test('HeroCard (in PE, from full include) is suppressed from Story Cards', () => {
-    const content = fs.readFileSync(peCardFile('main', 'Character'), 'utf8');
-    expect(content).not.toContain('HeroCard');
-  });
-
-  test('Plot Essentials.md is written and contains HeroCard', () => {
-    const pePath = path.join(peTmpDir, 'output', 'Branches', 'main', 'Components', 'Plot Essentials.md');
-    expect(fs.existsSync(pePath)).toBe(true);
-    const content = fs.readFileSync(pePath, 'utf8');
-    expect(content).toContain('HeroCard');
   });
 });
 
@@ -251,7 +176,7 @@ describe('Opening.md generation', () => {
   beforeAll(() => {
     openingTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-opening-int-'));
 
-    // Minimal card + template so compile has something to do
+    // Minimal v3-format card + template so compile has something to do
     fs.mkdirSync(path.join(openingTmpDir, 'cards'), { recursive: true });
     fs.mkdirSync(path.join(openingTmpDir, 'templates'), { recursive: true });
     fs.mkdirSync(path.join(openingTmpDir, 'openings'), { recursive: true });
@@ -259,32 +184,41 @@ describe('Opening.md generation', () => {
     fs.writeFileSync(path.join(openingTmpDir, 'cards', 'cards.yaml'), [
       '- id: Widget',
       '  name: Widget',
-      '  type: Item',
-      '  fields:',
+      '  aid:',
+      '    type: Item',
+      '    title: Widget',
+      '  render:',
+      '    template: Item',
+      '  body:',
       '    Desc: a widget',
     ].join('\n'), 'utf8');
 
     fs.writeFileSync(path.join(openingTmpDir, 'templates', 'Item.template'), [
-      '## {$name}',
+      '## {$aid.title}',
       '~~~',
-      '{$fields.Desc}',
+      '{$body.Desc}',
     ].join('\n'), 'utf8');
 
     // File-based opening content
     fs.writeFileSync(path.join(openingTmpDir, 'openings', 'b-opening.md'), 'Leaf B from file\n', 'utf8');
 
+    // v3 format compile.yaml — opening under components: at root and branch levels
+    // opening: inherits to leaves; openingChoice: writes to branch node directly
     fs.writeFileSync(path.join(openingTmpDir, 'compile.yaml'), [
-      `output: ${openingTmpDir}/output`,
-      `templates: ${openingTmpDir}/templates`,
-      `cards: ${openingTmpDir}/cards`,
-      'opening: "Root question"',
+      'structure:',
+      '  input:',
+      `    cards: [${openingTmpDir}/cards]`,
+      `    templates: [${openingTmpDir}/templates]`,
+      `  output: ${openingTmpDir}/output`,
+      'components:',
+      '  opening: "Root question"',
       'branches:',
       '  A:',
       '    opening: "Leaf A inline"',
       '  B:',
-      '    opening: ./openings/b-opening.md',
+      `    opening: ${openingTmpDir}/openings/b-opening.md`,
       '  nested:',
-      '    opening: "Branch question"',
+      '    openingChoice: "Branch question"',
       '    branches:',
       '      X: {}',
       '      Y: {}',
@@ -297,34 +231,39 @@ describe('Opening.md generation', () => {
     fs.rmSync(openingTmpDir, { recursive: true, force: true });
   });
 
-  test('root-level opening written to output/Components/Opening.md', () => {
-    const p = path.join(openingTmpDir, 'output', 'Components', 'Opening.md');
-    expect(fs.existsSync(p)).toBe(true);
-    expect(fs.readFileSync(p, 'utf8')).toBe('Root question\n');
-  });
-
-  test('inline leaf opening written to branch Components/Opening.md', () => {
+  test('leaf A inline opening written to Branches/A/Components/Opening.md', () => {
     const p = path.join(openingTmpDir, 'output', 'Branches', 'A', 'Components', 'Opening.md');
     expect(fs.existsSync(p)).toBe(true);
     expect(fs.readFileSync(p, 'utf8')).toBe('Leaf A inline\n');
   });
 
-  test('file-path leaf opening reads file content', () => {
+  test('leaf B file opening reads file content', () => {
     const p = path.join(openingTmpDir, 'output', 'Branches', 'B', 'Components', 'Opening.md');
     expect(fs.existsSync(p)).toBe(true);
     expect(fs.readFileSync(p, 'utf8')).toBe('Leaf B from file\n');
   });
 
-  test('branch-point opening written to intermediate node Components/', () => {
+  test('root opening inherited by leaves X and Y (via nested that has no own opening)', () => {
+    const x = path.join(openingTmpDir, 'output', 'Branches', 'nested', 'Branches', 'X', 'Components', 'Opening.md');
+    const y = path.join(openingTmpDir, 'output', 'Branches', 'nested', 'Branches', 'Y', 'Components', 'Opening.md');
+    expect(fs.existsSync(x)).toBe(true);
+    expect(fs.readFileSync(x, 'utf8')).toBe('Root question\n');
+    expect(fs.existsSync(y)).toBe(true);
+    expect(fs.readFileSync(y, 'utf8')).toBe('Root question\n');
+  });
+
+  test('branch-node openingChoice written to nested/Components/Opening.md', () => {
     const p = path.join(openingTmpDir, 'output', 'Branches', 'nested', 'Components', 'Opening.md');
     expect(fs.existsSync(p)).toBe(true);
     expect(fs.readFileSync(p, 'utf8')).toBe('Branch question\n');
   });
 
-  test('nested leaves without opening do not get Opening.md', () => {
+  test('non-leaf branch node with only openingChoice does not get a leaf Opening.md at its own level', () => {
+    // nested itself is not a leaf — its Opening.md is for openingChoice
+    // but the leaves X and Y have the inherited root opening
+    const nested = path.join(openingTmpDir, 'output', 'Branches', 'nested', 'Components', 'Opening.md');
     const x = path.join(openingTmpDir, 'output', 'Branches', 'nested', 'Branches', 'X', 'Components', 'Opening.md');
-    const y = path.join(openingTmpDir, 'output', 'Branches', 'nested', 'Branches', 'Y', 'Components', 'Opening.md');
-    expect(fs.existsSync(x)).toBe(false);
-    expect(fs.existsSync(y)).toBe(false);
+    expect(fs.readFileSync(nested, 'utf8')).toBe('Branch question\n'); // openingChoice
+    expect(fs.readFileSync(x, 'utf8')).toBe('Root question\n');      // inherited root opening
   });
 });

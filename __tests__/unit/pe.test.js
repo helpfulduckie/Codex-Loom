@@ -1,218 +1,181 @@
 'use strict';
 
-const { compilePE, blockAppliesTo } = require('../../src/pe');
+const { compilePE } = require('../../src/pe');
 
 // ── Shared fixtures ──────────────────────────────────────────────────────────
 
 const registry = new Map();
-const branchPath = ['subject'];
+const ctx = { branchPath: ['subject'], branchProtagonist: null };
 
 const templates = new Map([
-  ['character', { content: '{$name}: {$fields.Tagline}', _source: 'x' }],
-  ['fenced',    { content: '## Header\n~~~\nBody: {$name}', _source: 'y' }],
+  ['character', { content: '{$aid.title}: {$body.Tagline}', _source: 'x' }],
+  ['fenced',    { content: '## Header\n~~~\nBody: {$aid.title}', _source: 'y' }],
 ]);
 
-// ── blockAppliesTo ───────────────────────────────────────────────────────────
+// ── compilePE — inline blocks (no import) ────────────────────────────────────
 
-describe('blockAppliesTo', () => {
-  test('no filter: always true', () => {
-    expect(blockAppliesTo({}, ['subject'])).toBe(true);
+describe('compilePE — inline body block', () => {
+  test('renders body.text field', () => {
+    const blocks = [{ body: { text: 'Hello world' } }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('Hello world');
   });
 
-  test('only: exact match', () => {
-    expect(blockAppliesTo({ only: 'subject' },    ['subject'])).toBe(true);
-    expect(blockAppliesTo({ only: 'researcher' }, ['subject'])).toBe(false);
+  test('empty body.text is valid', () => {
+    const blocks = [{ body: { text: '' } }];
+    // empty text → block is skipped (no output)
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBeNull();
   });
 
-  test('only: prefix match', () => {
-    expect(blockAppliesTo({ only: 'subject' }, ['subject', 'A'])).toBe(true);
-    expect(blockAppliesTo({ only: 'other'   }, ['subject', 'A'])).toBe(false);
+  test('block excluded by null branch spec returns null', () => {
+    const blocks = [{ body: { text: 'Content' }, branches: { subject: null } }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBeNull();
   });
 
-  test('except: excludes matching path', () => {
-    expect(blockAppliesTo({ except: 'subject' }, ['subject'])).toBe(false);
-    expect(blockAppliesTo({ except: 'other'   }, ['subject'])).toBe(true);
+  test('block included by wildcard branch spec', () => {
+    const blocks = [{ body: { text: 'Wildcard content' }, branches: { '*': '' } }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('Wildcard content');
   });
 
-  test('case-insensitive matching', () => {
-    expect(blockAppliesTo({ only: 'SUBJECT' }, ['subject'])).toBe(true);
-  });
-});
-
-// ── compilePE — freeform blocks ──────────────────────────────────────────────
-
-describe('compilePE — freeform block', () => {
-  test('renders text field', () => {
-    const blocks = [{ text: 'Hello world' }];
-    const result = compilePE(blocks, registry, templates, new Map(), branchPath, null);
-    expect(result).toBe('Hello world');
+  test('render.wrapper square wraps inline output', () => {
+    const blocks = [{ body: { text: 'Content' }, render: { wrapper: 'square' } }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('[\nContent\n]');
   });
 
-  test('empty string text is valid', () => {
-    const blocks = [{ text: '' }];
-    const result = compilePE(blocks, registry, templates, new Map(), branchPath, null);
-    expect(result).toBe('');
-  });
-
-  test('wrapper: square wraps freeform output', () => {
-    const blocks = [{ text: 'Content', wrapper: 'square' }];
-    const result = compilePE(blocks, registry, templates, new Map(), branchPath, null);
-    expect(result).toBe('[\nContent\n]');
+  test('render.wrapper curly wraps inline output', () => {
+    const blocks = [{ body: { text: 'Content' }, render: { wrapper: 'curly' } }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('{\nContent\n}');
   });
 });
 
-// ── compilePE — template blocks ──────────────────────────────────────────────
+// ── compilePE — inline blocks with template ───────────────────────────────────
 
-describe('compilePE — template block', () => {
-  test('renders inline card data through named template', () => {
+describe('compilePE — inline block with template', () => {
+  test('renders card data through named template', () => {
     const blocks = [{
-      template: 'Character',
-      name: 'The Stranger',
-      fields: { Tagline: 'A wanderer' },
+      id:     'Stranger',
+      aid:    { title: 'The Stranger', type: 'Character' },
+      render: { template: 'Character' },
+      body:   { Tagline: 'A wanderer' },
     }];
-    const result = compilePE(blocks, registry, templates, new Map(), branchPath, null);
-    expect(result).toBe('The Stranger: A wanderer');
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('The Stranger: A wanderer');
   });
 
-  test('type alone resolves template (no explicit template field)', () => {
+  test('render.stripFence strips content above last ~~~', () => {
     const blocks = [{
-      type: 'Character',
-      name: 'The Stranger',
-      fields: { Tagline: 'A wanderer' },
+      id:     'Hero',
+      aid:    { title: 'Hero' },
+      render: { template: 'fenced', stripFence: true },
+      body:   {},
     }];
-    const result = compilePE(blocks, registry, templates, new Map(), branchPath, null);
-    expect(result).toBe('The Stranger: A wanderer');
-  });
-
-  test('explicit template overrides type for lookup', () => {
-    const overrideTemplates = new Map([
-      ...templates,
-      ['npc', { content: 'NPC:{$name}', _source: 'z' }],
-    ]);
-    const blocks = [{
-      template: 'npc',
-      type: 'Character',
-      name: 'Guard',
-      fields: {},
-    }];
-    const result = compilePE(blocks, registry, overrideTemplates, new Map(), branchPath, null);
-    expect(result).toBe('NPC:Guard');
-  });
-
-  test('strip_fence: true strips content above last ~~~', () => {
-    const blocks = [{
-      template: 'fenced',
-      name: 'Hero',
-      strip_fence: true,
-    }];
-    const result = compilePE(blocks, registry, templates, new Map(), branchPath, null);
+    const result = compilePE(blocks, registry, templates, new Map(), ctx);
     expect(result).not.toContain('## Header');
     expect(result).toContain('Body: Hero');
   });
 
-  test('wrapper: square wraps template output', () => {
+  test('render.wrapper square wraps template output', () => {
     const blocks = [{
-      template: 'Character',
-      name: 'X',
-      fields: { Tagline: 'Y' },
-      wrapper: 'square',
+      id:     'X',
+      aid:    { title: 'X', type: 'Character' },
+      render: { template: 'Character', wrapper: 'square' },
+      body:   { Tagline: 'Y' },
     }];
-    const result = compilePE(blocks, registry, templates, new Map(), branchPath, null);
-    expect(result).toBe('[\nX: Y\n]');
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('[\nX: Y\n]');
   });
 
-  test('fields: {} is safe when no fields provided', () => {
-    const noFieldTemplate = new Map([
-      ['bare', { content: '{$name}', _source: 'b' }],
-    ]);
-    const blocks = [{ template: 'bare', name: 'Solo' }];
-    const result = compilePE(blocks, registry, noFieldTemplate, new Map(), branchPath, null);
-    expect(result).toBe('Solo');
-  });
-
-  test('missing template logs error and returns null', () => {
-    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    const blocks = [{ template: 'NonExistent', name: 'Ghost' }];
-    const result = compilePE(blocks, registry, templates, new Map(), branchPath, null);
-    expect(result).toBeNull();
-    expect(spy).toHaveBeenCalledWith(expect.stringContaining('"NonExistent" not found'));
-    spy.mockRestore();
-  });
-
-  test('block with only filter that does not match is skipped', () => {
-    const blocks = [{
-      template: 'Character',
-      name: 'X',
-      fields: { Tagline: 'Y' },
-      only: 'other',
-    }];
-    const result = compilePE(blocks, registry, templates, new Map(), branchPath, null);
-    expect(result).toBeNull();
-  });
-});
-
-// ── compilePE — freeform variants ───────────────────────────────────────────
-
-describe('compilePE — freeform block with variants', () => {
-  test('variant overrides top-level text for matching branch', () => {
-    const blocks = [{
-      text: 'Base text',
-      variants: { subject: { text: 'Subject text' } },
-    }];
-    const result = compilePE(blocks, registry, templates, new Map(), ['subject'], null);
-    expect(result).toBe('Subject text');
-  });
-
-  test('top-level text used when no matching variant', () => {
-    const blocks = [{
-      text: 'Base text',
-      variants: { researcher: { text: 'Researcher text' } },
-    }];
-    const result = compilePE(blocks, registry, templates, new Map(), ['subject'], null);
-    expect(result).toBe('Base text');
-  });
-
-  test('no top-level text, variant provides it for matching branch', () => {
-    const blocks = [{
-      variants: { subject: { text: 'Only for subject' } },
-    }];
-    const result = compilePE(blocks, registry, templates, new Map(), ['subject'], null);
-    expect(result).toBe('Only for subject');
-  });
-
-  test('no top-level text, no matching variant → block skipped', () => {
-    const blocks = [{
-      variants: { researcher: { text: 'Only for researcher' } },
-    }];
-    const result = compilePE(blocks, registry, templates, new Map(), ['subject'], null);
-    expect(result).toBeNull();
-  });
-
-  test('variant can override pronouns and protagonist', () => {
-    const blocks = [{
-      variants: {
-        subject: {
-          pronouns: 'female',
-          text: '{$She} is here.',
-        },
-      },
-    }];
-    const result = compilePE(blocks, registry, templates, new Map(), ['subject'], null);
-    expect(result).toBe('She is here.');
-  });
-});
-
-// ── compilePE — unknown blocks ───────────────────────────────────────────────
-
-describe('compilePE — unknown block', () => {
-  test('block with no import, text, or template warns and is skipped', () => {
+  test('missing template warns and skips block', () => {
     const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const blocks = [{ wrapper: 'square' }];
-    const result = compilePE(blocks, registry, templates, new Map(), branchPath, null);
+    const blocks = [{
+      id:     'Ghost',
+      aid:    { title: 'Ghost' },
+      render: { template: 'NonExistent' },
+      body:   {},
+    }];
+    const result = compilePE(blocks, registry, templates, new Map(), ctx);
     expect(result).toBeNull();
-    expect(spy).toHaveBeenCalledWith(
-      expect.stringContaining('no import, text, or template')
-    );
     spy.mockRestore();
+  });
+});
+
+// ── compilePE — import blocks ─────────────────────────────────────────────────
+
+describe('compilePE — import block', () => {
+  const aness = {
+    id: 'aness',
+    name: { display: 'Aness', full: 'Aness Rozen' },
+    pronouns: 'female',
+    aid:    { title: 'Aness Rozen', type: 'Character', triggers: ['Aness', 'Rozen'], encapsulate: true },
+    render: { template: 'Character', wrapper: 'none' },
+    body:   { Tagline: 'Healer' },
+  };
+  const importRegistry = new Map([['aness', aness]]);
+
+  test('imports card and renders via its template', () => {
+    const blocks = [{ import: 'aness' }];
+    const result = compilePE(blocks, importRegistry, templates, new Map(), ctx);
+    expect(result).toBe('Aness Rozen: Healer');
+  });
+
+  test('body overrides apply on top of imported card', () => {
+    const blocks = [{
+      import: 'aness',
+      body:   { Tagline: 'Overridden Tagline' },
+    }];
+    const result = compilePE(blocks, importRegistry, templates, new Map(), ctx);
+    expect(result).toBe('Aness Rozen: Overridden Tagline');
+  });
+
+  test('missing import id logs error and returns null', () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const blocks = [{ import: 'unknown-id' }];
+    const result = compilePE(blocks, importRegistry, templates, new Map(), ctx);
+    expect(result).toBeNull();
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('"unknown-id"'));
+    spy.mockRestore();
+  });
+
+  test('block excluded by null branch spec is skipped', () => {
+    const blocks = [{
+      import: 'aness',
+      branches: { subject: null },
+    }];
+    const result = compilePE(blocks, importRegistry, templates, new Map(), ctx);
+    expect(result).toBeNull();
+  });
+});
+
+// ── compilePE — multi-block ordering ─────────────────────────────────────────
+
+describe('compilePE — position ordering', () => {
+  test('blocks are sorted by render.position (default 5)', () => {
+    const blocks = [
+      { body: { text: 'B' }, render: { position: 7 } },
+      { body: { text: 'A' }, render: { position: 3 } },
+    ];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('A\n\nB');
+  });
+
+  test('same position preserves definition order', () => {
+    const blocks = [
+      { body: { text: 'First' }, render: { position: 5 } },
+      { body: { text: 'Second' }, render: { position: 5 } },
+    ];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('First\n\nSecond');
+  });
+});
+
+// ── compilePE — style: skip ───────────────────────────────────────────────────
+
+describe('compilePE — style: skip', () => {
+  test('skipped block produces no output', () => {
+    const blocks = [{ body: { text: 'Invisible' }, style: 'skip' }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBeNull();
+  });
+
+  test('null result when all blocks skipped', () => {
+    const blocks = [
+      { body: { text: 'A' }, style: 'skip' },
+      { body: { text: 'B' }, style: 'skip' },
+    ];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBeNull();
   });
 });

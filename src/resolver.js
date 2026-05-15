@@ -1,88 +1,23 @@
 'use strict';
 
-/**
- * Card resolver — handles field operations, variant chains, and import resolution.
- *
- * Field operations (applied in variants and imports):
- *   Replace:          field: new value
- *   Remove:           field: "-"
- *   Append:           field: "+{value}"
- *   Remove substring: field: "-{value}"
- *   Swap substring:   field: "/{old}/{new}"
- *   Subfield ops:     field is a mapping, operations applied per subfield
- */
-
-/**
- * Deep clone a plain object/array.
- */
-function deepClone(obj) {
-  if (obj === null || typeof obj !== 'object') return obj;
-  if (Array.isArray(obj)) return obj.map(deepClone);
-  const out = {};
-  for (const [k, v] of Object.entries(obj)) out[k] = deepClone(v);
-  return out;
-}
-
-/**
- * Find a key in a mapping case-insensitively.
- * Returns the actual key string, or null if not found.
- */
-function findKey(obj, key) {
-  if (obj === null || typeof obj !== 'object') return null;
-  const lower = key.toLowerCase();
-  for (const k of Object.keys(obj)) {
-    if (k.toLowerCase() === lower) return k;
-  }
-  return null;
-}
-
-/**
- * Get a value from an object case-insensitively.
- */
-function getCI(obj, key) {
-  const actual = findKey(obj, key);
-  return actual !== null ? obj[actual] : undefined;
-}
-
-/**
- * Set a value on an object case-insensitively.
- * If the key already exists (any case), updates it in place.
- * Otherwise adds with the provided key.
- */
-function setCI(obj, key, value) {
-  const actual = findKey(obj, key);
-  if (actual !== null) {
-    obj[actual] = value;
-  } else {
-    obj[key] = value;
-  }
-}
-
-/**
- * Delete a key from an object case-insensitively.
- */
-function deleteCI(obj, key) {
-  const actual = findKey(obj, key);
-  if (actual !== null) delete obj[actual];
-}
+const { deepClone, findKey, getCI, setCI, deleteCI } = require('./util');
 
 /**
  * Apply a single field operation to a current value.
- * Returns the new value.
+ * Returns the new value or the sentinel '__DELETE__'.
  *
  * Operations (on string values):
- *   "-"            → remove (signals caller to delete the key)
- *   "+{x}"         → append x
- *   "-{x}"         → remove substring x
- *   "/{a}/{b}"     → swap a → b
- *   anything else  → replace
+ *   null / ~        → remove (DELETE)
+ *   "+{value}"      → append
+ *   "-{value}"      → remove substring (or remove matching array element)
+ *   "/{a}/{b}"      → swap
+ *   anything else   → replace
  *
- * If current is a mapping and op is also a mapping, recurse into subfields.
+ * If op is a mapping and current is also a mapping, recurse into subfields.
+ * If op is an array of op-strings, apply sequentially.
+ * If op is a value array (not all op-strings), replace.
  */
 function applyFieldOp(current, op) {
-  // Array — either sequential ops or a value array (replaces the field).
-  // Treated as ops if empty (no change) or every element is a string op prefix (+{, -{, /{).
-  // Anything else is a value array.
   if (Array.isArray(op)) {
     const isOpsArray = op.length === 0 || op.every(
       el => typeof el === 'string' && /^\+\{|^-\{|^\/\{/.test(el.trim())
@@ -98,17 +33,12 @@ function applyFieldOp(current, op) {
     return op;
   }
 
-  // Both are mappings — recurse into subfields
   if (op !== null && typeof op === 'object' && !Array.isArray(op)) {
-    const result = typeof current === 'object' && current !== null
-      ? deepClone(current)
-      : {};
+    const result = typeof current === 'object' && current !== null ? deepClone(current) : {};
     for (const [subKey, subOp] of Object.entries(op)) {
       const actualKey = findKey(result, subKey);
       const currentSub = actualKey !== null ? result[actualKey] : undefined;
-
-      if (subOp === null || String(subOp).trim() === '-') {
-        // Remove subfield (null/empty value or "-")
+      if (subOp === null) {
         if (actualKey !== null) delete result[actualKey];
       } else {
         const newVal = applyFieldOp(currentSub, subOp);
@@ -122,81 +52,62 @@ function applyFieldOp(current, op) {
     return result;
   }
 
-  // Null or empty value means remove
   if (op === null || op === undefined) return '__DELETE__';
 
   const opStr = String(op).trim();
 
-  // Remove entire field (quoted "-" form still supported for explicitness)
-  if (opStr === '-') return '__DELETE__';
-
-  // --- Array-typed current value: apply op element-wise or push/filter ---
   if (Array.isArray(current)) {
     const appendMatch = opStr.match(/^\+\{([\s\S]*)\}$/);
     if (appendMatch) return [...current, appendMatch[1]];
-
     const removeMatch = opStr.match(/^-\{([\s\S]*)\}$/);
     if (removeMatch) return current.filter(el => el !== removeMatch[1]);
-
     const swapMatch = opStr.match(/^\/\{([\s\S]*?)\}\/\{([\s\S]*?)\}$/);
     if (swapMatch) return current.map(el => String(el).split(swapMatch[1]).join(swapMatch[2]));
-
-    // Replace
     return op;
   }
 
-  const currentStr = current !== null && current !== undefined
-    ? String(current)
-    : '';
+  const currentStr = current !== null && current !== undefined ? String(current) : '';
 
-  // Append: +{value}
-  // Use '; ' for single-line scalars, newline for multiline block scalars.
-  // If toAdd already starts with a separator character, don't add another.
-  // If current is absent, start a new single-item array.
   const appendMatch = opStr.match(/^\+\{([\s\S]*)\}$/);
   if (appendMatch) {
     const toAdd = appendMatch[1];
     if (!currentStr) return toAdd;
     if (currentStr.includes('\n')) {
-      // Block scalar — append on new line
       const sep = toAdd.startsWith('\n') ? '' : '\n';
       return currentStr + sep + toAdd;
     } else {
-      // Single-line scalar — append with '; ' unless toAdd already starts with separator
       const sep = toAdd.match(/^[;,\s]/) ? '' : '; ';
       return currentStr + sep + toAdd;
     }
   }
 
-  // Remove substring: -{value}
   const removeMatch = opStr.match(/^-\{([\s\S]*)\}$/);
-  if (removeMatch) {
-    return currentStr.split(removeMatch[1]).join('').trim();
-  }
+  if (removeMatch) return currentStr.split(removeMatch[1]).join('').trim();
 
-  // Swap: /{old}/{new}
   const swapMatch = opStr.match(/^\/\{([\s\S]*?)\}\/\{([\s\S]*?)\}$/);
-  if (swapMatch) {
-    return currentStr.split(swapMatch[1]).join(swapMatch[2]).trim();
-  }
+  if (swapMatch) return currentStr.split(swapMatch[1]).join(swapMatch[2]).trim();
 
-  // Replace
   return op;
 }
 
 /**
- * Apply a fields delta object to a card's fields.
+ * Apply a delta to a card's body fields and eligible top-level fields.
  * Mutates card in place.
+ *
+ * v3 top-level card fields that variants can modify:
+ *   name, pronouns, aid (object), render (object), body (object)
+ * The `id` field cannot be altered by variants or branches.
  */
 function applyFieldsDelta(card, delta) {
   if (!delta || typeof delta !== 'object') return;
 
-  // Handle top-level card fields (name, triggers, pronouns, etc.)
-  const topLevelFields = ['name', 'type', 'template', 'pronouns', 'protagonist',
-    'encapsulate', 'known', 'triggers', 'id'];
+  const topLevelFields = ['name', 'pronouns', 'aid', 'render'];
 
   for (const [key, op] of Object.entries(delta)) {
-    const isTopLevel = topLevelFields.some(f => f.toLowerCase() === key.toLowerCase());
+    const keyLower = key.toLowerCase();
+    if (keyLower === 'id') continue; // id is immutable
+
+    const isTopLevel = topLevelFields.some(f => f === keyLower);
 
     if (isTopLevel) {
       const currentVal = getCI(card, key);
@@ -206,51 +117,58 @@ function applyFieldsDelta(card, delta) {
       } else {
         setCI(card, key, newVal);
       }
+    } else if (keyLower === 'body') {
+      // Explicit body: block — apply as subfield ops
+      if (!card.body) card.body = {};
+      const newVal = applyFieldOp(card.body, op);
+      if (newVal !== '__DELETE__') card.body = newVal;
     } else {
-      // It's a fields-level key
-      if (!card.fields) card.fields = {};
-      const currentVal = getCI(card.fields, key);
+      // Unknown key: treat as body field op
+      if (!card.body) card.body = {};
+      const currentVal = getCI(card.body, key);
       const newVal = applyFieldOp(currentVal, op);
       if (newVal === '__DELETE__') {
-        deleteCI(card.fields, key);
+        deleteCI(card.body, key);
       } else {
-        setCI(card.fields, key, newVal);
+        setCI(card.body, key, newVal);
       }
     }
   }
 }
 
 /**
- * Walk a variant path (slash-separated string or array of paths)
- * on a canonical card definition and return the merged delta.
- *
- * e.g. "human/noble" → apply 'human' variant, then 'noble' child of 'human'
- *
- * Returns array of delta objects to apply in order.
+ * Apply a variant delta to a card. Handles structural keys and field ops.
  */
-function collectVariantDeltas(canonCard, variantPath) {
+function applyDelta(card, delta) {
+  if (!delta) return;
+  // Skip structural-only keys
+  for (const [key, value] of Object.entries(delta)) {
+    const keyLower = key.toLowerCase();
+    if (['variants', 'importvariants', '_source'].includes(keyLower)) continue;
+    applyFieldsDelta(card, { [key]: value });
+  }
+}
+
+/**
+ * Walk a variant path (slash-separated) on a card definition and collect deltas.
+ * e.g. "human/noble" → apply 'human' variant delta, then 'noble' child of 'human'.
+ */
+function collectVariantDeltas(cardDef, variantPath) {
   const deltas = [];
   if (!variantPath) return deltas;
-
   const parts = variantPath.split('/').map(p => p.trim()).filter(Boolean);
-  let variantTree = canonCard.variants;
+  let variantTree = cardDef.variants;
 
   for (const part of parts) {
     if (!variantTree || typeof variantTree !== 'object') {
-      console.warn(`  WARN: variant "${part}" not found in variant tree of "${canonCard.id || canonCard.name}"`);
+      console.warn(`  WARN: variant "${part}" not found in variant tree of "${cardDef.id || cardDef.name}"`);
       break;
     }
-
-    // Case-insensitive variant lookup
-    const actualKey = Object.keys(variantTree).find(
-      k => k.toLowerCase() === part.toLowerCase()
-    );
-
+    const actualKey = Object.keys(variantTree).find(k => k.toLowerCase() === part.toLowerCase());
     if (!actualKey) {
-      console.warn(`  WARN: variant "${part}" not found in variant tree of "${canonCard.id || canonCard.name}"`);
+      console.warn(`  WARN: variant "${part}" not found in variant tree of "${cardDef.id || cardDef.name}"`);
       break;
     }
-
     const variantDef = variantTree[actualKey];
     deltas.push(variantDef);
     variantTree = variantDef.variants;
@@ -260,9 +178,8 @@ function collectVariantDeltas(canonCard, variantPath) {
 }
 
 /**
- * Parse the variants list from an import definition.
- * Supports: string "a/b/c", or array ["a/b", "c/d/e"]
- * Returns array of path strings.
+ * Parse importVariants: to a list of variant path strings.
+ * Accepts: string, or array of strings.
  */
 function parseVariantsList(variants) {
   if (!variants) return [];
@@ -272,257 +189,233 @@ function parseVariantsList(variants) {
 }
 
 /**
- * Resolve a card fully for a given branch leaf path.
+ * Resolve the branch spec for a card/block, walking the branch path.
  *
- * @param {object} cardDef - the card or import definition from the project
- * @param {Map} registry - full merged card registry
- * @param {string[]} branchPath - active leaf path e.g. ['A', 'X']
- * @returns {object} fully resolved card data (no variants, no import keys)
- */
-function resolveCard(cardDef, registry, branchPath) {
-  let card;
-  let canonCard = null;
-
-  if (cardDef.import) {
-    // --- Import resolution ---
-    const importPath = cardDef.import;
-    const parts = importPath.split('/').map(p => p.trim());
-    const canonId = parts[0].toLowerCase();
-    const variantPath = parts.slice(1).join('/');
-
-    canonCard = registry.get(canonId);
-    if (!canonCard) {
-      throw new Error(`Import failed: no card with id "${canonId}" found in registry`);
-    }
-
-    // Start with canonical base (strip compiler metadata)
-    card = deepClone(stripMeta(canonCard));
-
-    // Apply primary import variant path
-    if (variantPath) {
-      for (const delta of collectVariantDeltas(canonCard, variantPath)) {
-        applyDelta(card, delta, canonCard);
-      }
-    }
-
-    // Apply additional import-variant chains from canon
-    for (const vPath of parseVariantsList(cardDef['import-variant'])) {
-      for (const delta of collectVariantDeltas(canonCard, vPath)) {
-        applyDelta(card, delta, canonCard);
-      }
-    }
-
-    // Apply scenario-level fields
-    if (cardDef.fields) {
-      applyFieldsDelta(card, cardDef.fields);
-    }
-
-    // Apply top-level overrides from import def (name, pronouns, etc.)
-    // Use applyFieldOp so field operation syntax (+{}, -{}, /{}/{}) works here too.
-    for (const key of ['name', 'type', 'template', 'pronouns', 'protagonist',
-      'encapsulate', 'known', 'triggers', 'id']) {
-      if (cardDef[key] !== undefined) {
-        const newVal = applyFieldOp(card[key], cardDef[key]);
-        if (newVal === '__DELETE__') {
-          delete card[key];
-        } else {
-          card[key] = newVal;
-        }
-      }
-    }
-
-  } else {
-    // --- Local card definition ---
-    card = deepClone(stripMeta(cardDef));
-
-    // Determine effective import-variant for this branch, walking the include's variant tree
-    let effectiveIncludeVariants = cardDef._include_variants || null;
-    if (cardDef._include_variant_tree) {
-      let tree = cardDef._include_variant_tree;
-      for (const branch of branchPath) {
-        if (!tree || typeof tree !== 'object') break;
-        const actualKey = Object.keys(tree).find(k => k.toLowerCase() === branch.toLowerCase());
-        if (!actualKey) break;
-        const node = tree[actualKey];
-        if (node['import-variant'] !== undefined && node['import-variant'] !== null) {
-          effectiveIncludeVariants = node['import-variant'];
-        }
-        tree = node.variants || null;
-      }
-    }
-
-    if (effectiveIncludeVariants) {
-      for (const vPath of parseVariantsList(effectiveIncludeVariants)) {
-        for (const delta of collectVariantDeltas(cardDef, vPath)) {
-          applyDelta(card, delta, cardDef);
-        }
-      }
-    }
-
-    canonCard = null;
-  }
-
-  // Walk branch path, applying branch variants
-  applyBranchVariants(card, cardDef, canonCard, branchPath);
-
-  return card;
-}
-
-/**
- * Apply a single variant block's import-variant chains, fields, and top-level overrides.
- */
-function applyVariantBlock(card, variant, canonCard) {
-  if (variant['import-variant'] && canonCard) {
-    for (const vPath of parseVariantsList(variant['import-variant'])) {
-      for (const delta of collectVariantDeltas(canonCard, vPath)) {
-        applyDelta(card, delta, canonCard);
-      }
-    }
-  }
-
-  if (variant.fields) {
-    applyFieldsDelta(card, variant.fields);
-  }
-
-  for (const key of ['name', 'type', 'template', 'pronouns', 'protagonist',
-    'encapsulate', 'known', 'triggers', 'text']) {
-    if (variant[key] !== undefined) {
-      card[key] = variant[key];
-    }
-  }
-}
-
-/**
- * Returns true if the branch segment is listed in a variant's except field.
- */
-function branchExcepted(variant, branch) {
-  const except = variant.except;
-  if (!except) return false;
-  const list = Array.isArray(except) ? except : [except];
-  return list.some(e => String(e).toLowerCase() === branch.toLowerCase());
-}
-
-/**
- * Apply branch variant deltas by walking the branch path.
+ * Returns:
+ *   null             → card is excluded from this branch (explicit ~ on the key)
+ *   string[]         → variant names to apply (may be empty)
  *
- * Multiple variant trees are tracked in parallel so that wildcard (*) sub-variants
- * remain available alongside direct-match sub-variants at every depth.
+ * Resolution at each depth level:
+ *   1. If the exact key maps to null (~) → return null immediately (no wildcard)
+ *   2. Collect '*' wildcard variants as baseline
+ *   3. Collect exact key match variants (stacked on top of wildcard)
+ *   4. If mapping form: descend via 'branches' sub-key for next depth
  *
- * Per level, per tree, applied in order:
- *   Pass 0: wildcard (*) — fires first as a baseline; skipped if branch is in its except list
- *   Pass 1: direct branch name match — layers on top of the wildcard
- *   Pass 2: named group — a key whose nested variants contain the branch name;
- *           fires when no direct match exists (backward-compatible behaviour)
+ * Both '*' and an explicit key can match at the same level; explicit adds to wildcard.
+ *
+ * @param {object|null} spec - the branches: mapping on a card def
+ * @param {string[]} branchPath - leaf branch path e.g. ['A', 'X']
+ * @returns {null | string[]}
  */
-function applyBranchVariants(card, cardDef, canonCard, branchPath) {
-  let trees = cardDef.variants ? [cardDef.variants] : [];
+function resolveBranchSpec(spec, branchPath) {
+  if (!spec || typeof spec !== 'object') return [];
+
+  const variantNames = [];
+  let activeSpecs = [spec];
 
   for (const branch of branchPath) {
-    if (trees.length === 0) break;
+    const nextSpecs = [];
     const branchLower = branch.toLowerCase();
-    const nextTrees = [];
 
-    for (const tree of trees) {
-      if (!tree || typeof tree !== 'object') continue;
+    for (const currentSpec of activeSpecs) {
+      if (!currentSpec || typeof currentSpec !== 'object') continue;
 
-      // Pass 0: wildcard baseline
-      const starVariant = tree['*'];
-      if (starVariant && !branchExcepted(starVariant, branch)) {
-        applyVariantBlock(card, starVariant, canonCard);
-        if (starVariant.variants) nextTrees.push(starVariant.variants);
-      }
-
-      // Pass 1: direct match
-      const actualKey = Object.keys(tree).find(
-        k => k !== '*' && k.toLowerCase() === branchLower
-      );
-
-      if (actualKey) {
-        applyVariantBlock(card, tree[actualKey], canonCard);
-        if (tree[actualKey].variants) nextTrees.push(tree[actualKey].variants);
-        continue;
-      }
-
-      // Pass 2: named group — a key whose nested variants contain this branch
-      for (const groupKey of Object.keys(tree)) {
-        if (groupKey === '*') continue;
-        const groupVal = tree[groupKey];
-        if (!groupVal || !groupVal.variants) continue;
-        const innerKey = Object.keys(groupVal.variants).find(
-          k => k.toLowerCase() === branchLower
-        );
-        if (innerKey) {
-          applyVariantBlock(card, groupVal, canonCard);
-          const branchVariant = groupVal.variants[innerKey];
-          applyVariantBlock(card, branchVariant, canonCard);
-          if (branchVariant.variants) nextTrees.push(branchVariant.variants);
-          break;
+      // Check explicit key for null (exclude entire card)
+      const exactKey = Object.keys(currentSpec).find(k => k !== '*' && k.toLowerCase() === branchLower);
+      if (exactKey !== undefined) {
+        const exactVal = currentSpec[exactKey];
+        if (exactVal === null || exactVal === undefined) {
+          return null;
         }
+      }
+
+      // Collect wildcard baseline
+      if ('*' in currentSpec && currentSpec['*'] !== null) {
+        const wildcardVal = currentSpec['*'];
+        variantNames.push(...extractApplyList(wildcardVal));
+        const wildcardSub = extractSubBranches(wildcardVal);
+        if (wildcardSub) nextSpecs.push(wildcardSub);
+      }
+
+      // Collect exact key variants (stacked on top of wildcard)
+      if (exactKey !== undefined) {
+        const exactVal = currentSpec[exactKey];
+        variantNames.push(...extractApplyList(exactVal));
+        const exactSub = extractSubBranches(exactVal);
+        if (exactSub) nextSpecs.push(exactSub);
       }
     }
 
-    trees = nextTrees;
+    activeSpecs = nextSpecs;
   }
+
+  return variantNames;
 }
 
 /**
- * Apply a variant delta to a card in progress.
- * Handles both fields-level and top-level keys in the delta.
+ * Extract the list of variant names to apply from a branch spec value.
+ * Value forms:
+ *   scalar string → [string]
+ *   array         → array
+ *   mapping with apply: → apply value (scalar or array)
+ *   mapping without apply: → []
  */
-function applyDelta(card, delta, canonCard) {
-  if (!delta) return;
-
-  const topLevelFields = ['name', 'type', 'template', 'pronouns', 'protagonist',
-    'encapsulate', 'known', 'triggers', 'text'];
-
-  for (const [key, value] of Object.entries(delta)) {
-    // Skip compiler/structural keys
-    if (['variants', 'import-variant', '_source'].includes(key.toLowerCase())) continue;
-
-    const isTopLevel = topLevelFields.some(f => f.toLowerCase() === key.toLowerCase());
-
-    if (isTopLevel) {
-      const current = getCI(card, key);
-      const newVal = applyFieldOp(current, value);
-      if (newVal === '__DELETE__') {
-        deleteCI(card, key);
-      } else {
-        setCI(card, key, newVal);
-      }
-    } else if (key.toLowerCase() === 'fields') {
-      applyFieldsDelta(card, value);
-    } else {
-      // Treat unknown top-level keys in variant as field operations
-      if (!card.fields) card.fields = {};
-      const current = getCI(card.fields, key);
-      const newVal = applyFieldOp(current, value);
-      if (newVal === '__DELETE__') {
-        deleteCI(card.fields, key);
-      } else {
-        setCI(card.fields, key, newVal);
-      }
-    }
+function extractApplyList(val) {
+  if (val === null || val === undefined) return [];
+  if (typeof val === 'string') return val ? [val] : [];
+  if (Array.isArray(val)) return val.filter(v => typeof v === 'string' && v);
+  if (typeof val === 'object') {
+    // Mapping form: may have apply: key
+    const apply = val.apply;
+    if (apply === undefined) return [];
+    if (typeof apply === 'string') return apply ? [apply] : [];
+    if (Array.isArray(apply)) return apply.filter(v => typeof v === 'string' && v);
+    return [];
   }
+  return [];
+}
+
+/**
+ * Extract the sub-branches mapping from a branch spec value for deeper descent.
+ */
+function extractSubBranches(val) {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'object' && !Array.isArray(val) && val.branches) {
+    return val.branches;
+  }
+  return null;
 }
 
 /**
  * Strip compiler-internal metadata from a card before cloning.
  */
 function stripMeta(card) {
-  const { variants, _source, _include_variants, _include_variant_tree, ...rest } = card;
-  return rest;
+  const out = {};
+  const skip = new Set(['variants', '_source', '_include_variants', '_include_variant_tree']);
+  for (const [k, v] of Object.entries(card)) {
+    if (!skip.has(k.toLowerCase())) out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Resolve a card fully for a given branch leaf path.
+ *
+ * @param {object} cardDef - the card or import definition
+ * @param {Map} registry   - full merged card registry
+ * @param {string[]} branchPath - active leaf path
+ * @returns {object|null} fully resolved card, or null if excluded from this branch
+ */
+function resolveCard(cardDef, registry, branchPath) {
+  let card;
+  let sourceCardForVariants; // the card definition that holds the variants library
+
+  if (cardDef.import) {
+    // ── Import ──────────────────────────────────────────────────────────────
+    const canonId = String(cardDef.import).toLowerCase();
+    const canonCard = registry.get(canonId);
+    if (!canonCard) {
+      throw new Error(`Import failed: no card with id "${cardDef.import}" found in registry`);
+    }
+
+    card = deepClone(stripMeta(canonCard));
+    sourceCardForVariants = canonCard;
+
+    // Apply importVariants from the import def (top-level, before branch dispatch)
+    for (const vPath of parseVariantsList(cardDef.importVariants)) {
+      for (const delta of collectVariantDeltas(canonCard, vPath)) {
+        applyDelta(card, delta);
+      }
+    }
+
+    // Resolve branch spec → variant names to apply
+    const branchVariantNames = resolveBranchSpec(cardDef.branches, branchPath);
+    if (branchVariantNames === null) return null; // excluded
+
+    for (const vName of branchVariantNames) {
+      // Branch variant names dispatch into the import def's own variants library.
+      // Those local variants may themselves have importVariants pointing to canon.
+      const deltas = collectVariantDeltas(cardDef, vName);
+      for (const delta of deltas) {
+        // Apply any importVariants declared inside this local variant from canon
+        if (delta.importVariants && canonCard) {
+          for (const cvPath of parseVariantsList(delta.importVariants)) {
+            for (const canonDelta of collectVariantDeltas(canonCard, cvPath)) {
+              applyDelta(card, canonDelta);
+            }
+          }
+        }
+        applyDelta(card, delta);
+      }
+    }
+
+    // Apply project-level body overrides
+    if (cardDef.body) {
+      applyFieldsDelta(card, { body: cardDef.body });
+    }
+
+    // Apply top-level overrides from import def
+    for (const key of ['name', 'pronouns', 'aid', 'render']) {
+      if (cardDef[key] !== undefined) {
+        const newVal = applyFieldOp(card[key], cardDef[key]);
+        if (newVal === '__DELETE__') delete card[key]; else card[key] = newVal;
+      }
+    }
+
+  } else {
+    // ── Local card definition ────────────────────────────────────────────────
+    card = deepClone(stripMeta(cardDef));
+    sourceCardForVariants = cardDef;
+
+    // Handle included cards that carry importVariants from the include directive
+    if (cardDef._include_variants) {
+      for (const vPath of parseVariantsList(cardDef._include_variants)) {
+        for (const delta of collectVariantDeltas(cardDef, vPath)) {
+          applyDelta(card, delta);
+        }
+      }
+    }
+
+    // Resolve branch spec → variant names to apply
+    const branchVariantNames = resolveBranchSpec(
+      cardDef._include_branch_spec || cardDef.branches,
+      branchPath
+    );
+    if (branchVariantNames === null) return null; // excluded
+
+    for (const vName of branchVariantNames) {
+      for (const delta of collectVariantDeltas(sourceCardForVariants, vName)) {
+        applyDelta(card, delta);
+      }
+    }
+
+  }
+
+  // Normalise: ensure aid.type and render.template default to each other
+  if (!card.aid) card.aid = {};
+  if (!card.render) card.render = {};
+
+  if (!card.aid.type && card.render.template) card.aid.type = card.render.template;
+  if (!card.render.template && card.aid.type) card.render.template = card.aid.type;
+
+  if (!card.aid.type && !card.render.template) {
+    const name = card.id || (typeof card.name === 'string' ? card.name : '');
+    console.warn(`  WARN: card "${name}" has neither aid.type nor render.template`);
+  }
+
+  return card;
 }
 
 /**
  * Enumerate all leaf branch paths from a branch tree.
- * Returns array of arrays of strings, e.g. [['A','X'], ['A','Y'], ['B','Z']]
- * If no branches defined, returns [[]] (one leaf, the root).
+ * Returns array of arrays of strings: e.g. [['A','X'], ['A','Y'], ['B']]
+ * If no branches defined, returns [[]] (one root leaf).
  */
-function enumerateLeaves(branches, prefix = []) {
+function enumerateLeaves(branches, prefix) {
+  if (!prefix) prefix = [];
   if (!branches || typeof branches !== 'object' || Object.keys(branches).length === 0) {
     return [prefix];
   }
-
   const leaves = [];
   for (const [key, value] of Object.entries(branches)) {
     const childBranches = value && value.branches ? value.branches : null;
@@ -533,18 +426,14 @@ function enumerateLeaves(branches, prefix = []) {
 
 /**
  * Get branch config for a given path.
- * Returns the branch config object at the leaf, or {} if not found.
+ * Returns the branch config object at that path, or {} if not found.
  */
 function getBranchConfig(branches, branchPath) {
-  // branches is the raw branches map (e.g. config.branches)
-  // Each entry may have a nested 'branches' key for sub-branches
   let currentMap = branches;
   let currentNode = null;
   for (const part of branchPath) {
     if (!currentMap || typeof currentMap !== 'object') return {};
-    const actualKey = Object.keys(currentMap).find(
-      k => k.toLowerCase() === part.toLowerCase()
-    );
+    const actualKey = Object.keys(currentMap).find(k => k.toLowerCase() === part.toLowerCase());
     if (!actualKey) return {};
     currentNode = currentMap[actualKey];
     currentMap = currentNode && currentNode.branches ? currentNode.branches : null;
@@ -554,11 +443,12 @@ function getBranchConfig(branches, branchPath) {
 
 module.exports = {
   resolveCard,
+  resolveBranchSpec,
   enumerateLeaves,
   getBranchConfig,
   deepClone,
   applyFieldsDelta,
-  collectVariantDeltas,
   applyFieldOp,
-  applyBranchVariants,
+  collectVariantDeltas,
+  parseVariantsList,
 };

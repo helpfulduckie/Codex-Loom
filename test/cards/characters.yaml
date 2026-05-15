@@ -1,28 +1,38 @@
 # Include all cards from this canon file — Felicia will be skipped since she's imported below
-- include: Felicia.yaml
+- include: "{@main}/Felicia.yaml"
 
 # Explicit import with overrides — takes precedence over the include above
 - import: Felicia
   variants:
     felix:
-      import-variant: [Felix]
+      importVariants: [Felix]
+  branches:
+    felix: felix
 
-# Import Aness from canon with networked variant
-- import: Aness/networked
+# Import Aness from canon with networked variant; add subject-branch tagline
+- import: Aness
+  importVariants: [networked]
   variants:
     subject:
-      fields:
+      body:
         Tagline: +{; Fused-Squad Subject}
+  branches:
+    subject: subject
 
 # Local card
 - id: Kaiden
   name: Kaiden Ventus
-  type: Character
-  template: Character
-  encapsulate: true
-  known: true
-  triggers: Kaiden, Ventus
-  fields:
+  pronouns: male
+  aid:
+    title: Kaiden Ventus
+    type: Character
+    triggers: [Kaiden, Ventus]
+    encapsulate: true
+    known: true
+  render:
+    template: Character
+    wrapper: none
+  body:
     Tagline: knight; master swordsman
     Physical Traits:
       gender: male

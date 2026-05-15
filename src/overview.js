@@ -192,17 +192,21 @@ function collectOverviewSections(branchDir, branchNames, rootDirName) {
 function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf) {
   const { branchNames, cards, leafDir } = leaf;
 
-  // Walk up from the leaf to find the nearest Opening.md and Plot Essentials.md.
-  let dir     = leafDir;
-  let opening = null;
-  let plotEss = null;
+  // Walk up from the leaf to find the nearest versions of each component file.
+  let dir      = leafDir;
+  let opening  = null;
+  let plotEss  = null;
+  let ainText  = null;
+  let anText   = null;
   while (true) {
     const compDir = path.join(dir, 'Components');
     if (fs.existsSync(compDir)) {
       if (opening === null) opening = readFile(path.join(compDir, 'Opening.md'));
       if (plotEss === null) plotEss = readFile(path.join(compDir, 'Plot Essentials.md'));
+      if (ainText === null) ainText = readFile(path.join(compDir, 'AI Instructions.md'));
+      if (anText  === null) anText  = readFile(path.join(compDir, "Author's Note.md"));
     }
-    if (opening !== null && plotEss !== null) break;
+    if (opening !== null && plotEss !== null && ainText !== null && anText !== null) break;
     const parent     = path.dirname(dir);
     const parentName = path.basename(parent);
     if (parent === dir || parentName !== 'Branches') break;
@@ -222,8 +226,10 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf) {
 
   const parts = [];
   parts.push(`# ${title}`);
-  if (opening) parts.push(`# Opening\n\n${opening}`);
-  if (plotEss) parts.push(`# Plot Essentials\n\n${plotEss}`);
+  if (opening)  parts.push(`# Opening\n\n${opening}`);
+  if (plotEss)  parts.push(`# Plot Essentials\n\n${plotEss}`);
+  if (ainText)  parts.push(`# AI Instructions\n\n${ainText}`);
+  if (anText)   parts.push(`# Author's Note\n\n${anText}`);
   if (cards.length > 0) parts.push(`# Story Cards\n\n${cards.join('\n\n')}`);
 
   fs.writeFileSync(outPath, parts.join('\n\n'), 'utf8');

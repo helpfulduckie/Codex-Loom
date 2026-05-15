@@ -12,6 +12,7 @@ Physical Traits: female; early 40s; platinum blond hair in a controlled bun; col
 Personality: sharp, intelligent, cheerful, sadistic
 - Does not view research subjects as people deserving dignity; they are materials
 - Genuinely enjoys her work
+Magic: moderate water-affinity; minor growth-affinity; water whip attacks; minor water shields; small healing spells
 Background:
 one of the top Academy mages; has built her reputation through research
 that requires things most researchers won't do to their subjects
@@ -23,10 +24,12 @@ encapsulate: true
 notes: [e]
 ~~~
 Aness Rozen - Journeyman Healer; Magic Researcher; Fused-Squad Subject
-Physical Traits: female; mid 20s; black hair, braided, waist-length; brown eyes; tall, willowy build; a blue interface crystal implanted at the base of her skull
+Physical Traits: female; mid 20s; black hair, braided, waist-length; brown eyes; tall, willowy build; a blue interface crystal implanted at the base of your skull
 Personality: inquisitive, polite, sarcastic, compassionate
 - you love magic research — you instinctively leap to explore theoretical implications
-- Your polite nature is a social shield; behind it is a biting sarcasm you deploy when frustrated
+- your polite nature is a social shield; behind it is a biting sarcasm you deploy when frustrated
+Magic: high ice-affinity; moderate growth-affinity; - your growth-affinity powers strong healing magic; you are a trained Healer first
+- you know basic ice combat magic but are a poor combat mage who flinches under pressure
 
 ## Kaiden Ventus
 ~~~
@@ -37,5 +40,6 @@ notes: [e]
 Kaiden Ventus - knight; master swordsman
 Physical Traits: male; mid 20s; short brown hair; silver eyes; tall broad build
 Personality: honorable, disciplined, protective, warm
+Magic: no affinity; magicless
 "
 `;

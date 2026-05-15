@@ -3,44 +3,7 @@
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { cardAppliesTo, getTemplate, writeOpening, resolveOpeningContent } = require('../../src/compile');
-
-describe('cardAppliesTo', () => {
-  test('no filter: always true', () => {
-    expect(cardAppliesTo({}, ['any', 'path'])).toBe(true);
-    expect(cardAppliesTo({}, ['subject'])).toBe(true);
-  });
-
-  test('only: exact match', () => {
-    expect(cardAppliesTo({ only: 'subject' }, ['subject'])).toBe(true);
-    expect(cardAppliesTo({ only: 'subject' }, ['researcher'])).toBe(false);
-  });
-
-  test('only: prefix match for deeper paths', () => {
-    expect(cardAppliesTo({ only: 'subject' }, ['subject', 'A'])).toBe(true);
-    expect(cardAppliesTo({ only: 'researcher' }, ['subject', 'A'])).toBe(false);
-  });
-
-  test('only: array of prefixes — any match passes', () => {
-    expect(cardAppliesTo({ only: ['subject', 'felix'] }, ['felix'])).toBe(true);
-    expect(cardAppliesTo({ only: ['subject', 'felix'] }, ['researcher'])).toBe(false);
-  });
-
-  test('except: excludes matching path', () => {
-    expect(cardAppliesTo({ except: 'researcher' }, ['researcher'])).toBe(false);
-    expect(cardAppliesTo({ except: 'researcher' }, ['subject'])).toBe(true);
-  });
-
-  test('except: prefix exclusion', () => {
-    expect(cardAppliesTo({ except: 'A' }, ['A', 'X'])).toBe(false);
-    expect(cardAppliesTo({ except: 'A' }, ['B', 'X'])).toBe(true);
-  });
-
-  test('case-insensitive prefix matching', () => {
-    expect(cardAppliesTo({ only: 'Subject' }, ['subject'])).toBe(true);
-    expect(cardAppliesTo({ except: 'RESEARCHER' }, ['researcher'])).toBe(false);
-  });
-});
+const { getTemplate, writeOpening, resolveOpeningContent } = require('../../src/compile');
 
 describe('getTemplate', () => {
   const templates = new Map([
@@ -48,20 +11,24 @@ describe('getTemplate', () => {
     ['npc', { content: 'npc template', _source: 'y' }],
   ]);
 
-  test('returns template by explicit template field', () => {
-    expect(getTemplate({ template: 'npc', type: 'character' }, templates)).toBe('npc template');
+  test('returns template by render.template field', () => {
+    const card = { render: { template: 'npc' }, aid: { type: 'character' } };
+    expect(getTemplate(card, templates)).toBe('npc template');
   });
 
-  test('falls back to type when template field absent', () => {
-    expect(getTemplate({ type: 'Character' }, templates)).toBe('char template');
+  test('falls back to aid.type when render.template absent', () => {
+    const card = { render: {}, aid: { type: 'Character' } };
+    expect(getTemplate(card, templates)).toBe('char template');
   });
 
   test('type lookup is case-insensitive', () => {
-    expect(getTemplate({ type: 'CHARACTER' }, templates)).toBe('char template');
+    const card = { aid: { type: 'CHARACTER' } };
+    expect(getTemplate(card, templates)).toBe('char template');
   });
 
-  test('returns null when neither template nor type found', () => {
-    expect(getTemplate({ type: 'Unknown' }, templates)).toBeNull();
+  test('returns null when neither render.template nor aid.type found', () => {
+    const card = { aid: { type: 'Unknown' } };
+    expect(getTemplate(card, templates)).toBeNull();
   });
 
   test('returns null for card with no type or template', () => {

@@ -1,8 +1,15 @@
-canon: ./canon
-output: ./output
-templates: ./templates
-cards: ./cards
+structure:
+  input:
+    cards:
+      - ./cards
+    canon:
+      main: ./canon
+    templates:
+      - ./templates
+  output: ./output
+
 protagonist: Aness
+
 branches:
   subject:
     protagonist: Aness

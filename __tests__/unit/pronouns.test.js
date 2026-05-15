@@ -2,10 +2,10 @@
 
 const {
   resolveProunounToken,
-  processBracedPronounTokens,
-  processVerbConjugation,
-  processBareMarkers,
+  applyTokenPass,
 } = require('../../src/pronouns');
+
+// ── resolveProunounToken ────────────────────────────────────────────────────
 
 describe('resolveProunounToken', () => {
   describe('female set', () => {
@@ -23,11 +23,18 @@ describe('resolveProunounToken', () => {
     test('herself → himself', () => expect(resolveProunounToken('herself', 'male')).toBe('himself'));
   });
 
-  describe('they set', () => {
+  describe('they set (alias for nonbinary)', () => {
     test('she → they', () => expect(resolveProunounToken('she', 'they')).toBe('they'));
     test('her → them', () => expect(resolveProunounToken('her', 'they')).toBe('them'));
     test('her~ → their', () => expect(resolveProunounToken('her~', 'they')).toBe('their'));
     test('herself → themselves', () => expect(resolveProunounToken('herself', 'they')).toBe('themselves'));
+  });
+
+  describe('nonbinary set', () => {
+    test('she → they', () => expect(resolveProunounToken('she', 'nonbinary')).toBe('they'));
+    test('her → them', () => expect(resolveProunounToken('her', 'nonbinary')).toBe('them'));
+    test('her~ → their', () => expect(resolveProunounToken('her~', 'nonbinary')).toBe('their'));
+    test('herself → themselves', () => expect(resolveProunounToken('herself', 'nonbinary')).toBe('themselves'));
   });
 
   describe('you set', () => {
@@ -40,7 +47,6 @@ describe('resolveProunounToken', () => {
     test('She (capital) with male → He', () => expect(resolveProunounToken('She', 'male')).toBe('He'));
     test('Her~ (capital) with they → Their', () => expect(resolveProunounToken('Her~', 'they')).toBe('Their'));
     test('SHE is not all-caps preserving, just first-char', () => {
-      // Current impl only preserves leading capital, not all-caps
       const result = resolveProunounToken('SHE', 'male');
       expect(result[0]).toBe(result[0].toUpperCase());
     });
@@ -78,156 +84,210 @@ describe('resolveProunounToken', () => {
   });
 });
 
-describe('processBracedPronounTokens', () => {
-  test('replaces {$her~} with possessive for female', () => {
-    expect(processBracedPronounTokens('look at {$her~} face', 'female')).toBe('look at her face');
+// ── applyTokenPass ───────────────────────────────────────────────────────────
+
+function makeCard(id, pronouns) {
+  const display = id.charAt(0).toUpperCase() + id.slice(1);
+  return { id, name: display, pronouns };
+}
+
+describe('applyTokenPass — unscoped pronoun tokens', () => {
+  test('{$she} with female card → she', () => {
+    const card = makeCard('hero', 'female');
+    expect(applyTokenPass('{$she} walked in', { card, registry: new Map(), branchProtagonist: null }))
+      .toBe('she walked in');
   });
 
-  test('replaces {$She} with capitalized male subject', () => {
-    expect(processBracedPronounTokens('{$She} walked in', 'male')).toBe('He walked in');
+  test('{$she} with male card → he', () => {
+    const card = makeCard('hero', 'male');
+    expect(applyTokenPass('{$she} smiled', { card, registry: new Map(), branchProtagonist: null }))
+      .toBe('he smiled');
   });
 
-  test('leaves non-pronoun braced tokens unchanged', () => {
-    expect(processBracedPronounTokens('{$fields.something}', 'female')).toBe('{$fields.something}');
+  test('{$her~} with female → her (possessive)', () => {
+    const card = makeCard('hero', 'female');
+    expect(applyTokenPass('look at {$her~} face', { card, registry: new Map(), branchProtagonist: null }))
+      .toBe('look at her face');
   });
 
-  test('replaces multiple tokens in one string', () => {
-    const result = processBracedPronounTokens('{$she} raised {$her~} hand', 'female');
-    expect(result).toBe('she raised her hand');
+  test('{$She} with male → He (case preserved)', () => {
+    const card = makeCard('hero', 'male');
+    expect(applyTokenPass('{$She} walked in', { card, registry: new Map(), branchProtagonist: null }))
+      .toBe('He walked in');
   });
 
-  test('you set: {$her~} → your', () => {
-    expect(processBracedPronounTokens('{$her~} choice', 'you')).toBe('your choice');
+  test('{$her~} with you set → your', () => {
+    const card = makeCard('hero', 'you');
+    expect(applyTokenPass('{$her~} choice', { card, registry: new Map(), branchProtagonist: null }))
+      .toBe('your choice');
+  });
+
+  test('multiple unscoped tokens in one string', () => {
+    const card = makeCard('hero', 'female');
+    expect(applyTokenPass('{$she} raised {$her~} hand', { card, registry: new Map(), branchProtagonist: null }))
+      .toBe('she raised her hand');
+  });
+
+  test('unscoped tokens do not affect verb scope', () => {
+    // {$she} (unscoped) followed by [s] — scope falls back to card.pronouns
+    const card = makeCard('hero', 'female');
+    expect(applyTokenPass('{$she} run[s]', { card, registry: new Map(), branchProtagonist: null }))
+      .toBe('she runs');
   });
 });
 
-describe('processVerbConjugation', () => {
+describe('applyTokenPass — character references {$Id}', () => {
+  test('{$Id} → "you" when card is protagonist', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass('{$Aness} walked in', { card, registry, branchProtagonist: 'aness' }))
+      .toBe('you walked in');
+  });
+
+  test('{$Id} → display name when not protagonist', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass('{$Aness} smiled', { card, registry, branchProtagonist: 'veyrn' }))
+      .toBe('Aness smiled');
+  });
+
+  test('{$Id} sets conjugation scope — female', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass('{$Aness} love[s] it', { card, registry, branchProtagonist: null }))
+      .toBe('Aness loves it');
+  });
+
+  test('{$Id} sets conjugation scope — protagonist (you, plural → drop [s])', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass('{$Aness} love[s] it', { card, registry, branchProtagonist: 'aness' }))
+      .toBe('you love it');
+  });
+
+  test('[is] uses scope from last {$Id}', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass('{$Aness} [is] ready', { card, registry, branchProtagonist: null }))
+      .toBe('Aness is ready');
+  });
+
+  test('[was] uses scope from last {$Id} — protagonist', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass('{$Aness} [was] there', { card, registry, branchProtagonist: 'aness' }))
+      .toBe('you were there');
+  });
+});
+
+describe('applyTokenPass — scoped pronoun tokens {$Id.pronoun}', () => {
+  test('{$Id.she} → "you" when protagonist', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass('{$Aness.she} smiled', { card, registry, branchProtagonist: 'aness' }))
+      .toBe('you smiled');
+  });
+
+  test('{$Id.she} → "she" when not protagonist', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass('{$Aness.she} smiled', { card, registry, branchProtagonist: 'veyrn' }))
+      .toBe('she smiled');
+  });
+
+  test('{$Id.her~} → "your" when protagonist (possessive)', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass('{$Aness.her~} choice', { card, registry, branchProtagonist: 'aness' }))
+      .toBe('your choice');
+  });
+
+  test('{$Id.she} sets conjugation scope', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    // scoped pronoun sets scope, so [s] conjugates correctly
+    expect(applyTokenPass('{$Aness.she} love[s] it', { card, registry, branchProtagonist: null }))
+      .toBe('she loves it');
+  });
+
+  test('{$Id.she} → "you" and scope is plural → [s] drops', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass('{$Aness.she} love[s] it', { card, registry, branchProtagonist: 'aness' }))
+      .toBe('you love it');
+  });
+});
+
+describe('applyTokenPass — verb conjugation markers', () => {
+  function scopedStr(str, pronouns) {
+    // Use card's own pronouns as scope via unscoped tokens feeding into [marker]
+    const card = makeCard('hero', pronouns);
+    return applyTokenPass(str, { card, registry: new Map(), branchProtagonist: null });
+  }
+
   test('[s] → s for female (singular)', () => {
-    expect(processVerbConjugation('she love[s] it', 'female')).toBe('she loves it');
+    expect(scopedStr('she love[s] it', 'female')).toBe('she loves it');
   });
 
   test('[s] → s for male (singular)', () => {
-    expect(processVerbConjugation('he like[s] it', 'male')).toBe('he likes it');
+    expect(scopedStr('he like[s] it', 'male')).toBe('he likes it');
   });
 
   test('[s] → empty for they (plural)', () => {
-    expect(processVerbConjugation('they love[s] it', 'they')).toBe('they love it');
-  });
-
-  test('[s] → empty for you (plural)', () => {
-    expect(processVerbConjugation('you love[s] this', 'you')).toBe('you love this');
-  });
-
-  test('multiple [s] markers in one string', () => {
-    expect(processVerbConjugation('she run[s] and jump[s]', 'female')).toBe('she runs and jumps');
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    // scope set by {$Aness} as protagonist (you/plural)
+    expect(applyTokenPass('{$Aness} love[s] it', { card, registry, branchProtagonist: 'aness' }))
+      .toBe('you love it');
   });
 
   test('[es] → es for female (singular)', () => {
-    expect(processVerbConjugation('she flinch[es]', 'female')).toBe('she flinches');
+    expect(scopedStr('she flinch[es]', 'female')).toBe('she flinches');
   });
 
-  test('[es] → empty for they (plural)', () => {
-    expect(processVerbConjugation('they flinch[es]', 'they')).toBe('they flinch');
+  test('[is] → are for protagonist scope', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass('{$Aness} [is] ready', { card, registry, branchProtagonist: 'aness' }))
+      .toBe('you are ready');
   });
 
-  test('[es] → empty for you (plural)', () => {
-    expect(processVerbConjugation('you flinch[es]', 'you')).toBe('you flinch');
+  test('[was] → were for protagonist scope', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass('{$Aness} [was] here', { card, registry, branchProtagonist: 'aness' }))
+      .toBe('you were here');
   });
 
-  test('mixed [es] and [s] in one string', () => {
-    expect(processVerbConjugation('she flinch[es] and love[s] it', 'female')).toBe('she flinches and loves it');
+  test('[has] → have for protagonist scope', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass('{$Aness} [has] arrived', { card, registry, branchProtagonist: 'aness' }))
+      .toBe('you have arrived');
   });
 
-  test('mixed [es] and [s] stripped for plural', () => {
-    expect(processVerbConjugation('you flinch[es] and love[s] it', 'you')).toBe('you flinch and love it');
+  test('multiple conjugation markers in one string', () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass('{$Aness} run[s] and jump[s]', { card, registry, branchProtagonist: null }))
+      .toBe('Aness runs and jumps');
   });
 });
 
-describe('processBareMarkers', () => {
-  const heroCard = { id: 'aness', name: 'Aness', pronouns: 'female', protagonist: 'aness', fields: {} };
-  const registry = new Map([['aness', heroCard]]);
-
-  test('$CharacterId → "you" when card is active protagonist', () => {
-    const ctx = { card: heroCard, registry, branchProtagonist: 'aness' };
-    expect(processBareMarkers('$Aness walked in', ctx)).toBe('you walked in');
+describe('applyTokenPass — scope tracking across tokens', () => {
+  test('scope resets with each new {$Id} reference', () => {
+    const aness = makeCard('aness', 'female');
+    const kaiden = makeCard('kaiden', 'male');
+    const registry = new Map([['aness', aness], ['kaiden', kaiden]]);
+    // First {$Aness} → female scope → [s] adds 's'; then {$Kaiden} → male → [s] adds 's'
+    expect(applyTokenPass('{$Aness} love[s] it. {$Kaiden} like[s] it.', { card: aness, registry, branchProtagonist: null }))
+      .toBe('Aness loves it. Kaiden likes it.');
   });
 
-  test('$CharacterId → name when not active protagonist', () => {
-    const ctx = { card: heroCard, registry, branchProtagonist: 'veyrn' };
-    expect(processBareMarkers('$Aness smiled', ctx)).toBe('Aness smiled');
-  });
-
-  test('pronoun token $she → "you" for active protagonist', () => {
-    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
-    const ctx = { card, registry, branchProtagonist: 'aness' };
-    expect(processBareMarkers('$she knows', ctx)).toBe('you knows');
-  });
-
-  test('pronoun token $she → female pronoun when protagonist is different', () => {
-    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
-    const ctx = { card, registry, branchProtagonist: 'veyrn' };
-    expect(processBareMarkers('$she knows', ctx)).toBe('she knows');
-  });
-
-  test('$her~ → "your" for active protagonist', () => {
-    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
-    const ctx = { card, registry, branchProtagonist: 'aness' };
-    expect(processBareMarkers('$her~ choice', ctx)).toBe('your choice');
-  });
-
-  test('$is → "are" for active protagonist (you set)', () => {
-    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
-    const ctx = { card, registry, branchProtagonist: 'aness' };
-    expect(processBareMarkers('$is ready', ctx)).toBe('are ready');
-  });
-
-  test('$is → "is" when protagonist uses female pronouns and is not active', () => {
-    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
-    const ctx = { card, registry, branchProtagonist: 'veyrn' };
-    expect(processBareMarkers('$is ready', ctx)).toBe('is ready');
-  });
-
-  test('$Is (capital) → "Are" for active protagonist', () => {
-    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
-    const ctx = { card, registry, branchProtagonist: 'aness' };
-    expect(processBareMarkers('$Is ready', ctx)).toBe('Are ready');
-  });
-
-  test('$was → "were" for active protagonist (you set)', () => {
-    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
-    const ctx = { card, registry, branchProtagonist: 'aness' };
-    expect(processBareMarkers('$was there', ctx)).toBe('were there');
-  });
-
-  test('$was → "was" when protagonist uses female pronouns and is not active', () => {
-    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
-    const ctx = { card, registry, branchProtagonist: 'veyrn' };
-    expect(processBareMarkers('$was there', ctx)).toBe('was there');
-  });
-
-  test('$Was (capital) → "Were" for active protagonist', () => {
-    const card = { name: 'Aness', protagonist: 'aness', fields: {} };
-    const ctx = { card, registry, branchProtagonist: 'aness' };
-    expect(processBareMarkers('$Was there', ctx)).toBe('Were there');
-  });
-
-  test("$Aness's → \"your\" when Aness is active protagonist", () => {
-    const ctx = { card: heroCard, registry, branchProtagonist: 'aness' };
-    expect(processBareMarkers("$Aness's voice", ctx)).toBe("your voice");
-  });
-
-  test("$Aness's → \"Aness's\" when Aness is not active protagonist", () => {
-    const ctx = { card: heroCard, registry, branchProtagonist: 'veyrn' };
-    expect(processBareMarkers("$Aness's voice", ctx)).toBe("Aness's voice");
-  });
-
-  test("$aness's (lowercase) → \"your\" when Aness is active protagonist", () => {
-    const ctx = { card: heroCard, registry, branchProtagonist: 'aness' };
-    expect(processBareMarkers("$aness's voice", ctx)).toBe("your voice");
-  });
-
-  test('$Aness (no suffix) still resolves to "you" — no regression', () => {
-    const ctx = { card: heroCard, registry, branchProtagonist: 'aness' };
-    expect(processBareMarkers('$Aness walked in', ctx)).toBe('you walked in');
+  test('scope from {$Id} carries into subsequent [s] markers', () => {
+    const aness = makeCard('aness', 'female');
+    const registry = new Map([['aness', aness]]);
+    expect(applyTokenPass('{$Aness} run[s] and jump[s]', { card: aness, registry, branchProtagonist: null }))
+      .toBe('Aness runs and jumps');
   });
 });

@@ -2,49 +2,23 @@
 
 const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
+const { findFiles, loadYaml } = require('./util');
 
 /**
- * Recursively find all files with a given extension under a directory.
- */
-function findFiles(dir, ext) {
-  const results = [];
-  if (!fs.existsSync(dir)) return results;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      results.push(...findFiles(full, ext));
-    } else if (entry.isFile() && entry.name.toLowerCase().endsWith(ext)) {
-      results.push(full);
-    }
-  }
-  return results;
-}
-
-/**
- * Load and parse a YAML file.
- */
-function loadYaml(filePath) {
-  try {
-    const raw = fs.readFileSync(filePath, 'utf8');
-    return yaml.load(raw);
-  } catch (err) {
-    throw new Error(`Failed to load YAML at ${filePath}: ${err.message}`);
-  }
-}
-
-/**
- * Load all YAML card files from a directory recursively.
+ * Load all YAML card files from one or more directories recursively.
+ * Accepts a single path string or an array of path strings.
  * Returns flat array of card objects with source path attached.
  */
-function loadCardsFromDir(dir) {
-  const files = findFiles(dir, '.yaml');
+function loadCardsFromDir(dirs) {
+  if (!Array.isArray(dirs)) dirs = [dirs];
   const cards = [];
-  for (const file of files) {
-    const data = loadYaml(file);
-    const entries = Array.isArray(data) ? data : [data];
-    for (const entry of entries) {
-      cards.push({ ...entry, _source: file });
+  for (const dir of dirs) {
+    for (const file of findFiles(dir, '.yaml')) {
+      const data = loadYaml(file);
+      const entries = Array.isArray(data) ? data : [data];
+      for (const entry of entries) {
+        cards.push({ ...entry, _source: file });
+      }
     }
   }
   return cards;
@@ -68,10 +42,7 @@ function loadNamedFiles(dirs, ext) {
           `Duplicate ${ext} name "${name}" found in ${dir}:\n  ${dirEntries.get(name)._source}\n  ${file}`
         );
       }
-      dirEntries.set(name, {
-        content: fs.readFileSync(file, 'utf8'),
-        _source: file,
-      });
+      dirEntries.set(name, { content: fs.readFileSync(file, 'utf8'), _source: file });
     }
     for (const [name, entry] of dirEntries) {
       result.set(name, entry);
@@ -81,64 +52,119 @@ function loadNamedFiles(dirs, ext) {
 }
 
 /**
- * Load all templates and partials from one or more directories recursively.
- * Returns { templates: Map, partials: Map } where each Map is lowercase name → { content, _source }.
- * Errors on duplicate names within the same directory.
- * When multiple directories are given, later directories override earlier ones.
+ * Load all templates and partials from one or more directories.
  */
 function loadTemplates(dirs) {
   return {
     templates: loadNamedFiles(dirs, '.template'),
-    partials: loadNamedFiles(dirs, '.partial'),
+    partials:  loadNamedFiles(dirs, '.partial'),
   };
+}
+
+/**
+ * Resolve a sequence field (cards, templates) to an array of absolute paths.
+ * Accepts: string, or array of strings. Normalises scalar → [scalar].
+ */
+function resolveSequence(raw, base) {
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  return arr.map(p => path.resolve(base, String(p)));
+}
+
+/**
+ * Resolve a mapping field (canon, component dirs) to a Map<name, absolutePath>.
+ * Accepts: an object whose values are path strings.
+ */
+function resolveMapping(raw, base) {
+  const result = new Map();
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return result;
+  for (const [name, p] of Object.entries(raw)) {
+    result.set(name, path.resolve(base, String(p)));
+  }
+  return result;
 }
 
 /**
  * Load compile.yaml and resolve all paths relative to it.
  *
- * output: accepts three forms:
- *   - Plain string:  "./mod set 1"
- *   - Array of strings: ["./mod set 1", "./mod set 2"]
- *   - Array of objects: [{ path: "./mod set 1", label: "modset1" }, ...]
+ * Expected structure:
+ *   structure:
+ *     input:
+ *       cards:      # sequence of folder paths
+ *       canon:      # mapping: name → folder path
+ *       templates:  # sequence of folder paths
+ *       components:
+ *         aiInstructions: # mapping: name → folder path
+ *         opening:
+ *         openingChoice:
+ *         plotEssential:
+ *         authorsNote:
+ *         scripts:
+ *     output:       # single folder path
+ *   protagonist:
+ *   components:     # root component specs (file path | literal | {@Key})
+ *   variables:      # mapping
+ *   branches:       # branch tree
  *
- * _resolvedOutputs is always an array of { path: string, label: string|null }.
+ * Returns a CompileConfig object.
  */
 function loadCompileConfig(configPath) {
   const config = loadYaml(configPath);
   const base = path.dirname(path.resolve(configPath));
 
-  const rawOutputs = Array.isArray(config.output) ? config.output : [config.output];
-  const resolvedOutputs = rawOutputs.map(o => {
-    if (o && typeof o === 'object' && o.path) {
-      return { path: path.resolve(base, o.path), label: o.label || null };
-    }
-    return { path: path.resolve(base, String(o)), label: null };
-  });
+  const structure = config.structure || {};
+  const input = structure.input || {};
+  const components = input.components || {};
+
+  const resolvedOutput = structure.output
+    ? path.resolve(base, String(structure.output))
+    : path.resolve(base, 'output');
+
+  const resolvedCards     = resolveSequence(input.cards, base);
+  const resolvedCanon     = resolveMapping(input.canon, base);
+  const resolvedTemplates = resolveSequence(input.templates, base);
+
+  const componentTypes = ['aiInstructions', 'opening', 'openingChoice', 'plotEssential', 'authorsNote', 'scripts'];
+  const resolvedComponents = {};
+  for (const type of componentTypes) {
+    resolvedComponents[type] = resolveMapping(components[type], base);
+  }
+
+  // Warn on missing declared paths
+  for (const p of resolvedCards) {
+    if (!fs.existsSync(p)) console.warn(`  WARN: cards path not found: ${p}`);
+  }
+  for (const [name, p] of resolvedCanon) {
+    if (!fs.existsSync(p)) console.warn(`  WARN: canon "${name}" path not found: ${p}`);
+  }
+  for (const p of resolvedTemplates) {
+    if (!fs.existsSync(p)) console.warn(`  WARN: templates path not found: ${p}`);
+  }
 
   return {
-    ...config,
     _base: base,
-    _resolvedCanon: config.canon ? path.resolve(base, config.canon) : null,
-    _resolvedOutputs: resolvedOutputs,
-    _resolvedTemplates: Array.isArray(config.templates)
-      ? config.templates.map(t => path.resolve(base, t))
-      : path.resolve(base, config.templates),
-    _resolvedCards: path.resolve(base, config.cards),
+    _resolvedOutput: resolvedOutput,
+    _resolvedCards: resolvedCards,
+    _resolvedCanon: resolvedCanon,
+    _resolvedTemplates: resolvedTemplates,
+    _resolvedComponents: resolvedComponents,
+    protagonist: config.protagonist || null,
+    components:  config.components  || null,
+    variables:   config.variables   || null,
+    branches:    config.branches    || null,
+    _structure:  structure,
   };
 }
 
 /**
  * Build a card registry from an array of cards.
  * Keys are lowercase card IDs. Errors on collision.
- * @param {object[]} cards
- * @param {string} context - label for error messages ('canon', 'project', etc.)
  */
 function buildRegistry(cards, context) {
-  // Filter out import definitions — they are compile instructions, not registry entries
   cards = cards.filter(c => !c.import && !c.include);
   const registry = new Map();
   for (const card of cards) {
-    const id = (card.id || card.name || '').toLowerCase();
+    const id = (card.id || (typeof card.name === 'string' ? card.name : null) || '').toLowerCase();
     if (!id) {
       throw new Error(`Card in ${context} is missing both id and name fields (source: ${card._source})`);
     }
@@ -148,7 +174,6 @@ function buildRegistry(cards, context) {
         `Duplicate card ID "${id}" in ${context}:\n  ${existing._source}\n  ${card._source}`
       );
     }
-    // Normalize: ensure id field is always present
     registry.set(id, { ...card, id: card.id || card.name });
   }
   return registry;
@@ -163,7 +188,7 @@ function mergeRegistries(canonRegistry, projectRegistry) {
     if (merged.has(id)) {
       const existing = merged.get(id);
       throw new Error(
-        `Card ID "${id}" exists in both canon and project:\n  Canon: ${existing._source}\n  Project: ${card._source}\n  Use a different id if these are genuinely different entities.`
+        `Card ID "${id}" exists in both canon and project:\n  Canon: ${existing._source}\n  Project: ${card._source}`
       );
     }
     merged.set(id, card);
@@ -175,6 +200,7 @@ module.exports = {
   findFiles,
   loadYaml,
   loadCardsFromDir,
+  loadNamedFiles,
   loadTemplates,
   loadCompileConfig,
   buildRegistry,

@@ -7,17 +7,26 @@ const {
   loadCardsFromDir, loadTemplates, loadCompileConfig,
   buildRegistry, mergeRegistries, loadYaml,
 } = require('./loader');
-const { resolveCard, enumerateLeaves, getBranchConfig } = require('./resolver');
-const { applyPronounPasses } = require('./pronouns');
+const {
+  resolveCard, enumerateLeaves, getBranchConfig,
+  resolveBranchSpec, parseVariantsList,
+} = require('./resolver');
+const { applyPronounPasses, applyCrossCardRefs } = require('./pronouns');
 const { render, applyFieldInterpolation } = require('./template');
-const { loadPEConfig, compilePE, writePE, blockAppliesTo } = require('./pe');
+const { loadPEConfig, compilePE, writePE } = require('./pe');
+const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
+const { loadANConfig, compileAN, writeAN } = require('./an');
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * Get the template for a card. Checks card.template first, then card.type.
- * Both lookups are case-insensitive.
+ * Get the template for a card. Checks render.template first, then aid.type.
  */
 function getTemplate(card, templates) {
-  const keys = [card.template, card.type].filter(Boolean);
+  const keys = [
+    card.render && card.render.template,
+    card.aid && card.aid.type,
+  ].filter(Boolean);
   for (const key of keys) {
     const t = templates.get(key.toLowerCase());
     if (t) return t.content;
@@ -26,8 +35,7 @@ function getTemplate(card, templates) {
 }
 
 /**
- * Resolve opening content: if the value is a path to an existing file, read it;
- * otherwise treat it as inline text.
+ * Resolve opening content: file path → read file; otherwise use as inline text.
  */
 function resolveOpeningContent(opening, base) {
   const resolved = path.resolve(base, String(opening));
@@ -38,43 +46,120 @@ function resolveOpeningContent(opening, base) {
 }
 
 /**
- * Write content to {outputDir}/Components/Opening.md.
+ * Expand {%key} variable references in a string.
+ * Cycle-detects via a resolving Set.
  */
-function writeOpening(outputDir, content) {
-  const dir = path.join(outputDir, 'Components');
-  fs.mkdirSync(dir, { recursive: true });
-  const outPath = path.join(dir, 'Opening.md');
-  fs.writeFileSync(outPath, content + '\n', 'utf8');
-  return outPath;
+function resolveVariables(text, variables, _resolving) {
+  if (!variables || typeof text !== 'string') return text;
+  if (!_resolving) _resolving = new Set();
+
+  return text.replace(/\{%([^}]+)\}/g, (match, key) => {
+    const lower = key.trim().toLowerCase();
+    if (_resolving.has(lower)) {
+      console.warn(`  WARN: cycle detected in variable "{%${key}}"`);
+      return match;
+    }
+    const actualKey = Object.keys(variables).find(k => k.toLowerCase() === lower);
+    if (actualKey === undefined) {
+      console.warn(`  WARN: variable "{%${key}}" not declared`);
+      return match;
+    }
+    _resolving.add(lower);
+    const expanded = resolveVariables(String(variables[actualKey]), variables, _resolving);
+    _resolving.delete(lower);
+    return expanded;
+  });
 }
 
 /**
- * Recursively write Opening.md for every branch level that has an opening: key.
- * outputBases is now an array of { path, label } objects.
+ * Expand {@Key} component key references in text (content mode: returns file contents).
  */
-function writeOpenings(nodeOpening, branches, outputBases, configBase) {
-  if (nodeOpening != null) {
-    const content = resolveOpeningContent(nodeOpening, configBase);
-    for (const base of outputBases) {
-      const outPath = writeOpening(base.path, content);
-      console.log(`    OK: Opening → ${outPath}`);
+function resolveComponentKey(text, componentDirs) {
+  if (!componentDirs || typeof text !== 'string') return text;
+  return text.replace(/\{@([^}]+)\}/g, (match, key) => {
+    const name = key.trim();
+    // Search all component dir maps for a matching name
+    for (const [type, dirMap] of Object.entries(componentDirs)) {
+      const actualKey = [...dirMap.keys()].find(k => k.toLowerCase() === name.toLowerCase());
+      if (actualKey !== undefined) {
+        const dirPath = dirMap.get(actualKey);
+        // Content mode: if it's a file read it, if a dir return path string
+        if (fs.existsSync(dirPath)) {
+          const stat = fs.statSync(dirPath);
+          if (stat.isFile()) return fs.readFileSync(dirPath, 'utf8').trim();
+          return dirPath; // folder — caller handles
+        }
+        return dirPath;
+      }
     }
+    console.warn(`  WARN: component key "{@${name}}" not found`);
+    return match;
+  });
+}
+
+/**
+ * Resolve a component spec value (file path | literal string | {@Key}) to a file path.
+ * Returns null if spec is null/undefined.
+ * Returns a resolved absolute path if the spec points to an existing file.
+ * Returns the literal string (for opening/openingChoice inline text).
+ */
+function resolveComponentSpec(spec, base, componentDirs) {
+  if (spec == null) return null;
+  // Expand {@Key} references (path mode: returns the folder/file path)
+  let resolved = spec;
+  if (typeof resolved === 'string') {
+    resolved = resolved.replace(/\{@([^}]+)\}/g, (match, key) => {
+      const name = key.trim();
+      for (const [, dirMap] of Object.entries(componentDirs)) {
+        const actualKey = [...dirMap.keys()].find(k => k.toLowerCase() === name.toLowerCase());
+        if (actualKey !== undefined) return dirMap.get(actualKey);
+      }
+      return match;
+    });
   }
-  if (!branches || typeof branches !== 'object') return;
-  for (const [name, branchConfig] of Object.entries(branches)) {
-    const childBases = outputBases.map(b => ({
-      path: path.join(b.path, 'Branches', name),
-      label: b.label,
-    }));
-    const childOpening = branchConfig && branchConfig.opening != null ? branchConfig.opening : null;
-    const childBranches = branchConfig && branchConfig.branches ? branchConfig.branches : null;
-    writeOpenings(childOpening, childBranches, childBases, configBase);
+  // Try resolving as file path
+  const filePath = path.resolve(base, String(resolved));
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) return filePath;
+  // Otherwise return the raw value (inline string)
+  return spec;
+}
+
+/**
+ * Build the CompileContext for a given branch path.
+ * Merges variables and components from root → branch chain.
+ */
+function buildCompileContext(config, branchPath) {
+  // Walk branch chain merging variables and components
+  let variables = Object.assign({}, config.variables || {});
+  let components = Object.assign({}, config.components || {});
+
+  let currentMap = config.branches;
+  for (const part of branchPath) {
+    if (!currentMap || typeof currentMap !== 'object') break;
+    const actualKey = Object.keys(currentMap).find(k => k.toLowerCase() === part.toLowerCase());
+    if (!actualKey) break;
+    const node = currentMap[actualKey];
+    if (node) {
+      if (node.variables) Object.assign(variables, node.variables);
+      if (node.components) Object.assign(components, node.components);
+    }
+    currentMap = node && node.branches ? node.branches : null;
   }
+
+  // Resolve component specs to file paths
+  const componentTypes = ['aiInstructions', 'opening', 'openingChoice', 'plotEssential', 'authorsNote', 'scripts'];
+  const componentRefs = {};
+  for (const type of componentTypes) {
+    const spec = components[type] !== undefined ? components[type] : null;
+    componentRefs[type] = resolveComponentSpec(spec, config._base, config._resolvedComponents);
+  }
+
+  return { variables, componentRefs };
 }
 
 /**
  * Write compiled cards to output directory.
- * One .md file per card type per branch leaf.
+ * One .md file per card type: Story Cards/{type}/{type}.md
  */
 function writeOutput(outputDir, type, renderedCards) {
   const typeDir = path.join(outputDir, 'Story Cards', type);
@@ -85,51 +170,18 @@ function writeOutput(outputDir, type, renderedCards) {
 }
 
 /**
- * Check whether a card/block/include applies to a given output label.
- *
- * only_output: [labels]   → include only for these output labels
- * except_output: [labels] → include for all outputs except these
- *
- * If the output has no label, only_output filters are ignored with a warning
- * and except_output filters are ignored silently (unlabelled outputs always compile).
+ * Build the output directory path for a branch leaf.
  */
-function outputAppliesTo(def, outputLabel) {
-  const onlyOut  = def.only_output;
-  const exceptOut = def.except_output;
-
-  if (!onlyOut && !exceptOut) return true;
-
-  if (!outputLabel) {
-    if (onlyOut) {
-      console.warn('  WARN: only_output filter on a card/block targeting an unlabelled output — filter ignored, card will compile');
-    }
-    return true;
-  }
-
-  const label = outputLabel.toLowerCase();
-
-  function matchesAny(list) {
-    const arr = Array.isArray(list) ? list : [list];
-    return arr.some(l => String(l).toLowerCase() === label);
-  }
-
-  if (onlyOut  !== undefined && onlyOut  !== null) return  matchesAny(onlyOut);
-  if (exceptOut !== undefined && exceptOut !== null) return !matchesAny(exceptOut);
-  return true;
+function buildBranchOutputDir(baseOutput, branchPath) {
+  if (branchPath.length === 0) return baseOutput;
+  return path.join(baseOutput, ...branchPath.flatMap(b => ['Branches', b]));
 }
 
 /**
- * Resolve include directives from project card definitions.
+ * Resolve includes from project card defs.
  * Returns additional card definitions loaded from canon files.
- *
- * For each `- include: path/to/file.yaml` entry:
- *   - Loads all cards from that file (relative to canonDir)
- *   - Skips any whose ID matches an explicitly imported/defined card
- *
- * Explicit imports/definitions always win — included cards are supplemental.
  */
-function resolveIncludes(cardDefs, canonDir) {
-  // Collect IDs of all explicitly imported or locally defined cards
+function resolveIncludes(cardDefs, canonRegistry, config) {
   const explicitIds = new Set();
   const includeDefs = [];
 
@@ -137,11 +189,9 @@ function resolveIncludes(cardDefs, canonDir) {
     if (def.include) {
       includeDefs.push(def);
     } else if (def.import) {
-      // Extract base ID from import path (e.g. "Zephon/human/noble" → "zephon")
-      const baseId = def.import.split('/')[0].toLowerCase();
-      explicitIds.add(baseId);
+      explicitIds.add(String(def.import).toLowerCase());
     } else if (def.id || def.name) {
-      const id = (def.id || def.name).toLowerCase();
+      const id = ((def.id || (typeof def.name === 'string' ? def.name : '')) || '').toLowerCase();
       explicitIds.add(id);
     }
   }
@@ -150,8 +200,22 @@ function resolveIncludes(cardDefs, canonDir) {
 
   const included = [];
   for (const def of includeDefs) {
-    const includePath = def.include;
-    const fullPath = path.resolve(canonDir, includePath);
+    // Resolve {@Key} in include path
+    let includePath = String(def.include);
+    includePath = includePath.replace(/\{@([^}]+)\}/g, (match, key) => {
+      const name = key.trim();
+      for (const [, dirMap] of Object.entries(config._resolvedComponents)) {
+        const actualKey = [...dirMap.keys()].find(k => k.toLowerCase() === name.toLowerCase());
+        if (actualKey !== undefined) return dirMap.get(actualKey);
+      }
+      // Also check canon dirs
+      const actualCanonKey = [...config._resolvedCanon.keys()].find(k => k.toLowerCase() === name.toLowerCase());
+      if (actualCanonKey) return config._resolvedCanon.get(actualCanonKey);
+      return match;
+    });
+
+    // Resolve relative to config base or as absolute
+    const fullPath = path.isAbsolute(includePath) ? includePath : path.resolve(config._base, includePath);
     if (!fs.existsSync(fullPath)) {
       console.warn(`  WARN: include path not found: ${fullPath}`);
       continue;
@@ -161,19 +225,13 @@ function resolveIncludes(cardDefs, canonDir) {
     const cards = Array.isArray(raw) ? raw : [raw];
 
     for (const card of cards) {
-      const id = ((card.id || card.name) || '').toLowerCase();
-      if (explicitIds.has(id)) {
-        // Explicit import takes precedence — skip included version
-        continue;
-      }
-      // Stamp only/except and only_output/except_output from the include directive onto the card
+      const id = ((card.id || (typeof card.name === 'string' ? card.name : '')) || '').toLowerCase();
+      if (explicitIds.has(id)) continue; // explicit import wins
+
       const stamped = { ...card, _source: fullPath };
-      if (def.only        !== undefined && def.only        !== null) stamped.only        = def.only;
-      if (def.except      !== undefined && def.except      !== null) stamped.except      = def.except;
-      if (def.only_output !== undefined && def.only_output !== null) stamped.only_output = def.only_output;
-      if (def.except_output !== undefined && def.except_output !== null) stamped.except_output = def.except_output;
-      if (def['import-variant'] !== undefined && def['import-variant'] !== null) stamped._include_variants = def['import-variant'];
-      if (def.variants !== undefined && def.variants !== null) stamped._include_variant_tree = def.variants;
+      // Stamp include-level importVariants and branches onto card for resolveCard to use
+      if (def.importVariants) stamped._include_variants = def.importVariants;
+      if (def.branches) stamped._include_branch_spec = def.branches;
       included.push(stamped);
     }
   }
@@ -182,104 +240,105 @@ function resolveIncludes(cardDefs, canonDir) {
 }
 
 /**
- * Check whether a card definition should be compiled for a given branch leaf path.
- *
- * If 'only' is set: include if the leaf path starts with any listed prefix.
- * If 'except' is set: exclude if the leaf path starts with any listed prefix.
- * If neither is set: always include.
- * Prefix matching is case-insensitive.
+ * Build the combined canon registry from all named canon dirs.
  */
-function cardAppliesTo(cardDef, branchPath) {
-  const only = cardDef.only;
-  const except = cardDef.except;
-
-  // Normalise branchPath to a slash-joined lowercase string for prefix matching
-  const leafStr = branchPath.map(p => p.toLowerCase()).join('/');
-
-  function matchesAnyPrefix(prefixList) {
-    const prefixes = Array.isArray(prefixList) ? prefixList : [prefixList];
-    return prefixes.some(prefix => {
-      const p = prefix.toLowerCase();
-      // Leaf starts with prefix, and either exact match or next char is '/'
-      return leafStr === p || leafStr.startsWith(p + '/');
-    });
+function buildCanonRegistry(resolvedCanon) {
+  const registry = new Map();
+  for (const [name, canonPath] of resolvedCanon) {
+    if (!fs.existsSync(canonPath)) {
+      console.warn(`  WARN: canon "${name}" path not found: ${canonPath}`);
+      continue;
+    }
+    const { loadCardsFromDir: lcd, buildRegistry: br } = require('./loader');
+    const cards = lcd([canonPath]);
+    const sub = br(cards, `canon:${name}`);
+    for (const [id, card] of sub) {
+      if (registry.has(id)) {
+        const existing = registry.get(id);
+        throw new Error(
+          `Duplicate card ID "${id}" across canon dirs:\n  ${existing._source}\n  ${card._source}`
+        );
+      }
+      registry.set(id, card);
+    }
   }
-
-  if (only !== undefined && only !== null) {
-    return matchesAnyPrefix(only);
-  }
-  if (except !== undefined && except !== null) {
-    return !matchesAnyPrefix(except);
-  }
-  return true;
+  return registry;
 }
 
 /**
- * Compile all cards for a single branch leaf into a single output directory.
- * outputLabel is the label for this output (may be null for unlabelled outputs).
+ * Compile story cards for a single branch leaf.
+ * Returns array of resolved cards (after Phase A), in place for Phase B caller.
+ *
+ * Phase A: resolve + field interpolation
+ * Phase B (caller): cross-card refs + pronouns + render
  */
-function compileBranch(cardDefs, registry, templates, partials, outputDir, branchPath, branchConfig, outputLabel, peCardIds = new Set(), includedFilePaths = new Set()) {
-  const branchProtagonist = (
-    branchConfig.protagonist || ''
-  ).toLowerCase() || null;
+function compileBranchPhaseA(allCardDefs, registry, branchPath) {
+  const resolvedCards = [];
 
-  const grouped = new Map();
-
-  for (const cardDef of cardDefs) {
-    // Skip include directives — already resolved into cardDefs by caller
-    if (cardDef.include) continue;
-
-    // Apply only/except branch filter
-    if (!cardAppliesTo(cardDef, branchPath)) continue;
-
-    // Apply only_output/except_output filter
-    if (!outputAppliesTo(cardDef, outputLabel)) continue;
-
-    // Skip cards that are in PE and arrived via a full include (not an explicit import)
-    const baseId = ((cardDef.id || cardDef.name) || '').toLowerCase();
-    if (baseId && peCardIds.has(baseId) && cardDef._source && includedFilePaths.has(cardDef._source)) {
-      continue;
-    }
+  for (const cardDef of allCardDefs) {
+    if (cardDef.include) continue; // include directives already expanded
 
     let card;
     try {
       card = resolveCard(cardDef, registry, branchPath);
     } catch (err) {
-      console.error(`  ERR resolving card: ${err.message}`);
+      const label = cardDef.id || cardDef.import || cardDef.name || '?';
+      console.error(`  ERR resolving card "${label}": ${err.message}`);
       continue;
     }
 
-    // Post-resolution passes
+    if (!card) continue; // excluded by branch spec
+
     applyFieldInterpolation(card);
+    resolvedCards.push(card);
+  }
+
+  return resolvedCards;
+}
+
+/**
+ * Phase B: apply cross-card refs, pronouns, render, and write output.
+ */
+function compileBranchPhaseB(resolvedCards, registry, templates, partials, outputDir, branchProtagonist) {
+  applyCrossCardRefs(resolvedCards, registry);
+
+  const grouped = new Map();
+
+  for (const card of resolvedCards) {
     applyPronounPasses(card, registry, branchProtagonist);
 
-    // Get template
     const template = getTemplate(card, templates);
     if (!template) {
-      console.error(`  ERR: no template found for card "${card.name}" (type: ${card.type}, template: ${card.template})`);
+      const name = card.id || (typeof card.name === 'string' ? card.name : String(card.name));
+      const type = (card.aid && card.aid.type) || (card.render && card.render.template) || '?';
+      console.error(`  ERR: no template found for card "${name}" (type: ${type})`);
       continue;
     }
 
-    // Build render context — card fields merged with top-level card data
+    // Build render context: top-level card fields + body for {$body.X} access
     const context = {
-      ...card,
-      fields: card.fields || {},
+      id:       card.id,
+      name:     card.name,
+      pronouns: card.pronouns,
+      aid:      card.aid || {},
+      render:   card.render || {},
+      body:     card.body || {},
     };
 
     let rendered;
     try {
       rendered = render(template, context, partials);
     } catch (err) {
-      console.error(`  ERR rendering card "${card.name}": ${err.message}`);
+      const name = card.id || String(card.name);
+      console.error(`  ERR rendering card "${name}": ${err.message}`);
       continue;
     }
 
-    const type = card.type || 'Uncategorized';
+    const type = (card.aid && card.aid.type) || 'Uncategorized';
     if (!grouped.has(type)) grouped.set(type, []);
     grouped.get(type).push(rendered);
   }
 
-  // Write output files
   const written = [];
   for (const [type, cards] of grouped) {
     const outPath = writeOutput(outputDir, type, cards);
@@ -290,68 +349,122 @@ function compileBranch(cardDefs, registry, templates, partials, outputDir, branc
 }
 
 /**
- * Main compile function.
+ * Copy scripts directory to target branch Scripts/ folder.
  */
+function copyScripts(srcDir, targetDir) {
+  if (!srcDir || !fs.existsSync(srcDir)) return;
+  const dest = path.join(targetDir, 'Scripts');
+  fs.cpSync(srcDir, dest, { recursive: true });
+}
+
+/**
+ * Write Opening.md or Opening Choice.md to a branch node's Components folder.
+ */
+function writeComponentFile(outputDir, filename, content) {
+  const dir = path.join(outputDir, 'Components');
+  fs.mkdirSync(dir, { recursive: true });
+  const outPath = path.join(dir, filename);
+  fs.writeFileSync(outPath, content + '\n', 'utf8');
+  return outPath;
+}
+
+/**
+ * Recursively write opening / openingChoice files through the branch tree.
+ *
+ * Rules:
+ *   opening:       inherits down; written ONLY to leaf nodes' Components/Opening.md
+ *   openingChoice: does NOT inherit; written to branch NODE's Components/Opening.md
+ *                  if present on leaf, warn and skip
+ *
+ * @param {object} branches - branch tree
+ * @param {string} baseOutput - base output directory
+ * @param {string} configBase - base path for resolving relative file paths
+ * @param {string|null} inheritedOpening - effective opening carried from ancestor
+ * @param {boolean} isLeaf - whether this level is a leaf (no sub-branches)
+ */
+function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening) {
+  if (!branches || typeof branches !== 'object') {
+    // We're at the root level with no branches — the root itself is the only leaf
+    if (inheritedOpening != null) {
+      const content = resolveOpeningContent(inheritedOpening, configBase);
+      const outPath = writeComponentFile(outputBase, 'Opening.md', content);
+      console.log(`    OK: Opening → ${outPath}`);
+    }
+    return;
+  }
+
+  for (const [name, branchConfig] of Object.entries(branches)) {
+    const nodeOutput = path.join(outputBase, 'Branches', name);
+    const subBranches = branchConfig && branchConfig.branches;
+    const isLeafNode = !subBranches || Object.keys(subBranches).length === 0;
+
+    // Determine effective opening for this node
+    const nodeOpening = branchConfig && branchConfig.components && branchConfig.components.opening !== undefined
+      ? branchConfig.components.opening
+      : (branchConfig && branchConfig.opening !== undefined ? branchConfig.opening : undefined);
+    const effectiveOpening = nodeOpening !== undefined ? nodeOpening : inheritedOpening;
+
+    // openingChoice on this node
+    const openingChoice = branchConfig && branchConfig.components && branchConfig.components.openingChoice !== undefined
+      ? branchConfig.components.openingChoice
+      : (branchConfig && branchConfig.openingChoice !== undefined ? branchConfig.openingChoice : null);
+
+    if (openingChoice != null) {
+      if (isLeafNode) {
+        console.warn(`  WARN: openingChoice on leaf branch "${name}" — ignoring`);
+      } else {
+        const content = resolveOpeningContent(openingChoice, configBase);
+        const outPath = writeComponentFile(nodeOutput, 'Opening.md', content);
+        console.log(`    OK: OpeningChoice → ${outPath}`);
+      }
+    }
+
+    if (isLeafNode) {
+      // Write the inherited/overridden opening to this leaf
+      if (effectiveOpening != null) {
+        const content = resolveOpeningContent(effectiveOpening, configBase);
+        const outPath = writeComponentFile(nodeOutput, 'Opening.md', content);
+        console.log(`    OK: Opening → ${outPath}`);
+      }
+    } else {
+      // Recurse into sub-branches
+      writeOpeningsRecursive(subBranches, nodeOutput, configBase, effectiveOpening);
+    }
+  }
+}
+
+// ── Main compile function ─────────────────────────────────────────────────────
+
 function compile(configPath) {
   const config = loadCompileConfig(configPath);
 
-  // Load templates and partials
   const { templates, partials } = loadTemplates(config._resolvedTemplates);
   console.log(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
-  // Load plot-essentials.yaml if present
-  const peBlocks = loadPEConfig(config._base);
-  if (peBlocks.length > 0) {
-    console.log(`Loaded ${peBlocks.length} plot essentials block(s).`);
+  // Build canon registry
+  const canonRegistry = buildCanonRegistry(config._resolvedCanon);
+  if (canonRegistry.size > 0) {
+    console.log(`Loaded ${canonRegistry.size} canonical card(s).`);
   }
 
-  // Load canon registry
-  let canonRegistry = new Map();
-  if (config._resolvedCanon) {
-    if (!fs.existsSync(config._resolvedCanon)) {
-      console.warn(`  WARN: canon path not found: ${config._resolvedCanon}`);
-    } else {
-      const canonCards = loadCardsFromDir(config._resolvedCanon);
-      canonRegistry = buildRegistry(canonCards, 'canon');
-      console.log(`Loaded ${canonRegistry.size} canonical card(s).`);
-    }
-  }
-
-  // Load project cards (includes include directives and explicit imports/definitions)
+  // Load project cards
   const rawProjectCards = loadCardsFromDir(config._resolvedCards);
 
-  // Resolve includes — load additional canon cards not explicitly imported
-  const includedCards = config._resolvedCanon
-    ? resolveIncludes(rawProjectCards, config._resolvedCanon)
-    : [];
-
+  // Resolve includes
+  const includedCards = resolveIncludes(rawProjectCards, canonRegistry, config);
   if (includedCards.length > 0) {
     console.log(`Loaded ${includedCards.length} included canonical card(s).`);
   }
 
-  // Track which canon files are being fully included (for PE dedup later)
-  const includedFilePaths = new Set(
-    config._resolvedCanon
-      ? rawProjectCards
-          .filter(d => d.include)
-          .map(d => path.resolve(config._resolvedCanon, d.include))
-          .filter(p => fs.existsSync(p))
-      : []
-  );
-
-  // All card definitions to compile: explicit project defs + included canon cards
   const allCardDefs = [...rawProjectCards, ...includedCards];
 
-  // Build project registry from locally defined cards only (not imports/includes)
   const projectRegistry = buildRegistry(rawProjectCards, 'project');
   console.log(`Loaded ${projectRegistry.size} project card definition(s).`);
 
-  // Merge registries — errors on collision
   const registry = mergeRegistries(canonRegistry, projectRegistry);
 
-  // Enumerate branch leaves
   const leaves = enumerateLeaves(config.branches);
-  console.log(`\nCompiling ${leaves.length} branch(es) × ${config._resolvedOutputs.length} output(s)...`);
+  console.log(`\nCompiling ${leaves.length} branch leaf/leaves...`);
 
   let totalFiles = 0;
 
@@ -360,79 +473,91 @@ function compile(configPath) {
     console.log(`\n  Branch: ${label}`);
 
     const branchConfig = getBranchConfig(config.branches, branchPath);
-
-    // Resolve protagonist for this branch
     const branchProtagonist = (
       branchConfig.protagonist || config.protagonist || ''
     ).toLowerCase() || null;
 
-    for (const outputEntry of config._resolvedOutputs) {
-      const outputBase = outputEntry.path;
-      const outputLabel = outputEntry.label;
+    const outputDir = buildBranchOutputDir(config._resolvedOutput, branchPath);
+    const ctx = buildCompileContext(config, branchPath);
+    const compileContext = { branchPath, branchProtagonist, ...ctx };
 
-      if (outputLabel) {
-        console.log(`    Output: [${outputLabel}]`);
-      }
+    // Phase A: resolve all story cards
+    const resolvedCards = compileBranchPhaseA(allCardDefs, registry, branchPath);
 
-      // Build the branch-specific output path (Velvet Lattice folder structure)
-      const branchOutputDir = branchPath.length > 0
-        ? path.join(outputBase, ...branchPath.flatMap(b => ['Branches', b]))
-        : outputBase;
+    // Phase B: cross-card refs + pronouns + render + write
+    const written = compileBranchPhaseB(
+      resolvedCards, registry, templates, partials, outputDir, branchProtagonist
+    );
+    totalFiles += written.length;
 
-      // Compute which PE card IDs apply to this branch+output combo (for Story Card dedup)
-      const peCardIds = new Set(
-        peBlocks
-          .filter(b => blockAppliesTo(b, branchPath) && outputAppliesTo(b, outputLabel) && b.import)
-          .map(b => b.import.split('/')[0].toLowerCase())
-      );
-
-      // Compile story cards for this branch × output
-      const written = compileBranch(
-        allCardDefs,
-        registry,
-        templates,
-        partials,
-        branchOutputDir,
-        branchPath,
-        { ...branchConfig, protagonist: branchProtagonist },
-        outputLabel,
-        peCardIds,
-        includedFilePaths,
-      );
-      totalFiles += written.length;
-
-      // Compile plot essentials for this branch × output
+    // Plot Essentials
+    const peSpec = compileContext.componentRefs.plotEssential;
+    if (peSpec) {
+      const peBlocks = loadPEConfig(typeof peSpec === 'string' && !peSpec.includes('{') ? peSpec : null);
       if (peBlocks.length > 0) {
-        const peContent = compilePE(peBlocks, registry, templates, partials, branchPath, branchProtagonist, outputLabel);
-        const pePath = writePE(branchOutputDir, peContent);
-        if (pePath) {
-          console.log(`    OK: PlotEssentials → ${pePath}`);
-          totalFiles++;
-        }
+        const peContent = compilePE(peBlocks, registry, templates, partials, compileContext);
+        const pePath = writePE(outputDir, peContent);
+        if (pePath) { console.log(`    OK: PlotEssentials → ${pePath}`); totalFiles++; }
       }
+    }
+
+    // AI Instructions
+    const ainSpec = compileContext.componentRefs.aiInstructions;
+    if (ainSpec && typeof ainSpec === 'string' && fs.existsSync(ainSpec)) {
+      const ainDoc = loadAINConfig(ainSpec);
+      const { ain } = compileAIN(ainDoc, registry, compileContext);
+      const ainPath = writeAIN(outputDir, ain);
+      if (ainPath) { console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
+    }
+
+    // Author's Note
+    const anSpec = compileContext.componentRefs.authorsNote;
+    if (anSpec && typeof anSpec === 'string' && fs.existsSync(anSpec)) {
+      const anDoc = loadANConfig(anSpec);
+      const anContent = compileAN(anDoc, registry, compileContext);
+      const anPath = writeAN(outputDir, anContent);
+      if (anPath) { console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
+    }
+
+    // Scripts
+    const scriptsSpec = compileContext.componentRefs.scripts;
+    if (scriptsSpec && typeof scriptsSpec === 'string') {
+      copyScripts(scriptsSpec, outputDir);
     }
   }
 
   console.log(`\nDone. Wrote ${totalFiles} file(s).`);
 
-  // Write Opening.md files for all levels that have an opening: key
-  writeOpenings(config.opening ?? null, config.branches, config._resolvedOutputs, config._base);
-
-  if (config.overview) {
-    const { runLeafReviewMode } = require('./overview');
-    const overviewDir = path.resolve(config._base, config.overview);
-    fs.mkdirSync(overviewDir, { recursive: true });
-    console.log(`\nGenerating leaf review files → ${overviewDir}`);
-    try {
-      const written = runLeafReviewMode(config._resolvedOutputs[0].path, overviewDir);
-      console.log(`Generated ${written.length} leaf review file(s).`);
-    } catch (err) {
-      console.warn(`  WARN: leaf review generation failed: ${err.message}`);
-    }
-  }
+  // Write Opening / OpeningChoice files (post-loop)
+  const rootOpening = config.components && config.components.opening != null
+    ? config.components.opening
+    : null;
+  writeOpeningsRecursive(config.branches, config._resolvedOutput, config._base, rootOpening);
 }
 
-module.exports = { compile, compileBranch, cardAppliesTo, outputAppliesTo, getTemplate, writeOutput, resolveIncludes, writeOpening, resolveOpeningContent };
+/**
+ * Write content to Components/Opening.md inside outputDir.
+ * Exposed for unit testing.
+ */
+function writeOpening(outputDir, content) {
+  return writeComponentFile(outputDir, 'Opening.md', content);
+}
+
+module.exports = {
+  compile,
+  compileBranchPhaseA,
+  compileBranchPhaseB,
+  getTemplate,
+  writeOutput,
+  resolveIncludes,
+  buildCompileContext,
+  resolveVariables,
+  buildBranchOutputDir,
+  resolveOpeningContent,
+  writeOpening,
+};
+
+// ── CLI entry point ───────────────────────────────────────────────────────────
 
 if (require.main === module) {
   const rawArgs = process.argv.slice(2);
@@ -441,28 +566,19 @@ if (require.main === module) {
   const overviewIdx   = rawArgs.findIndex(a => a === '--overview'   || a === '-o');
 
   if (leafReviewIdx !== -1) {
-    // ── Standalone leaf review mode (one file per leaf) ──────────────────────
     const { runLeafReviewMode } = require('./overview');
     const rest = rawArgs.filter((_, i) => i !== leafReviewIdx);
-
-    let scenarioRoot;
-    let outputDir;
+    let scenarioRoot, outputDir;
 
     if (rest.length === 0) {
-      // No args: load compile.yaml from cwd
       const cfgPath = path.join(process.cwd(), 'compile.yaml');
       if (!fs.existsSync(cfgPath)) {
         console.error('No compile.yaml in current directory and no path given.');
         process.exit(1);
       }
-      const { loadCompileConfig } = require('./loader');
       const cfg = loadCompileConfig(cfgPath);
-      scenarioRoot = cfg._resolvedOutputs[0].path;
-      if (!cfg.overview) {
-        console.error('compile.yaml has no "overview:" key — cannot determine output dir.');
-        process.exit(1);
-      }
-      outputDir = path.resolve(path.dirname(cfgPath), cfg.overview);
+      scenarioRoot = cfg._resolvedOutput;
+      outputDir = path.resolve(path.dirname(cfgPath), 'leaf-review');
     } else {
       scenarioRoot = path.resolve(rest[0]);
       outputDir    = path.resolve(rest[1] || 'leaf-review');
@@ -474,9 +590,7 @@ if (require.main === module) {
     }
 
     fs.mkdirSync(outputDir, { recursive: true });
-    console.log(`\nLeaf review mode`);
-    console.log(`Scenario root : ${scenarioRoot}`);
-    console.log(`Output dir    : ${outputDir}\n`);
+    console.log(`\nLeaf review mode\nScenario root : ${scenarioRoot}\nOutput dir    : ${outputDir}\n`);
 
     try {
       const written = runLeafReviewMode(scenarioRoot, outputDir);
@@ -487,7 +601,6 @@ if (require.main === module) {
     }
 
   } else if (overviewIdx !== -1) {
-    // ── Standalone overview mode (one whole-tree file) ────────────────────────
     const { runOverviewMode } = require('./overview');
     const rest = rawArgs.filter((_, i) => i !== overviewIdx);
 
@@ -505,9 +618,7 @@ if (require.main === module) {
     }
 
     fs.mkdirSync(outputDir, { recursive: true });
-    console.log(`\nOverview mode`);
-    console.log(`Scenario root : ${scenarioRoot}`);
-    console.log(`Output dir    : ${outputDir}\n`);
+    console.log(`\nOverview mode\nScenario root : ${scenarioRoot}\nOutput dir    : ${outputDir}\n`);
 
     try {
       runOverviewMode(scenarioRoot, outputDir);
@@ -518,10 +629,9 @@ if (require.main === module) {
     }
 
   } else {
-    // ── Normal compile mode ──────────────────────────────────────────────────
     if (rawArgs.length === 0) {
       console.error(
-        'Usage: codex-loom <path/to/compile.yaml or path/to/project/>\n' +
+        'Usage: codex-loom <path/to/compile.yaml or project/>\n' +
         '       codex-loom --leafReview|-l [<scenario-root>] [<output-dir>]\n' +
         '       codex-loom --overview|-o <scenario-root> [<output-dir>]'
       );
@@ -529,15 +639,11 @@ if (require.main === module) {
     }
 
     let configPath = rawArgs[0];
-
     try {
-      const stat = fs.statSync(configPath);
-      if (stat.isDirectory()) {
+      if (fs.statSync(configPath).isDirectory()) {
         configPath = path.join(configPath, 'compile.yaml');
       }
-    } catch (err) {
-      // statSync failed — path doesn't exist, let compile() surface the error
-    }
+    } catch (_) {}
 
     try {
       compile(configPath);

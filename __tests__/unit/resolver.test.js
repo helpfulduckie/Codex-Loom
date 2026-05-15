@@ -5,6 +5,7 @@ const {
   collectVariantDeltas,
   enumerateLeaves,
   resolveCard,
+  resolveBranchSpec,
   deepClone,
 } = require('../../src/resolver');
 
@@ -13,12 +14,18 @@ describe('applyFieldOp', () => {
     expect(applyFieldOp('old', 'new value')).toBe('new value');
   });
 
-  test('remove: "-" returns __DELETE__', () => {
-    expect(applyFieldOp('anything', '-')).toBe('__DELETE__');
-  });
-
   test('remove: null returns __DELETE__', () => {
     expect(applyFieldOp('anything', null)).toBe('__DELETE__');
+  });
+
+  test('bare "-" is a plain replacement (not delete) in v3', () => {
+    expect(applyFieldOp('anything', '-')).toBe('-');
+  });
+
+  test('object op with null subfield removes the subfield', () => {
+    const result = applyFieldOp({ a: 'x', b: 'y' }, { a: null });
+    expect(result).not.toHaveProperty('a');
+    expect(result.b).toBe('y');
   });
 
   test('append single-line: joins with "; "', () => {
@@ -44,12 +51,6 @@ describe('applyFieldOp', () => {
   test('object op recursion: applies ops to subfields', () => {
     const result = applyFieldOp({ gender: 'male' }, { gender: '/{male}/{female}' });
     expect(result).toEqual({ gender: 'female' });
-  });
-
-  test('object op removes subfield with "-"', () => {
-    const result = applyFieldOp({ a: 'x', b: 'y' }, { a: '-' });
-    expect(result).not.toHaveProperty('a');
-    expect(result.b).toBe('y');
   });
 
   describe('array of operations', () => {
@@ -107,9 +108,9 @@ describe('collectVariantDeltas', () => {
     id: 'zephon',
     variants: {
       human: {
-        fields: { race: 'human' },
+        body: { race: 'human' },
         variants: {
-          noble: { fields: { rank: 'noble' } },
+          noble: { body: { rank: 'noble' } },
         },
       },
     },
@@ -118,14 +119,14 @@ describe('collectVariantDeltas', () => {
   test('returns deltas in order for nested path', () => {
     const deltas = collectVariantDeltas(canonCard, 'human/noble');
     expect(deltas).toHaveLength(2);
-    expect(deltas[0].fields.race).toBe('human');
-    expect(deltas[1].fields.rank).toBe('noble');
+    expect(deltas[0].body.race).toBe('human');
+    expect(deltas[1].body.rank).toBe('noble');
   });
 
   test('returns single delta for single-segment path', () => {
     const deltas = collectVariantDeltas(canonCard, 'human');
     expect(deltas).toHaveLength(1);
-    expect(deltas[0].fields.race).toBe('human');
+    expect(deltas[0].body.race).toBe('human');
   });
 
   test('unknown segment warns and returns partial deltas', () => {
@@ -173,44 +174,133 @@ describe('enumerateLeaves', () => {
   });
 });
 
+// ── resolveBranchSpec ─────────────────────────────────────────────────────────
+
+describe('resolveBranchSpec', () => {
+  test('null spec → empty array (include with no variants)', () => {
+    expect(resolveBranchSpec(null, ['subject'])).toEqual([]);
+  });
+
+  test('exact key match returns its variant names', () => {
+    const spec = { subject: 'subject-variant' };
+    expect(resolveBranchSpec(spec, ['subject'])).toEqual(['subject-variant']);
+  });
+
+  test('exact null key → returns null (excluded)', () => {
+    const spec = { subject: null };
+    expect(resolveBranchSpec(spec, ['subject'])).toBeNull();
+  });
+
+  test('wildcard * applies as baseline for any non-excluded branch', () => {
+    const spec = { '*': 'generic' };
+    expect(resolveBranchSpec(spec, ['anything'])).toEqual(['generic']);
+    expect(resolveBranchSpec(spec, ['other'])).toEqual(['generic']);
+  });
+
+  test('explicit key stacks on top of wildcard (both apply)', () => {
+    const spec = { '*': 'generic', Wyvern: 'draconic' };
+    // Wyvern: wildcard fires first, then explicit — both appear
+    expect(resolveBranchSpec(spec, ['Wyvern'])).toEqual(['generic', 'draconic']);
+    // Free Form: only wildcard
+    expect(resolveBranchSpec(spec, ['Free Form'])).toEqual(['generic']);
+  });
+
+  test('explicit null prevents wildcard from applying', () => {
+    const spec = { '*': 'generic', Wyvern: null };
+    expect(resolveBranchSpec(spec, ['Wyvern'])).toBeNull();
+    expect(resolveBranchSpec(spec, ['Other'])).toEqual(['generic']);
+  });
+
+  test('array apply form at a branch level', () => {
+    const spec = { subject: { apply: ['a', 'b'] } };
+    expect(resolveBranchSpec(spec, ['subject'])).toEqual(['a', 'b']);
+  });
+
+  test('multi-level descent: [A, X]', () => {
+    const spec = {
+      A: {
+        apply: 'a-variant',
+        branches: {
+          X: 'x-variant',
+          Y: 'y-variant',
+        },
+      },
+    };
+    expect(resolveBranchSpec(spec, ['A', 'X'])).toEqual(['a-variant', 'x-variant']);
+    expect(resolveBranchSpec(spec, ['A', 'Y'])).toEqual(['a-variant', 'y-variant']);
+  });
+
+  test('wildcard at first level descends into sub-branches', () => {
+    const spec = {
+      '*': {
+        branches: {
+          Aness: 'aness-shared',
+          Veryn: 'veryn-shared',
+        },
+      },
+    };
+    expect(resolveBranchSpec(spec, ['Free Form', 'Aness'])).toEqual(['aness-shared']);
+    expect(resolveBranchSpec(spec, ['Wyvern', 'Veryn'])).toEqual(['veryn-shared']);
+  });
+
+  test('wildcard baseline + explicit sub-branch stack', () => {
+    const spec = {
+      '*': { branches: { Aness: 'shared' } },
+      Wyvern: { branches: { Aness: 'wyvern-specific' } },
+    };
+    // Free Form/Aness: only */Aness fires
+    expect(resolveBranchSpec(spec, ['Free Form', 'Aness'])).toEqual(['shared']);
+    // Wyvern/Aness: */Aness fires, then Wyvern/Aness stacks on top
+    expect(resolveBranchSpec(spec, ['Wyvern', 'Aness'])).toEqual(['shared', 'wyvern-specific']);
+  });
+});
+
+// ── resolveCard ───────────────────────────────────────────────────────────────
+
 describe('resolveCard', () => {
   const canonCard = {
     id: 'hero',
     name: 'Hero',
-    type: 'Character',
-    fields: { role: 'warrior' },
+    aid:    { type: 'Character', title: 'Hero' },
+    render: { template: 'Character' },
+    body: { role: 'warrior' },
     variants: {
-      mage: { fields: { role: 'mage', magic: 'yes' } },
+      mage: { body: { role: 'mage', magic: 'yes' } },
     },
   };
 
   const registry = new Map([['hero', canonCard]]);
 
-  test('import without variant yields base card fields', () => {
+  test('import without importVariants yields base card body', () => {
     const cardDef = { import: 'hero' };
     const card = resolveCard(cardDef, registry, []);
     expect(card.name).toBe('Hero');
-    expect(card.fields.role).toBe('warrior');
+    expect(card.body.role).toBe('warrior');
   });
 
-  test('import with variant path applies variant fields', () => {
-    const cardDef = { import: 'hero/mage' };
+  test('importVariants applies variant body fields', () => {
+    const cardDef = { import: 'hero', importVariants: ['mage'] };
     const card = resolveCard(cardDef, registry, []);
-    expect(card.fields.role).toBe('mage');
-    expect(card.fields.magic).toBe('yes');
+    expect(card.body.role).toBe('mage');
+    expect(card.body.magic).toBe('yes');
   });
 
-  test('fields override in cardDef overwrites base fields', () => {
-    const cardDef = { import: 'hero', fields: { role: 'rogue' } };
+  test('body override in cardDef overwrites base body fields', () => {
+    const cardDef = { import: 'hero', body: { role: 'rogue' } };
     const card = resolveCard(cardDef, registry, []);
-    expect(card.fields.role).toBe('rogue');
+    expect(card.body.role).toBe('rogue');
   });
 
   test('local card definition (no import) is returned as-is', () => {
-    const cardDef = { id: 'npc', name: 'Guard', type: 'Character', fields: { role: 'guard' } };
+    const cardDef = {
+      id: 'npc', name: 'Guard',
+      aid: { type: 'Character', title: 'Guard' },
+      render: { template: 'Character' },
+      body: { role: 'guard' },
+    };
     const card = resolveCard(cardDef, new Map(), []);
     expect(card.name).toBe('Guard');
-    expect(card.fields.role).toBe('guard');
+    expect(card.body.role).toBe('guard');
   });
 
   test('import of unknown id throws', () => {
@@ -225,40 +315,40 @@ describe('resolveCard', () => {
     expect(card).not.toHaveProperty('_source');
   });
 
-  describe('import-level field operations on top-level fields', () => {
+  describe('import-level field operations on aid and top-level fields', () => {
     const baseCard = {
       id: 'outfit',
       name: 'Outfit',
-      type: 'Item',
-      triggers: 'clothing, style',
-      known: 'base knowledge',
+      aid: { type: 'Item', title: 'Outfit', triggers: ['clothing', 'style'] },
+      render: { template: 'Item' },
+      body: { known: 'base knowledge' },
       pronouns: 'they/them',
     };
     const reg = new Map([['outfit', baseCard]]);
 
-    test('triggers: plain string replaces', () => {
-      const card = resolveCard({ import: 'outfit', triggers: 'uniform' }, reg, []);
-      expect(card.triggers).toBe('uniform');
+    test('aid.triggers: plain array replaces', () => {
+      const card = resolveCard({ import: 'outfit', aid: { triggers: ['uniform'] } }, reg, []);
+      expect(card.aid.triggers).toEqual(['uniform']);
     });
 
-    test('triggers: +{} appends to existing triggers', () => {
-      const card = resolveCard({ import: 'outfit', triggers: '+{, uniform}' }, reg, []);
-      expect(card.triggers).toBe('clothing, style, uniform');
+    test('aid.triggers: +{} appends to array', () => {
+      const card = resolveCard({ import: 'outfit', aid: { triggers: '+{uniform}' } }, reg, []);
+      expect(card.aid.triggers).toEqual(['clothing', 'style', 'uniform']);
     });
 
-    test('triggers: -{} removes substring from triggers', () => {
-      const card = resolveCard({ import: 'outfit', triggers: '-{, style}' }, reg, []);
-      expect(card.triggers).toBe('clothing');
+    test('aid.triggers: -{} removes item from array', () => {
+      const card = resolveCard({ import: 'outfit', aid: { triggers: '-{style}' } }, reg, []);
+      expect(card.aid.triggers).toEqual(['clothing']);
     });
 
-    test('triggers: - deletes the field', () => {
-      const card = resolveCard({ import: 'outfit', triggers: '-' }, reg, []);
-      expect(card).not.toHaveProperty('triggers');
+    test('aid.triggers: null deletes the field', () => {
+      const card = resolveCard({ import: 'outfit', aid: { triggers: null } }, reg, []);
+      expect(card.aid).not.toHaveProperty('triggers');
     });
 
-    test('known: +{} appends', () => {
-      const card = resolveCard({ import: 'outfit', known: '+{ and more}' }, reg, []);
-      expect(card.known).toBe('base knowledge and more');
+    test('body.known: +{} appends', () => {
+      const card = resolveCard({ import: 'outfit', body: { known: '+{ and more}' } }, reg, []);
+      expect(card.body.known).toBe('base knowledge and more');
     });
 
     test('name: /{old}/{new} swaps substring', () => {
@@ -267,7 +357,7 @@ describe('resolveCard', () => {
     });
 
     test('name: array of swaps applies all in sequence', () => {
-      const base = { id: 'char', name: 'She said her name was Sarah', type: 'Character' };
+      const base = { id: 'char', name: 'She said her name was Sarah', aid: { type: 'Character' }, body: {} };
       const r = new Map([['char', base]]);
       const card = resolveCard(
         { import: 'char', name: ['/{She}/{He}', '/{her}/{his}', '/{Sarah}/{Sam}'] },
@@ -283,188 +373,91 @@ describe('resolveCard', () => {
     });
   });
 
-  describe('named group variants', () => {
-    const canonCard = {
+  describe('branch-based variant dispatch via branches:', () => {
+    const baseCard = {
       id: 'spirit',
       name: 'Spirit',
-      type: 'Character',
-      fields: { form: 'incorporeal', origin: 'unknown' },
+      aid: { type: 'Character', title: 'Spirit' },
+      render: { template: 'Character' },
+      body: { form: 'incorporeal', origin: 'unknown' },
     };
-    const reg = new Map([['spirit', canonCard]]);
+    const reg = new Map([['spirit', baseCard]]);
 
-    test('group fields apply before inner branch fields', () => {
+    test('wildcard * applies as baseline for all non-excluded branches', () => {
       const cardDef = {
         import: 'spirit',
         variants: {
-          Transformed: {
-            name: 'Prime',
-            fields: { form: 'artificial' },
-            variants: {
-              'Branch A': { fields: { origin: 'scientist A' } },
-              'Branch B': { fields: { origin: 'scientist B' } },
-            },
-          },
+          generic: { body: { form: 'generic' } },
+        },
+        branches: {
+          '*': 'generic',
         },
       };
+      expect(resolveCard(cardDef, reg, ['Free Form']).body.form).toBe('generic');
+      expect(resolveCard(cardDef, reg, ['Wyvern']).body.form).toBe('generic');
+    });
 
+    test('explicit branch stacks on wildcard', () => {
+      const cardDef = {
+        import: 'spirit',
+        variants: {
+          generic:  { body: { form: 'generic' } },
+          draconic: { body: { form: 'draconic' } },
+        },
+        branches: {
+          '*':     'generic',
+          Wyvern:  'draconic',
+        },
+      };
+      expect(resolveCard(cardDef, reg, ['Wyvern']).body.form).toBe('draconic');
+      expect(resolveCard(cardDef, reg, ['Free Form']).body.form).toBe('generic');
+    });
+
+    test('null branch key excludes card for that branch', () => {
+      const cardDef = {
+        import: 'spirit',
+        branches: { Wyvern: null },
+      };
+      expect(resolveCard(cardDef, reg, ['Wyvern'])).toBeNull();
+      expect(resolveCard(cardDef, reg, ['Other'])).not.toBeNull();
+    });
+
+    test('multi-level branch applies variants from each level in order', () => {
+      const cardDef = {
+        import: 'spirit',
+        variants: {
+          transformed: { name: 'Prime', body: { form: 'artificial' } },
+          branchA:     { body: { origin: 'scientist A' } },
+          branchB:     { body: { origin: 'scientist B' } },
+        },
+        branches: {
+          'Branch A': { apply: ['transformed', 'branchA'] },
+          'Branch B': { apply: ['transformed', 'branchB'] },
+        },
+      };
       const cardA = resolveCard(cardDef, reg, ['Branch A']);
       expect(cardA.name).toBe('Prime');
-      expect(cardA.fields.form).toBe('artificial');
-      expect(cardA.fields.origin).toBe('scientist A');
+      expect(cardA.body.form).toBe('artificial');
+      expect(cardA.body.origin).toBe('scientist A');
 
       const cardB = resolveCard(cardDef, reg, ['Branch B']);
       expect(cardB.name).toBe('Prime');
-      expect(cardB.fields.form).toBe('artificial');
-      expect(cardB.fields.origin).toBe('scientist B');
+      expect(cardB.body.form).toBe('artificial');
+      expect(cardB.body.origin).toBe('scientist B');
     });
 
-    test('direct branch match takes priority over group containing same name', () => {
+    test('branch not defined yields base card (no variants applied)', () => {
       const cardDef = {
         import: 'spirit',
         variants: {
-          'Branch A': { fields: { form: 'direct' } },
-          Group: {
-            variants: {
-              'Branch A': { fields: { form: 'via group' } },
-            },
-          },
+          special: { body: { form: 'special' } },
+        },
+        branches: {
+          Wyvern: 'special',
         },
       };
-      const card = resolveCard(cardDef, reg, ['Branch A']);
-      expect(card.fields.form).toBe('direct');
-    });
-
-    test('branch not in any group yields base card', () => {
-      const cardDef = {
-        import: 'spirit',
-        variants: {
-          Group: {
-            fields: { form: 'artificial' },
-            variants: {
-              'Branch A': { fields: { origin: 'a' } },
-            },
-          },
-        },
-      };
-      const card = resolveCard(cardDef, reg, ['Branch C']);
-      expect(card.fields.form).toBe('incorporeal');
-      expect(card.fields.origin).toBe('unknown');
-    });
-  });
-
-  describe('wildcard * variant key', () => {
-    const canonCard = {
-      id: 'spirit',
-      name: 'Spirit',
-      type: 'Character',
-      fields: { form: 'incorporeal', origin: 'unknown' },
-    };
-    const reg = new Map([['spirit', canonCard]]);
-
-    test('* matches any branch at that level', () => {
-      const cardDef = {
-        import: 'spirit',
-        variants: {
-          '*': {
-            variants: {
-              Aness: { fields: { origin: 'aness-shared' } },
-              Veryn: { fields: { origin: 'veryn-shared' } },
-            },
-          },
-        },
-      };
-
-      expect(resolveCard(cardDef, reg, ['Free Form', 'Aness']).fields.origin).toBe('aness-shared');
-      expect(resolveCard(cardDef, reg, ['Wyvern',    'Aness']).fields.origin).toBe('aness-shared');
-      expect(resolveCard(cardDef, reg, ['Free Form', 'Veryn']).fields.origin).toBe('veryn-shared');
-      expect(resolveCard(cardDef, reg, ['Wyvern',    'Veryn']).fields.origin).toBe('veryn-shared');
-    });
-
-    test('direct match layers on top of * (both fire, direct wins final value)', () => {
-      const cardDef = {
-        import: 'spirit',
-        variants: {
-          '*': { fields: { form: 'generic' } },
-          Wyvern: { fields: { form: 'draconic' } },
-        },
-      };
-
-      // Wyvern: * fires first (form=generic), then Wyvern fires (form=draconic)
-      expect(resolveCard(cardDef, reg, ['Wyvern']).fields.form).toBe('draconic');
-      // Free Form: only * fires
-      expect(resolveCard(cardDef, reg, ['Free Form']).fields.form).toBe('generic');
-    });
-
-    test('*/Aness applies as baseline for Wyvern/Aness; Wyvern/Aness layers on top', () => {
-      const cardDef = {
-        import: 'spirit',
-        variants: {
-          '*': {
-            variants: {
-              Aness: { fields: { origin: 'shared' } },
-              Veryn: { fields: { origin: 'shared-veryn' } },
-            },
-          },
-          Wyvern: {
-            variants: {
-              Aness: { fields: { origin: 'wyvern-specific' } },
-            },
-          },
-        },
-      };
-
-      // Free Form/Aness: only */Aness fires
-      expect(resolveCard(cardDef, reg, ['Free Form', 'Aness']).fields.origin).toBe('shared');
-      // Wyvern/Aness: */Aness fires first, then Wyvern/Aness overrides
-      expect(resolveCard(cardDef, reg, ['Wyvern', 'Aness']).fields.origin).toBe('wyvern-specific');
-      // Wyvern/Veryn: */Veryn fires (no Wyvern/Veryn override)
-      expect(resolveCard(cardDef, reg, ['Wyvern', 'Veryn']).fields.origin).toBe('shared-veryn');
-    });
-
-    test('* with no matching leaf yields base card', () => {
-      const cardDef = {
-        import: 'spirit',
-        variants: {
-          '*': {
-            variants: {
-              Aness: { fields: { origin: 'aness-shared' } },
-            },
-          },
-        },
-      };
-      expect(resolveCard(cardDef, reg, ['Free Form', 'Veryn']).fields.origin).toBe('unknown');
-    });
-
-    test('except on * prevents wildcard from firing for listed branches', () => {
-      const cardDef = {
-        import: 'spirit',
-        variants: {
-          '*': {
-            except: ['Wyvern'],
-            fields: { form: 'generic' },
-          },
-        },
-      };
-
-      // * is excepted for Wyvern → base value
-      expect(resolveCard(cardDef, reg, ['Wyvern']).fields.form).toBe('incorporeal');
-      // * fires for everyone else
-      expect(resolveCard(cardDef, reg, ['Free Form']).fields.form).toBe('generic');
-    });
-
-    test('except as a string works the same as a single-element array', () => {
-      const cardDef = {
-        import: 'spirit',
-        variants: {
-          '*': {
-            except: 'Wyvern',
-            fields: { form: 'generic' },
-          },
-        },
-      };
-
-      expect(resolveCard(cardDef, reg, ['Wyvern']).fields.form).toBe('incorporeal');
-      expect(resolveCard(cardDef, reg, ['Free Form']).fields.form).toBe('generic');
+      const card = resolveCard(cardDef, reg, ['Other']);
+      expect(card.body.form).toBe('incorporeal');
     });
   });
 });

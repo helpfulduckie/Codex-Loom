@@ -1,13 +1,18 @@
 - id: Aness
-  name: Aness Rozen
-  type: Character
-  template: Character
-  encapsulate: true
-  known: true
+  name:
+    display: Aness
+    full: Aness Rozen
   pronouns: female
-  protagonist: Aness
-  triggers: Aness, Rozen
-  fields:
+  aid:
+    title: Aness Rozen
+    type: Character
+    triggers: [Aness, Rozen]
+    encapsulate: true
+    known: true
+  render:
+    template: Character
+    wrapper: none
+  body:
     Tagline: Journeyman Healer; Magic Researcher
     Physical Traits:
       gender: female
@@ -22,15 +27,15 @@
         - sarcastic
         - compassionate
       expanded: |
-        - $Aness love[s] magic research — $she instinctively leap[s] to explore theoretical implications
-        - $Her~ polite nature is a social shield; behind it is a biting sarcasm $she deploy[s] when frustrated
+        - {$Aness} love[s] magic research — {$Aness.she} instinctively leap[s] to explore theoretical implications
+        - {$Aness.her~} polite nature is a social shield; behind it is a biting sarcasm {$Aness.she} deploy[s] when frustrated
     Magic:
       affinity: high ice-affinity; moderate growth-affinity
       effect: |
-        - {$Her~} growth-affinity powers strong healing magic; $she is a trained Healer first
-        - $She knows basic ice combat magic but is a poor combat mage who flinches under pressure
+        - {$Aness.her~} growth-affinity powers strong healing magic; {$Aness.she} [is] a trained Healer first
+        - {$Aness.she} know[s] basic ice combat magic but [is] a poor combat mage who flinches under pressure
   variants:
     networked:
-      fields:
+      body:
         Physical Traits:
-          other: a blue interface crystal implanted at the base of {$her~} skull
+          other: a blue interface crystal implanted at the base of {$Aness.her~} skull

@@ -2,45 +2,32 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolveCard, applyBranchVariants } = require('./resolver');
+const { loadYaml } = require('./util');
+const { resolveCard, resolveBranchSpec, applyFieldsDelta } = require('./resolver');
 const { applyPronounPasses } = require('./pronouns');
-const { render, applyFieldInterpolation } = require('./template');
+const { render, applyFieldInterpolation, applyWrapper, resolveTemplateName } = require('./template');
 
 /**
- * Load and parse plot-essentials.yaml from the project base directory.
- * Returns an array of PE block definitions, or [] if the file does not exist.
+ * Load and parse a Plot Essentials YAML file.
+ * Returns an array of PE block definitions, or [] if spec is null/missing.
+ *
+ * @param {string|null} peSpec - resolved file path (already resolved by compile.js)
  */
-function loadPEConfig(base) {
-  const pePath = path.join(base, 'plot-essentials.yaml');
-  if (!fs.existsSync(pePath)) return [];
-
-  const yaml = require('js-yaml');
-  try {
-    const raw = fs.readFileSync(pePath, 'utf8');
-    const data = yaml.load(raw);
-    if (!Array.isArray(data)) {
-      throw new Error('plot-essentials.yaml must be a YAML sequence (list of blocks)');
-    }
-    return data;
-  } catch (err) {
-    throw new Error(`Failed to load plot-essentials.yaml: ${err.message}`);
+function loadPEConfig(peSpec) {
+  if (!peSpec) return [];
+  if (!fs.existsSync(peSpec)) {
+    console.warn(`  WARN [PE]: file not found: ${peSpec}`);
+    return [];
   }
+  const data = loadYaml(peSpec);
+  if (!Array.isArray(data)) {
+    throw new Error(`PE file must be a YAML sequence: ${peSpec}`);
+  }
+  return data;
 }
 
 /**
- * Wrap rendered text in the appropriate AID bracket style.
- */
-function applyWrapper(text, wrapper) {
-  const w = (wrapper || 'none').toLowerCase();
-  if (w === 'square') return `[\n${text}\n]`;
-  if (w === 'curly')  return `{\n${text}\n}`;
-  return text;
-}
-
-/**
- * Strip everything up to and including the last ~~~ fence line from rendered text.
- * Used for card-body blocks so the ## Name / ~~~...~~~ header is removed.
- * Returns the trimmed body that follows the last fence.
+ * Strip everything above the last ~~~ fence line from rendered text.
  */
 function stripAboveLastFence(rendered) {
   const lines = rendered.split('\n');
@@ -53,213 +40,181 @@ function stripAboveLastFence(rendered) {
 }
 
 /**
- * Get the template for a card (same logic as compile.js getTemplate).
- * Checks card.template first, then card.type. Case-insensitive.
+ * Get template content for a card, with optional hint fallback.
  */
-function getTemplate(card, templates) {
-  const keys = [card.template, card.type].filter(Boolean);
-  for (const key of keys) {
-    const t = templates.get(key.toLowerCase());
-    if (t) return t.content;
+function getCardTemplate(card, templates, style) {
+  const templateName = card.render && card.render.template
+    ? card.render.template
+    : (card.aid && card.aid.type ? card.aid.type : null);
+
+  if (!templateName) return null;
+
+  if (style === 'hint') {
+    const hintKey = (templateName + '.hint').toLowerCase();
+    const hintTemplate = templates.get(hintKey);
+    if (hintTemplate) return hintTemplate.content;
+    // Fallback to regular template with warning
+    console.warn(`  WARN [PE]: no .hint template found for "${templateName}", falling back to full template`);
   }
-  return null;
+
+  const t = templates.get(templateName.toLowerCase());
+  return t ? t.content : null;
 }
 
 /**
- * Check whether a PE block applies to the given branch leaf path.
- * Identical logic to cardAppliesTo in compile.js.
+ * Sort rendered segments by position (default 5). Stable sort.
  */
-function blockAppliesTo(blockDef, branchPath) {
-  const only   = blockDef.only;
-  const except = blockDef.except;
-  const leafStr = branchPath.map(p => p.toLowerCase()).join('/');
-
-  function matchesAnyPrefix(prefixList) {
-    const prefixes = Array.isArray(prefixList) ? prefixList : [prefixList];
-    return prefixes.some(prefix => {
-      const p = prefix.toLowerCase();
-      return leafStr === p || leafStr.startsWith(p + '/');
-    });
-  }
-
-  if (only  !== undefined && only  !== null) return  matchesAnyPrefix(only);
-  if (except !== undefined && except !== null) return !matchesAnyPrefix(except);
-  return true;
+function sortByPosition(segments) {
+  return segments.slice().sort((a, b) => (a.position || 5) - (b.position || 5));
 }
 
 /**
- * Check whether a PE block applies to the given output label.
- * Mirrors outputAppliesTo in compile.js.
- */
-function blockOutputAppliesTo(blockDef, outputLabel) {
-  const onlyOut   = blockDef.only_output;
-  const exceptOut = blockDef.except_output;
-
-  if (!onlyOut && !exceptOut) return true;
-
-  if (!outputLabel) {
-    if (onlyOut) {
-      console.warn('  WARN [PE]: only_output filter on a block targeting an unlabelled output — filter ignored');
-    }
-    return true;
-  }
-
-  const label = outputLabel.toLowerCase();
-
-  function matchesAny(list) {
-    const arr = Array.isArray(list) ? list : [list];
-    return arr.some(l => String(l).toLowerCase() === label);
-  }
-
-  if (onlyOut  !== undefined && onlyOut  !== null) return  matchesAny(onlyOut);
-  if (exceptOut !== undefined && exceptOut !== null) return !matchesAny(exceptOut);
-  return true;
-}
-
-/**
- * Compile all applicable PE blocks for a single branch leaf × output.
- * Returns the full Plot Essentials.md content string, or null if no blocks apply.
+ * Compile all applicable PE blocks for a single branch leaf.
+ * Returns the full Plot Essentials content string, or null if no blocks produce output.
  *
- * @param {object[]} peBlocks        - raw block definitions from plot-essentials.yaml
- * @param {Map}      registry        - full merged card registry
- * @param {Map}      templates       - loaded template map
- * @param {string[]} branchPath      - active leaf path e.g. ['subject']
- * @param {string|null} branchProtagonist - lowercase protagonist ID for this branch
- * @param {string|null} outputLabel  - label of the current output (may be null)
+ * @param {object[]} peBlocks          - raw block definitions
+ * @param {Map}      registry          - full merged card registry
+ * @param {Map}      templates         - loaded template map
+ * @param {Map}      partials          - loaded partials map
+ * @param {object}   compileContext    - { branchPath, branchProtagonist }
  */
-function compilePE(peBlocks, registry, templates, partials, branchPath, branchProtagonist, outputLabel) {
-  const rendered = [];
+function compilePE(peBlocks, registry, templates, partials, compileContext) {
+  const { branchPath, branchProtagonist } = compileContext;
+  const segments = [];
 
   for (const blockDef of peBlocks) {
-    if (!blockAppliesTo(blockDef, branchPath)) continue;
-    if (!blockOutputAppliesTo(blockDef, outputLabel)) continue;
+    // Branch filtering via resolveBranchSpec
+    const branchResult = resolveBranchSpec(blockDef.branches, branchPath);
+    if (branchResult === null) continue; // excluded
 
-    const wrapper   = blockDef.wrapper || 'none';
-    const stripFence = !!blockDef.strip_fence;
+    const style = (blockDef.style || 'full').toLowerCase();
+    if (style === 'skip') continue;
 
-    // ── Detect block type ────────────────────────────────────────────────────
-    const isImport   = !!blockDef.import;
-    const isFreeform = !isImport && !blockDef.template && !blockDef.type &&
-                       (blockDef.text != null || !!blockDef.variants);
-    const isTemplate = !isImport && !isFreeform &&
-                       !!(blockDef.template || blockDef.type);
+    const renderOpts = blockDef.render || {};
+    const position  = renderOpts.position !== undefined ? renderOpts.position : 5;
+    const stripFence = !!renderOpts.stripFence;
+    const wrapperOverride = renderOpts.wrapper || null;
 
-    // ── Freeform block ──────────────────────────────────────────────────────
-    if (isFreeform) {
-      const fakeCard = {
-        name:        blockDef.id || '(pe block)',
-        pronouns:    blockDef.pronouns    || null,
-        protagonist: blockDef.protagonist || null,
-        text:        blockDef.text        ?? null,
-        fields:      {},
+    // ── Inline PE card (no import) ────────────────────────────────────────────
+    if (!blockDef.import) {
+      const syntheticCard = {
+        id:      blockDef.id || '(pe-inline)',
+        name:    blockDef.id || '(pe-inline)',
+        pronouns: blockDef.pronouns || null,
+        aid:     blockDef.aid || {},
+        render:  blockDef.render || {},
+        body:    blockDef.body || {},
       };
 
+      // Apply block-level variants if any
       if (blockDef.variants) {
-        applyBranchVariants(fakeCard, blockDef, null, branchPath);
+        applyFieldsDelta(syntheticCard, blockDef.variants);
       }
 
-      if (fakeCard.text == null) continue;
+      applyFieldInterpolation(syntheticCard);
+      applyPronounPasses(syntheticCard, registry, branchProtagonist);
 
-      fakeCard.fields._text = fakeCard.text;
-      applyPronounPasses(fakeCard, registry, branchProtagonist);
-      const processedText = fakeCard.fields._text;
-
-      rendered.push(applyWrapper(processedText.trim(), wrapper));
-      continue;
-    }
-
-    // ── Template block ──────────────────────────────────────────────────────
-    if (isTemplate) {
-      let card;
-      try {
-        card = resolveCard(blockDef, registry, branchPath);
-      } catch (err) {
-        console.error(
-          `  ERR [PE]: resolving template block "${blockDef.name || blockDef.id}": ${err.message}`
-        );
+      // Inline PE cards may have a template or just body text
+      const templateOverride = renderOpts.template;
+      const wrapper = wrapperOverride || (syntheticCard.render && syntheticCard.render.wrapper) || 'none';
+      let rendered;
+      if (templateOverride) {
+        const t = templates.get(templateOverride.toLowerCase());
+        if (!t) {
+          console.warn(`  WARN [PE]: template "${templateOverride}" not found for inline block`);
+          continue;
+        }
+        // Strip wrapper from context so template.js doesn't also wrap — pe.js applies it below
+        const cardForRender = { ...syntheticCard, render: { ...syntheticCard.render, wrapper: 'none' } };
+        rendered = render(t.content, cardForRender, partials);
+      } else if (syntheticCard.body && Object.keys(syntheticCard.body).length > 0) {
+        // No template: render body as plain text if it has a text/content field
+        const bodyText = syntheticCard.body.text || syntheticCard.body.content || '';
+        if (!bodyText) continue;
+        rendered = String(bodyText).trim();
+      } else {
         continue;
       }
 
-      const templateContent = getTemplate(card, templates);
-      if (!templateContent) {
-        const label = blockDef.template || blockDef.type;
-        console.error(`  ERR [PE]: template "${label}" not found for template block`);
-        continue;
-      }
-
-      applyFieldInterpolation(card);
-      applyPronounPasses(card, registry, branchProtagonist);
-
-      let renderedCard;
-      try {
-        renderedCard = render(templateContent, card, partials);
-      } catch (err) {
-        console.error(
-          `  ERR [PE]: rendering template block "${card.name}": ${err.message}`
-        );
-        continue;
-      }
-
-      const body = stripFence ? stripAboveLastFence(renderedCard) : renderedCard.trim();
-      rendered.push(applyWrapper(body, wrapper));
+      const body = stripFence ? stripAboveLastFence(rendered) : rendered;
+      segments.push({ text: applyWrapper(body, wrapper), position });
       continue;
     }
 
-    // ── Card-body block (import: syntax) ────────────────────────────────────
-    if (!isImport) {
-      console.warn('  WARN [PE]: block has no import, text, or template — skipping');
+    // ── Card import ───────────────────────────────────────────────────────────
+    const canonId = String(blockDef.import).toLowerCase();
+    const canonCard = registry.get(canonId);
+    if (!canonCard) {
+      console.error(`  ERR [PE]: no card with id "${blockDef.import}" found in registry`);
       continue;
     }
+
+    // Build a synthetic import def for resolveCard
+    // Apply block's variants and branch-selected variants
+    const importDef = {
+      import:         blockDef.import,
+      importVariants: blockDef.importVariants,
+      branches:       blockDef.branches,
+      body:           blockDef.body,
+    };
+
     let card;
     try {
-      card = resolveCard(blockDef, registry, branchPath);
+      card = resolveCard(importDef, registry, branchPath);
     } catch (err) {
       console.error(`  ERR [PE]: resolving import "${blockDef.import}": ${err.message}`);
       continue;
     }
 
+    if (!card) continue; // excluded by branch spec
+
+    // Apply additional block-level variants (render-only overrides)
+    if (blockDef.variants) {
+      applyFieldsDelta(card, blockDef.variants);
+    }
+
+    // Apply render overrides from block
+    if (renderOpts.template) {
+      if (!card.render) card.render = {};
+      card.render.template = renderOpts.template;
+    }
+    if (renderOpts.wrapper) {
+      if (!card.render) card.render = {};
+      card.render.wrapper = renderOpts.wrapper;
+    }
+
     applyFieldInterpolation(card);
     applyPronounPasses(card, registry, branchProtagonist);
 
-    // Template override on the PE block takes priority over card's own template/type
-    const templateKey = blockDef.template || null;
-    let templateContent;
-    if (templateKey) {
-      const t = templates.get(templateKey.toLowerCase());
-      if (!t) {
-        console.error(`  ERR [PE]: template "${templateKey}" not found for import "${blockDef.import}"`);
-        continue;
-      }
-      templateContent = t.content;
-    } else {
-      templateContent = getTemplate(card, templates);
-      if (!templateContent) {
-        console.error(`  ERR [PE]: no template found for card "${card.name}" (type: ${card.type}, template: ${card.template})`);
-        continue;
-      }
+    const templateContent = getCardTemplate(card, templates, style);
+    if (!templateContent) {
+      const name = card.id || blockDef.import;
+      console.error(`  ERR [PE]: no template found for card "${name}" (type: ${card.aid && card.aid.type}, style: ${style})`);
+      continue;
     }
 
-    const context = { ...card, fields: card.fields || {} };
-
+    const wrapper = wrapperOverride || (card.render && card.render.wrapper) || 'none';
+    // Strip wrapper from context so template.js doesn't also wrap — pe.js applies it below
+    const context = { ...card, body: card.body || {}, render: { ...card.render, wrapper: 'none' } };
     let renderedCard;
     try {
       renderedCard = render(templateContent, context, partials);
     } catch (err) {
-      console.error(`  ERR [PE]: rendering card "${card.name}": ${err.message}`);
+      console.error(`  ERR [PE]: rendering card "${card.id || blockDef.import}": ${err.message}`);
       continue;
     }
 
-    const body = stripFence ? stripAboveLastFence(renderedCard) : renderedCard.trim();
-    rendered.push(applyWrapper(body, wrapper));
+    const body = stripFence ? stripAboveLastFence(renderedCard) : renderedCard;
+    segments.push({ text: applyWrapper(body, wrapper), position });
   }
 
-  if (rendered.length === 0) return null;
-  return rendered.join('\n\n');
+  if (segments.length === 0) return null;
+  return sortByPosition(segments).map(s => s.text).join('\n\n');
 }
 
 /**
  * Write Plot Essentials.md to the Components folder for a branch.
- * Creates the directory if needed. Does nothing if content is null.
+ * Returns the output path, or null if content is null.
  */
 function writePE(branchOutputDir, content) {
   if (!content) return null;
@@ -270,4 +225,4 @@ function writePE(branchOutputDir, content) {
   return outPath;
 }
 
-module.exports = { loadPEConfig, compilePE, writePE, blockAppliesTo, blockOutputAppliesTo };
+module.exports = { loadPEConfig, compilePE, writePE };
