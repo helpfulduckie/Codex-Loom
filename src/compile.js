@@ -533,6 +533,13 @@ function compile(configPath) {
     ? config.components.opening
     : null;
   writeOpeningsRecursive(config.branches, config._resolvedOutput, config._base, rootOpening);
+
+  // Overview (leaf review) — always generated after compile
+  const { runLeafReviewMode } = require('./overview');
+  const overviewDir = path.join(config._resolvedOutput, 'Overview');
+  fs.mkdirSync(overviewDir, { recursive: true });
+  console.log('\nGenerating overview...');
+  runLeafReviewMode(config._resolvedOutput, overviewDir);
 }
 
 /**

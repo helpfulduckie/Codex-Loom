@@ -4,7 +4,6 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { compile } = require('../../src/compile');
-const { runLeafReviewMode } = require('../../src/overview');
 
 const FIXTURE_DIR = path.resolve(__dirname, '../../test');
 
@@ -99,72 +98,33 @@ describe('snapshot regression', () => {
 
 // ── overview: key integration ─────────────────────────────────────────────────
 
-describe('runLeafReviewMode after compile', () => {
-  let overviewTmpDir;
+describe('overview generated automatically by compile', () => {
+  // compile() always writes Overview/ inside the output dir — use the
+  // outer tmpDir/output that was already compiled in beforeAll.
+  const overviewDir = () => path.join(tmpDir, 'output', 'Overview');
 
-  beforeAll(() => {
-    overviewTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-overview-int-'));
-
-    const cfg = [
-      'structure:',
-      '  input:',
-      `    cards:`,
-      `      - ${FIXTURE_DIR}/cards`,
-      `    canon:`,
-      `      main: ${FIXTURE_DIR}/canon`,
-      `    templates:`,
-      `      - ${FIXTURE_DIR}/templates`,
-      `  output: ${overviewTmpDir}/output`,
-      'protagonist: Aness',
-      'branches:',
-      '  subject:',
-      '    protagonist: Aness',
-      '  researcher:',
-      '    protagonist: Veyrn',
-      '  felix:',
-      '    protagonist: Aness',
-    ].join('\n');
-
-    const overviewConfigPath = path.join(overviewTmpDir, 'compile.yaml');
-    fs.writeFileSync(overviewConfigPath, cfg, 'utf8');
-
-    compile(overviewConfigPath);
-
-    // In v3, overview is a separate step (not triggered by compile.yaml key)
-    fs.mkdirSync(path.join(overviewTmpDir, 'overview'), { recursive: true });
-    runLeafReviewMode(path.join(overviewTmpDir, 'output'), path.join(overviewTmpDir, 'overview'));
-  });
-
-  afterAll(() => {
-    fs.rmSync(overviewTmpDir, { recursive: true, force: true });
-  });
-
-  test('overview directory is created', () => {
-    expect(fs.existsSync(path.join(overviewTmpDir, 'overview'))).toBe(true);
+  test('Overview/ directory is created inside output', () => {
+    expect(fs.existsSync(overviewDir())).toBe(true);
   });
 
   test('one .overview.md file is written per branch leaf', () => {
-    const files = fs.readdirSync(path.join(overviewTmpDir, 'overview'));
+    const files = fs.readdirSync(overviewDir());
     expect(files.every(f => f.endsWith('.overview.md'))).toBe(true);
     expect(files).toHaveLength(3); // subject, researcher, felix
   });
 
   test('subject.overview.md contains subject Character card content', () => {
     const content = fs.readFileSync(
-      path.join(overviewTmpDir, 'overview', 'subject.overview.md'), 'utf8'
+      path.join(overviewDir(), 'subject.overview.md'), 'utf8'
     );
     expect(content).toContain('Fused-Squad Subject');
   });
 
   test('researcher.overview.md does not contain subject-only content', () => {
     const content = fs.readFileSync(
-      path.join(overviewTmpDir, 'overview', 'researcher.overview.md'), 'utf8'
+      path.join(overviewDir(), 'researcher.overview.md'), 'utf8'
     );
     expect(content).not.toContain('Fused-Squad Subject');
-  });
-
-  test('compile alone does not create overview dir (overview is a separate step)', () => {
-    expect(fs.existsSync(path.join(tmpDir, 'overview'))).toBe(false);
   });
 });
 
