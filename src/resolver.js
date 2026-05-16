@@ -72,13 +72,7 @@ function applyFieldOp(current, op) {
   if (appendMatch) {
     const toAdd = appendMatch[1];
     if (!currentStr) return toAdd;
-    if (currentStr.includes('\n')) {
-      const sep = toAdd.startsWith('\n') ? '' : '\n';
-      return currentStr + sep + toAdd;
-    } else {
-      const sep = toAdd.match(/^[;,\s]/) ? '' : '; ';
-      return currentStr + sep + toAdd;
-    }
+    return [currentStr, toAdd];
   }
 
   const removeMatch = opStr.match(/^-\{([\s\S]*)\}$/);

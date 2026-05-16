@@ -12,7 +12,7 @@ const {
   resolveBranchSpec, parseVariantsList,
 } = require('./resolver');
 const { applyPronounPasses, applyCrossCardRefs } = require('./pronouns');
-const { render, applyFieldInterpolation } = require('./template');
+const { render, applyFieldInterpolation, applyFieldRenderFunctions } = require('./template');
 const { loadPEConfig, compilePE, writePE } = require('./pe');
 const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
 const { loadANConfig, compileAN, writeAN } = require('./an');
@@ -178,6 +178,30 @@ function buildBranchOutputDir(baseOutput, branchPath) {
 }
 
 /**
+ * Resolve the output folder path for a branch identifier path.
+ * Uses each node's `title` field as the folder name when present; falls back to the key.
+ *
+ * @param {object|null} branches - root branches mapping from config
+ * @param {string[]}    idPath   - branch identifier path (e.g. ['tier2', 'alpha'])
+ * @returns {string[]}           - folder name path (e.g. ['Tier Two', 'Alpha Path'])
+ */
+function resolveBranchFolderPath(branches, idPath) {
+  const folderPath = [];
+  let currentMap = branches;
+  for (const id of idPath) {
+    if (!currentMap || typeof currentMap !== 'object') {
+      folderPath.push(id);
+      continue;
+    }
+    const actualKey = Object.keys(currentMap).find(k => k.toLowerCase() === id.toLowerCase());
+    const node = actualKey !== undefined ? currentMap[actualKey] : null;
+    folderPath.push((node && node.title) || (actualKey || id));
+    currentMap = node && node.branches ? node.branches : null;
+  }
+  return folderPath;
+}
+
+/**
  * Resolve includes from project card defs.
  * Returns additional card definitions loaded from canon files.
  */
@@ -302,6 +326,11 @@ function compileBranchPhaseA(allCardDefs, registry, branchPath) {
 function compileBranchPhaseB(resolvedCards, registry, templates, partials, outputDir, branchProtagonist) {
   applyCrossCardRefs(resolvedCards, registry);
 
+  // Expand render functions in body field values now that cross-card refs are resolved.
+  for (const card of resolvedCards) {
+    applyFieldRenderFunctions(card);
+  }
+
   const grouped = new Map();
 
   for (const card of resolvedCards) {
@@ -394,7 +423,8 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
   }
 
   for (const [name, branchConfig] of Object.entries(branches)) {
-    const nodeOutput = path.join(outputBase, 'Branches', name);
+    const folderName = (branchConfig && branchConfig.title) || name;
+    const nodeOutput = path.join(outputBase, 'Branches', folderName);
     const subBranches = branchConfig && branchConfig.branches;
     const isLeafNode = !subBranches || Object.keys(subBranches).length === 0;
 
@@ -477,7 +507,8 @@ function compile(configPath) {
       branchConfig.protagonist || config.protagonist || ''
     ).toLowerCase() || null;
 
-    const outputDir = buildBranchOutputDir(config._resolvedOutput, branchPath);
+    const folderPath = resolveBranchFolderPath(config.branches, branchPath);
+    const outputDir = buildBranchOutputDir(config._resolvedOutput, folderPath);
     const ctx = buildCompileContext(config, branchPath);
     const compileContext = { branchPath, branchProtagonist, ...ctx };
 
@@ -560,6 +591,7 @@ module.exports = {
   buildCompileContext,
   resolveVariables,
   buildBranchOutputDir,
+  resolveBranchFolderPath,
   resolveOpeningContent,
   writeOpening,
 };

@@ -107,10 +107,10 @@ function evaluateInline(inner, data) {
 }
 
 function evaluateJoin(inner, data) {
-  const sepMatch = inner.match(/^join\(\s*"([^"]*)"\s*,(.+)\)$/s);
+  const sepMatch = inner.match(/^join\(\s*(["'`])([^"'`]*)\1\s*,(.+)\)$/s);
   if (!sepMatch) throw new Error('Malformed join(): ' + inner);
-  const separator = sepMatch[1];
-  const refs = sepMatch[2].split(',').map(s => s.trim()).filter(Boolean);
+  const separator = sepMatch[2];
+  const refs = sepMatch[3].split(',').map(s => s.trim()).filter(Boolean);
   const values = refs
     .map(ref => resolveField(ref, data))
     .filter(v => v !== null)
@@ -386,6 +386,77 @@ function processFieldInterpolation(value, context) {
 }
 
 /**
+ * Apply render function calls to all string values in card.body recursively.
+ *
+ * Runs in Phase B after cross-card refs are resolved but before pronoun passes,
+ * so that {$Id.body.field} values are already substituted into body fields before
+ * render functions like {join(...)} operate on them.
+ *
+ * Expands: {inline(...)}, {join(...)}, {list(...)}, {and(...)},
+ *          {prose(...)}, {block(...)}, {keys(...)}
+ * Leaves:  {$she}, {$Id}, {$Id.pronoun}, {%variable}, and all other {$...} tokens
+ *          untouched so the pronoun pass can handle them.
+ */
+function applyFieldRenderFunctions(card) {
+  if (!card.body) return;
+
+  const context = {
+    id:       card.id,
+    name:     card.name,
+    pronouns: card.pronouns,
+    aid:      card.aid    || {},
+    render:   card.render || {},
+    body:     card.body,
+  };
+
+  applyRenderFunctionsRecursive(card.body, context);
+}
+
+function applyRenderFunctionsRecursive(obj, context) {
+  if (!obj || typeof obj !== 'object') return;
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (typeof val === 'string') {
+      obj[key] = processFieldRenderFunctions(val, context);
+    } else if (Array.isArray(val)) {
+      obj[key] = val.map(item =>
+        typeof item === 'string' ? processFieldRenderFunctions(item, context) : item
+      );
+    } else if (typeof val === 'object' && val !== null) {
+      applyRenderFunctionsRecursive(val, context);
+    }
+  }
+}
+
+function processFieldRenderFunctions(value, context) {
+  if (typeof value !== 'string') return value;
+  return value.replace(/\{([^{}]+)\}/g, function(match, inner) {
+    inner = inner.trim();
+    const fnDispatchers = [
+      ['inline(', evaluateInline],
+      ['join(',   evaluateJoin],
+      ['list(',   evaluateList],
+      ['and(',    evaluateAnd],
+      ['prose(',  evaluateProse],
+      ['block(',  evaluateBlock],
+      ['keys(',   evaluateKeys],
+    ];
+    for (const [prefix, fn] of fnDispatchers) {
+      if (inner.startsWith(prefix)) {
+        try {
+          return fn(inner, context);
+        } catch (e) {
+          console.warn(`  WARN: render function in field value: ${e.message}`);
+          return match;
+        }
+      }
+    }
+    // Not a render function — leave as-is (pronoun tokens, field refs, etc.)
+    return match;
+  });
+}
+
+/**
  * Look up a template name. For style:'hint', tries templateName.hint first.
  */
 function resolveTemplateName(templateName, style) {
@@ -460,6 +531,7 @@ module.exports = {
   render,
   resolveField,
   applyFieldInterpolation,
+  applyFieldRenderFunctions,
   processConditionals,
   processInline,
   processIncludes,

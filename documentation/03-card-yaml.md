@@ -1,0 +1,276 @@
+# Card Definition Reference
+
+Cards are the atomic units of content in a Codex Loom project — a character, a location, a settings block, or any other story card. Each YAML card file is a sequence of card entries.
+
+---
+
+## Complete Example
+
+```yaml
+- id: Aness
+  name:
+    display: Aness
+    full: Aness Rozen
+  pronouns: female
+  aid:
+    title: Aness Rozen
+    type: Character
+    triggers: [Aness, Rozen]
+    encapsulate: true
+    known: true
+  render:
+    template: Character
+    wrapper: none
+  body:
+    Tagline: Journeyman Healer; Magic Researcher
+    Physical Traits:
+      gender: female
+      age: mid 20s
+      hair: black hair, braided, waist-length
+      eyes: brown eyes
+      build: tall, willowy build
+    Personality:
+      keywords:
+        - inquisitive
+        - polite
+        - sarcastic
+        - compassionate
+      expanded: |
+        - {$Aness} love[s] magic research — {$Aness.she} instinctively leap[s] to explore theoretical implications
+        - {$Aness.her~} polite nature is a social shield; behind it is a biting sarcasm {$Aness.she} deploy[s]
+    Magic:
+      affinity: high ice-affinity; moderate growth-affinity
+  variants:
+    networked:
+      body:
+        Physical Traits:
+          other: a blue interface crystal implanted at the base of {$Aness.her~} skull
+```
+
+---
+
+## Top-Level Fields
+
+### `id`
+
+Compiler-internal identifier. Used to look up this card in the registry, in `import:` directives, and in pronoun tokens (`{$Aness}`). Defaults to `name` if absent. Case-insensitive for matching.
+
+Must be unique across all canon and project cards — collision is an error.
+
+```yaml
+id: Aness
+```
+
+### `name`
+
+Display name used in rendered output. Two forms:
+
+**Scalar string** — used directly as both display and full name.
+
+```yaml
+name: Aness Rozen
+```
+
+**Object** — separate display (short) and full forms.
+
+```yaml
+name:
+  display: Aness
+  full: Aness Rozen
+```
+
+Templates access `{$name}` (returns the display name), `{$name.display}`, or `{$name.full}`. The pronoun token `{$Aness}` (ID reference) uses the display name.
+
+### `pronouns`
+
+Declared pronoun set for this card. Controls how `{$she}`, `{$her~}`, `{$they}` etc. resolve within this card's field values and template.
+
+| Value | Pronouns |
+|---|---|
+| `female` | she / her / her / herself / she's |
+| `male` | he / him / his / himself / he's |
+| `nonbinary` (or `they`) | they / them / their / themselves / they're |
+
+When this card is the active branch protagonist, pronouns resolve to the `you` set instead. See [Pronoun System](08-pronouns.md).
+
+---
+
+## `aid:` Block
+
+AID-specific metadata. All fields are optional.
+
+```yaml
+aid:
+  title: Aness Rozen        # display title in AID (can differ from name)
+  type: Character           # card type — determines output folder and default template
+  triggers: [Aness, Rozen]  # trigger keywords (sequence or single string)
+  encapsulate: true         # boolean; passed through to output
+  known: true               # boolean; controls [e] in notes
+```
+
+| Field | Description |
+|---|---|
+| `title` | The title shown in AID. If absent, the template typically uses `{$name}` instead. |
+| `type` | Output folder name. Also used as the default template name if `render.template` is absent. |
+| `triggers` | Trigger keyword list. In the template, accessed as `{$aid.triggers}` or `{join(", ", $aid.triggers)}`. |
+| `encapsulate` | Boolean. Passed through to the rendered output. |
+| `known` | Boolean. Typically used to control `[e]` annotation in the AID notes field. |
+
+`aid.type` and `render.template` default to each other — if one is set the other is filled in automatically. If neither is set, the card cannot be rendered and a warning is emitted.
+
+---
+
+## `render:` Block
+
+Controls how this card is rendered.
+
+```yaml
+render:
+  template: Character    # template filename (without .template extension)
+  wrapper: none          # none | square | curly
+```
+
+| Field | Description |
+|---|---|
+| `template` | Filename of the `.template` file to use (case-insensitive match). Defaults to `aid.type` if absent. |
+| `wrapper` | Wraps the entire rendered output or a `{wrapper}...{/wrapper}` block. `square` → `[ ... ]`, `curly` → `{ ... }`, `none` → raw text. |
+
+---
+
+## `body:` Block
+
+All card content. Values can be plain strings, block scalars, YAML sequences (arrays), or nested mappings. Field names are case-insensitive throughout — the compiler and templates match them case-insensitively.
+
+```yaml
+body:
+  Tagline: Journeyman Healer; Magic Researcher
+  Physical Traits:
+    gender: female
+    age: mid 20s
+    hair: black hair, braided, waist-length
+  Personality:
+    keywords:
+      - inquisitive
+      - polite
+    expanded: |
+      - loves research
+      - biting sarcasm
+  Notes: |
+    Some multi-line
+    block scalar content.
+```
+
+In templates, body fields are accessed as `{$body.Tagline}`, `{$body.Physical Traits.gender}`, etc.
+
+### Field Interpolation
+
+Within body field values, you can reference other body fields using `{$body.X}` syntax. This is resolved before pronoun tokens.
+
+```yaml
+body:
+  graduation year: 1315
+  background: |
+    - Graduated Primary Education in {$body.graduation year}.
+```
+
+Cross-card body references (`{$OtherId.body.FieldName}`) are also supported and resolved in a second pass after all cards for a branch are compiled. See [Pronoun System](08-pronouns.md).
+
+---
+
+## `variants:` Block
+
+Named deltas that layer changes on top of this card definition. Variants can modify any top-level card field (`name`, `pronouns`, `aid`, `render`) and any `body` field.
+
+```yaml
+variants:
+  networked:
+    body:
+      Physical Traits:
+        other: a blue interface crystal implanted at the base of {$Aness.her~} skull
+
+  Felix:
+    name:
+      display: Felix
+      full: Felix Grayls
+    pronouns: male
+    aid:
+      title: Felix Grayls
+      triggers: [Felix, Grayls]
+    body:
+      Physical Traits:
+        gender: male
+        hair: -{in a controlled bun}
+
+  sci-fi:
+    body:
+      Magic:                       # remove field (null value)
+      background: works for Helix Industries
+    variants:
+      near-future:
+        body:
+          Tagline: +{; corporate operative}
+```
+
+Variants can be nested to any depth. A slash-separated path like `sci-fi/near-future` applies the `sci-fi` delta first, then the `near-future` child.
+
+The `id` field is immutable and cannot be changed by any variant.
+
+See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) and [Field Operations](06-field-operations.md) for how variants are applied and what operations are available.
+
+---
+
+## `branches:` Key (on local cards)
+
+Maps branch names to variant names for branch-specific dispatch. Separate from `variants:` — `variants:` defines the named deltas, `branches:` dispatches to them based on which branch is being compiled.
+
+```yaml
+- id: Aness
+  ...
+  variants:
+    subject:
+      body:
+        Tagline: +{; Fused-Squad Subject}
+  branches:
+    subject: subject    # when in the "subject" branch, apply the "subject" variant
+```
+
+See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) for the full syntax including wildcards and nested dispatch.
+
+---
+
+## Excluding a Card from Specific Branches
+
+To exclude a local card from a branch, use a null (`~`) value in the `branches:` dispatch map. This is the v3 mechanism for branch exclusion — there are no `only:` or `except:` keys on cards.
+
+```yaml
+- id: ContextCard
+  branches:
+    '*': base          # apply "base" variant for all branches
+    flashback: ~       # null: exclude this card from the flashback branch entirely
+  variants:
+    base:
+      body:
+        ...
+```
+
+See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) for the full `branches:` dispatch syntax.
+
+---
+
+## Card File Structure
+
+A single `.yaml` file can contain multiple card entries as a sequence:
+
+```yaml
+- id: Aness
+  name: Aness Rozen
+  ...
+
+- id: Kaiden
+  name: Kaiden Ventus
+  ...
+```
+
+A file can also mix local card definitions with import and include directives. All entries in a sequence are processed in order.
+
+Cards and templates are loaded recursively from their configured directories. Any `.yaml` file found is loaded.

@@ -9,6 +9,7 @@ const {
   processInline,
   processIncludes,
   render,
+  applyFieldRenderFunctions,
 } = require('../../src/template');
 
 describe('resolveField', () => {
@@ -86,8 +87,18 @@ describe('isTruthy', () => {
 describe('evaluateJoin', () => {
   const data = { body: { a: 'alpha', c: 'gamma' } };
 
-  test('joins present values with separator', () => {
+  test('joins present values with separator (double quotes)', () => {
     const result = evaluateJoin('join("; ", $body.a, $body.c)', data);
+    expect(result).toBe('alpha; gamma');
+  });
+
+  test('joins present values with separator (single quotes)', () => {
+    const result = evaluateJoin("join('; ', $body.a, $body.c)", data);
+    expect(result).toBe('alpha; gamma');
+  });
+
+  test('joins present values with separator (backtick quotes)', () => {
+    const result = evaluateJoin('join(`; `, $body.a, $body.c)', data);
     expect(result).toBe('alpha; gamma');
   });
 
@@ -235,5 +246,106 @@ describe('processIncludes', () => {
   test('literal braces in partial survive render', () => {
     const partials = new Map([['lit', { content: '{{curly}}' }]]);
     expect(render('{include lit}', {}, partials)).toBe('{curly}');
+  });
+});
+
+// ── applyFieldRenderFunctions ─────────────────────────────────────────────────
+
+describe('applyFieldRenderFunctions', () => {
+  test('expands join() in a body field', () => {
+    const card = {
+      body: {
+        head: '{join("; ", $body.gender, $body.hair)}',
+        gender: 'female',
+        hair: 'black hair',
+      },
+    };
+    applyFieldRenderFunctions(card);
+    expect(card.body.head).toBe('female; black hair');
+  });
+
+  test('expands and() in a body field', () => {
+    const card = {
+      body: {
+        summary: '{and($body.tags)}',
+        tags: ['brave', 'clever', 'loyal'],
+      },
+    };
+    applyFieldRenderFunctions(card);
+    expect(card.body.summary).toBe('brave, clever, and loyal');
+  });
+
+  test('expands inline() on a nested mapping', () => {
+    const card = {
+      body: {
+        compact: '{inline($body.traits)}',
+        traits: { gender: 'female', build: 'willowy' },
+      },
+    };
+    applyFieldRenderFunctions(card);
+    expect(card.body.compact).toBe('female willowy');
+  });
+
+  test('descends into nested body mappings', () => {
+    const card = {
+      body: {
+        Physical: {
+          combined: '{join("; ", $body.Physical.hair, $body.Physical.eyes)}',
+          hair: 'black hair',
+          eyes: 'brown eyes',
+        },
+      },
+    };
+    applyFieldRenderFunctions(card);
+    expect(card.body.Physical.combined).toBe('black hair; brown eyes');
+  });
+
+  test('leaves pronoun tokens untouched', () => {
+    const card = {
+      body: {
+        note: '{$she} is kind',
+        tagline: '{$Id} returns',
+      },
+    };
+    applyFieldRenderFunctions(card);
+    expect(card.body.note).toBe('{$she} is kind');
+    expect(card.body.tagline).toBe('{$Id} returns');
+  });
+
+  test('leaves non-render-function braced tokens untouched', () => {
+    const card = {
+      body: { note: '{$body.something}' },
+    };
+    applyFieldRenderFunctions(card);
+    // {$body.something} is not a render function call — left as-is
+    expect(card.body.note).toBe('{$body.something}');
+  });
+
+  test('expands render function in array element', () => {
+    const card = {
+      body: {
+        lines: ['{join(", ", $body.a, $body.b)}', 'plain line'],
+        a: 'alpha',
+        b: 'beta',
+      },
+    };
+    applyFieldRenderFunctions(card);
+    expect(card.body.lines[0]).toBe('alpha, beta');
+    expect(card.body.lines[1]).toBe('plain line');
+  });
+
+  test('does nothing when card has no body', () => {
+    const card = { id: 'test', aid: { type: 'Character' } };
+    expect(() => applyFieldRenderFunctions(card)).not.toThrow();
+  });
+
+  test('emit warning and leave match intact on bad render function call', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const card = {
+      body: { broken: '{join($body.oops)}' }, // missing separator arg
+    };
+    // Should not throw; bad calls are caught and warned
+    expect(() => applyFieldRenderFunctions(card)).not.toThrow();
+    warnSpy.mockRestore();
   });
 });

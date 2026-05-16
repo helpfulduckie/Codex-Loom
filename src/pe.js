@@ -5,7 +5,7 @@ const path = require('path');
 const { loadYaml } = require('./util');
 const { resolveCard, resolveBranchSpec, applyFieldsDelta } = require('./resolver');
 const { applyPronounPasses } = require('./pronouns');
-const { render, applyFieldInterpolation, applyWrapper, resolveTemplateName } = require('./template');
+const { render, applyFieldInterpolation, applyFieldRenderFunctions, applyWrapper, resolveTemplateName } = require('./template');
 
 /**
  * Load and parse a Plot Essentials YAML file.
@@ -112,6 +112,7 @@ function compilePE(peBlocks, registry, templates, partials, compileContext) {
       }
 
       applyFieldInterpolation(syntheticCard);
+      applyFieldRenderFunctions(syntheticCard);
       applyPronounPasses(syntheticCard, registry, branchProtagonist);
 
       // Inline PE cards may have a template or just body text
@@ -184,6 +185,7 @@ function compilePE(peBlocks, registry, templates, partials, compileContext) {
     }
 
     applyFieldInterpolation(card);
+    applyFieldRenderFunctions(card);
     applyPronounPasses(card, registry, branchProtagonist);
 
     const templateContent = getCardTemplate(card, templates, style);

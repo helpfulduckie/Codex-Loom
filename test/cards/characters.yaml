@@ -15,7 +15,7 @@
   variants:
     subject:
       body:
-        Tagline: +{; Fused-Squad Subject}
+        Tagline: +{Fused-Squad Subject}
   branches:
     subject: subject
 

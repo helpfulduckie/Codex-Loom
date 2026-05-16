@@ -3,7 +3,7 @@
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { getTemplate, writeOpening, resolveOpeningContent } = require('../../src/compile');
+const { getTemplate, writeOpening, resolveOpeningContent, resolveBranchFolderPath } = require('../../src/compile');
 
 describe('getTemplate', () => {
   const templates = new Map([
@@ -91,5 +91,71 @@ describe('writeOpening', () => {
     const nested = path.join(tmpDir, 'Branches', 'A');
     writeOpening(nested, 'Nested');
     expect(fs.existsSync(path.join(nested, 'Components', 'Opening.md'))).toBe(true);
+  });
+});
+
+describe('resolveBranchFolderPath', () => {
+  test('returns id path when no branches config', () => {
+    expect(resolveBranchFolderPath(null, ['alpha', 'beta'])).toEqual(['alpha', 'beta']);
+  });
+
+  test('returns id path when no title on nodes', () => {
+    const branches = {
+      alpha: { branches: { beta: {} } },
+    };
+    expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['alpha', 'beta']);
+  });
+
+  test('uses title when present on a node', () => {
+    const branches = {
+      alpha: { title: 'The Alpha Path', branches: { beta: {} } },
+    };
+    expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['The Alpha Path', 'beta']);
+  });
+
+  test('uses title on nested node', () => {
+    const branches = {
+      alpha: { branches: { beta: { title: 'Beta Run' } } },
+    };
+    expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['alpha', 'Beta Run']);
+  });
+
+  test('uses title at all levels when both present', () => {
+    const branches = {
+      alpha: { title: 'Alpha Stage', branches: { beta: { title: 'Beta Stage' } } },
+    };
+    expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['Alpha Stage', 'Beta Stage']);
+  });
+
+  test('falls back to key when title is empty string', () => {
+    const branches = {
+      alpha: { title: '' },
+    };
+    expect(resolveBranchFolderPath(branches, ['alpha'])).toEqual(['alpha']);
+  });
+
+  test('falls back to key when title is null', () => {
+    const branches = {
+      alpha: { title: null },
+    };
+    expect(resolveBranchFolderPath(branches, ['alpha'])).toEqual(['alpha']);
+  });
+
+  test('returns id for unknown keys not in branches map', () => {
+    const branches = {
+      alpha: {},
+    };
+    expect(resolveBranchFolderPath(branches, ['alpha', 'unknown'])).toEqual(['alpha', 'unknown']);
+  });
+
+  test('id lookup is case-insensitive', () => {
+    const branches = {
+      Alpha: { title: 'The Alpha Path' },
+    };
+    expect(resolveBranchFolderPath(branches, ['alpha'])).toEqual(['The Alpha Path']);
+  });
+
+  test('empty id path returns empty folder path', () => {
+    expect(resolveBranchFolderPath({}, [])).toEqual([]);
   });
 });

@@ -28,12 +28,12 @@ describe('applyFieldOp', () => {
     expect(result.b).toBe('y');
   });
 
-  test('append single-line: joins with "; "', () => {
-    expect(applyFieldOp('hello', '+{world}')).toBe('hello; world');
+  test('append single-line: converts to two-element array', () => {
+    expect(applyFieldOp('hello', '+{world}')).toEqual(['hello', 'world']);
   });
 
-  test('append multiline: joins with newline', () => {
-    expect(applyFieldOp('line1\nline2', '+{line3}')).toBe('line1\nline2\nline3');
+  test('append multiline: converts block scalar to two-element array', () => {
+    expect(applyFieldOp('line1\nline2', '+{line3}')).toEqual(['line1\nline2', 'line3']);
   });
 
   test('append to empty string: returns just the value', () => {
@@ -70,10 +70,10 @@ describe('applyFieldOp', () => {
       expect(applyFieldOp('Hello world', [
         '/{world}/{there}',
         '+{!}',
-      ])).toBe('Hello there; !');
+      ])).toEqual(['Hello there', '!']);
     });
-    test('mixed ops: append then swap', () => {
-      expect(applyFieldOp('foo', ['+{bar}', '/{bar}/{baz}'])).toBe('foo; baz');
+    test('mixed ops: append then swap (swap maps over resulting array)', () => {
+      expect(applyFieldOp('foo', ['+{bar}', '/{bar}/{baz}'])).toEqual(['foo', 'baz']);
     });
     test('plain-string array is a value replacement, not ops', () => {
       expect(applyFieldOp('old', ['new value'])).toEqual(['new value']);
@@ -346,9 +346,9 @@ describe('resolveCard', () => {
       expect(card.aid).not.toHaveProperty('triggers');
     });
 
-    test('body.known: +{} appends', () => {
-      const card = resolveCard({ import: 'outfit', body: { known: '+{ and more}' } }, reg, []);
-      expect(card.body.known).toBe('base knowledge and more');
+    test('body.known: +{} converts scalar to two-element array', () => {
+      const card = resolveCard({ import: 'outfit', body: { known: '+{and more}' } }, reg, []);
+      expect(card.body.known).toEqual(['base knowledge', 'and more']);
     });
 
     test('name: /{old}/{new} swaps substring', () => {
