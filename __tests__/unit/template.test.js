@@ -715,4 +715,29 @@ describe('applyVariableInterpolation', () => {
     expect(card.body).toBe(body);
     expect(body.Tagline).toBe('y');
   });
+
+  test('expands {%var} tokens in card.name', () => {
+    const card = { name: "{%employer}'s Penthouse", body: {} };
+    applyVariableInterpolation(card, { employer: 'Zephon' });
+    expect(card.name).toBe("Zephon's Penthouse");
+  });
+
+  test('expands {%var} tokens in card.id', () => {
+    const card = { id: 'home-{%employer}', body: {} };
+    applyVariableInterpolation(card, { employer: 'Zephon' });
+    expect(card.id).toBe('home-Zephon');
+  });
+
+  test('name and body expanded together', () => {
+    const card = { name: '{%pcName} home', body: { desc: '{%pcName} lives here' } };
+    applyVariableInterpolation(card, { pcName: 'Aness' });
+    expect(card.name).toBe('Aness home');
+    expect(card.body.desc).toBe('Aness lives here');
+  });
+
+  test('non-string name left unchanged', () => {
+    const card = { name: 42, body: {} };
+    applyVariableInterpolation(card, { x: 'y' });
+    expect(card.name).toBe(42);
+  });
 });

@@ -39,14 +39,15 @@ function getTemplate(card, templates) {
  * Resolve opening content: file path → read file; otherwise use as inline text.
  */
 function resolveOpeningContent(opening, base, variables) {
-  const resolved = path.resolve(base, String(opening));
+  const expandedSpec = variables ? resolveVariables(String(opening), variables) : String(opening);
+  const resolved = path.resolve(base, expandedSpec);
   let content;
   if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
     content = fs.readFileSync(resolved, 'utf8').trimEnd();
   } else {
-    content = String(opening).trimEnd();
+    content = expandedSpec.trimEnd();
   }
-  return resolveVariables(content, variables);
+  return variables ? resolveVariables(content, variables) : content;
 }
 
 /**
@@ -95,9 +96,9 @@ function resolveComponentSpec(spec, base, componentDirs) {
       return match;
     });
   }
-  // Try resolving as file path
+  // Try resolving as file or directory path
   const filePath = path.resolve(base, String(resolved));
-  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) return filePath;
+  if (fs.existsSync(filePath)) return filePath;
   // Otherwise return the raw value (inline string)
   return spec;
 }
@@ -473,7 +474,7 @@ function writeComponentFile(outputDir, filename, content) {
  * @param {string|null} inheritedOpening - effective opening carried from ancestor
  * @param {boolean} isLeaf - whether this level is a leaf (no sub-branches)
  */
-function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables) {
+function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables, componentDirs) {
   if (!branches || typeof branches !== 'object') {
     // We're at the root level with no branches — the root itself is the only leaf
     if (inheritedOpening != null) {
@@ -490,6 +491,11 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
     const subBranches = branchConfig && branchConfig.branches;
     const isLeafNode = !subBranches || Object.keys(subBranches).length === 0;
 
+    // Merge this branch node's variables on top of inherited variables
+    const branchVars = (branchConfig && branchConfig.variables)
+      ? Object.assign({}, variables, branchConfig.variables)
+      : variables;
+
     // Determine effective opening for this node
     const nodeOpening = branchConfig && branchConfig.components && branchConfig.components.opening !== undefined
       ? branchConfig.components.opening
@@ -505,7 +511,10 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
       if (isLeafNode) {
         console.warn(`  WARN: openingChoice on leaf branch "${name}" — ignoring`);
       } else {
-        const content = resolveOpeningContent(openingChoice, configBase, variables);
+        const expandedChoice = (componentDirs && typeof openingChoice === 'string')
+          ? resolveComponentKey(openingChoice, componentDirs)
+          : openingChoice;
+        const content = resolveOpeningContent(expandedChoice, configBase, branchVars);
         const outPath = writeComponentFile(nodeOutput, 'Opening.md', content);
         console.log(`    OK: OpeningChoice → ${outPath}`);
       }
@@ -514,13 +523,13 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
     if (isLeafNode) {
       // Write the inherited/overridden opening to this leaf
       if (effectiveOpening != null) {
-        const content = resolveOpeningContent(effectiveOpening, configBase, variables);
+        const content = resolveOpeningContent(effectiveOpening, configBase, branchVars);
         const outPath = writeComponentFile(nodeOutput, 'Opening.md', content);
         console.log(`    OK: Opening → ${outPath}`);
       }
     } else {
       // Recurse into sub-branches
-      writeOpeningsRecursive(subBranches, nodeOutput, configBase, effectiveOpening, variables);
+      writeOpeningsRecursive(subBranches, nodeOutput, configBase, effectiveOpening, branchVars, componentDirs);
     }
   }
 }
@@ -661,10 +670,32 @@ function compile(configPath, options = {}) {
   console.log(`\nDone. Wrote ${totalFiles} file(s).`);
 
   // Write Opening / OpeningChoice files (post-loop)
+
+  // Root-level openingChoice: non-inheriting, written at the root output dir
+  const rootOpeningChoice = config.components && config.components.openingChoice != null
+    ? config.components.openingChoice
+    : null;
+  if (rootOpeningChoice != null) {
+    const hasBranches = config.branches && Object.keys(config.branches).length > 0;
+    if (!hasBranches) {
+      console.warn(`  WARN: root openingChoice with no branches — ignoring`);
+    } else {
+      const expandedChoice = typeof rootOpeningChoice === 'string'
+        ? resolveComponentKey(rootOpeningChoice, config._resolvedComponents)
+        : rootOpeningChoice;
+      const content = resolveOpeningContent(expandedChoice, config._base, config.variables || {});
+      const outPath = writeComponentFile(config._resolvedOutput, 'Opening.md', content);
+      console.log(`    OK: Root OpeningChoice → ${outPath}`);
+    }
+  }
+
   const rootOpening = config.components && config.components.opening != null
     ? config.components.opening
     : null;
-  writeOpeningsRecursive(config.branches, config._resolvedOutput, config._base, rootOpening, config.variables || {});
+  writeOpeningsRecursive(
+    config.branches, config._resolvedOutput, config._base,
+    rootOpening, config.variables || {}, config._resolvedComponents
+  );
 
   // Overview (leaf review) — always generated after compile
   const { runLeafReviewMode } = require('./overview');
@@ -695,6 +726,7 @@ module.exports = {
   resolveBranchFolderPath,
   resolveOpeningContent,
   writeOpening,
+  writeOpeningsRecursive,
 };
 
 // ── CLI entry point ───────────────────────────────────────────────────────────

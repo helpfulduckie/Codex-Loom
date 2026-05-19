@@ -227,3 +227,91 @@ describe('Opening.md generation', () => {
     expect(fs.readFileSync(x, 'utf8')).toBe('Root question\n');      // inherited root opening
   });
 });
+
+// ── openingChoice {@Key} token resolution ──────────────────────────────────────
+
+describe('openingChoice {@Key} resolution', () => {
+  let atKeyTmpDir;
+
+  beforeAll(() => {
+    atKeyTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-atkey-int-'));
+
+    fs.mkdirSync(path.join(atKeyTmpDir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(atKeyTmpDir, 'templates'), { recursive: true });
+
+    fs.writeFileSync(path.join(atKeyTmpDir, 'cards', 'cards.yaml'), [
+      '- id: Widget',
+      '  name: Widget',
+      '  aid:',
+      '    type: Item',
+      '    title: Widget',
+      '  render:',
+      '    template: Item',
+      '  body:',
+      '    Desc: a widget',
+    ].join('\n'), 'utf8');
+
+    fs.writeFileSync(path.join(atKeyTmpDir, 'templates', 'Item.template'), [
+      '## {$aid.title}',
+      '~~~',
+      '{$body.Desc}',
+    ].join('\n'), 'utf8');
+
+    fs.writeFileSync(path.join(atKeyTmpDir, 'compile.yaml'), [
+      'structure:',
+      '  input:',
+      `    cards: [${atKeyTmpDir}/cards]`,
+      `    templates: [${atKeyTmpDir}/templates]`,
+      '    components:',
+      '      openingChoice:',
+      '        roleChoice: Are you the mage or the employer?',
+      '        mageChoice: Who is your mage?',
+      '        employerChoice: Who is your employer?',
+      `  output: ${atKeyTmpDir}/output`,
+      'components:',
+      "  openingChoice: '{@roleChoice}'",
+      'branches:',
+      '  employer:',
+      '    title: Employer',
+      '    components:',
+      "      openingChoice: '{@mageChoice}'",
+      '    branches:',
+      '      alice: {}',
+      '  mage:',
+      '    title: Personal Mage',
+      '    components:',
+      "      openingChoice: '{@employerChoice}'",
+      '    branches:',
+      '      bob: {}',
+    ].join('\n'), 'utf8');
+
+    compile(path.join(atKeyTmpDir, 'compile.yaml'));
+  });
+
+  afterAll(() => {
+    fs.rmSync(atKeyTmpDir, { recursive: true, force: true });
+  });
+
+  test('root openingChoice {@roleChoice} resolves to literal string', () => {
+    const p = path.join(atKeyTmpDir, 'output', 'Components', 'Opening.md');
+    expect(fs.existsSync(p)).toBe(true);
+    expect(fs.readFileSync(p, 'utf8')).toBe('Are you the mage or the employer?\n');
+  });
+
+  test('employer branch openingChoice {@mageChoice} resolves to literal string', () => {
+    const p = path.join(atKeyTmpDir, 'output', 'Branches', 'Employer', 'Components', 'Opening.md');
+    expect(fs.existsSync(p)).toBe(true);
+    expect(fs.readFileSync(p, 'utf8')).toBe('Who is your mage?\n');
+  });
+
+  test('mage branch openingChoice {@employerChoice} resolves to literal string', () => {
+    const p = path.join(atKeyTmpDir, 'output', 'Branches', 'Personal Mage', 'Components', 'Opening.md');
+    expect(fs.existsSync(p)).toBe(true);
+    expect(fs.readFileSync(p, 'utf8')).toBe('Who is your employer?\n');
+  });
+
+  test('leaf nodes do not get openingChoice Opening.md', () => {
+    const alice = path.join(atKeyTmpDir, 'output', 'Branches', 'Employer', 'Branches', 'alice', 'Components', 'Opening.md');
+    expect(fs.existsSync(alice)).toBe(false);
+  });
+});

@@ -106,12 +106,15 @@ function resolveSequence(raw, base) {
 /**
  * Resolve a mapping field (canon, component dirs) to a Map<name, absolutePath>.
  * Accepts: an object whose values are path strings.
+ * When lenient=true, stores the raw string for values that don't resolve to an existing file/dir
+ * (used for openingChoice, where values may be literal question strings rather than paths).
  */
-function resolveMapping(raw, base) {
+function resolveMapping(raw, base, lenient = false) {
   const result = new Map();
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return result;
   for (const [name, p] of Object.entries(raw)) {
-    result.set(name, path.resolve(base, String(p)));
+    const resolved = path.resolve(base, String(p));
+    result.set(name, (lenient && !fs.existsSync(resolved)) ? String(p) : resolved);
   }
   return result;
 }
@@ -211,7 +214,7 @@ function loadCompileConfig(configPath) {
   const componentTypes = ['aiInstructions', 'opening', 'openingChoice', 'plotEssential', 'authorsNote', 'scripts'];
   const resolvedComponents = {};
   for (const type of componentTypes) {
-    resolvedComponents[type] = resolveMapping(components[type], base);
+    resolvedComponents[type] = resolveMapping(components[type], base, type === 'openingChoice');
   }
 
   // Warn on missing declared paths

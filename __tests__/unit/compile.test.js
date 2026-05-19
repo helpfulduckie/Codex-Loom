@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const {
   getTemplate, writeOpening, resolveOpeningContent, resolveBranchFolderPath,
-  buildBranchOutputDir, buildCompileContext, writeOutput,
+  buildBranchOutputDir, buildCompileContext, writeOutput, writeOpeningsRecursive,
 } = require('../../src/compile');
 
 describe('getTemplate', () => {
@@ -69,6 +69,27 @@ describe('resolveOpeningContent', () => {
 
   test('non-existent path returns string as inline text', () => {
     expect(resolveOpeningContent('./does-not-exist.md', tmpDir)).toBe('./does-not-exist.md');
+  });
+
+  test('{%variable} in path is expanded before file lookup', () => {
+    fs.mkdirSync(path.join(tmpDir, 'openings'));
+    const file = path.join(tmpDir, 'openings', 'E-Kaiden.md');
+    fs.writeFileSync(file, 'Kaiden opening', 'utf8');
+    const spec = path.join(tmpDir, 'openings', 'E-{%pcName}.md');
+    expect(resolveOpeningContent(spec, tmpDir, { pcName: 'Kaiden' })).toBe('Kaiden opening');
+  });
+
+  test('{%variable} in path that resolves to non-existent file returns expanded path string', () => {
+    const spec = path.join(tmpDir, 'openings', 'E-{%pcName}.md');
+    const result = resolveOpeningContent(spec, tmpDir, { pcName: 'Kaiden' });
+    expect(result).toBe(path.join(tmpDir, 'openings', 'E-Kaiden.md'));
+    expect(result).not.toContain('{%');
+  });
+
+  test('unresolved {%variable} in path stays as literal when variable undefined', () => {
+    const spec = './openings/E-{%pcName}.md';
+    const result = resolveOpeningContent(spec, tmpDir, {});
+    expect(result).toContain('{%pcName}');
   });
 });
 
@@ -277,5 +298,90 @@ describe('writeOutput', () => {
   test('returns the output file path', () => {
     const result = writeOutput(tmpDir, 'NPC', ['Card']);
     expect(result).toBe(path.join(tmpDir, 'Story Cards', 'NPC', 'NPC.md'));
+  });
+});
+
+// ── writeOpeningsRecursive — branch variable merging ─────────────────────────
+
+describe('writeOpeningsRecursive — branch variable merging', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-wor-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('branch variable overrides are used when resolving opening path', () => {
+    // Setup: two opening files, one per branch
+    const openingsDir = path.join(tmpDir, 'openings');
+    fs.mkdirSync(openingsDir, { recursive: true });
+    fs.writeFileSync(path.join(openingsDir, 'E-Kaiden.md'), 'Kaiden opening content', 'utf8');
+    fs.writeFileSync(path.join(openingsDir, 'E-Zephon.md'), 'Zephon opening content', 'utf8');
+
+    const outputDir = path.join(tmpDir, 'output');
+    fs.mkdirSync(outputDir, { recursive: true });
+
+    // opening spec uses {%opening} (dir) and {%pcName} (per-branch)
+    const openingSpec = path.join(openingsDir, 'E-{%pcName}.md');
+
+    const branches = {
+      kaiden: {
+        title: 'Kaiden',
+        variables: { pcName: 'Kaiden' },
+        opening: openingSpec,
+      },
+      zephon: {
+        title: 'Zephon',
+        variables: { pcName: 'Zephon' },
+        opening: openingSpec,
+      },
+    };
+
+    // Root variables have no pcName — each branch must supply its own
+    writeOpeningsRecursive(branches, outputDir, tmpDir, null, {});
+
+    const kaidenOut = path.join(outputDir, 'Branches', 'Kaiden', 'Components', 'Opening.md');
+    const zephonOut = path.join(outputDir, 'Branches', 'Zephon', 'Components', 'Opening.md');
+
+    expect(fs.readFileSync(kaidenOut, 'utf8').trim()).toBe('Kaiden opening content');
+    expect(fs.readFileSync(zephonOut, 'utf8').trim()).toBe('Zephon opening content');
+  });
+
+  test('nested branch variables accumulate correctly', () => {
+    const openingsDir = path.join(tmpDir, 'openings');
+    fs.mkdirSync(openingsDir, { recursive: true });
+    fs.writeFileSync(path.join(openingsDir, 'PM-Felix-Pet.md'), 'Felix pet opening', 'utf8');
+
+    const outputDir = path.join(tmpDir, 'output');
+    fs.mkdirSync(outputDir, { recursive: true });
+
+    const branches = {
+      personalMage: {
+        title: 'Personal Mage',
+        branches: {
+          felix: {
+            title: 'Felix',
+            variables: { employerName: 'Felix' },
+            branches: {
+              pet: {
+                title: 'Pet',
+                opening: path.join(openingsDir, 'PM-{%employerName}-Pet.md'),
+              },
+            },
+          },
+        },
+      },
+    };
+
+    writeOpeningsRecursive(branches, outputDir, tmpDir, null, {});
+
+    const petOut = path.join(
+      outputDir, 'Branches', 'Personal Mage', 'Branches', 'Felix', 'Branches', 'Pet',
+      'Components', 'Opening.md'
+    );
+    expect(fs.readFileSync(petOut, 'utf8').trim()).toBe('Felix pet opening');
   });
 });

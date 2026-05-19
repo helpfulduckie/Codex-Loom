@@ -429,8 +429,10 @@ function applyFieldRenderFunctions(card) {
  * Called after applyFieldInterpolation, before cross-card refs and pronoun passes.
  */
 function applyVariableInterpolation(card, variables) {
-  if (!card.body || !variables) return;
-  applyVariableInterpolationRecursive(card.body, variables);
+  if (!variables) return;
+  if (typeof card.name === 'string') card.name = resolveVariables(card.name, variables);
+  if (typeof card.id   === 'string') card.id   = resolveVariables(card.id,   variables);
+  if (card.body) applyVariableInterpolationRecursive(card.body, variables);
 }
 
 function applyVariableInterpolationRecursive(obj, variables) {
