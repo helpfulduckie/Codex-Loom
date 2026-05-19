@@ -66,6 +66,11 @@ function applyFieldOp(current, op) {
     return op;
   }
 
+  if (current !== null && typeof current === 'object' && !Array.isArray(current)) {
+    const values = Object.values(current).filter(v => v != null);
+    return applyFieldOp(values, op);
+  }
+
   const currentStr = current !== null && current !== undefined ? String(current) : '';
 
   const appendMatch = opStr.match(/^\+\{([\s\S]*)\}$/);
@@ -224,7 +229,7 @@ function resolveBranchSpec(spec, branchPath) {
       if (!currentSpec || typeof currentSpec !== 'object') continue;
 
       // Check explicit key for null (exclude entire card)
-      const exactKey = Object.keys(currentSpec).find(k => k !== '*' && k.toLowerCase() === branchLower);
+      const exactKey = Object.keys(currentSpec).find(k => k !== '*' && k !== '_' && k.toLowerCase() === branchLower);
       if (exactKey !== undefined) {
         const exactVal = currentSpec[exactKey];
         if (exactVal === null || exactVal === undefined) {
@@ -246,6 +251,17 @@ function resolveBranchSpec(spec, branchPath) {
         variantNames.push(...extractApplyList(exactVal));
         const exactSub = extractSubBranches(exactVal);
         if (exactSub) nextSpecs.push(exactSub);
+      }
+
+      // Collect fallback variants (only for branches with no exact key match)
+      if (exactKey === undefined && '_' in currentSpec) {
+        const fallbackVal = currentSpec['_'];
+        if (fallbackVal === null || fallbackVal === undefined) {
+          return null;
+        }
+        variantNames.push(...extractApplyList(fallbackVal));
+        const fallbackSub = extractSubBranches(fallbackVal);
+        if (fallbackSub) nextSpecs.push(fallbackSub);
       }
     }
 

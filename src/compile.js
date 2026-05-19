@@ -148,6 +148,86 @@ function writeOutput(outputDir, type, renderedCards) {
 }
 
 /**
+ * Delete Story Cards, Components, and Scripts subdirs from a branch output dir.
+ */
+function cleanBranchOutputDir(dir) {
+  for (const sub of ['Story Cards', 'Components', 'Scripts']) {
+    const target = path.join(dir, sub);
+    if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Recursively collect leaf-level branch dirs on disk.
+ * A dir is a leaf if it has no Branches/ child (or an empty one).
+ */
+function findLeafDirsOnDisk(dir) {
+  if (!fs.existsSync(dir)) return [];
+  const leaves = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const child = path.join(dir, entry.name);
+    const sub = path.join(child, 'Branches');
+    const hasBranchesSub = fs.existsSync(sub) && fs.readdirSync(sub).length > 0;
+    if (hasBranchesSub) {
+      leaves.push(...findLeafDirsOnDisk(sub));
+    } else {
+      leaves.push(child);
+    }
+  }
+  return leaves;
+}
+
+function isDirEmpty(dir) {
+  if (!fs.existsSync(dir)) return true;
+  return fs.readdirSync(dir).length === 0;
+}
+
+/**
+ * Pre-build clean: wipe output-type folders from active branches, then
+ * detect and archive (or delete) any stale branch folders on disk.
+ */
+function cleanAndArchive(config, leaves) {
+  const baseOutput = config._resolvedOutput;
+
+  const expectedDirs = new Set();
+  for (const branchPath of leaves) {
+    const folderPath = resolveBranchFolderPath(config.branches, branchPath);
+    expectedDirs.add(path.resolve(buildBranchOutputDir(baseOutput, folderPath)));
+  }
+  if (leaves.length === 1 && leaves[0].length === 0) {
+    expectedDirs.add(path.resolve(baseOutput));
+  }
+
+  for (const dir of expectedDirs) {
+    cleanBranchOutputDir(dir);
+    console.log(`  Cleaned: ${path.relative(baseOutput, dir) || '(root)'}`);
+  }
+
+  const branchesRoot = path.join(baseOutput, 'Branches');
+  const diskLeaves = findLeafDirsOnDisk(branchesRoot);
+  const stale = diskLeaves.filter(d => !expectedDirs.has(path.resolve(d)));
+  if (stale.length === 0) return;
+
+  const ts = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 15);
+  const archiveBase = path.join(baseOutput, 'Archive', ts);
+
+  for (const staleDir of stale) {
+    cleanBranchOutputDir(staleDir);
+    if (isDirEmpty(staleDir)) {
+      fs.rmSync(staleDir, { recursive: true, force: true });
+      console.log(`  Removed empty stale branch: ${path.relative(baseOutput, staleDir)}`);
+    } else {
+      const rel = path.relative(baseOutput, staleDir);
+      const dest = path.join(archiveBase, rel);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.renameSync(staleDir, dest);
+      console.log(`  Archived stale branch → Archive/${ts}/${rel}`);
+    }
+  }
+}
+
+/**
  * Build the output directory path for a branch leaf.
  */
 function buildBranchOutputDir(baseOutput, branchPath) {
@@ -447,7 +527,7 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
 
 // ── Main compile function ─────────────────────────────────────────────────────
 
-function compile(configPath) {
+function compile(configPath, options = {}) {
   const config = loadCompileConfig(configPath);
 
   const { templates, partials } = loadTemplates(config._resolvedTemplates);
@@ -481,6 +561,12 @@ function compile(configPath) {
   const registry = mergeRegistries(canonRegistry, projectRegistry);
 
   const leaves = enumerateLeaves(config.branches);
+
+  if (options.clean) {
+    console.log('\nClean build: clearing output folders...');
+    cleanAndArchive(config, leaves);
+  }
+
   console.log(`\nCompiling ${leaves.length} branch leaf/leaves...`);
 
   let totalFiles = 0;
@@ -683,16 +769,20 @@ if (require.main === module) {
     }
 
   } else {
-    if (rawArgs.length === 0) {
+    const cleanIdx = rawArgs.findIndex(a => a === '--clean' || a === '-c');
+    const isClean = cleanIdx !== -1;
+    const compileArgs = rawArgs.filter((_, i) => i !== cleanIdx);
+
+    if (compileArgs.length === 0) {
       console.error(
-        'Usage: codex-loom <path/to/compile.yaml or project/>\n' +
+        'Usage: codex-loom [--clean|-c] <path/to/compile.yaml or project/>\n' +
         '       codex-loom --leafReview|-l [<scenario-root>] [<output-dir>]\n' +
         '       codex-loom --overview|-o <scenario-root> [<output-dir>]'
       );
       process.exit(1);
     }
 
-    let configPath = rawArgs[0];
+    let configPath = compileArgs[0];
     try {
       if (fs.statSync(configPath).isDirectory()) {
         configPath = path.join(configPath, 'compile.yaml');
@@ -700,7 +790,7 @@ if (require.main === module) {
     } catch (_) {}
 
     try {
-      compile(configPath);
+      compile(configPath, { clean: isClean });
     } catch (err) {
       console.error(`\nFatal: ${err.message}`);
       process.exit(1);

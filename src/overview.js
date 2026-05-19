@@ -158,7 +158,9 @@ function collectOverviewSections(branchDir, branchNames, rootDirName) {
 
   const sectionParts = [heading];
   for (const [name, content] of Object.entries(ownComponents)) {
-    sectionParts.push(`### ${name}\n\n${content}`);
+    const fenced = name === 'Plot Essentials' || name === 'AI Instructions';
+    const body   = fenced ? `\`\`\`\n${content}\n\`\`\`` : content;
+    sectionParts.push(`### ${name}\n\n${body}`);
   }
   if (ownCards) sectionParts.push(`### Story Cards\n\n${ownCards}`);
   if (sectionParts.length === 1) sectionParts.push('_No content at this level._');
@@ -227,8 +229,8 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf) {
   const parts = [];
   parts.push(`# ${title}`);
   if (opening)  parts.push(`# Opening\n\n${opening}`);
-  if (plotEss)  parts.push(`# Plot Essentials\n\n${plotEss}`);
-  if (ainText)  parts.push(`# AI Instructions\n\n${ainText}`);
+  if (plotEss)  parts.push(`# Plot Essentials\n\n\`\`\`\n${plotEss}\n\`\`\``);
+  if (ainText)  parts.push(`# AI Instructions\n\n\`\`\`\n${ainText}\n\`\`\``);
   if (anText)   parts.push(`# Author's Note\n\n${anText}`);
   if (cards.length > 0) parts.push(`# Story Cards\n\n${cards.join('\n\n')}`);
 

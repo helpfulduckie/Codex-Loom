@@ -101,6 +101,24 @@ describe('applyFieldOp', () => {
       expect(result).toEqual({ gender: 'He was strong' });
     });
   });
+
+  describe('mapping-typed current with string op', () => {
+    test('append: extracts values and appends', () => {
+      expect(applyFieldOp({ a: 'foo', b: 'bar' }, '+{baz}')).toEqual(['foo', 'bar', 'baz']);
+    });
+    test('append to empty mapping: returns single-element array', () => {
+      expect(applyFieldOp({}, '+{baz}')).toEqual(['baz']);
+    });
+    test('remove: filters matching value from extracted values', () => {
+      expect(applyFieldOp({ a: 'foo', b: 'bar' }, '-{foo}')).toEqual(['bar']);
+    });
+    test('swap: applies to each extracted value', () => {
+      expect(applyFieldOp({ a: 'red fox', b: 'red dog' }, '/{red}/{blue}')).toEqual(['blue fox', 'blue dog']);
+    });
+    test('replace: still replaces entirely', () => {
+      expect(applyFieldOp({ a: 'foo' }, 'new value')).toBe('new value');
+    });
+  });
 });
 
 describe('collectVariantDeltas', () => {
@@ -252,6 +270,60 @@ describe('resolveBranchSpec', () => {
     expect(resolveBranchSpec(spec, ['Free Form', 'Aness'])).toEqual(['shared']);
     // Wyvern/Aness: */Aness fires, then Wyvern/Aness stacks on top
     expect(resolveBranchSpec(spec, ['Wyvern', 'Aness'])).toEqual(['shared', 'wyvern-specific']);
+  });
+});
+
+// ── _ fallback wildcard ───────────────────────────────────────────────────────
+
+describe('_ fallback wildcard (resolveBranchSpec)', () => {
+  test('_ applies to branches with no exact key match', () => {
+    const spec = { '_': 'fallback' };
+    expect(resolveBranchSpec(spec, ['anything'])).toEqual(['fallback']);
+    expect(resolveBranchSpec(spec, ['other'])).toEqual(['fallback']);
+  });
+
+  test('_ does NOT apply when an exact key matches', () => {
+    const spec = { '_': 'fallback', Felix: 'felix-variant' };
+    expect(resolveBranchSpec(spec, ['Felix'])).toEqual(['felix-variant']);
+  });
+
+  test('_ stacks on top of * for unmatched branches', () => {
+    const spec = { '*': 'base', '_': 'extra' };
+    expect(resolveBranchSpec(spec, ['unmatched'])).toEqual(['base', 'extra']);
+  });
+
+  test('_ does not apply alongside * when exact key matches', () => {
+    const spec = { '*': 'base', '_': 'extra', Felix: 'felix-only' };
+    expect(resolveBranchSpec(spec, ['Felix'])).toEqual(['base', 'felix-only']);
+    expect(resolveBranchSpec(spec, ['Other'])).toEqual(['base', 'extra']);
+  });
+
+  test('_: ~ (null) excludes unmatched branches', () => {
+    const spec = { '_': null, Felix: 'felix-variant' };
+    expect(resolveBranchSpec(spec, ['Other'])).toBeNull();
+    expect(resolveBranchSpec(spec, ['Unrelated'])).toBeNull();
+  });
+
+  test('_: ~ does not affect branches with an exact key', () => {
+    const spec = { '_': null, Felix: 'felix-variant' };
+    expect(resolveBranchSpec(spec, ['Felix'])).toEqual(['felix-variant']);
+  });
+
+  test('_ with branches: sub-key descends correctly', () => {
+    const spec = {
+      '_': {
+        branches: {
+          Aness: 'aness-fallback',
+        },
+      },
+      Felix: {
+        branches: {
+          Aness: 'aness-felix',
+        },
+      },
+    };
+    expect(resolveBranchSpec(spec, ['Other', 'Aness'])).toEqual(['aness-fallback']);
+    expect(resolveBranchSpec(spec, ['Felix', 'Aness'])).toEqual(['aness-felix']);
   });
 });
 
