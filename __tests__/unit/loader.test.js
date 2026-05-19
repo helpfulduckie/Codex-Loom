@@ -3,7 +3,10 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { buildRegistry, mergeRegistries, loadTemplates } = require('../../src/loader');
+const {
+  buildRegistry, mergeRegistries, loadTemplates,
+  loadCardsFromDir, buildOverlays, loadCompileConfig,
+} = require('../../src/loader');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -166,5 +169,174 @@ describe('mergeRegistries', () => {
     const project = new Map([['hero', { id: 'hero' }]]);
     const merged = mergeRegistries(canon, project);
     expect(merged.get('hero').id).toBe('hero');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// loadCardsFromDir
+// ---------------------------------------------------------------------------
+
+describe('loadCardsFromDir', () => {
+  test('returns empty array when directory is empty', () => {
+    const dir = makeTmpDir();
+    expect(loadCardsFromDir([dir])).toEqual([]);
+  });
+
+  test('loads a single-card YAML (non-array) and wraps it', () => {
+    const dir = makeTmpDir();
+    fs.writeFileSync(path.join(dir, 'card.yaml'), 'id: Aria\nname: Aria Voss\n', 'utf8');
+    const cards = loadCardsFromDir([dir]);
+    expect(cards).toHaveLength(1);
+    expect(cards[0].id).toBe('Aria');
+    expect(cards[0]._source).toContain('card.yaml');
+  });
+
+  test('loads a multi-card YAML (array sequence)', () => {
+    const dir = makeTmpDir();
+    fs.writeFileSync(path.join(dir, 'cards.yaml'), '- id: Alpha\n- id: Beta\n', 'utf8');
+    const cards = loadCardsFromDir([dir]);
+    expect(cards).toHaveLength(2);
+    expect(cards[0].id).toBe('Alpha');
+    expect(cards[1].id).toBe('Beta');
+  });
+
+  test('normalizes vars: field to v: on each card', () => {
+    const dir = makeTmpDir();
+    fs.writeFileSync(path.join(dir, 'card.yaml'), 'id: Hero\nvars:\n  role: knight\n', 'utf8');
+    const [card] = loadCardsFromDir([dir]);
+    expect(card).toHaveProperty('v');
+    expect(card).not.toHaveProperty('vars');
+    expect(card.v.role).toBe('knight');
+  });
+
+  test('loads from multiple directories', () => {
+    const dir1 = makeTmpDir();
+    const dir2 = makeTmpDir();
+    fs.writeFileSync(path.join(dir1, 'a.yaml'), 'id: Alpha\n', 'utf8');
+    fs.writeFileSync(path.join(dir2, 'b.yaml'), 'id: Beta\n', 'utf8');
+    expect(loadCardsFromDir([dir1, dir2])).toHaveLength(2);
+  });
+
+  test('accepts a scalar string path (not wrapped in array)', () => {
+    const dir = makeTmpDir();
+    fs.writeFileSync(path.join(dir, 'card.yaml'), 'id: Solo\n', 'utf8');
+    const cards = loadCardsFromDir(dir);
+    expect(cards).toHaveLength(1);
+    expect(cards[0].id).toBe('Solo');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildOverlays
+// ---------------------------------------------------------------------------
+
+describe('buildOverlays', () => {
+  test('returns empty map when no cards have import:', () => {
+    expect(buildOverlays([{ id: 'Aria', _source: 'cards.yaml' }]).size).toBe(0);
+  });
+
+  test('maps import: target (lowercased) to the card', () => {
+    const card = { import: 'Felicia', _source: 'cards.yaml' };
+    const overlays = buildOverlays([card]);
+    expect(overlays.has('felicia')).toBe(true);
+    expect(overlays.get('felicia')).toBe(card);
+  });
+
+  test('key is stored lowercase regardless of import: casing', () => {
+    const card = { import: 'MYCARD', _source: 'x.yaml' };
+    expect(buildOverlays([card]).has('mycard')).toBe(true);
+  });
+
+  test('duplicate import: target warns and keeps first', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    const first  = { import: 'Felicia', _source: 'a.yaml' };
+    const second = { import: 'Felicia', _source: 'b.yaml' };
+    const overlays = buildOverlays([first, second]);
+    expect(overlays.get('felicia')).toBe(first);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Felicia'));
+    warn.mockRestore();
+  });
+
+  test('ignores non-import cards, includes only import cards', () => {
+    const cards = [
+      { id: 'Hero', _source: 'a.yaml' },
+      { import: 'Villain', _source: 'b.yaml' },
+    ];
+    expect(buildOverlays(cards).size).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// loadCompileConfig
+// ---------------------------------------------------------------------------
+
+describe('loadCompileConfig', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    jest.spyOn(console, 'warn').mockImplementation();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    jest.restoreAllMocks();
+  });
+
+  function writeConfig(yaml) {
+    const p = path.join(tmpDir, 'compile.yaml');
+    fs.writeFileSync(p, yaml, 'utf8');
+    return p;
+  }
+
+  test('_base is set to the directory containing compile.yaml', () => {
+    const cfgPath = writeConfig('structure: {}\n');
+    expect(loadCompileConfig(cfgPath)._base).toBe(tmpDir);
+  });
+
+  test('resolves structure.output relative to config dir', () => {
+    const cfgPath = writeConfig('structure:\n  output: ./out\n');
+    expect(loadCompileConfig(cfgPath)._resolvedOutput).toBe(path.resolve(tmpDir, 'out'));
+  });
+
+  test('defaults output to ./output when not specified', () => {
+    const cfgPath = writeConfig('structure: {}\n');
+    expect(loadCompileConfig(cfgPath)._resolvedOutput).toBe(path.resolve(tmpDir, 'output'));
+  });
+
+  test('resolves cards sequence to absolute paths', () => {
+    const cfgPath = writeConfig('structure:\n  input:\n    cards:\n      - ./cards\n');
+    expect(loadCompileConfig(cfgPath)._resolvedCards)
+      .toEqual([path.resolve(tmpDir, 'cards')]);
+  });
+
+  test('resolves canon mapping entries to absolute paths', () => {
+    const cfgPath = writeConfig('structure:\n  input:\n    canon:\n      Core: ./canon/core\n');
+    const { _resolvedCanon } = loadCompileConfig(cfgPath);
+    expect(_resolvedCanon.get('Core')).toBe(path.resolve(tmpDir, 'canon/core'));
+  });
+
+  test('two-pass canon: entry using {@Name} resolves after first pass', () => {
+    const cfgPath = writeConfig([
+      'structure:',
+      '  input:',
+      '    canon:',
+      '      Base: ./base',
+      '      Ext: "{@Base}/ext"',
+    ].join('\n') + '\n');
+    const { _resolvedCanon } = loadCompileConfig(cfgPath);
+    const ext = _resolvedCanon.get('Ext');
+    expect(ext).toContain('base');
+    expect(ext).toContain('ext');
+  });
+
+  test('passes through protagonist, variables, and branches', () => {
+    const cfgPath = writeConfig(
+      'protagonist: Aria\nvariables:\n  role: knight\nbranches:\n  main: {}\n'
+    );
+    const config = loadCompileConfig(cfgPath);
+    expect(config.protagonist).toBe('Aria');
+    expect(config.variables).toEqual({ role: 'knight' });
+    expect(config.branches).toHaveProperty('main');
   });
 });

@@ -142,16 +142,23 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
   const overlayKey = String(blockDef.import).toLowerCase();
   const overlay = overlays.get(overlayKey) || null;
 
+  // When neither the PE block nor the overlay specify branches, inherit from the card definition.
+  const peHasBranches = blockDef.branches !== undefined || overlay?.branches !== undefined;
+  const resolvedBranches = (overlay?.branches !== undefined && blockDef.branches !== undefined)
+    ? applyFieldOp(overlay.branches, blockDef.branches)
+    : (blockDef.branches ?? overlay?.branches ?? canonCard.branches);
+
   const importDef = {
     import:         blockDef.import,
     importVariants: blockDef.importVariants ?? overlay?.importVariants,
-    branches:       (overlay?.branches !== undefined && blockDef.branches !== undefined)
-                      ? applyFieldOp(overlay.branches, blockDef.branches)
-                      : (blockDef.branches ?? overlay?.branches),
+    branches:       resolvedBranches,
     body:           (overlay?.body !== undefined && blockDef.body !== undefined)
                       ? applyFieldOp(overlay.body, blockDef.body)
                       : (blockDef.body ?? overlay?.body),
-    variants:       Object.assign({}, overlay?.variants, blockDef.variants),
+    // When inheriting card branches, also fold in card variants so dispatched variant names resolve.
+    variants:       peHasBranches
+                      ? Object.assign({}, overlay?.variants, blockDef.variants)
+                      : Object.assign({}, canonCard.variants, overlay?.variants, blockDef.variants),
     name:           blockDef.name     ?? overlay?.name,
     pronouns:       blockDef.pronouns ?? overlay?.pronouns,
     aid:            (overlay?.aid !== undefined && blockDef.aid !== undefined)

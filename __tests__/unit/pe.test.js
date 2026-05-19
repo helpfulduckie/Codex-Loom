@@ -1,6 +1,7 @@
 'use strict';
 
-const { compilePE } = require('../../src/pe');
+const fs = require('fs');
+const { compilePE, loadPEConfig, writePE } = require('../../src/pe');
 
 // ── Shared fixtures ──────────────────────────────────────────────────────────
 
@@ -153,6 +154,63 @@ describe('compilePE — import block', () => {
     }];
     const result = compilePE(blocks, importRegistry, templates, new Map(), ctx);
     expect(result).toBeNull();
+  });
+
+  describe('card branch inheritance', () => {
+    const branchCard = {
+      id: 'target',
+      name: { display: 'Target', full: 'Target Card' },
+      pronouns: 'female',
+      aid:    { title: 'Target Card', type: 'Character' },
+      render: { template: 'Character', wrapper: 'none' },
+      body:   { Tagline: 'Base Tagline' },
+      branches: { subject: null },
+    };
+    const branchRegistry = new Map([['target', branchCard]]);
+
+    test('card excluded by its own branch spec is skipped when PE block has no branches', () => {
+      const blocks = [{ import: 'target' }];
+      const result = compilePE(blocks, branchRegistry, templates, new Map(), ctx);
+      expect(result).toBeNull();
+    });
+
+    test('card excluded by specific branch, included by wildcard: skipped on excluded branch', () => {
+      const card = { ...branchCard, branches: { subject: null, '*': '' } };
+      const reg = new Map([['target', card]]);
+      const blocks = [{ import: 'target' }];
+      expect(compilePE(blocks, reg, templates, new Map(), ctx)).toBeNull();
+    });
+
+    test('card excluded by specific branch, included by wildcard: renders on other branch', () => {
+      const card = { ...branchCard, branches: { subject: null, '*': '' } };
+      const reg = new Map([['target', card]]);
+      const blocks = [{ import: 'target' }];
+      const otherCtx = { branchPath: ['other'], branchProtagonist: null };
+      expect(compilePE(blocks, reg, templates, new Map(), otherCtx)).toBe('Target Card: Base Tagline');
+    });
+
+    test('explicit PE branches: null overrides card include', () => {
+      const card = { ...branchCard, branches: { '*': '' } };
+      const reg = new Map([['target', card]]);
+      const blocks = [{ import: 'target', branches: { subject: null } }];
+      expect(compilePE(blocks, reg, templates, new Map(), ctx)).toBeNull();
+    });
+
+    test('explicit PE branches take precedence over card exclude', () => {
+      const blocks = [{ import: 'target', branches: { subject: '' } }];
+      expect(compilePE(blocks, branchRegistry, templates, new Map(), ctx)).toBe('Target Card: Base Tagline');
+    });
+
+    test('card branch-dispatched variant applies via inherited branches', () => {
+      const card = {
+        ...branchCard,
+        branches: { subject: 'alt' },
+        variants: { alt: { body: { Tagline: 'Alt Tagline' } } },
+      };
+      const reg = new Map([['target', card]]);
+      const blocks = [{ import: 'target' }];
+      expect(compilePE(blocks, reg, templates, new Map(), ctx)).toBe('Target Card: Alt Tagline');
+    });
   });
 
   test('Codex overlay v: fields are applied to PE import (regression: $v.field resolved against canon, not overlay)', () => {
@@ -357,5 +415,69 @@ describe('compilePE — section block', () => {
       render: { wrapper: 'none' },
     }];
     expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('Shown');
+  });
+});
+
+// ── loadPEConfig ──────────────────────────────────────────────────────────────
+
+describe('loadPEConfig', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  test('null spec → returns empty array', () => {
+    expect(loadPEConfig(null)).toEqual([]);
+  });
+
+  test('missing file → warns and returns empty array', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+    expect(loadPEConfig('/missing.yaml')).toEqual([]);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  test('non-array YAML (mapping) → throws', () => {
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readFileSync').mockReturnValue('key: value\n');
+    expect(() => loadPEConfig('/bad.yaml')).toThrow('PE file must be a YAML sequence');
+  });
+
+  test('valid array YAML → returns parsed array', () => {
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readFileSync').mockReturnValue('- body:\n    text: Hello\n');
+    expect(loadPEConfig('/pe.yaml')).toEqual([{ body: { text: 'Hello' } }]);
+  });
+});
+
+// ── writePE ───────────────────────────────────────────────────────────────────
+
+describe('writePE', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  test('null content → returns null and does not write', () => {
+    const writeFileSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation();
+    jest.spyOn(fs, 'mkdirSync').mockImplementation();
+    expect(writePE('/output/branch', null)).toBeNull();
+    expect(writeFileSpy).not.toHaveBeenCalled();
+  });
+
+  test('writes to Components/Plot Essentials.md', () => {
+    const writeFileSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation();
+    jest.spyOn(fs, 'mkdirSync').mockImplementation();
+    const outPath = writePE('/output/branch', 'content');
+    expect(outPath).toContain('Plot Essentials.md');
+    expect(writeFileSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Plot Essentials.md'),
+      'content\n',
+      'utf8'
+    );
+  });
+
+  test('creates Components directory', () => {
+    const mkdirSpy = jest.spyOn(fs, 'mkdirSync').mockImplementation();
+    jest.spyOn(fs, 'writeFileSync').mockImplementation();
+    writePE('/output/branch', 'content');
+    expect(mkdirSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Components'),
+      { recursive: true }
+    );
   });
 });

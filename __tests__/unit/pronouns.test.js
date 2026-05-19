@@ -1,8 +1,8 @@
 'use strict';
 
 const {
-  resolveProunounToken,
-  applyTokenPass,
+  resolveProunounToken, applyTokenPass,
+  getDisplayName, getFullName, applyCrossCardRefs, applyPronounPasses,
 } = require('../../src/pronouns');
 
 // ── resolveProunounToken ────────────────────────────────────────────────────
@@ -21,6 +21,7 @@ describe('resolveProunounToken', () => {
     test('her → him', () => expect(resolveProunounToken('her', 'male')).toBe('him'));
     test('her~ → his', () => expect(resolveProunounToken('her~', 'male')).toBe('his'));
     test('herself → himself', () => expect(resolveProunounToken('herself', 'male')).toBe('himself'));
+    test("she's → he's", () => expect(resolveProunounToken("she's", 'male')).toBe("he's"));
   });
 
   describe('they set (alias for nonbinary)', () => {
@@ -28,6 +29,7 @@ describe('resolveProunounToken', () => {
     test('her → them', () => expect(resolveProunounToken('her', 'they')).toBe('them'));
     test('her~ → their', () => expect(resolveProunounToken('her~', 'they')).toBe('their'));
     test('herself → themselves', () => expect(resolveProunounToken('herself', 'they')).toBe('themselves'));
+    test("she's → they're", () => expect(resolveProunounToken("she's", 'they')).toBe("they're"));
   });
 
   describe('nonbinary set', () => {
@@ -41,6 +43,7 @@ describe('resolveProunounToken', () => {
     test('she → you', () => expect(resolveProunounToken('she', 'you')).toBe('you'));
     test('her~ → your', () => expect(resolveProunounToken('her~', 'you')).toBe('your'));
     test('herself → yourself', () => expect(resolveProunounToken('herself', 'you')).toBe('yourself'));
+    test("she's → you're", () => expect(resolveProunounToken("she's", 'you')).toBe("you're"));
   });
 
   describe('case preservation', () => {
@@ -289,5 +292,214 @@ describe('applyTokenPass — scope tracking across tokens', () => {
     const registry = new Map([['aness', aness]]);
     expect(applyTokenPass('{$Aness} run[s] and jump[s]', { card: aness, registry, branchProtagonist: null }))
       .toBe('Aness runs and jumps');
+  });
+});
+
+// ── getDisplayName ────────────────────────────────────────────────────────────
+
+describe('getDisplayName', () => {
+  test('no name → falls back to card.id', () => {
+    expect(getDisplayName({ id: 'hero' })).toBe('hero');
+  });
+
+  test('no name and no id → returns empty string', () => {
+    expect(getDisplayName({})).toBe('');
+  });
+
+  test('string name → returns first whitespace-delimited word', () => {
+    expect(getDisplayName({ name: 'Aria Voss' })).toBe('Aria');
+  });
+
+  test('single-word string name → returned as-is', () => {
+    expect(getDisplayName({ name: 'Aria' })).toBe('Aria');
+  });
+
+  test('object name with display → returns display', () => {
+    expect(getDisplayName({ name: { display: 'Aria', full: 'Aria Voss' } })).toBe('Aria');
+  });
+
+  test('object name without display → returns first value', () => {
+    expect(getDisplayName({ name: { full: 'Elder Roshan' } })).toBe('Elder Roshan');
+  });
+});
+
+// ── getFullName ───────────────────────────────────────────────────────────────
+
+describe('getFullName', () => {
+  test('no name → falls back to card.id', () => {
+    expect(getFullName({ id: 'hero' })).toBe('hero');
+  });
+
+  test('no name and no id → returns empty string', () => {
+    expect(getFullName({})).toBe('');
+  });
+
+  test('string name → returns full string unchanged', () => {
+    expect(getFullName({ name: 'Aria Voss' })).toBe('Aria Voss');
+  });
+
+  test('object name with full → returns full', () => {
+    expect(getFullName({ name: { full: 'Aria Voss', display: 'Aria' } })).toBe('Aria Voss');
+  });
+
+  test('object name without full, with display → returns display', () => {
+    expect(getFullName({ name: { display: 'Aria' } })).toBe('Aria');
+  });
+
+  test('object name with neither full nor display → returns first value', () => {
+    expect(getFullName({ name: { common: 'Elder' } })).toBe('Elder');
+  });
+});
+
+// ── applyCrossCardRefs ────────────────────────────────────────────────────────
+
+describe('applyCrossCardRefs', () => {
+  test('resolves {$id.body.field} token in a card body string', () => {
+    const cards = [
+      { id: 'aria',   body: { Tagline: '{$mentor.body.Tagline}' } },
+      { id: 'mentor', body: { Tagline: 'Archivist' } },
+    ];
+    applyCrossCardRefs(cards, new Map());
+    expect(cards[0].body.Tagline).toBe('Archivist');
+  });
+
+  test('case-insensitive card ID lookup', () => {
+    const cards = [
+      { id: 'aria',   body: { Tagline: '{$Mentor.body.Tagline}' } },
+      { id: 'mentor', body: { Tagline: 'Archivist' } },
+    ];
+    applyCrossCardRefs(cards, new Map());
+    expect(cards[0].body.Tagline).toBe('Archivist');
+  });
+
+  test('case-insensitive field name lookup', () => {
+    const cards = [
+      { id: 'aria',   body: { Tagline: '{$mentor.body.tagline}' } },
+      { id: 'mentor', body: { Tagline: 'Archivist' } },
+    ];
+    applyCrossCardRefs(cards, new Map());
+    expect(cards[0].body.Tagline).toBe('Archivist');
+  });
+
+  test('dotted nested field path', () => {
+    const cards = [
+      { id: 'aria',   body: { Hair: '{$mentor.body.Traits.hair}' } },
+      { id: 'mentor', body: { Traits: { hair: 'silver' } } },
+    ];
+    applyCrossCardRefs(cards, new Map());
+    expect(cards[0].body.Hair).toBe('silver');
+  });
+
+  test('missing card → warns and leaves token as-is', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    const cards = [{ id: 'aria', body: { Tagline: '{$nobody.body.Field}' } }];
+    applyCrossCardRefs(cards, new Map());
+    expect(cards[0].body.Tagline).toBe('{$nobody.body.Field}');
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  test('missing field → leaves token as-is', () => {
+    const cards = [
+      { id: 'aria',   body: { Tagline: '{$mentor.body.Missing}' } },
+      { id: 'mentor', body: { Tagline: 'Archivist' } },
+    ];
+    applyCrossCardRefs(cards, new Map());
+    expect(cards[0].body.Tagline).toBe('{$mentor.body.Missing}');
+  });
+
+  test('resolves refs in nested body objects (recursive walk)', () => {
+    const cards = [
+      { id: 'aria',   body: { Traits: { hair: '{$mentor.body.Hair}' } } },
+      { id: 'mentor', body: { Hair: 'white' } },
+    ];
+    applyCrossCardRefs(cards, new Map());
+    expect(cards[0].body.Traits.hair).toBe('white');
+  });
+
+  test('resolves refs in body array items', () => {
+    const cards = [
+      { id: 'aria',   body: { Keywords: ['{$mentor.body.Title}', 'brave'] } },
+      { id: 'mentor', body: { Title: 'Elder' } },
+    ];
+    applyCrossCardRefs(cards, new Map());
+    expect(cards[0].body.Keywords[0]).toBe('Elder');
+    expect(cards[0].body.Keywords[1]).toBe('brave');
+  });
+
+  test('falls back to registry when card not in resolved set', () => {
+    const registryCard = { id: 'mentor', body: { Tagline: 'Sage' } };
+    const registry = new Map([['mentor', registryCard]]);
+    const cards = [{ id: 'aria', body: { Tagline: '{$mentor.body.Tagline}' } }];
+    applyCrossCardRefs(cards, registry);
+    expect(cards[0].body.Tagline).toBe('Sage');
+  });
+});
+
+// ── applyTokenPass — {$Id.display} and {$Id.full} ────────────────────────────
+
+describe('applyTokenPass — {$Id.display} and {$Id.full} tokens', () => {
+  test('{$Id.display} → resolves to display name and does not set conjugation scope', () => {
+    // aness has 'they' pronouns (plural). hero card is 'female' (singular).
+    // If {$Aness.display} incorrectly set scope to 'they', [s] would drop (plural → '').
+    // Correct: display does not set scope → [s] falls back to card (female, singular) → 's'.
+    const aness = { id: 'aness', name: 'Aness', pronouns: 'they' };
+    const hero = makeCard('hero', 'female');
+    const registry = new Map([['aness', aness]]);
+    expect(applyTokenPass('{$Aness.display} love[s]', { card: hero, registry, branchProtagonist: null }))
+      .toBe('Aness loves');
+  });
+
+  test('{$Id.full} → resolves to full name and does not set conjugation scope', () => {
+    const aness = { id: 'aness', name: { display: 'Aness', full: 'Aness Rozen' }, pronouns: 'they' };
+    const hero = makeCard('hero', 'female');
+    const registry = new Map([['aness', aness]]);
+    expect(applyTokenPass('{$Aness.full} lead[s]', { card: hero, registry, branchProtagonist: null }))
+      .toBe('Aness Rozen leads');
+  });
+
+  test('{$Id.display} → returns display name even when Id is protagonist (no "you" swap)', () => {
+    const aness = makeCard('aness', 'female');
+    const registry = new Map([['aness', aness]]);
+    expect(applyTokenPass('{$Aness.display}', { card: aness, registry, branchProtagonist: 'aness' }))
+      .toBe('Aness');
+  });
+});
+
+// ── applyPronounPasses ────────────────────────────────────────────────────────
+
+describe('applyPronounPasses', () => {
+  test('no card.body → returns without error', () => {
+    expect(() => applyPronounPasses({ id: 'hero' }, new Map(), null)).not.toThrow();
+  });
+
+  test('resolves {$token} in string body fields', () => {
+    const card = { id: 'hero', pronouns: 'female', body: { Tagline: '{$she} fights' } };
+    applyPronounPasses(card, new Map(), null);
+    expect(card.body.Tagline).toBe('she fights');
+  });
+
+  test('walks nested body objects', () => {
+    const card = { id: 'hero', pronouns: 'male', body: { Traits: { desc: '{$she} stands tall' } } };
+    applyPronounPasses(card, new Map(), null);
+    expect(card.body.Traits.desc).toBe('he stands tall');
+  });
+
+  test('processes string items in body arrays', () => {
+    const card = {
+      id: 'hero', pronouns: 'female',
+      body: { Keywords: ['{$she} fights', 'brave'] },
+    };
+    applyPronounPasses(card, new Map(), null);
+    expect(card.body.Keywords[0]).toBe('she fights');
+    expect(card.body.Keywords[1]).toBe('brave');
+  });
+
+  test('mutates card.body in place', () => {
+    const body = { Tagline: '{$she} leads' };
+    const card = { id: 'hero', pronouns: 'female', body };
+    applyPronounPasses(card, new Map(), null);
+    expect(card.body).toBe(body);
+    expect(body.Tagline).toBe('she leads');
   });
 });

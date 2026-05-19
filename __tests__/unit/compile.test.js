@@ -3,7 +3,10 @@
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { getTemplate, writeOpening, resolveOpeningContent, resolveBranchFolderPath } = require('../../src/compile');
+const {
+  getTemplate, writeOpening, resolveOpeningContent, resolveBranchFolderPath,
+  buildBranchOutputDir, buildCompileContext, writeOutput,
+} = require('../../src/compile');
 
 describe('getTemplate', () => {
   const templates = new Map([
@@ -157,5 +160,122 @@ describe('resolveBranchFolderPath', () => {
 
   test('empty id path returns empty folder path', () => {
     expect(resolveBranchFolderPath({}, [])).toEqual([]);
+  });
+});
+
+// ── buildBranchOutputDir ──────────────────────────────────────────────────────
+
+describe('buildBranchOutputDir', () => {
+  test('empty branchPath returns baseOutput unchanged', () => {
+    expect(buildBranchOutputDir('/output', [])).toBe('/output');
+  });
+
+  test('single-level path inserts Branches/{name}', () => {
+    expect(buildBranchOutputDir('/output', ['knight']))
+      .toBe(path.join('/output', 'Branches', 'knight'));
+  });
+
+  test('two-level path interleaves Branches between each level', () => {
+    expect(buildBranchOutputDir('/output', ['tier1', 'alpha']))
+      .toBe(path.join('/output', 'Branches', 'tier1', 'Branches', 'alpha'));
+  });
+});
+
+// ── buildCompileContext ───────────────────────────────────────────────────────
+
+const baseCtxConfig = {
+  _base: '/project',
+  _resolvedComponents: {},
+  variables: {},
+  components: {},
+  branches: null,
+};
+
+describe('buildCompileContext', () => {
+  test('empty branchPath returns root variables', () => {
+    const config = { ...baseCtxConfig, variables: { theme: 'dark' } };
+    const { variables } = buildCompileContext(config, []);
+    expect(variables).toEqual({ theme: 'dark' });
+  });
+
+  test('branch variables are merged over root', () => {
+    const config = {
+      ...baseCtxConfig,
+      variables: { a: '1', b: '2' },
+      branches: { main: { variables: { b: 'branch', c: '3' } } },
+    };
+    const { variables } = buildCompileContext(config, ['main']);
+    expect(variables).toEqual({ a: '1', b: 'branch', c: '3' });
+  });
+
+  test('two-level nested path merges variables in order', () => {
+    const config = {
+      ...baseCtxConfig,
+      variables: { a: 'root' },
+      branches: {
+        tier1: {
+          variables: { b: 'tier1' },
+          branches: { tier2: { variables: { c: 'tier2' } } },
+        },
+      },
+    };
+    const { variables } = buildCompileContext(config, ['tier1', 'tier2']);
+    expect(variables).toEqual({ a: 'root', b: 'tier1', c: 'tier2' });
+  });
+
+  test('unknown branch key stops at root variables', () => {
+    const config = {
+      ...baseCtxConfig,
+      variables: { a: 'root' },
+      branches: { main: { variables: { b: 'branch' } } },
+    };
+    const { variables } = buildCompileContext(config, ['nonexistent']);
+    expect(variables).toEqual({ a: 'root' });
+  });
+
+  test('branch key lookup is case-insensitive', () => {
+    const config = {
+      ...baseCtxConfig,
+      branches: { Main: { variables: { role: 'knight' } } },
+    };
+    const { variables } = buildCompileContext(config, ['main']);
+    expect(variables.role).toBe('knight');
+  });
+
+  test('all componentRefs are null when components block is empty', () => {
+    const { componentRefs } = buildCompileContext(baseCtxConfig, []);
+    for (const val of Object.values(componentRefs)) {
+      expect(val).toBeNull();
+    }
+  });
+});
+
+// ── writeOutput ───────────────────────────────────────────────────────────────
+
+describe('writeOutput', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-writeout-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('writes cards joined by \\n\\n with trailing newline', () => {
+    writeOutput(tmpDir, 'Character', ['Card A', 'Card B']);
+    const outPath = path.join(tmpDir, 'Story Cards', 'Character', 'Character.md');
+    expect(fs.readFileSync(outPath, 'utf8')).toBe('Card A\n\nCard B\n');
+  });
+
+  test('creates Story Cards/{type}/ directory recursively', () => {
+    writeOutput(tmpDir, 'Location', ['Card']);
+    expect(fs.existsSync(path.join(tmpDir, 'Story Cards', 'Location'))).toBe(true);
+  });
+
+  test('returns the output file path', () => {
+    const result = writeOutput(tmpDir, 'NPC', ['Card']);
+    expect(result).toBe(path.join(tmpDir, 'Story Cards', 'NPC', 'NPC.md'));
   });
 });

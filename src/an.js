@@ -20,7 +20,7 @@ function loadANConfig(anSpec) {
     return null;
   }
   const data = loadYaml(anSpec);
-  if (!data || typeof data !== 'object') {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
     throw new Error(`AN file must be a YAML mapping: ${anSpec}`);
   }
   if (data.card) {

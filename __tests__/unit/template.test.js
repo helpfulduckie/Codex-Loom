@@ -10,6 +10,16 @@ const {
   processIncludes,
   render,
   applyFieldRenderFunctions,
+  normalizeWhitespace,
+  applyWrapper,
+  resolveTemplateName,
+  evaluateProse,
+  evaluateBlock,
+  evaluateKeys,
+  evaluateInline,
+  processWrapperBlocks,
+  applyFieldInterpolation,
+  applyVariableInterpolation,
 } = require('../../src/template');
 
 describe('resolveField', () => {
@@ -142,6 +152,11 @@ describe('evaluateList', () => {
   test('returns empty string for missing field', () => {
     expect(evaluateList('list($body.missing)', {})).toBe('');
   });
+
+  test('single-element array → renders inline as bare value (no bullet, no newline)', () => {
+    const d = { body: { items: ['solo'] } };
+    expect(evaluateList('list($body.items)', d)).toBe('solo');
+  });
 });
 
 describe('processConditionals', () => {
@@ -273,7 +288,7 @@ describe('applyFieldRenderFunctions', () => {
     expect(card.body.head).toBe('female; black hair');
   });
 
-  test('expands and() in a body field', () => {
+  test('expands and() in a body field — three elements', () => {
     const card = {
       body: {
         summary: '{and($body.tags)}',
@@ -282,6 +297,17 @@ describe('applyFieldRenderFunctions', () => {
     };
     applyFieldRenderFunctions(card);
     expect(card.body.summary).toBe('brave, clever, and loyal');
+  });
+
+  test('{and()} — two-element array → "a and b"', () => {
+    const card = {
+      body: {
+        pair: '{and($body.tags)}',
+        tags: ['brave', 'loyal'],
+      },
+    };
+    applyFieldRenderFunctions(card);
+    expect(card.body.pair).toBe('brave and loyal');
   });
 
   test('expands inline() on a nested mapping', () => {
@@ -373,5 +399,320 @@ describe('render — whitespace and wrapper', () => {
     const tmpl = 'before\n{preserve}\nline1\n\nline2\n{/preserve}\nafter';
     const result = render(tmpl, data, new Map());
     expect(result).toBe('before\nline1\n\nline2\nafter');
+  });
+
+  test('auto-wrapper applied to entire output when template has no {wrapper} block', () => {
+    const data = { body: { Tagline: 'the archivist' }, render: { wrapper: 'square' } };
+    const result = render('{$body.Tagline}', data, new Map());
+    expect(result).toBe('[\nthe archivist\n]');
+  });
+
+  test('auto-wrapper not applied when render.wrapper is "none"', () => {
+    const data = { body: { Tagline: 'hello' }, render: { wrapper: 'none' } };
+    expect(render('{$body.Tagline}', data, new Map())).toBe('hello');
+  });
+});
+
+// ── render — template context tokens ─────────────────────────────────────────
+
+describe('render — template context tokens', () => {
+  const richData = {
+    name:     { display: 'Roshan', full: 'Elder Roshan' },
+    aid:      { type: 'Character', title: 'Elder Roshan', triggers: ['Roshan'], encapsulate: true, known: false },
+    render:   { template: 'Character', wrapper: 'none' },
+    pronouns: 'male',
+    v:        { affiliation: 'guild' },
+    body:     {},
+    id:       'roshan',
+  };
+
+  test('{$name.display} → display name', () => {
+    expect(render('{$name.display}', richData)).toBe('Roshan');
+  });
+
+  test('{$name.full} → full name string', () => {
+    expect(render('{$name.full}', richData)).toBe('Elder Roshan');
+  });
+
+  test('{$aid.title} → aid title field', () => {
+    expect(render('{$aid.title}', richData)).toBe('Elder Roshan');
+  });
+
+  test('{$aid.type} → aid type field', () => {
+    expect(render('{$aid.type}', richData)).toBe('Character');
+  });
+
+  test('{$aid.known} → "false" for boolean false', () => {
+    expect(render('{$aid.known}', richData)).toBe('false');
+  });
+
+  test('{$aid.encapsulate} → "true" for boolean true', () => {
+    expect(render('{$aid.encapsulate}', richData)).toBe('true');
+  });
+
+  test('{$render.template} → render template field', () => {
+    expect(render('{$render.template}', richData)).toBe('Character');
+  });
+
+  test('{$pronouns} → pronoun set string', () => {
+    expect(render('{$pronouns}', richData)).toBe('male');
+  });
+
+  test('{$v.affiliation} → v block field', () => {
+    expect(render('{$v.affiliation}', richData)).toBe('guild');
+  });
+});
+
+// ── normalizeWhitespace ───────────────────────────────────────────────────────
+
+describe('normalizeWhitespace', () => {
+  test('trims leading/trailing whitespace from every line', () => {
+    expect(normalizeWhitespace('  hello  \n  world  ')).toBe('hello\nworld');
+  });
+
+  test('strips tabs', () => {
+    expect(normalizeWhitespace('\thello\n\tworld')).toBe('hello\nworld');
+  });
+
+  test('collapses multiple consecutive spaces to one', () => {
+    expect(normalizeWhitespace('hello   world')).toBe('hello world');
+  });
+
+  test('collapses multiple blank lines to a single newline', () => {
+    expect(normalizeWhitespace('A\n\n\nB')).toBe('A\nB');
+  });
+
+  test('trims document edges', () => {
+    expect(normalizeWhitespace('\nhello\n')).toBe('hello');
+  });
+
+  test('{preserve} blocks skip whitespace normalization inside', () => {
+    const input = 'before\n{preserve}\n  indented  \n\n  spaced  \n{/preserve}\nafter';
+    const result = normalizeWhitespace(input);
+    expect(result).toContain('  indented  ');
+    expect(result).toContain('  spaced  ');
+    expect(result).toContain('before');
+    expect(result).toContain('after');
+  });
+});
+
+// ── applyWrapper ──────────────────────────────────────────────────────────────
+
+describe('applyWrapper', () => {
+  test('square → wraps with [ and ]', () => {
+    expect(applyWrapper('content', 'square')).toBe('[\ncontent\n]');
+  });
+
+  test('curly → wraps with { and }', () => {
+    expect(applyWrapper('content', 'curly')).toBe('{\ncontent\n}');
+  });
+
+  test('none → returns text unchanged', () => {
+    expect(applyWrapper('content', 'none')).toBe('content');
+  });
+
+  test('undefined wrapper → returns text unchanged', () => {
+    expect(applyWrapper('content', undefined)).toBe('content');
+  });
+
+  test('case-insensitive wrapper name', () => {
+    expect(applyWrapper('content', 'SQUARE')).toBe('[\ncontent\n]');
+  });
+});
+
+// ── resolveTemplateName ───────────────────────────────────────────────────────
+
+describe('resolveTemplateName', () => {
+  test('no style → returns name unchanged', () => {
+    expect(resolveTemplateName('character', undefined)).toBe('character');
+  });
+
+  test('hint style → appends .hint suffix', () => {
+    expect(resolveTemplateName('character', 'hint')).toBe('character.hint');
+  });
+
+  test('other style → returns name unchanged', () => {
+    expect(resolveTemplateName('character', 'skip')).toBe('character');
+  });
+});
+
+// ── evaluate* helpers ─────────────────────────────────────────────────────────
+
+const evalData = {
+  body: {
+    Tagline: 'the archivist',
+    Keywords: ['brave', 'wise'],
+    Traits: { hair: 'silver', eyes: 'grey' },
+  },
+  aid: {},
+  render: {},
+  name: 'Roshan',
+  id: 'roshan',
+  v: {},
+};
+
+describe('evaluateProse', () => {
+  test('string value → capitalized with period', () => {
+    expect(evaluateProse('prose($body.Tagline)', evalData)).toBe('The archivist.');
+  });
+
+  test('trailing punctuation replaced with period', () => {
+    const d = { ...evalData, body: { ...evalData.body, Note: 'done!' } };
+    expect(evaluateProse('prose($body.Note)', d)).toBe('Done.');
+  });
+
+  test('array → each item sentence-cased and joined with spaces', () => {
+    expect(evaluateProse('prose($body.Keywords)', evalData)).toBe('Brave. Wise.');
+  });
+
+  test('null field → empty string', () => {
+    expect(evaluateProse('prose($body.Missing)', evalData)).toBe('');
+  });
+
+  test('malformed syntax → throws', () => {
+    expect(() => evaluateProse('prose(bad)', evalData)).toThrow('Malformed prose()');
+  });
+});
+
+describe('evaluateBlock', () => {
+  test('string value → returned as-is', () => {
+    expect(evaluateBlock('block($body.Tagline)', evalData)).toBe('the archivist');
+  });
+
+  test('array → joined with newlines', () => {
+    expect(evaluateBlock('block($body.Keywords)', evalData)).toBe('brave\nwise');
+  });
+
+  test('null field → empty string', () => {
+    expect(evaluateBlock('block($body.Missing)', evalData)).toBe('');
+  });
+
+  test('malformed syntax → throws', () => {
+    expect(() => evaluateBlock('block(bad)', evalData)).toThrow('Malformed block()');
+  });
+});
+
+describe('evaluateKeys', () => {
+  test('object field → key: value per line', () => {
+    expect(evaluateKeys('keys($body.Traits)', evalData)).toBe('hair: silver\neyes: grey');
+  });
+
+  test('null field → empty string', () => {
+    expect(evaluateKeys('keys($body.Missing)', evalData)).toBe('');
+  });
+
+  test('malformed syntax → throws', () => {
+    expect(() => evaluateKeys('keys(bad)', evalData)).toThrow('Malformed keys()');
+  });
+});
+
+describe('evaluateInline', () => {
+  test('object field → space-joined values', () => {
+    expect(evaluateInline('inline($body.Traits)', evalData)).toBe('silver grey');
+  });
+
+  test('array field → space-joined', () => {
+    expect(evaluateInline('inline($body.Keywords)', evalData)).toBe('brave wise');
+  });
+
+  test('string field → returned as string', () => {
+    expect(evaluateInline('inline($body.Tagline)', evalData)).toBe('the archivist');
+  });
+
+  test('null field → empty string', () => {
+    expect(evaluateInline('inline($body.Missing)', evalData)).toBe('');
+  });
+
+  test('malformed syntax → throws', () => {
+    expect(() => evaluateInline('inline(bad)', evalData)).toThrow('Malformed inline()');
+  });
+});
+
+// ── processWrapperBlocks ──────────────────────────────────────────────────────
+
+describe('processWrapperBlocks', () => {
+  test('square wrapper replaces {wrapper}...{/wrapper} block', () => {
+    expect(processWrapperBlocks('{wrapper}content{/wrapper}', { render: { wrapper: 'square' } }))
+      .toBe('[\ncontent\n]');
+  });
+
+  test('curly wrapper replaces block', () => {
+    expect(processWrapperBlocks('{wrapper}content{/wrapper}', { render: { wrapper: 'curly' } }))
+      .toBe('{\ncontent\n}');
+  });
+
+  test('none wrapper returns content unchanged', () => {
+    expect(processWrapperBlocks('{wrapper}content{/wrapper}', { render: { wrapper: 'none' } }))
+      .toBe('content');
+  });
+
+  test('no render block → treated as none', () => {
+    expect(processWrapperBlocks('{wrapper}content{/wrapper}', {})).toBe('content');
+  });
+});
+
+// ── applyFieldInterpolation ───────────────────────────────────────────────────
+
+describe('applyFieldInterpolation', () => {
+  test('no card.body → returns without error', () => {
+    expect(() => applyFieldInterpolation({ id: 'hero', aid: {} })).not.toThrow();
+  });
+
+  test('expands {$body.X} token referencing another body field', () => {
+    const card = {
+      id: 'hero',
+      body: { Tagline: 'Rank: {$body.Title}', Title: 'Guard Captain' },
+      aid: {},
+      render: {},
+    };
+    applyFieldInterpolation(card);
+    expect(card.body.Tagline).toBe('Rank: Guard Captain');
+  });
+
+  test('expands {$v.X} token from card.v', () => {
+    const card = {
+      id: 'hero',
+      body: { Tagline: 'Role: {$v.role}' },
+      v: { role: 'knight' },
+      aid: {},
+      render: {},
+    };
+    applyFieldInterpolation(card);
+    expect(card.body.Tagline).toBe('Role: knight');
+  });
+
+  test('mutates body in place', () => {
+    const body = { Tagline: 'hello' };
+    const card = { id: 'hero', body, aid: {}, render: {} };
+    applyFieldInterpolation(card);
+    expect(card.body).toBe(body);
+  });
+});
+
+// ── applyVariableInterpolation ────────────────────────────────────────────────
+
+describe('applyVariableInterpolation', () => {
+  test('no card.body → returns without error', () => {
+    expect(() => applyVariableInterpolation({ id: 'hero' }, { role: 'x' })).not.toThrow();
+  });
+
+  test('null variables → returns without error, body unchanged', () => {
+    const card = { body: { Tagline: '{%role}' } };
+    applyVariableInterpolation(card, null);
+    expect(card.body.Tagline).toBe('{%role}');
+  });
+
+  test('expands {%var} tokens in body strings', () => {
+    const card = { body: { Tagline: 'Role: {%role}' } };
+    applyVariableInterpolation(card, { role: 'knight' });
+    expect(card.body.Tagline).toBe('Role: knight');
+  });
+
+  test('mutates body in place', () => {
+    const body = { Tagline: '{%x}' };
+    const card = { body };
+    applyVariableInterpolation(card, { x: 'y' });
+    expect(card.body).toBe(body);
+    expect(body.Tagline).toBe('y');
   });
 });

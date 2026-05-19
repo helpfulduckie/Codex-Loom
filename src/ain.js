@@ -20,7 +20,7 @@ function loadAINConfig(ainSpec) {
     return null;
   }
   const data = loadYaml(ainSpec);
-  if (!data || typeof data !== 'object') {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
     throw new Error(`AIN file must be a YAML mapping: ${ainSpec}`);
   }
   return data;
