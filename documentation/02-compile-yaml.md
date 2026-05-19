@@ -107,6 +107,26 @@ Canon names are matched case-insensitively in `{@key}` references. Use the name 
 - include: "{@main}/Characters/Aness.yaml"
 ```
 
+**Token expansion in canon values** — Canon path values support token expansion before path resolution:
+
+- `{%variableName}` — replaced with the value from the top-level `variables:` block
+- `{@otherCanonName}` — replaced with the resolved absolute path of another canon entry
+
+This makes it practical to define a root path once as a variable and reference it for multiple subdirectory entries, rather than repeating the full path:
+
+```yaml
+variables:
+  canonRoot: C:\Shared\AID\_Canon
+
+structure:
+  input:
+    canon:
+      canonGeneral: '{%canonRoot}\StoryCards\_General'
+      canonNovalune: '{%canonRoot}\StoryCards\Novalune'
+```
+
+Canon-to-canon `{@}` references resolve after all plain-path entries are built, so an entry with no `{@}` tokens can be referenced by a later sibling that does. Unresolved tokens are left as-is and will trigger the standard missing-path warning.
+
 ### `structure.input.templates`
 
 A sequence of directories to load `.template` and `.partial` files from. When multiple directories are listed, **later directories override earlier ones** on name collision. Duplicate names within the same directory are an error.
@@ -115,6 +135,15 @@ A sequence of directories to load `.template` and `.partial` files from. When mu
 templates:
   - ../../_SharedTemplates   # base library — loaded first
   - ./templates              # project overrides — same name here wins
+```
+
+Template path entries support the same token expansion as canon values: `{%variableName}` and `{@canonName}`. The full canon map is available when templates are resolved, so any named canon entry can be referenced:
+
+```yaml
+templates:
+  - '{%canonRoot}\templates'   # {%variable} expanded to absolute path
+  - '{@canonGeneral}\templates'  # {@ canon name} expanded to that dir's path
+  - ./templates
 ```
 
 ### `structure.input.components`
@@ -171,6 +200,8 @@ variables:
 ```
 
 Used in a template as: `The year is {%year}.`
+
+Top-level variables are also expanded in `structure.input.canon` values and `structure.input.templates` entries before path resolution, making them useful as shared path prefixes across the config (see the `structure.input.canon` section above for an example).
 
 ### `components`
 

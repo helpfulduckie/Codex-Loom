@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadYaml } = require('./util');
+const { loadYaml, resolveVariables } = require('./util');
 const { applyFieldOp } = require('./resolver');
 const { applyTokenPass } = require('./pronouns');
 const { normalizeWhitespace } = require('./template');
@@ -190,25 +190,28 @@ function applySection(section, variantDef) {
  * Render a single AIN section to a string.
  */
 function renderSection(section, opts) {
-  const { branchProtagonist, registry } = opts;
+  const { branchProtagonist, registry, variables } = opts;
   const lines = [];
 
   // Heading
   if (section.heading) {
-    const level = section.headingLevel || 2;
-    lines.push('#'.repeat(level) + ' ' + section.heading);
-    lines.push('');
+    const level = section.headingLevel ?? 2;
+    lines.push(level > 0 ? '#'.repeat(level) + ' ' + section.heading : section.heading);
+    if (!section.render?.compact) lines.push('');
   }
 
   // Text
   const text = section.text;
+  const prefix = section.render?.bullet ? '- ' : '';
   if (typeof text === 'string') {
-    const processed = applyTokenPass(text, { card: {}, registry, branchProtagonist });
-    lines.push(processed.trim());
+    const withVars = resolveVariables(text, variables);
+    const processed = applyTokenPass(withVars, { card: {}, registry, branchProtagonist });
+    lines.push(prefix + processed.trim());
   } else if (text && typeof text === 'object') {
-    for (const [ruleId, ruleText] of Object.entries(text)) {
-      const processed = applyTokenPass(String(ruleText), { card: {}, registry, branchProtagonist });
-      lines.push(`${ruleId}: ${processed.trim()}`);
+    for (const [, ruleText] of Object.entries(text)) {
+      const withVars = resolveVariables(String(ruleText), variables);
+      const processed = applyTokenPass(withVars, { card: {}, registry, branchProtagonist });
+      lines.push(prefix + processed.trim());
     }
   }
 
@@ -237,14 +240,14 @@ function sortSections(sections) {
 function compileAIN(ainDoc, registry, compileContext) {
   if (!ainDoc) return { ain: null, storyCard: null };
 
-  const { branchPath, branchProtagonist } = compileContext;
+  const { branchPath, branchProtagonist, variables } = compileContext;
   const { ainVariants, cardVariantSets } = resolveAINBranches(ainDoc.branches, branchPath);
 
   // Apply document-level variants for AIN output
   const resolvedDoc = applyDocumentVariants(ainDoc, ainVariants);
   const sections = resolvedDoc.sections || {};
 
-  const opts = { branchProtagonist, registry };
+  const opts = { branchProtagonist, registry, variables: variables || {} };
   const sectionStrings = sortSections(sections)
     .map(([, section]) => renderSection(section, opts))
     .filter(s => s.trim());

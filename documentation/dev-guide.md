@@ -151,13 +151,13 @@ The `'__DELETE__'` sentinel is propagated up the call chain so callers can delet
 
 `render(template, data, partials)` in `template.js` applies 7 steps in order:
 
-1. **Escape literals** — `{{`, `}}`, `[[`, `]]` replaced with internal sentinel strings to prevent them from being parsed as expressions
+1. **Escape literals** — `{{` and `}}` replaced with internal sentinel strings to prevent them from being parsed as expressions
 2. **Expand partials** — `{include PartialName}` expanded depth-first, with circular-include detection via a stack
 3. **Process conditionals** — `{if ...}...{else}...{/if}` resolved innermost-first (repeated until stable)
 4. **Process wrapper blocks** — `{wrapper}...{/wrapper}` replaced with wrapped content per `data.render.wrapper`
-5. **Process inline expressions** — `{$field}`, `{join(...)}`, `{list(...)}`, `{if ...}` (remaining field-only ifs), render functions
-6. **Restore sentinels** — sentinel strings replaced back with literal `{`, `}`, `[`, `]`
-7. **Normalize whitespace** — tabs stripped, blank-line runs collapsed, spaces deduplicated, document trimmed
+5. **Process inline expressions** — `{$field}`, `{join(...)}`, `{list(...)}`, render functions
+6. **Restore sentinels** — sentinel strings replaced back with literal `{` and `}`
+7. **Normalize whitespace** — `{preserve}...{/preserve}` blocks extracted; tabs stripped, blank lines removed, spaces deduplicated, document trimmed; preserved blocks restored
 
 Post-render: if `data.render.wrapper` is non-`none` and no `{wrapper}` block was used, the entire output is wrapped automatically (unless it already starts with the corresponding bracket).
 
@@ -215,3 +215,9 @@ Phase A (`compileBranchPhaseA`) resolves all cards for a branch and applies fiel
 **Canon naming (mapping not string)**
 
 `structure.input.canon` is a named mapping (`{main: ./path}`) rather than a plain string or array. Names serve two purposes: they appear in error messages (`Duplicate card ID "x" across canon dirs: canon:main`) and enable `{@main}` reference resolution in `include:` paths. A plain path string would require either path-based display (brittle) or `{@}` syntax without a name.
+
+**Token expansion in config paths**
+
+Canon values and template path entries support `{%variable}` and `{@canonName}` substitution before `path.resolve()` runs. This is handled in `loadCompileConfig()` in `loader.js` via the `expandPathTokens()` helper, using the same `/\{[@%]([^}]+)\}/g` regex pattern as the rest of the codebase.
+
+Canon resolution uses a two-pass approach: plain-path entries (no `{@}` tokens after variable expansion) are resolved in pass 1, forming the lookup table for pass 2 which handles entries that reference sibling canon names. Template paths are expanded after both passes, so they can reference any named canon entry. Unresolved tokens pass through unchanged, causing the standard missing-path warning to fire with the unexpanded token visible in the path string.

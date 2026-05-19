@@ -16,7 +16,6 @@ Cards are the atomic units of content in a Codex Loom project — a character, a
     title: Aness Rozen
     type: Character
     triggers: [Aness, Rozen]
-    encapsulate: true
     known: true
   render:
     template: Character
@@ -40,11 +39,17 @@ Cards are the atomic units of content in a Codex Loom project — a character, a
         - {$Aness.her~} polite nature is a social shield; behind it is a biting sarcasm {$Aness.she} deploy[s]
     Magic:
       affinity: high ice-affinity; moderate growth-affinity
+  v:
+    affiliation: Zenus Institute
+    role: Magic Researcher
   variants:
     networked:
       body:
         Physical Traits:
           other: a blue interface crystal implanted at the base of {$Aness.her~} skull
+    freelance:
+      v:
+        affiliation: Independent
 ```
 
 ---
@@ -65,13 +70,15 @@ id: Aness
 
 Display name used in rendered output. Two forms:
 
-**Scalar string** — used directly as both display and full name.
+**Scalar string** — the compiler normalizes it automatically: `display` is set to the first word, `full` is the complete string.
 
 ```yaml
 name: Aness Rozen
+# → display: "Aness",  full: "Aness Rozen"
+# {$name} → "Aness Rozen",  {$name.display} → "Aness"
 ```
 
-**Object** — separate display (short) and full forms.
+**Object** — explicit separate display (short) and full forms.
 
 ```yaml
 name:
@@ -79,7 +86,7 @@ name:
   full: Aness Rozen
 ```
 
-Templates access `{$name}` (returns the display name), `{$name.display}`, or `{$name.full}`. The pronoun token `{$Aness}` (ID reference) uses the display name.
+Templates access `{$name}` (returns `full`), `{$name.display}`, or `{$name.full}`. Use `{list($name)}` to render both values as a bullet list. The pronoun token `{$Aness}` (ID reference) also uses `display`.
 
 ### `pronouns`
 
@@ -177,9 +184,36 @@ Cross-card body references (`{$OtherId.body.FieldName}`) are also supported and 
 
 ---
 
+## `v:` Block (Card Variables)
+
+Arbitrary author-defined key/value data attached to this card. Use this for metadata that isn't part of the rendered content — affiliation, faction, role, status flags, or any other per-card values you want to reference in templates or override in variants.
+
+```yaml
+v:
+  affiliation: Academy
+  role: Researcher
+  rank: 3
+```
+
+In templates, access as `{$v.affiliation}`, `{$v.role}`, etc.
+
+**Aliases** — the following field names are all equivalent and normalize to `v` at compile time:
+
+| Alias | Example |
+|---|---|
+| `v` | `v:` |
+| `var` | `var:` |
+| `vars` | `vars:` |
+| `variable` | `variable:` |
+| `variables` | `variables:` |
+
+You can write any alias in your card YAML, in a variant delta, or in a template token — they all resolve to the same data. If multiple aliases appear as sibling top-level keys on the same card or within the same variant delta, a warning is emitted and their subfields are merged (last-writer-wins per subfield).
+
+---
+
 ## `variants:` Block
 
-Named deltas that layer changes on top of this card definition. Variants can modify any top-level card field (`name`, `pronouns`, `aid`, `render`) and any `body` field.
+Named deltas that layer changes on top of this card definition. Variants can modify any top-level card field (`name`, `pronouns`, `aid`, `render`, `v`) and any `body` field.
 
 ```yaml
 variants:

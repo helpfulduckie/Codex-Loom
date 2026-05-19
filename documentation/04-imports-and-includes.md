@@ -56,7 +56,7 @@ If a card from an `include:` file is also listed in an explicit `import:` entry,
 - include: "{@main}/Characters/Felicia.yaml"
 
 # Explicit import with overrides — takes precedence over the include
-- import: Felicia
+- import: Grayls
   variants:
     felix:
       importVariants: [Felix]
@@ -111,7 +111,7 @@ This applies the `human` variant, then `human/noble`, then `sci-fi`, then `sci-f
 `importVariants:` can also appear **inside a branch variant** on the import, where it sources from the same canonical card's variant tree:
 
 ```yaml
-- import: Felicia
+- import: Grayls
   variants:
     felix:
       importVariants: [Felix]    # applies Felix variant from Felicia's canon variants

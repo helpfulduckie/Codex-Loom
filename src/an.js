@@ -78,14 +78,14 @@ function resolveANBranches(branchesSpec, branchPath) {
 function compileAN(anDoc, registry, compileContext) {
   if (!anDoc) return null;
 
-  const { branchPath, branchProtagonist } = compileContext;
+  const { branchPath, branchProtagonist, variables } = compileContext;
   const variantNames = resolveANBranches(anDoc.branches, branchPath);
   const resolvedDoc = applyDocumentVariants(anDoc, variantNames);
   const sections = resolvedDoc.sections || {};
 
   // Reuse the section sorting and rendering from ain.js via compileAIN
   // but strip the story card output
-  const { ain } = compileAIN(resolvedDoc, registry, { branchPath, branchProtagonist });
+  const { ain } = compileAIN(resolvedDoc, registry, { branchPath, branchProtagonist, variables });
   return ain;
 }
 

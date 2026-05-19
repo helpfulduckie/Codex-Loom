@@ -2,7 +2,7 @@
 - include: "{@main}/Felicia.yaml"
 
 # Explicit import with overrides — takes precedence over the include above
-- import: Felicia
+- import: Grayls
   variants:
     felix:
       importVariants: [Felix]
@@ -18,6 +18,34 @@
         Tagline: +{Fused-Squad Subject}
   branches:
     subject: subject
+
+# Card using 'vars:' alias — tests variable-block normalization and variant override
+- id: Guildmember
+  name: Mira Ashfen
+  pronouns: female
+  aid:
+    title: Mira Ashfen
+    type: Character
+    triggers: [Mira, Ashfen]
+    encapsulate: true
+    known: true
+  render:
+    template: Character
+    wrapper: none
+  vars:
+    affiliation: Academy
+    role: Researcher
+  body:
+    Tagline: Academy Scholar
+  variants:
+    guild:
+      v:
+        affiliation: Merchant Guild
+        role: Agent
+      body:
+        Tagline: Guild Agent
+  branches:
+    guild: guild
 
 # Local card
 - id: Kaiden

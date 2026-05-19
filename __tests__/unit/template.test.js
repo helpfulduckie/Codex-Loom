@@ -129,9 +129,9 @@ describe('evaluateJoin', () => {
 });
 
 describe('evaluateList', () => {
-  test('renders array as bullet lines', () => {
+  test('renders multi-element array as bullet lines with leading newline', () => {
     const d = { body: { items: ['alpha', 'beta', 'gamma'] } };
-    expect(evaluateList('list($body.items)', d)).toBe('- alpha\n- beta\n- gamma');
+    expect(evaluateList('list($body.items)', d)).toBe('\n- alpha\n- beta\n- gamma');
   });
 
   test('passes string value through unchanged', () => {
@@ -174,18 +174,27 @@ describe('render', () => {
     expect(render('{$name}', { name: 'Aness' })).toBe('Aness');
   });
 
+  test('renders name object as full name by default', () => {
+    expect(render('{$name}', { name: { display: 'Aness', full: 'Aness Rozen' } })).toBe('Aness Rozen');
+  });
+
+  test('list() on name object renders both values as bullet list', () => {
+    const result = render('{list($name)}', { name: { display: 'Aness', full: 'Aness Rozen' } });
+    expect(result).toBe('- Aness\n- Aness Rozen');
+  });
+
   test('escaped braces become literal braces', () => {
     expect(render('{{literal}}', {})).toBe('{literal}');
   });
 
-  test('normalizes multiple blank lines to single blank line', () => {
+  test('strips blank lines from output', () => {
     const result = render('line1\n\nline2', {});
-    expect(result).toBe('line1\n\nline2');
+    expect(result).toBe('line1\nline2');
   });
 
-  test('collapses 3+ consecutive blank lines to single blank line', () => {
+  test('collapses 3+ consecutive blank lines to no blank line', () => {
     const result = render('line1\n\n\n\nline2', {});
-    expect(result).toBe('line1\n\nline2');
+    expect(result).toBe('line1\nline2');
   });
 
   test('processes conditionals and inline in order', () => {
@@ -347,5 +356,22 @@ describe('applyFieldRenderFunctions', () => {
     // Should not throw; bad calls are caught and warned
     expect(() => applyFieldRenderFunctions(card)).not.toThrow();
     warnSpy.mockRestore();
+  });
+});
+
+// ── render integration ────────────────────────────────────────────────────────
+
+describe('render — whitespace and wrapper', () => {
+  test('square wrapper with scalar heading + array entries has no blank line between them', () => {
+    const data = { render: { wrapper: 'square' }, body: { heading: 'Title', entries: ['A', 'B'] } };
+    const result = render('{wrapper}\n{$body.heading}\n{$body.entries}\n{/wrapper}', data, new Map());
+    expect(result).toBe('[\nTitle\n- A\n- B\n]');
+  });
+
+  test('{preserve} block protects internal blank lines from collapse', () => {
+    const data = { render: { wrapper: 'none' } };
+    const tmpl = 'before\n{preserve}\nline1\n\nline2\n{/preserve}\nafter';
+    const result = render(tmpl, data, new Map());
+    expect(result).toBe('before\nline1\n\nline2\nafter');
   });
 });

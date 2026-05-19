@@ -274,7 +274,7 @@ describe('resolveCard', () => {
   test('import without importVariants yields base card body', () => {
     const cardDef = { import: 'hero' };
     const card = resolveCard(cardDef, registry, []);
-    expect(card.name).toBe('Hero');
+    expect(card.name.full).toBe('Hero');
     expect(card.body.role).toBe('warrior');
   });
 
@@ -299,7 +299,7 @@ describe('resolveCard', () => {
       body: { role: 'guard' },
     };
     const card = resolveCard(cardDef, new Map(), []);
-    expect(card.name).toBe('Guard');
+    expect(card.name.full).toBe('Guard');
     expect(card.body.role).toBe('guard');
   });
 
@@ -353,7 +353,7 @@ describe('resolveCard', () => {
 
     test('name: /{old}/{new} swaps substring', () => {
       const card = resolveCard({ import: 'outfit', name: '/{Outfit}/{Uniform}' }, reg, []);
-      expect(card.name).toBe('Uniform');
+      expect(card.name.full).toBe('Uniform');
     });
 
     test('name: array of swaps applies all in sequence', () => {
@@ -364,7 +364,7 @@ describe('resolveCard', () => {
         r,
         []
       );
-      expect(card.name).toBe('He said his name was Sam');
+      expect(card.name.full).toBe('He said his name was Sam');
     });
 
     test('pronouns: plain string replaces', () => {
@@ -436,12 +436,12 @@ describe('resolveCard', () => {
         },
       };
       const cardA = resolveCard(cardDef, reg, ['Branch A']);
-      expect(cardA.name).toBe('Prime');
+      expect(cardA.name.full).toBe('Prime');
       expect(cardA.body.form).toBe('artificial');
       expect(cardA.body.origin).toBe('scientist A');
 
       const cardB = resolveCard(cardDef, reg, ['Branch B']);
-      expect(cardB.name).toBe('Prime');
+      expect(cardB.name.full).toBe('Prime');
       expect(cardB.body.form).toBe('artificial');
       expect(cardB.body.origin).toBe('scientist B');
     });

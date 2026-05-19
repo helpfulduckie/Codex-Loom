@@ -51,6 +51,8 @@ Warnings indicate likely authoring mistakes but do not stop compilation.
 | `WARN: templates path not found: <path>` | A `structure.input.templates` directory does not exist. | Check the templates path in `compile.yaml`. |
 | `WARN: include path not found: <path>` | An `include:` path does not exist. | Check the include path and canon directory configuration. |
 | `WARN: variant "<name>" not found in variant tree of "<card>"` | A variant path references a variant name that doesn't exist in the variant tree. | Check the spelling of the variant name and ensure it's defined under `variants:` on the card. |
+| `WARN: card "<id>" has multiple variable-block aliases (["v", "vars"]). Merging...` | A card definition has more than one of `v`/`var`/`vars`/`variable`/`variables` as sibling top-level keys. | Use a single alias consistently. Subfields are merged and last-writer-wins, but the result may not be what you intended. |
+| `WARN: card "<id>" variant delta contains multiple variable-block aliases (["v", "vars"]). Merging...` | A variant delta has more than one variable-block alias as sibling keys. | Use a single alias in the variant. Subfields are merged last-writer-wins. |
 | `WARN: card "<name>" has neither aid.type nor render.template` | A card has no type information — it cannot be rendered. | Add `aid.type:` or `render.template:` to the card. |
 | `WARN: cycle detected in variable "{%key}"` | A `{%variable}` reference forms a cycle with another variable. | Remove the circular reference in `variables:`. |
 | `WARN: variable "{%key}" not declared` | A `{%key}` reference in a template or field has no matching entry in `variables:`. | Declare the variable in `compile.yaml` or fix the typo. |

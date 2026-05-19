@@ -156,7 +156,8 @@ function getEffectivePronounSet(cardOrPronouns, cardId, branchProtagonist) {
  */
 function applyTokenPass(str, opts) {
   const { card, registry, branchProtagonist } = opts;
-  const cardPronounSet = (card.pronouns || '').toLowerCase() || null;
+  const cardId = (card.id || '').toLowerCase();
+  const cardPronounSet = getEffectivePronounSet(card, cardId, branchProtagonist);
 
   // Current conjugation scope: pronoun set name of the most-recently-referenced {$Id}
   let currentScope = null;

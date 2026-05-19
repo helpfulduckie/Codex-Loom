@@ -84,6 +84,8 @@ Each leaf is identified by a **path** — the sequence of branch **keys** from r
 
 Variants can be **nested** to any depth. A slash-separated path `sci-fi/near-future` walks the variant tree: applies `sci-fi`, then descends into `sci-fi.variants.near-future`.
 
+Variants can modify any top-level card field: `name`, `pronouns`, `aid`, `render`, `v` (and all its aliases), and any `body` subfield.
+
 The `id` field is immutable and cannot be changed by any variant.
 
 ---
@@ -197,7 +199,7 @@ This applies identically to local card definitions, `import:` entries, `include:
 
 **Project import:**
 ```yaml
-- import: Felicia
+- import: Grayls
   variants:
     felix:
       importVariants: [Felix]    # apply Felicia's canon Felix variant

@@ -2,7 +2,39 @@
 
 const fs = require('fs');
 const path = require('path');
-const { findFiles, loadYaml } = require('./util');
+const { findFiles, loadYaml, VAR_ALIASES, deepClone } = require('./util');
+
+/**
+ * Normalize variable-block aliases (v/var/vars/variable/variables) to canonical 'v'.
+ * If multiple aliases appear as sibling keys, warn and merge them (last-writer-wins per subfield).
+ */
+function normalizeCardVarField(entry) {
+  const aliasKeys = Object.keys(entry).filter(k => VAR_ALIASES.has(k.toLowerCase()));
+  if (aliasKeys.length === 0) return entry;
+
+  if (aliasKeys.length > 1) {
+    const cardId = entry.id || (typeof entry.name === 'string' ? entry.name : '(unknown)');
+    console.warn(`  WARN: card "${cardId}" has multiple variable-block aliases (${aliasKeys.map(k => `"${k}"`).join(', ')}). Merging — subfield conflicts resolve last-writer-wins.`);
+  }
+
+  const merged = {};
+  for (const k of aliasKeys) {
+    const val = entry[k];
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      Object.assign(merged, deepClone(val));
+    } else {
+      Object.assign(merged, deepClone(val) || {});
+    }
+  }
+
+  const out = {};
+  for (const [k, v] of Object.entries(entry)) {
+    if (VAR_ALIASES.has(k.toLowerCase())) continue;
+    out[k] = v;
+  }
+  out.v = merged;
+  return out;
+}
 
 /**
  * Load all YAML card files from one or more directories recursively.
@@ -17,7 +49,7 @@ function loadCardsFromDir(dirs) {
       const data = loadYaml(file);
       const entries = Array.isArray(data) ? data : [data];
       for (const entry of entries) {
-        cards.push({ ...entry, _source: file });
+        cards.push({ ...normalizeCardVarField(entry), _source: file });
       }
     }
   }
@@ -85,6 +117,30 @@ function resolveMapping(raw, base) {
 }
 
 /**
+ * Expand {%variable} and {@canonName} tokens in a path string.
+ * variables: plain object (config.variables).
+ * canonMap:  Map<name, absolutePath> (may be partially built for two-pass canon resolution).
+ * Case-insensitive. Unresolved tokens are left as-is.
+ */
+function expandPathTokens(str, variables, canonMap) {
+  return str.replace(/\{[@%]([^}]+)\}/g, (match, key) => {
+    const k = key.trim().toLowerCase();
+    if (match.startsWith('{%')) {
+      if (variables) {
+        const entry = Object.entries(variables).find(([v]) => v.toLowerCase() === k);
+        if (entry) return entry[1];
+      }
+      return match;
+    } else {
+      for (const [name, value] of canonMap) {
+        if (name.toLowerCase() === k) return value;
+      }
+      return match;
+    }
+  });
+}
+
+/**
  * Load compile.yaml and resolve all paths relative to it.
  *
  * Expected structure:
@@ -120,9 +176,37 @@ function loadCompileConfig(configPath) {
     ? path.resolve(base, String(structure.output))
     : path.resolve(base, 'output');
 
-  const resolvedCards     = resolveSequence(input.cards, base);
-  const resolvedCanon     = resolveMapping(input.canon, base);
-  const resolvedTemplates = resolveSequence(input.templates, base);
+  const resolvedCards = resolveSequence(input.cards, base);
+
+  // Canon: two-pass resolution so entries can reference {%variables} and sibling {@canonName} entries.
+  // Pass 1: expand {%variables}, then resolve entries with no remaining {@ tokens.
+  // Pass 2: expand {%variables} + {@canonName} in the remainder using pass-1 results.
+  const canonRaw = (input.canon && typeof input.canon === 'object' && !Array.isArray(input.canon))
+    ? input.canon : {};
+  const variables = config.variables || null;
+  const resolvedCanon = new Map();
+
+  for (const [name, p] of Object.entries(canonRaw)) {
+    const afterVars = expandPathTokens(String(p), variables, resolvedCanon);
+    if (!afterVars.includes('{@')) {
+      resolvedCanon.set(name, path.resolve(base, afterVars));
+    }
+  }
+  for (const [name, p] of Object.entries(canonRaw)) {
+    if (!resolvedCanon.has(name)) {
+      const expanded = expandPathTokens(String(p), variables, resolvedCanon);
+      resolvedCanon.set(name, path.resolve(base, expanded));
+    }
+  }
+
+  // Templates: expand {%variables} and {@canonName} before resolving paths.
+  const templatesRaw = input.templates
+    ? (Array.isArray(input.templates) ? input.templates : [input.templates])
+    : [];
+  const resolvedTemplates = templatesRaw.map(p => {
+    const expanded = expandPathTokens(String(p), variables, resolvedCanon);
+    return path.resolve(base, expanded);
+  });
 
   const componentTypes = ['aiInstructions', 'opening', 'openingChoice', 'plotEssential', 'authorsNote', 'scripts'];
   const resolvedComponents = {};
@@ -196,6 +280,28 @@ function mergeRegistries(canonRegistry, projectRegistry) {
   return merged;
 }
 
+/**
+ * Build a map of Codex overlays from import-only project card definitions.
+ * These are Codex cards that have `import:` but no `id:`, making them invisible
+ * to buildRegistry. The overlays map lets PE blocks pick up the Codex-level
+ * importVariants, variants, branches, and body without re-defining them.
+ *
+ * Keyed by lowercase import target id. Warns and skips on duplicate overlays.
+ */
+function buildOverlays(cards) {
+  const overlays = new Map();
+  for (const card of cards) {
+    if (!card.import) continue;
+    const key = String(card.import).toLowerCase();
+    if (overlays.has(key)) {
+      console.warn(`  WARN: duplicate Codex overlay for "${card.import}" in ${card._source}; keeping first`);
+      continue;
+    }
+    overlays.set(key, card);
+  }
+  return overlays;
+}
+
 module.exports = {
   findFiles,
   loadYaml,
@@ -205,4 +311,5 @@ module.exports = {
   loadCompileConfig,
   buildRegistry,
   mergeRegistries,
+  buildOverlays,
 };

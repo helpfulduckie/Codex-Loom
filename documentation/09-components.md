@@ -100,6 +100,48 @@ Imports a card from the registry and renders it through a template. Useful for c
     subject: networked
 ```
 
+#### Section block
+
+A section block groups multiple child blocks under a single shared wrapper with an optional heading. Presence of the `blocks:` key identifies it as a section. Child `render.wrapper` values are ignored — the section applies the wrapper to the combined output.
+
+```yaml
+# Group two genre lines under one square bracket
+- blocks:
+    - body:
+        text: "Genre: Psychological Thriller"
+    - body:
+        text: "Genre: Dark Character Study"
+  render:
+    wrapper: square
+    position: 1
+```
+
+With a heading and hint-style card imports:
+
+```yaml
+- blocks:
+    - import: Aness
+      render:
+        style: hint
+        stripFence: true
+        position: 1
+    - import: Kaiden
+      render:
+        style: hint
+        stripFence: true
+        position: 2
+  heading: Hints
+  headingLevel: 0        # 0 = plain text (default); 1-6 = Markdown heading
+  render:
+    wrapper: curly
+    position: 4
+    compact: false       # true = no blank line between heading and children
+  branches:
+    flashback: ~         # null = exclude entire section from this branch
+```
+
+Sections are **not nestable** — a child block may not itself have a `blocks:` key.
+
 ### Block fields
 
 | Field | Description |
@@ -109,12 +151,24 @@ Imports a card from the registry and renders it through a template. Useful for c
 | `body` | For freeform blocks: content mapping with a `text` key. For import blocks: additional body field overrides. |
 | `pronouns` | For freeform blocks: pronoun set for token resolution within `body.text`. |
 | `branches` | Branch dispatch spec — uses the same `resolveBranchSpec` mechanism as card-level `branches:`. |
-| `style` | `full` (default), `hint`, or `skip`. `hint` tries a `TemplateName.hint` template first. `skip` excludes the block. |
+| `render.style` | `full` (default), `hint`, or `skip`. `hint` tries a `TemplateName.hint` template first. `skip` excludes the block. |
 | `render.wrapper` | `square` → `[ ... ]`, `curly` → `{ ... }`, `none` → raw. |
 | `render.stripFence` | Boolean. When `true`, strips everything up to and including the last `~~~` line from the rendered output (keeps only the card body, not the story card header). |
 | `render.position` | Numeric sort key for block ordering. Default `5`. Lower numbers appear first. |
 | `render.template` | Template override for the imported card. Falls back to the card's own `render.template` / `aid.type`. |
 | `variants` | Local card deltas applied after import resolution. |
+
+### Section fields
+
+| Field | Description |
+|---|---|
+| `blocks` | Sequence of child block definitions. Presence of this key identifies the entry as a section. |
+| `heading` | Optional heading placed before child content, inside the wrapper. Omit to suppress entirely. |
+| `headingLevel` | `1`–`6` adds a Markdown `#` prefix. `0` (default) renders plain text. |
+| `render.wrapper` | Applied to the entire section output (heading + joined children). Child `render.wrapper` values are ignored. |
+| `render.position` | Sort key for the section among all top-level PE segments. Default `5`. |
+| `render.compact` | When `true`, suppresses the blank line between the heading and the first child. Default `false`. |
+| `branches` | Branch dispatch for the entire section. `~` excludes the whole section. Child blocks may also carry their own `branches:`. |
 
 `only:` and `except:` are **not** supported directly on PE blocks; use `branches:` with null values to exclude blocks from specific branches:
 
@@ -193,6 +247,26 @@ Physical Traits: female; mid 20s; black hair, braided, waist-length; ...
   branches:
     researcher: base
     subject: ~
+
+# Grouped hints — one curly block with heading, excluded from flashback branch
+- blocks:
+    - import: Aness
+      render:
+        style: hint
+        stripFence: true
+        position: 1
+    - import: Kaiden
+      render:
+        style: hint
+        stripFence: true
+        position: 2
+  heading: Hints
+  headingLevel: 0
+  render:
+    wrapper: curly
+    position: 6
+  branches:
+    flashback: ~
 ```
 
 ---
@@ -208,9 +282,12 @@ sections:
   SectionId:
     heading: "Section Title"
     headingLevel: 2            # default: 2
-    text: "prose content"      # OR a mapping: {RuleId: text}
+    text: "prose content"      # OR a mapping: {RuleId: text} — keys are internal only, not rendered
+    headingLevel: 2            # 0 = plain text heading; omit heading: to suppress entirely
     render:
       position: 5              # sort order; default 5
+      compact: false           # true = no blank line between heading and text
+      bullet: false            # true = prefix each text line with "- "
 
 variants:
   DocumentVariant:
@@ -229,13 +306,21 @@ branches:                          # branch dispatch
 
 ### Sections
 
-Each section has a heading and text. Text can be a plain string or a mapping where each key becomes a labeled line (`RuleId: text`).
+Each section has an optional heading and text. Text can be a plain string or a mapping — when using a mapping, the keys are purely internal identifiers (for field operations); only the values are rendered.
+
+**Render controls:**
+
+| Field | Default | Effect |
+|---|---|---|
+| `render.position` | `5` | Sort order; lower = earlier |
+| `render.compact` | `false` | Suppress blank line between heading and text |
+| `render.bullet` | `false` | Prefix each text line with `- ` |
+| `headingLevel` | `2` | Markdown heading depth; `0` = plain text heading; omit `heading:` to suppress entirely |
 
 ```yaml
 sections:
   narrative:
     heading: Narrative Tone
-    headingLevel: 2
     text: |
       Write with psychological weight. The horror is not what you do to them.
     render:
@@ -243,11 +328,20 @@ sections:
 
   rules:
     heading: Writing Rules
-    text:
-      POV: Second person, present tense.
-      Tone: Clinical observation punctuated by visceral sensation.
     render:
       position: 2
+      compact: true
+      bullet: true
+    text:
+      pov: Second person, present tense.
+      tone: Clinical observation punctuated by visceral sensation.
+```
+
+The `rules` section above renders as:
+```
+## Writing Rules
+- Second person, present tense.
+- Clinical observation punctuated by visceral sensation.
 ```
 
 ### Branch variants

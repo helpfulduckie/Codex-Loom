@@ -1,5 +1,7 @@
 'use strict';
 
+const { normalizeVarKey, resolveVariables } = require('./util');
+
 /**
  * Template engine for Codex Loom v3.
  *
@@ -21,19 +23,18 @@
  *   {keys($body.mapping)}        - "key: value" lines
  *
  * Block syntax:
- *   {wrapper}...{/wrapper}       - wraps content per card's render.wrapper
+ *   {wrapper}...{/wrapper}        - wraps content per card's render.wrapper
  *   {if $body.field}...{/if}     - conditional
  *   {include PartialName}        - partial inclusion
+ *   {preserve}...{/preserve}     - protect inner whitespace from normalization
  *
  * Literal escapes:
- *   {{ → {    }} → }    [[ → [    ]] → ]
+ *   {{ → {    }} → }
  */
 
 // Sentinel strings used during processing to protect escaped sequences
 const S_LBRACE = '\x00LBRACE\x00';
 const S_RBRACE = '\x00RBRACE\x00';
-const S_LBRACKET = '\x00LBRACKET\x00';
-const S_RBRACKET = '\x00RBRACKET\x00';
 
 /**
  * Case-insensitive deep field resolver.
@@ -45,6 +46,7 @@ const S_RBRACKET = '\x00RBRACKET\x00';
 function resolveField(ref, data) {
   const path = ref.startsWith('$') ? ref.slice(1) : ref;
   const parts = path.split('.');
+  if (parts.length > 0) parts[0] = normalizeVarKey(parts[0]);
 
   let value = data;
   for (const part of parts) {
@@ -114,7 +116,7 @@ function evaluateJoin(inner, data) {
   const values = refs
     .map(ref => resolveField(ref, data))
     .filter(v => v !== null)
-    .flatMap(v => Array.isArray(v) ? v : [v]);
+    .flatMap(v => Array.isArray(v) ? v : (typeof v === 'object' ? Object.values(v).filter(x => x != null) : [v]));
   return values.join(separator);
 }
 
@@ -123,7 +125,16 @@ function evaluateList(inner, data) {
   if (!refMatch) throw new Error('Malformed list(): ' + inner);
   const val = resolveField(refMatch[1].trim(), data);
   if (val === null) return '';
-  if (Array.isArray(val)) return val.map(item => '- ' + item).join('\n');
+  if (Array.isArray(val)) {
+    if (val.length === 1) return String(val[0]);
+    return '\n' + val.map(item => '- ' + item).join('\n');
+  }
+  if (typeof val === 'object') {
+    const entries = Object.values(val).filter(v => v != null);
+    if (entries.length === 0) return '';
+    if (entries.length === 1) return String(entries[0]);
+    return '\n' + entries.map(v => '- ' + v).join('\n');
+  }
   return renderScalar(val);
 }
 
@@ -197,9 +208,7 @@ function processIncludes(template, partials, stack) {
     // Protect escaped sequences within included content
     return expanded
       .replace(/\{\{/g, S_LBRACE)
-      .replace(/\}\}/g, S_RBRACE)
-      .replace(/\[\[/g, S_LBRACKET)
-      .replace(/\]\]/g, S_RBRACKET);
+      .replace(/\}\}/g, S_RBRACE);
   });
 }
 
@@ -281,9 +290,16 @@ function processInline(template, data) {
     if (inner.startsWith('$')) {
       const val = resolveField(inner, data);
       if (val === null) return '';
-      // For name mapping fields, default to first value
-      if (typeof val === 'object' && !Array.isArray(val)) {
-        return Object.values(val)[0] || '';
+      if (Array.isArray(val)) {
+        if (val.length === 1) return String(val[0]);
+        return '\n' + val.map(item => '- ' + item).join('\n');
+      }
+      if (typeof val === 'object') {
+        if (val.full != null) return String(val.full);
+        const entries = Object.values(val).filter(v => v != null);
+        if (entries.length === 0) return '';
+        if (entries.length === 1) return String(entries[0]);
+        return '\n' + entries.map(v => '- ' + v).join('\n');
       }
       return renderScalar(val);
     }
@@ -297,42 +313,37 @@ function processInline(template, data) {
  * Normalize whitespace in rendered output.
  *
  * Steps (in order):
- * 1. Identify [preserve blocks] — single brackets, NOT [[escaped]] ones
+ * 1. Extract {preserve}...{/preserve} blocks — inner content is shielded from all normalization
  * 2. Strip tabs outside preserved blocks
- * 3. Collapse runs of whitespace-only lines → single blank line
- * 4. Collapse 3+ consecutive newlines → \n\n
- * 5. Deduplicate consecutive spaces within lines (outside preserved)
+ * 3. Trim leading/trailing whitespace from every line
+ * 4. Collapse 2+ consecutive spaces → single space (cleans up {if} block boundaries)
+ * 5. Collapse 2+ consecutive newlines → \n (removes all blank lines)
  * 6. Trim leading/trailing whitespace from whole document
- * 7. Restore preserved blocks
+ * 7. Restore preserved block contents
  */
 function normalizeWhitespace(str) {
-  // Step 1: Mark [preserve blocks] for protection
-  // A single [ that is NOT preceded by another [ (which would be a sentinel or escaped bracket)
-  // We use a simple approach: find [...]  that don't start with sentinel
+  // Step 1: Extract {preserve}...{/preserve} blocks
   const preserved = [];
-  let working = str.replace(/\[([^\[\]]*)\]/g, (match, content) => {
-    // Only preserve if not an already-sentineled bracket
+  let working = str.replace(/\{preserve\}([\s\S]*?)\{\/preserve\}/g, (match, content) => {
     const idx = preserved.length;
-    preserved.push(match);
+    // Trim one leading/trailing newline so tags on their own lines don't double up
+    preserved.push(content.replace(/^\n/, '').replace(/\n$/, ''));
     return `\x00PRESERVE_${idx}\x00`;
   });
 
   // Step 2: Strip tabs
   working = working.replace(/\t/g, '');
 
-  // Step 3: Collapse runs of whitespace-only lines to a single blank line
-  working = working.replace(/(\n[ \t]*){2,}\n/g, '\n\n');
+  // Step 3: Trim leading/trailing whitespace from every line
+  working = working.split('\n').map(line => line.trim()).join('\n');
 
-  // Step 4: Collapse 3+ consecutive newlines to \n\n (redundant after step 3, but belt-and-suspenders)
-  working = working.replace(/\n{3,}/g, '\n\n');
+  // Step 4: Collapse multiple consecutive spaces to one (handles {if} boundary whitespace)
+  working = working.replace(/ {2,}/g, ' ');
 
-  // Step 5: Deduplicate consecutive spaces within lines
-  working = working.split('\n').map(line => {
-    // Don't collapse inside preserve markers (they'll be restored later)
-    return line.replace(/  +/g, ' ');
-  }).join('\n');
+  // Step 5: Remove all blank lines — collapse any run of 2+ newlines to one
+  working = working.replace(/\n{2,}/g, '\n');
 
-  // Step 6: Trim leading/trailing whitespace
+  // Step 6: Trim document edges
   working = working.trim();
 
   // Step 7: Restore preserved blocks
@@ -355,6 +366,7 @@ function applyFieldInterpolation(card) {
     aid: card.aid || {},
     render: card.render || {},
     id: card.id,
+    v: card.v || {},
   };
 
   applyInterpolationRecursive(card.body, context);
@@ -376,9 +388,9 @@ function applyInterpolationRecursive(obj, context) {
 
 function processFieldInterpolation(value, context) {
   if (typeof value !== 'string') return value;
-  // Only expand {$body.X} style refs within field values
-  // Pronoun tokens ({$she} etc.) and {$Id} refs are left for the pronoun pass
-  return value.replace(/\{(\$body\.[^{}]+)\}/g, function(match, ref) {
+  // Expand {$body.X} and {$v.X} (+ all v aliases) refs within field values.
+  // Pronoun tokens ({$she} etc.) and {$Id} refs are left for the pronoun pass.
+  return value.replace(/\{(\$(body|v|var|vars|variable|variables)\.[^{}]+)\}/gi, function(match, ref) {
     const resolved = resolveField(ref.trim(), context);
     if (resolved === null) return '';
     return renderScalar(resolved);
@@ -410,6 +422,29 @@ function applyFieldRenderFunctions(card) {
   };
 
   applyRenderFunctionsRecursive(card.body, context);
+}
+
+/**
+ * Expand {%varName} compile-time variable tokens in all string values in card.body.
+ * Called after applyFieldInterpolation, before cross-card refs and pronoun passes.
+ */
+function applyVariableInterpolation(card, variables) {
+  if (!card.body || !variables) return;
+  applyVariableInterpolationRecursive(card.body, variables);
+}
+
+function applyVariableInterpolationRecursive(obj, variables) {
+  if (!obj || typeof obj !== 'object') return;
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (typeof val === 'string') {
+      obj[key] = resolveVariables(val, variables);
+    } else if (Array.isArray(val)) {
+      obj[key] = val.map(item => typeof item === 'string' ? resolveVariables(item, variables) : item);
+    } else if (typeof val === 'object' && val !== null) {
+      applyVariableInterpolationRecursive(val, variables);
+    }
+  }
 }
 
 function applyRenderFunctionsRecursive(obj, context) {
@@ -468,6 +503,7 @@ function resolveTemplateName(templateName, style) {
  * Render a template string with the given card data.
  *
  * Pipeline:
+ *   0. Resolve {%variable} tokens (compile-time variables)
  *   1. Escape {{ }} [[ ]] → sentinels
  *   2. Expand {include ...} partials
  *   3. processConditionals
@@ -479,22 +515,27 @@ function resolveTemplateName(templateName, style) {
  * @param {string} template
  * @param {object} data - card data; body fields accessed via {$body.X}
  * @param {Map} partials
+ * @param {object} [variables] - compile.yaml variables for {%varName} expansion
  */
-function render(template, data, partials) {
+function render(template, data, partials, variables) {
   if (!partials) partials = new Map();
+
+  // Step 0: Resolve {%variable} tokens
+  if (variables) template = resolveVariables(template, variables);
 
   // Step 1: Escape literal delimiters
   let result = template
     .replace(/\{\{/g, S_LBRACE)
-    .replace(/\}\}/g, S_RBRACE)
-    .replace(/\[\[/g, S_LBRACKET)
-    .replace(/\]\]/g, S_RBRACKET);
+    .replace(/\}\}/g, S_RBRACE);
 
   // Step 2: Expand partials
   result = processIncludes(result, partials);
 
   // Step 3: Conditionals
   result = processConditionals(result, data);
+
+  // Check after conditionals so a {wrapper} inside a false {if} branch doesn't suppress auto-wrap
+  const hasWrapperBlock = /\{wrapper\}/.test(result);
 
   // Step 4: Wrapper blocks
   result = processWrapperBlocks(result, data);
@@ -505,23 +546,14 @@ function render(template, data, partials) {
   // Step 6: Restore sentinels
   result = result
     .replace(new RegExp(S_LBRACE.replace(/\x00/g, '\\x00'), 'g'), '{')
-    .replace(new RegExp(S_RBRACE.replace(/\x00/g, '\\x00'), 'g'), '}')
-    .replace(new RegExp(S_LBRACKET.replace(/\x00/g, '\\x00'), 'g'), '[')
-    .replace(new RegExp(S_RBRACKET.replace(/\x00/g, '\\x00'), 'g'), ']');
+    .replace(new RegExp(S_RBRACE.replace(/\x00/g, '\\x00'), 'g'), '}');
 
   // Step 7: Whitespace normalization
   result = normalizeWhitespace(result);
 
   // Post-render: if card has render.wrapper and template didn't use {wrapper} block, wrap entire output
-  if (data.render && data.render.wrapper && data.render.wrapper !== 'none') {
-    // Only wrap if the content doesn't already start with the wrapper bracket
-    const w = data.render.wrapper.toLowerCase();
-    const alreadyWrapped =
-      (w === 'square' && result.startsWith('[') && result.endsWith(']')) ||
-      (w === 'curly'  && result.startsWith('{') && result.endsWith('}'));
-    if (!alreadyWrapped) {
-      result = applyWrapper(result, data.render.wrapper);
-    }
+  if (!hasWrapperBlock && data.render && data.render.wrapper && data.render.wrapper !== 'none') {
+    result = applyWrapper(result, data.render.wrapper);
   }
 
   return result;
@@ -531,6 +563,7 @@ module.exports = {
   render,
   resolveField,
   applyFieldInterpolation,
+  applyVariableInterpolation,
   applyFieldRenderFunctions,
   processConditionals,
   processInline,

@@ -22,11 +22,12 @@ Templates receive a card context with these top-level keys:
 | Key | Accessed as |
 |---|---|
 | `id` | `{$id}` |
-| `name` | `{$name}` (display name), `{$name.display}`, `{$name.full}` |
+| `name` | `{$name}` (full name), `{$name.display}`, `{$name.full}` |
 | `pronouns` | `{$pronouns}` |
 | `aid` | `{$aid.type}`, `{$aid.title}`, `{$aid.triggers}`, `{$aid.encapsulate}`, `{$aid.known}` |
 | `render` | `{$render.template}`, `{$render.wrapper}` |
 | `body` | `{$body.FieldName}`, `{$body.Nested.sub}` |
+| `v` | `{$v.key}` — also accessible as `{$var.key}`, `{$vars.key}`, `{$variable.key}`, `{$variables.key}` |
 
 Body fields are matched case-insensitively. Missing fields silently resolve to empty string.
 
@@ -35,16 +36,15 @@ Body fields are matched case-insensitively. Missing fields silently resolve to e
 ## Variable Interpolation
 
 ```
-{$name}                           top-level card field (display name for name objects)
+{$name}                           full name; use {$name.display} for first-word short form
 {$aid.title}                      aid block field
-{$aid.triggers}                   aid triggers (array → "; " joined when used directly)
+{$aid.triggers}                   aid triggers (array → bullet list when used directly)
 {$body.Tagline}                   body field
 {$body.Physical Traits.gender}    nested body subfield
+{$v.affiliation}                  card variable (also: {$var.affiliation}, {$vars.affiliation}, etc.)
 ```
 
-When a field holds an array and you use it directly with `{$body.Field}`, elements are joined with `"; "`. Use `{join(...)}` or `{list(...)}` for explicit formatting.
-
-When a field holds a mapping (nested object) and you use it directly with `{$body.Field}`, only the first value is returned. Use `{keys(...)}` or `{inline(...)}` for mappings.
+When a field holds an array or mapping and you use it directly with `{$body.Field}`, it renders using the same logic as `{list(...)}`: a single element renders inline (`- value`), while two or more elements render as a bullet list preceded by a newline. Use `{join(...)}`, `{and(...)}`, `{keys(...)}`, or `{inline(...)}` when you need a different format.
 
 ---
 
@@ -70,14 +70,33 @@ When a ref resolves to an array, all its elements are spread into the join list.
 
 ### `{list($body.items)}`
 
-Renders a YAML array as a bulleted list, one `- item` line per element. When passed a plain string instead of an array, outputs the string unchanged (for backwards compatibility with block scalars).
+Renders a YAML array or mapping as a bulleted list. Also the default behavior when referencing an array or mapping field directly with `{$body.Field}`. When passed a plain string, outputs the string unchanged.
+
+**Single-element** arrays render as the bare value with no bullet and no leading newline, so `Heading: {list($field)}` stays on one line:
 
 ```
-{list($body.Personality.keywords)}
-→  - inquisitive
+{list($body.Personality.keywords)}   ← single element
+→  inquisitive
+```
+
+**Multi-element** arrays prepend a newline before the first bullet. This means `Heading: {list($field)}` and the block form produce identical output:
+
+```
+Heading: {list($body.Personality.keywords)}
+→  Heading:
+   - inquisitive
    - polite
    - sarcastic
    - compassionate
+```
+
+For a mapping, the values are listed as bullets using the same single/multi-element rule.
+
+```
+{list($body.Physical Traits)}
+→  - female
+   - mid 20s
+   - black hair, braided, waist-length
 ```
 
 ### `{and($body.items)}`
@@ -236,10 +255,8 @@ triggers: [{join(", ", $aid.triggers)}]
 |---|---|
 | `{{` | `{` |
 | `}}` | `}` |
-| `[[` | `[` |
-| `]]` | `]` |
 
-Use these when you need literal braces or brackets in output that would otherwise be parsed as template syntax.
+Use these when you need a literal `{` or `}` in output that would otherwise be parsed as a template expression. Square brackets (`[` `]`) have no special meaning and do not need escaping.
 
 ---
 
@@ -261,11 +278,22 @@ Component key references (`{@name}`) expand to a file path or file contents and 
 After rendering, the output is normalized:
 
 - Tabs are stripped
-- Runs of blank lines are collapsed to a single blank line
-- Leading/trailing whitespace from the whole document is trimmed
+- All blank lines are removed (runs of 2+ newlines collapsed to one)
+- Leading/trailing whitespace from every line is trimmed
 - Consecutive spaces within lines are deduplicated
+- Leading/trailing whitespace from the whole document is trimmed
 
-Content inside `[square bracket blocks]` is preserved as-is (brackets are a common AID format feature).
+To protect a block of content from normalization — keeping its blank lines and exact spacing intact — wrap it in `{preserve}...{/preserve}`:
+
+```
+{preserve}
+line one
+
+line two (blank line above is kept)
+{/preserve}
+```
+
+The `{preserve}` and `{/preserve}` tags are stripped from the output; only the inner content is emitted.
 
 ---
 

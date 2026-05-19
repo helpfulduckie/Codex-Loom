@@ -5,14 +5,15 @@ const fs = require('fs');
 const path = require('path');
 const {
   loadCardsFromDir, loadTemplates, loadCompileConfig,
-  buildRegistry, mergeRegistries, loadYaml,
+  buildRegistry, mergeRegistries, buildOverlays, loadYaml,
 } = require('./loader');
 const {
   resolveCard, enumerateLeaves, getBranchConfig,
   resolveBranchSpec, parseVariantsList,
 } = require('./resolver');
 const { applyPronounPasses, applyCrossCardRefs } = require('./pronouns');
-const { render, applyFieldInterpolation, applyFieldRenderFunctions } = require('./template');
+const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
+const { resolveVariables } = require('./util');
 const { loadPEConfig, compilePE, writePE } = require('./pe');
 const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
 const { loadANConfig, compileAN, writeAN } = require('./an');
@@ -37,38 +38,15 @@ function getTemplate(card, templates) {
 /**
  * Resolve opening content: file path → read file; otherwise use as inline text.
  */
-function resolveOpeningContent(opening, base) {
+function resolveOpeningContent(opening, base, variables) {
   const resolved = path.resolve(base, String(opening));
+  let content;
   if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
-    return fs.readFileSync(resolved, 'utf8').trimEnd();
+    content = fs.readFileSync(resolved, 'utf8').trimEnd();
+  } else {
+    content = String(opening).trimEnd();
   }
-  return String(opening).trimEnd();
-}
-
-/**
- * Expand {%key} variable references in a string.
- * Cycle-detects via a resolving Set.
- */
-function resolveVariables(text, variables, _resolving) {
-  if (!variables || typeof text !== 'string') return text;
-  if (!_resolving) _resolving = new Set();
-
-  return text.replace(/\{%([^}]+)\}/g, (match, key) => {
-    const lower = key.trim().toLowerCase();
-    if (_resolving.has(lower)) {
-      console.warn(`  WARN: cycle detected in variable "{%${key}}"`);
-      return match;
-    }
-    const actualKey = Object.keys(variables).find(k => k.toLowerCase() === lower);
-    if (actualKey === undefined) {
-      console.warn(`  WARN: variable "{%${key}}" not declared`);
-      return match;
-    }
-    _resolving.add(lower);
-    const expanded = resolveVariables(String(variables[actualKey]), variables, _resolving);
-    _resolving.delete(lower);
-    return expanded;
-  });
+  return resolveVariables(content, variables);
 }
 
 /**
@@ -296,7 +274,7 @@ function buildCanonRegistry(resolvedCanon) {
  * Phase A: resolve + field interpolation
  * Phase B (caller): cross-card refs + pronouns + render
  */
-function compileBranchPhaseA(allCardDefs, registry, branchPath) {
+function compileBranchPhaseA(allCardDefs, registry, branchPath, variables) {
   const resolvedCards = [];
 
   for (const cardDef of allCardDefs) {
@@ -314,6 +292,7 @@ function compileBranchPhaseA(allCardDefs, registry, branchPath) {
     if (!card) continue; // excluded by branch spec
 
     applyFieldInterpolation(card);
+    applyVariableInterpolation(card, variables);
     resolvedCards.push(card);
   }
 
@@ -323,7 +302,7 @@ function compileBranchPhaseA(allCardDefs, registry, branchPath) {
 /**
  * Phase B: apply cross-card refs, pronouns, render, and write output.
  */
-function compileBranchPhaseB(resolvedCards, registry, templates, partials, outputDir, branchProtagonist) {
+function compileBranchPhaseB(resolvedCards, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}) {
   applyCrossCardRefs(resolvedCards, registry);
 
   // Expand render functions in body field values now that cross-card refs are resolved.
@@ -335,6 +314,8 @@ function compileBranchPhaseB(resolvedCards, registry, templates, partials, outpu
 
   for (const card of resolvedCards) {
     applyPronounPasses(card, registry, branchProtagonist);
+
+    if (suppressIds.has((card.id || '').toLowerCase())) continue; // fully rendered in PE; skip story card
 
     const template = getTemplate(card, templates);
     if (!template) {
@@ -352,11 +333,12 @@ function compileBranchPhaseB(resolvedCards, registry, templates, partials, outpu
       aid:      card.aid || {},
       render:   card.render || {},
       body:     card.body || {},
+      v:        card.v || {},
     };
 
     let rendered;
     try {
-      rendered = render(template, context, partials);
+      rendered = render(template, context, partials, variables);
     } catch (err) {
       const name = card.id || String(card.name);
       console.error(`  ERR rendering card "${name}": ${err.message}`);
@@ -411,11 +393,11 @@ function writeComponentFile(outputDir, filename, content) {
  * @param {string|null} inheritedOpening - effective opening carried from ancestor
  * @param {boolean} isLeaf - whether this level is a leaf (no sub-branches)
  */
-function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening) {
+function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables) {
   if (!branches || typeof branches !== 'object') {
     // We're at the root level with no branches — the root itself is the only leaf
     if (inheritedOpening != null) {
-      const content = resolveOpeningContent(inheritedOpening, configBase);
+      const content = resolveOpeningContent(inheritedOpening, configBase, variables);
       const outPath = writeComponentFile(outputBase, 'Opening.md', content);
       console.log(`    OK: Opening → ${outPath}`);
     }
@@ -443,7 +425,7 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
       if (isLeafNode) {
         console.warn(`  WARN: openingChoice on leaf branch "${name}" — ignoring`);
       } else {
-        const content = resolveOpeningContent(openingChoice, configBase);
+        const content = resolveOpeningContent(openingChoice, configBase, variables);
         const outPath = writeComponentFile(nodeOutput, 'Opening.md', content);
         console.log(`    OK: OpeningChoice → ${outPath}`);
       }
@@ -452,13 +434,13 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
     if (isLeafNode) {
       // Write the inherited/overridden opening to this leaf
       if (effectiveOpening != null) {
-        const content = resolveOpeningContent(effectiveOpening, configBase);
+        const content = resolveOpeningContent(effectiveOpening, configBase, variables);
         const outPath = writeComponentFile(nodeOutput, 'Opening.md', content);
         console.log(`    OK: Opening → ${outPath}`);
       }
     } else {
       // Recurse into sub-branches
-      writeOpeningsRecursive(subBranches, nodeOutput, configBase, effectiveOpening);
+      writeOpeningsRecursive(subBranches, nodeOutput, configBase, effectiveOpening, variables);
     }
   }
 }
@@ -491,6 +473,11 @@ function compile(configPath) {
   const projectRegistry = buildRegistry(rawProjectCards, 'project');
   console.log(`Loaded ${projectRegistry.size} project card definition(s).`);
 
+  const overlays = buildOverlays(rawProjectCards);
+  if (overlays.size > 0) {
+    console.log(`Loaded ${overlays.size} Codex overlay(s).`);
+  }
+
   const registry = mergeRegistries(canonRegistry, projectRegistry);
 
   const leaves = enumerateLeaves(config.branches);
@@ -512,21 +499,49 @@ function compile(configPath) {
     const ctx = buildCompileContext(config, branchPath);
     const compileContext = { branchPath, branchProtagonist, ...ctx };
 
+    // Pre-scan PE blocks: full-style card imports suppress story card generation
+    const peSpec = compileContext.componentRefs.plotEssential;
+    const peSuppressedIds = new Set();
+    if (peSpec && typeof peSpec === 'string' && !peSpec.includes('{')) {
+      const peBlocksForScan = loadPEConfig(peSpec);
+      for (const block of peBlocksForScan) {
+        if (block.blocks) {
+          // Section block — apply section-level branch filter then walk children
+          const sectionBranch = resolveBranchSpec(block.branches, branchPath);
+          if (sectionBranch === null) continue;
+          for (const child of block.blocks) {
+            if (!child.import) continue;
+            const childBranch = resolveBranchSpec(child.branches, branchPath);
+            if (childBranch === null) continue;
+            const style = ((child.render && child.render.style) || 'full').toLowerCase();
+            if (style === 'full') peSuppressedIds.add(String(child.import).toLowerCase());
+          }
+          continue;
+        }
+        if (!block.import) continue;
+        const branchResult = resolveBranchSpec(block.branches, branchPath);
+        if (branchResult === null) continue;
+        const style = ((block.render && block.render.style) || 'full').toLowerCase();
+        if (style === 'full') {
+          peSuppressedIds.add(String(block.import).toLowerCase());
+        }
+      }
+    }
+
     // Phase A: resolve all story cards
-    const resolvedCards = compileBranchPhaseA(allCardDefs, registry, branchPath);
+    const resolvedCards = compileBranchPhaseA(allCardDefs, registry, branchPath, ctx.variables);
 
     // Phase B: cross-card refs + pronouns + render + write
     const written = compileBranchPhaseB(
-      resolvedCards, registry, templates, partials, outputDir, branchProtagonist
+      resolvedCards, registry, templates, partials, outputDir, branchProtagonist, peSuppressedIds, ctx.variables
     );
     totalFiles += written.length;
 
     // Plot Essentials
-    const peSpec = compileContext.componentRefs.plotEssential;
     if (peSpec) {
       const peBlocks = loadPEConfig(typeof peSpec === 'string' && !peSpec.includes('{') ? peSpec : null);
       if (peBlocks.length > 0) {
-        const peContent = compilePE(peBlocks, registry, templates, partials, compileContext);
+        const peContent = compilePE(peBlocks, registry, templates, partials, compileContext, overlays);
         const pePath = writePE(outputDir, peContent);
         if (pePath) { console.log(`    OK: PlotEssentials → ${pePath}`); totalFiles++; }
       }
@@ -563,7 +578,7 @@ function compile(configPath) {
   const rootOpening = config.components && config.components.opening != null
     ? config.components.opening
     : null;
-  writeOpeningsRecursive(config.branches, config._resolvedOutput, config._base, rootOpening);
+  writeOpeningsRecursive(config.branches, config._resolvedOutput, config._base, rootOpening, config.variables || {});
 
   // Overview (leaf review) — always generated after compile
   const { runLeafReviewMode } = require('./overview');

@@ -1,6 +1,6 @@
 'use strict';
 
-const { deepClone, findKey, getCI, setCI, deleteCI } = require('./util');
+const { deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey } = require('./util');
 
 /**
  * Apply a single field operation to a current value.
@@ -95,21 +95,30 @@ function applyFieldOp(current, op) {
 function applyFieldsDelta(card, delta) {
   if (!delta || typeof delta !== 'object') return;
 
-  const topLevelFields = ['name', 'pronouns', 'aid', 'render'];
+  const topLevelFields = ['name', 'pronouns', 'aid', 'render', 'v'];
+
+  // Warn if the delta contains multiple variable-block aliases
+  const deltaAliasKeys = Object.keys(delta).filter(k => VAR_ALIASES.has(k.toLowerCase()));
+  if (deltaAliasKeys.length > 1) {
+    const cardId = card.id || (typeof card.name === 'string' ? card.name : '(unknown)');
+    console.warn(`  WARN: card "${cardId}" variant delta contains multiple variable-block aliases (${deltaAliasKeys.map(k => `"${k}"`).join(', ')}). Merging — subfield conflicts resolve last-writer-wins.`);
+  }
 
   for (const [key, op] of Object.entries(delta)) {
     const keyLower = key.toLowerCase();
     if (keyLower === 'id') continue; // id is immutable
 
-    const isTopLevel = topLevelFields.some(f => f === keyLower);
+    const normalizedKey = normalizeVarKey(key);
+    const normalizedLower = normalizedKey.toLowerCase();
+    const isTopLevel = topLevelFields.some(f => f === normalizedLower);
 
     if (isTopLevel) {
-      const currentVal = getCI(card, key);
+      const currentVal = getCI(card, normalizedKey);
       const newVal = applyFieldOp(currentVal, op);
       if (newVal === '__DELETE__') {
-        deleteCI(card, key);
+        deleteCI(card, normalizedKey);
       } else {
-        setCI(card, key, newVal);
+        setCI(card, normalizedKey, newVal);
       }
     } else if (keyLower === 'body') {
       // Explicit body: block — apply as subfield ops
@@ -322,6 +331,18 @@ function resolveCard(cardDef, registry, branchPath) {
       }
     }
 
+    // Apply import-level overrides as the project base, before branch variants run.
+    // Branch variants always win over these — they are defaults, not finalizers.
+    if (cardDef.body) {
+      applyFieldsDelta(card, { body: cardDef.body });
+    }
+    for (const key of ['name', 'pronouns', 'aid', 'render', 'v']) {
+      if (cardDef[key] !== undefined) {
+        const newVal = applyFieldOp(card[key], cardDef[key]);
+        if (newVal === '__DELETE__') delete card[key]; else card[key] = newVal;
+      }
+    }
+
     // Resolve branch spec → variant names to apply
     const branchVariantNames = resolveBranchSpec(cardDef.branches, branchPath);
     if (branchVariantNames === null) return null; // excluded
@@ -340,19 +361,6 @@ function resolveCard(cardDef, registry, branchPath) {
           }
         }
         applyDelta(card, delta);
-      }
-    }
-
-    // Apply project-level body overrides
-    if (cardDef.body) {
-      applyFieldsDelta(card, { body: cardDef.body });
-    }
-
-    // Apply top-level overrides from import def
-    for (const key of ['name', 'pronouns', 'aid', 'render']) {
-      if (cardDef[key] !== undefined) {
-        const newVal = applyFieldOp(card[key], cardDef[key]);
-        if (newVal === '__DELETE__') delete card[key]; else card[key] = newVal;
       }
     }
 
@@ -395,6 +403,17 @@ function resolveCard(cardDef, registry, branchPath) {
   if (!card.aid.type && !card.render.template) {
     const name = card.id || (typeof card.name === 'string' ? card.name : '');
     console.warn(`  WARN: card "${name}" has neither aid.type nor render.template`);
+  }
+
+  // Normalize name to structured form so {$name.full} / {$name.display} always resolve
+  const rawName = card.name;
+  if (typeof rawName === 'string' && rawName) {
+    const words = rawName.trim().split(/\s+/);
+    card.name = { display: words[0], full: rawName };
+  } else if (rawName && typeof rawName === 'object' && !Array.isArray(rawName)) {
+    const first = rawName.display || Object.values(rawName)[0] || card.id || '';
+    if (!rawName.display) rawName.display = first.split(/\s+/)[0];
+    if (!rawName.full)    rawName.full    = first;
   }
 
   return card;

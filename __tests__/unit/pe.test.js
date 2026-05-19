@@ -45,6 +45,19 @@ describe('compilePE — inline body block', () => {
     const blocks = [{ body: { text: 'Content' }, render: { wrapper: 'curly' } }];
     expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('{\nContent\n}');
   });
+
+  test('resolves {%variable} tokens in body.text', () => {
+    const ctxWithVars = { branchPath: [], branchProtagonist: null, variables: { startDate: '03/14/2726' } };
+    const blocks = [{ body: { text: 'Memory wipe on {%startDate}' } }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctxWithVars)).toBe('Memory wipe on 03/14/2726');
+  });
+
+  test('{%variable} tokens without matching variable are left untouched', () => {
+    const ctxWithVars = { branchPath: [], branchProtagonist: null, variables: {} };
+    const blocks = [{ body: { text: 'Date: {%startDate}' } }];
+    // warn is expected; token remains literal
+    expect(compilePE(blocks, registry, templates, new Map(), ctxWithVars)).toBe('Date: {%startDate}');
+  });
 });
 
 // ── compilePE — inline blocks with template ───────────────────────────────────
@@ -141,6 +154,32 @@ describe('compilePE — import block', () => {
     const result = compilePE(blocks, importRegistry, templates, new Map(), ctx);
     expect(result).toBeNull();
   });
+
+  test('Codex overlay v: fields are applied to PE import (regression: $v.field resolved against canon, not overlay)', () => {
+    const vTemplates = new Map([
+      ['character', { content: '{$aid.title}: {$v.affiliation} {$v.role}', _source: 'x' }],
+    ]);
+    const canonCard = {
+      id: 'employee',
+      name: { display: 'Eve', full: 'Eve Smith' },
+      aid:    { title: 'Eve Smith', type: 'Character' },
+      render: { template: 'Character', wrapper: 'none' },
+      v:      { affiliation: 'Academy', role: 'Researcher' },
+      body:   {},
+    };
+    const reg = new Map([['employee', canonCard]]);
+
+    // Overlay from the project Codex (e.g. grayls.yaml) overrides v:
+    const overlay = new Map([['employee', {
+      import:         'employee',
+      importVariants: [],
+      v:              { affiliation: 'Helix Industries', role: 'Lead Researcher' },
+    }]]);
+
+    const blocks = [{ import: 'employee' }];
+    const result = compilePE(blocks, reg, vTemplates, new Map(), ctx, overlay);
+    expect(result).toBe('Eve Smith: Helix Industries Lead Researcher');
+  });
 });
 
 // ── compilePE — multi-block ordering ─────────────────────────────────────────
@@ -167,15 +206,156 @@ describe('compilePE — position ordering', () => {
 
 describe('compilePE — style: skip', () => {
   test('skipped block produces no output', () => {
-    const blocks = [{ body: { text: 'Invisible' }, style: 'skip' }];
+    const blocks = [{ body: { text: 'Invisible' }, render: { style: 'skip' } }];
     expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBeNull();
   });
 
   test('null result when all blocks skipped', () => {
     const blocks = [
-      { body: { text: 'A' }, style: 'skip' },
-      { body: { text: 'B' }, style: 'skip' },
+      { body: { text: 'A' }, render: { style: 'skip' } },
+      { body: { text: 'B' }, render: { style: 'skip' } },
     ];
     expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBeNull();
+  });
+});
+
+// ── compilePE — section blocks ────────────────────────────────────────────────
+
+describe('compilePE — section block', () => {
+  test('two freeform children are joined and wrapped', () => {
+    const blocks = [{
+      blocks: [
+        { body: { text: 'Line A' } },
+        { body: { text: 'Line B' } },
+      ],
+      render: { wrapper: 'square', position: 1 },
+    }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx))
+      .toBe('[\nLine A\nLine B\n]');
+  });
+
+  test('section with headingLevel 0 renders plain text heading inside wrapper', () => {
+    const blocks = [{
+      blocks: [{ body: { text: 'Content' } }],
+      heading: 'My Section',
+      headingLevel: 0,
+      render: { wrapper: 'curly', compact: false },
+    }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx))
+      .toBe('{\nMy Section\n\nContent\n}');
+  });
+
+  test('section with headingLevel 2 renders markdown heading inside wrapper', () => {
+    const blocks = [{
+      blocks: [{ body: { text: 'Content' } }],
+      heading: 'My Section',
+      headingLevel: 2,
+      render: { wrapper: 'none', compact: false },
+    }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx))
+      .toBe('## My Section\n\nContent');
+  });
+
+  test('compact: true omits blank line after heading', () => {
+    const blocks = [{
+      blocks: [{ body: { text: 'Content' } }],
+      heading: 'Title',
+      headingLevel: 0,
+      render: { wrapper: 'none', compact: true },
+    }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx))
+      .toBe('Title\nContent');
+  });
+
+  test('empty blocks array produces no output', () => {
+    const blocks = [{ blocks: [], render: { wrapper: 'square' } }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBeNull();
+  });
+
+  test('section excluded by null branch spec is skipped', () => {
+    const blocks = [{
+      blocks: [{ body: { text: 'Hello' } }],
+      render: { wrapper: 'square' },
+      branches: { subject: null },
+    }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBeNull();
+  });
+
+  test('child excluded by its own branches is removed from section', () => {
+    const blocks = [{
+      blocks: [
+        { body: { text: 'Kept' } },
+        { body: { text: 'Excluded' }, branches: { subject: null } },
+      ],
+      render: { wrapper: 'none' },
+    }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('Kept');
+  });
+
+  test('children sorted by render.position within section', () => {
+    const blocks = [{
+      blocks: [
+        { body: { text: 'B' }, render: { position: 7 } },
+        { body: { text: 'A' }, render: { position: 2 } },
+      ],
+      render: { wrapper: 'none' },
+    }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('A\nB');
+  });
+
+  test('child render.wrapper is ignored; section wrapper applies', () => {
+    const blocks = [{
+      blocks: [{ body: { text: 'Inner' }, render: { wrapper: 'curly' } }],
+      render: { wrapper: 'square' },
+    }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('[\nInner\n]');
+  });
+
+  test('section and regular block coexist, sorted by outer position', () => {
+    const blocks = [
+      {
+        blocks: [{ body: { text: 'SectionContent' } }],
+        render: { wrapper: 'square', position: 2 },
+      },
+      { body: { text: 'RegularBlock' }, render: { position: 1 } },
+    ];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx))
+      .toBe('RegularBlock\n\n[\nSectionContent\n]');
+  });
+
+  test('nested section warns and is skipped', () => {
+    const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const blocks = [{
+      blocks: [
+        { blocks: [{ body: { text: 'Nested' } }], render: {} },
+        { body: { text: 'Valid' } },
+      ],
+      render: { wrapper: 'none' },
+    }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('Valid');
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('nested sections'));
+    spy.mockRestore();
+  });
+
+  test('all children excluded produces null section output', () => {
+    const blocks = [{
+      blocks: [
+        { body: { text: 'A' }, branches: { subject: null } },
+        { body: { text: 'B' }, branches: { subject: null } },
+      ],
+      render: { wrapper: 'square' },
+    }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBeNull();
+  });
+
+  test('child render.style: skip is excluded from section', () => {
+    const blocks = [{
+      blocks: [
+        { body: { text: 'Shown' } },
+        { body: { text: 'Hidden' }, render: { style: 'skip' } },
+      ],
+      render: { wrapper: 'none' },
+    }];
+    expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('Shown');
   });
 });

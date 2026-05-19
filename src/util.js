@@ -63,4 +63,36 @@ function deleteCI(obj, key) {
   if (actual !== null) delete obj[actual];
 }
 
-module.exports = { findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI };
+const VAR_ALIASES = new Set(['v', 'var', 'vars', 'variable', 'variables']);
+
+function normalizeVarKey(key) {
+  return VAR_ALIASES.has(key.toLowerCase()) ? 'v' : key;
+}
+
+/**
+ * Expand {%key} variable references in a string.
+ * Cycle-detects via a resolving Set.
+ */
+function resolveVariables(text, variables, _resolving) {
+  if (!variables || typeof text !== 'string') return text;
+  if (!_resolving) _resolving = new Set();
+
+  return text.replace(/\{%([^}]+)\}/g, (match, key) => {
+    const lower = key.trim().toLowerCase();
+    if (_resolving.has(lower)) {
+      console.warn(`  WARN: cycle detected in variable "{%${key}}"`);
+      return match;
+    }
+    const actualKey = Object.keys(variables).find(k => k.toLowerCase() === lower);
+    if (actualKey === undefined) {
+      console.warn(`  WARN: variable "{%${key}}" not declared`);
+      return match;
+    }
+    _resolving.add(lower);
+    const expanded = resolveVariables(String(variables[actualKey]), variables, _resolving);
+    _resolving.delete(lower);
+    return expanded;
+  });
+}
+
+module.exports = { findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey, resolveVariables };
