@@ -430,8 +430,13 @@ function applyFieldRenderFunctions(card) {
  */
 function applyVariableInterpolation(card, variables) {
   if (!variables) return;
-  if (typeof card.name === 'string') card.name = resolveVariables(card.name, variables);
-  if (typeof card.id   === 'string') card.id   = resolveVariables(card.id,   variables);
+  // card.name is normalized to {display, full, ...} by resolveCard before this runs
+  if (card.name && typeof card.name === 'object' && !Array.isArray(card.name)) {
+    applyVariableInterpolationRecursive(card.name, variables);
+  } else if (typeof card.name === 'string') {
+    card.name = resolveVariables(card.name, variables);
+  }
+  if (typeof card.id === 'string') card.id = resolveVariables(card.id, variables);
   if (card.body) applyVariableInterpolationRecursive(card.body, variables);
 }
 

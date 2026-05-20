@@ -716,26 +716,35 @@ describe('applyVariableInterpolation', () => {
     expect(body.Tagline).toBe('y');
   });
 
-  test('expands {%var} tokens in card.name', () => {
+  // card.name is normalized to {display, full} by resolveCard before applyVariableInterpolation runs
+  test('expands {%var} tokens in card.name object (display and full)', () => {
+    const card = { name: { display: "{%employer}'s", full: "{%employer}'s Penthouse" }, body: {} };
+    applyVariableInterpolation(card, { employer: 'Zephon' });
+    expect(card.name.full).toBe("Zephon's Penthouse");
+    expect(card.name.display).toBe("Zephon's");
+  });
+
+  test('expands {%var} tokens in card.id', () => {
+    const card = { name: { display: 'Home', full: 'Home' }, id: 'home-{%employer}', body: {} };
+    applyVariableInterpolation(card, { employer: 'Zephon' });
+    expect(card.id).toBe('home-Zephon');
+  });
+
+  test('name object and body expanded together', () => {
+    const card = { name: { display: '{%pcName}', full: '{%pcName} home' }, body: { desc: '{%pcName} lives here' } };
+    applyVariableInterpolation(card, { pcName: 'Aness' });
+    expect(card.name.full).toBe('Aness home');
+    expect(card.name.display).toBe('Aness');
+    expect(card.body.desc).toBe('Aness lives here');
+  });
+
+  test('string-form card.name (defensive fallback) is still expanded', () => {
     const card = { name: "{%employer}'s Penthouse", body: {} };
     applyVariableInterpolation(card, { employer: 'Zephon' });
     expect(card.name).toBe("Zephon's Penthouse");
   });
 
-  test('expands {%var} tokens in card.id', () => {
-    const card = { id: 'home-{%employer}', body: {} };
-    applyVariableInterpolation(card, { employer: 'Zephon' });
-    expect(card.id).toBe('home-Zephon');
-  });
-
-  test('name and body expanded together', () => {
-    const card = { name: '{%pcName} home', body: { desc: '{%pcName} lives here' } };
-    applyVariableInterpolation(card, { pcName: 'Aness' });
-    expect(card.name).toBe('Aness home');
-    expect(card.body.desc).toBe('Aness lives here');
-  });
-
-  test('non-string name left unchanged', () => {
+  test('non-object non-string name (e.g. number) left unchanged', () => {
     const card = { name: 42, body: {} };
     applyVariableInterpolation(card, { x: 'y' });
     expect(card.name).toBe(42);
