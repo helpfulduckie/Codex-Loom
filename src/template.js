@@ -55,7 +55,19 @@ function resolveField(ref, data) {
 
     const lower = part.toLowerCase();
     const actualKey = Object.keys(value).find(k => k.toLowerCase() === lower);
-    if (actualKey === undefined) return null;
+    if (actualKey === undefined) {
+      // Cross-card ref fallback: if we're still at the root context and a cardMap is
+      // available, treat the unresolved segment as a card ID and pivot to that card.
+      // e.g. $Aness.body.magic.affinity → find 'aness' in cardMap, then navigate body.magic.affinity
+      if (value === data && data.cardMap) {
+        const sourceCard = data.cardMap.get(lower);
+        if (sourceCard) {
+          value = sourceCard;
+          continue;
+        }
+      }
+      return null;
+    }
     value = value[actualKey];
   }
 
@@ -409,7 +421,7 @@ function processFieldInterpolation(value, context) {
  * Leaves:  {$she}, {$Id}, {$Id.pronoun}, {%variable}, and all other {$...} tokens
  *          untouched so the pronoun pass can handle them.
  */
-function applyFieldRenderFunctions(card) {
+function applyFieldRenderFunctions(card, cardMap) {
   if (!card.body) return;
 
   const context = {
@@ -420,6 +432,7 @@ function applyFieldRenderFunctions(card) {
     render:   card.render || {},
     body:     card.body,
   };
+  if (cardMap) context.cardMap = cardMap;
 
   applyRenderFunctionsRecursive(card.body, context);
 }

@@ -96,6 +96,65 @@ describe('snapshot regression', () => {
   });
 });
 
+// ── nested protagonist inheritance ────────────────────────────────────────────
+
+describe('protagonist inherited from parent branch node', () => {
+  let nestedTmpDir;
+
+  beforeAll(() => {
+    nestedTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-nested-proto-'));
+
+    const patchedConfig = [
+      'structure:',
+      '  input:',
+      `    cards:`,
+      `      - ${FIXTURE_DIR}/cards`,
+      `    canon:`,
+      `      main: ${FIXTURE_DIR}/canon`,
+      `    templates:`,
+      `      - ${FIXTURE_DIR}/templates`,
+      `  output: ${nestedTmpDir}/output`,
+      // protagonist declared on parent node only — leaf nodes have none
+      'branches:',
+      '  Aness:',
+      '    protagonist: Aness',
+      '    branches:',
+      '      Cult: {}',
+      '  Veyrn:',
+      '    protagonist: Veyrn',
+      '    branches:',
+      '      Cult: {}',
+    ].join('\n');
+
+    const cfgPath = path.join(nestedTmpDir, 'compile.yaml');
+    fs.writeFileSync(cfgPath, patchedConfig, 'utf8');
+    compile(cfgPath);
+  });
+
+  afterAll(() => {
+    fs.rmSync(nestedTmpDir, { recursive: true, force: true });
+  });
+
+  function nestedCardFile(tier1, tier2, type) {
+    return path.join(
+      nestedTmpDir, 'output', 'Branches', tier1, 'Branches', tier2,
+      'Story Cards', type, `${type}.md`
+    );
+  }
+
+  test('Aness/Cult leaf inherits protagonist=Aness: {$Aness} resolves to "you"', () => {
+    const content = fs.readFileSync(nestedCardFile('Aness', 'Cult', 'Character'), 'utf8');
+    expect(content).toContain('you love magic research');
+    expect(content).toContain('your polite nature');
+  });
+
+  test('Veyrn/Cult leaf with non-matching protagonist: {$Aness} resolves to display name', () => {
+    const content = fs.readFileSync(nestedCardFile('Veyrn', 'Cult', 'Character'), 'utf8');
+    expect(content).toContain('Aness loves magic research');
+    expect(content).toContain('her polite nature');
+  });
+});
+
 // ── overview: key integration ─────────────────────────────────────────────────
 
 describe('overview generated automatically by compile', () => {
@@ -313,5 +372,118 @@ describe('openingChoice {@Key} resolution', () => {
   test('leaf nodes do not get openingChoice Opening.md', () => {
     const alice = path.join(atKeyTmpDir, 'output', 'Branches', 'Employer', 'Branches', 'alice', 'Components', 'Opening.md');
     expect(fs.existsSync(alice)).toBe(false);
+  });
+});
+
+// ── cross-card render function refs in body fields ────────────────────────────
+
+describe('cross-card refs inside body field render functions', () => {
+  let xrefTmpDir;
+
+  beforeAll(() => {
+    xrefTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-xref-int-'));
+    fs.mkdirSync(path.join(xrefTmpDir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(xrefTmpDir, 'templates'), { recursive: true });
+
+    // Cards: Alice and Carol cross-ref Bishop's hair (plain token, resolved by applyCrossCardRefs).
+    // Bishop's familyMembers use join() on Alice/Carol's physicalTraits (new cross-card render fn).
+    // Store's employees use join() on Bishop's familyMembers (chained, order-dependent without multi-pass).
+    // Cards are deliberately ordered Store → Bishop → Carol → Alice (deepest-dependent first)
+    // to exercise the multi-pass convergence loop.
+    fs.writeFileSync(path.join(xrefTmpDir, 'cards', 'cards.yaml'), [
+      '- id: Store',
+      '  name: Store',
+      '  aid:',
+      '    type: Item',
+      '    title: Store',
+      '  render:',
+      '    template: Item',
+      '  body:',
+      "    employees: \"{join('; ', $Bishop.body.familyMembers)}\"",
+      '',
+      '- id: Bishop',
+      '  name: Bishop',
+      '  aid:',
+      '    type: Item',
+      '    title: Bishop',
+      '  render:',
+      '    template: Item',
+      '  body:',
+      '    physicalTraits:',
+      '      hair: blond',
+      '    familyMembers:',
+      "      - 'Alice ({join(\"; \", $Alice.body.physicalTraits)})'",
+      "      - 'Carol ({join(\"; \", $Carol.body.physicalTraits)})'",
+      '',
+      '- id: Carol',
+      '  name: Carol',
+      '  aid:',
+      '    type: Item',
+      '    title: Carol',
+      '  render:',
+      '    template: Item',
+      '  body:',
+      '    physicalTraits:',
+      "      hair: '{$Bishop.body.physicalTraits.hair}'",
+      '      eyes: green',
+      '',
+      '- id: Alice',
+      '  name: Alice',
+      '  aid:',
+      '    type: Item',
+      '    title: Alice',
+      '  render:',
+      '    template: Item',
+      '  body:',
+      '    physicalTraits:',
+      "      hair: '{$Bishop.body.physicalTraits.hair}'",
+      '      eyes: blue',
+    ].join('\n'), 'utf8');
+
+    fs.writeFileSync(path.join(xrefTmpDir, 'templates', 'Item.template'), [
+      '## {$aid.title}',
+      '~~~',
+      '{$body.employees}',
+      '{join("; ", $body.familyMembers)}',
+    ].join('\n'), 'utf8');
+
+    fs.writeFileSync(path.join(xrefTmpDir, 'compile.yaml'), [
+      'structure:',
+      '  input:',
+      `    cards: [${xrefTmpDir}/cards]`,
+      `    templates: [${xrefTmpDir}/templates]`,
+      `  output: ${xrefTmpDir}/output`,
+      'branches:',
+      '  main: {}',
+    ].join('\n'), 'utf8');
+
+    compile(path.join(xrefTmpDir, 'compile.yaml'));
+  });
+
+  afterAll(() => {
+    fs.rmSync(xrefTmpDir, { recursive: true, force: true });
+  });
+
+  function xrefCard(name) {
+    return fs.readFileSync(
+      path.join(xrefTmpDir, 'output', 'Branches', 'main', 'Story Cards', 'Item', 'Item.md'), 'utf8'
+    );
+  }
+
+  test('Bishop familyMembers: join() on cross-card mapping resolves hair+eyes', () => {
+    const content = xrefCard('Item');
+    expect(content).toContain('Alice (blond; blue)');
+    expect(content).toContain('Carol (blond; green)');
+  });
+
+  test('Store employees: chained cross-card join() resolves fully despite deepest-first ordering', () => {
+    const content = xrefCard('Item');
+    expect(content).toContain('Alice (blond; blue); Carol (blond; green)');
+  });
+
+  test('Alice physicalTraits.hair: plain cross-card token resolved to Bishop hair', () => {
+    const content = xrefCard('Item');
+    // Carol's physicalTraits are referenced in Bishop's familyMembers and appear resolved
+    expect(content).toContain('Carol (blond; green)');
   });
 });

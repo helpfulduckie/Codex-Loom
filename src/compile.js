@@ -388,17 +388,36 @@ function compileBranchPhaseA(allCardDefs, registry, branchPath, variables) {
  * Phase B: apply cross-card refs, pronouns, render, and write output.
  */
 function compileBranchPhaseB(resolvedCards, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}) {
-  applyCrossCardRefs(resolvedCards, registry);
-
-  // Expand render functions in body field values now that cross-card refs are resolved.
-  for (const card of resolvedCards) {
-    applyFieldRenderFunctions(card);
-  }
-
+  // Build early so render functions can resolve cross-card refs during field expansion.
   const resolvedById = new Map();
   for (const card of resolvedCards) {
     const id = (card.id || '').toLowerCase();
     if (id) resolvedById.set(id, card);
+  }
+
+  applyCrossCardRefs(resolvedCards, registry);
+
+  // Expand render functions in body field values now that cross-card refs are resolved.
+  // Multi-pass: repeat until no body fields change, to handle order-dependent chains
+  // where A.field = join($B.body.x) and B.body.x itself contains a cross-card render
+  // function. Cap at N+1 passes (N = card count): a non-circular graph of N cards has
+  // at most N-1 chain depth, so N-1 resolve passes + 1 convergence pass = N total.
+  // The +1 ensures the worst-case linear chain doesn't falsely trigger the warning —
+  // only a true cycle can exceed this bound.
+  const maxPasses = resolvedCards.length + 1;
+  let changed = true;
+  let pass = 0;
+  while (changed && pass < maxPasses) {
+    changed = false;
+    pass++;
+    for (const card of resolvedCards) {
+      const snapshot = JSON.stringify(card.body);
+      applyFieldRenderFunctions(card, resolvedById);
+      if (JSON.stringify(card.body) !== snapshot) changed = true;
+    }
+  }
+  if (pass === maxPasses) {
+    console.warn(`  WARN: cross-card render functions may have circular dependencies — stopped after ${maxPasses} passes`);
   }
 
   const grouped = new Map();
@@ -597,9 +616,19 @@ function compile(configPath, options = {}) {
     console.log(`\n  Branch: ${label}`);
 
     const branchConfig = getBranchConfig(config.branches, branchPath);
-    const branchProtagonist = (
-      branchConfig.protagonist || config.protagonist || ''
-    ).toLowerCase() || null;
+
+    // Walk the full branch chain to find the nearest ancestor that declares protagonist
+    let inheritedProtagonist = config.protagonist || '';
+    let walkMap = config.branches;
+    for (const part of branchPath) {
+      if (!walkMap || typeof walkMap !== 'object') break;
+      const actualKey = Object.keys(walkMap).find(k => k.toLowerCase() === part.toLowerCase());
+      if (!actualKey) break;
+      const node = walkMap[actualKey];
+      if (node && node.protagonist) inheritedProtagonist = node.protagonist;
+      walkMap = node && node.branches ? node.branches : null;
+    }
+    const branchProtagonist = inheritedProtagonist.toLowerCase() || null;
 
     const folderPath = resolveBranchFolderPath(config.branches, branchPath);
     const outputDir = buildBranchOutputDir(config._resolvedOutput, folderPath);
