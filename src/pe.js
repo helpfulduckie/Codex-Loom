@@ -196,7 +196,8 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
   const templateContent = getCardTemplate(card, templates, style);
   if (!templateContent) {
     const name = card.id || blockDef.import;
-    console.error(`  ERR [PE]: no template found for card "${name}" (type: ${card.aid && card.aid.type}, style: ${style})`);
+    const src = card._source ? ` (${card._source})` : '';
+    console.error(`  ERR [PE]: no template found for card "${name}"${src} (type: ${card.aid && card.aid.type}, style: ${style})`);
     return null;
   }
 
@@ -206,7 +207,8 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
   try {
     renderedCard = render(templateContent, context, partials, variables);
   } catch (err) {
-    console.error(`  ERR [PE]: rendering card "${card.id || blockDef.import}": ${err.message}`);
+    const src = card._source ? ` (${card._source})` : '';
+    console.error(`  ERR [PE]: rendering card "${card.id || blockDef.import}"${src}: ${err.message}`);
     return null;
   }
 

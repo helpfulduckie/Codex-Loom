@@ -158,6 +158,16 @@ function applyDelta(card, delta) {
 }
 
 /**
+ * Return true if the first segment of variantPath exists on cardDef.variants.
+ * Used to decide local-vs-canon dispatch without emitting a spurious warning.
+ */
+function hasVariant(cardDef, variantPath) {
+  if (!cardDef.variants || typeof cardDef.variants !== 'object') return false;
+  const firstPart = variantPath.split('/')[0].trim().toLowerCase();
+  return Object.keys(cardDef.variants).some(k => k.toLowerCase() === firstPart);
+}
+
+/**
  * Walk a variant path (slash-separated) on a card definition and collect deltas.
  * e.g. "human/noble" → apply 'human' variant delta, then 'noble' child of 'human'.
  */
@@ -167,14 +177,15 @@ function collectVariantDeltas(cardDef, variantPath) {
   const parts = variantPath.split('/').map(p => p.trim()).filter(Boolean);
   let variantTree = cardDef.variants;
 
+  const src = cardDef._source ? ` (${cardDef._source})` : '';
   for (const part of parts) {
     if (!variantTree || typeof variantTree !== 'object') {
-      console.warn(`  WARN: variant "${part}" not found in variant tree of "${cardDef.id || cardDef.name}"`);
+      console.warn(`  WARN: variant "${part}" not found in variant tree of "${cardDef.id || cardDef.name}"${src}`);
       break;
     }
     const actualKey = Object.keys(variantTree).find(k => k.toLowerCase() === part.toLowerCase());
     if (!actualKey) {
-      console.warn(`  WARN: variant "${part}" not found in variant tree of "${cardDef.id || cardDef.name}"`);
+      console.warn(`  WARN: variant "${part}" not found in variant tree of "${cardDef.id || cardDef.name}"${src}`);
       break;
     }
     const variantDef = variantTree[actualKey];
@@ -310,7 +321,7 @@ function extractSubBranches(val) {
  */
 function stripMeta(card) {
   const out = {};
-  const skip = new Set(['variants', '_source', '_include_variants', '_include_variant_tree']);
+  const skip = new Set(['variants', '_include_variants', '_include_variant_tree']);
   for (const [k, v] of Object.entries(card)) {
     if (!skip.has(k.toLowerCase())) out[k] = v;
   }
@@ -364,9 +375,10 @@ function resolveCard(cardDef, registry, branchPath) {
     if (branchVariantNames === null) return null; // excluded
 
     for (const vName of branchVariantNames) {
-      // Branch variant names dispatch into the import def's own variants library.
-      // Those local variants may themselves have importVariants pointing to canon.
-      const deltas = collectVariantDeltas(cardDef, vName);
+      // Branch variant names dispatch local-first: if the import def defines the variant,
+      // use it (allowing project-level overrides); otherwise fall back to the canon card.
+      const variantSource = hasVariant(cardDef, vName) ? cardDef : canonCard;
+      const deltas = collectVariantDeltas(variantSource, vName);
       for (const delta of deltas) {
         // Apply any importVariants declared inside this local variant from canon
         if (delta.importVariants && canonCard) {

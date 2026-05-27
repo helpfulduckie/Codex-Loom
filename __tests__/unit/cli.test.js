@@ -19,6 +19,27 @@ function run(args, cwd) {
   });
 }
 
+const MINIMAL_COMPILE_YAML = `
+structure:
+  input:
+    cards: []
+  output: ./output
+protagonist: Test
+branches:
+  only: {}
+`.trimStart();
+
+const COMPILE_YAML_WITH_OVERVIEW = `
+structure:
+  input:
+    cards: []
+  output: ./output
+  overview: ./my-overviews
+protagonist: Test
+branches:
+  only: {}
+`.trimStart();
+
 // ── --leafReview / -l flag ────────────────────────────────────────────────────
 
 describe('CLI --leafReview flag', () => {
@@ -34,12 +55,15 @@ describe('CLI --leafReview flag', () => {
 
   test('--leafReview with path writes one .overview.md per leaf', () => {
     write(path.join(tmp, 'scenario', 'Branches', 'hero', 'Story Cards', 'Char', 'x.md'), 'content');
-    const outDir = path.join(tmp, 'out');
-    fs.mkdirSync(outDir);
 
-    const result = run(['--leafReview', path.join(tmp, 'scenario'), outDir]);
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '--leafReview', path.join(tmp, 'scenario')],
+      { encoding: 'utf8', cwd: tmp }
+    );
     expect(result.status).toBe(0);
 
+    const outDir = path.join(tmp, 'overview');
     const files = fs.readdirSync(outDir);
     expect(files.length).toBeGreaterThan(0);
     expect(files.every(f => f.endsWith('.overview.md'))).toBe(true);
@@ -47,20 +71,14 @@ describe('CLI --leafReview flag', () => {
 
   test('-l short flag is accepted', () => {
     write(path.join(tmp, 'scenario', 'Story Cards', 'Char', 'x.md'), 'content');
-    const outDir = path.join(tmp, 'out');
-    fs.mkdirSync(outDir);
 
-    const result = run(['-l', path.join(tmp, 'scenario'), outDir]);
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '-l', path.join(tmp, 'scenario')],
+      { encoding: 'utf8', cwd: tmp }
+    );
     expect(result.status).toBe(0);
-  });
-
-  test('--leafReview with explicit output dir uses that dir', () => {
-    write(path.join(tmp, 'scenario', 'Story Cards', 'T', 'c.md'), 'c');
-    const outDir = path.join(tmp, 'custom-out');
-    fs.mkdirSync(outDir);
-
-    run(['--leafReview', path.join(tmp, 'scenario'), outDir]);
-    expect(fs.readdirSync(outDir).length).toBeGreaterThan(0);
+    expect(fs.existsSync(path.join(tmp, 'overview'))).toBe(true);
   });
 
   test('--leafReview with missing scenario root exits nonzero', () => {
@@ -77,7 +95,7 @@ describe('CLI --leafReview flag', () => {
     expect(result.stderr).toMatch(/compile\.yaml/i);
   });
 
-  test('--leafReview with no output-dir defaults to <cwd>/leaf-review', () => {
+  test('--leafReview with no path defaults to <cwd>/overview', () => {
     write(path.join(tmp, 'scenario', 'Story Cards', 'T', 'c.md'), 'c');
     const result = spawnSync(
       process.execPath,
@@ -85,7 +103,38 @@ describe('CLI --leafReview flag', () => {
       { encoding: 'utf8', cwd: tmp }
     );
     expect(result.status).toBe(0);
-    expect(fs.existsSync(path.join(tmp, 'leaf-review'))).toBe(true);
+    expect(fs.existsSync(path.join(tmp, 'overview'))).toBe(true);
+  });
+
+  test('--leafReview with compile.yaml uses config output as scenario root', () => {
+    const cfgPath = path.join(tmp, 'compile.yaml');
+    const outputDir = path.join(tmp, 'output');
+    write(path.join(outputDir, 'Branches', 'alpha', 'Story Cards', 'T', 'c.md'), 'c');
+    write(cfgPath, MINIMAL_COMPILE_YAML);
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '--leafReview', cfgPath],
+      { encoding: 'utf8', cwd: tmp }
+    );
+    expect(result.status).toBe(0);
+    // with no overview field, defaults to {output}/Overview
+    expect(fs.existsSync(path.join(outputDir, 'Overview'))).toBe(true);
+  });
+
+  test('--leafReview with compile.yaml uses structure.overview when set', () => {
+    const cfgPath = path.join(tmp, 'compile.yaml');
+    const outputDir = path.join(tmp, 'output');
+    write(path.join(outputDir, 'Story Cards', 'T', 'c.md'), 'c');
+    write(cfgPath, COMPILE_YAML_WITH_OVERVIEW);
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '--leafReview', cfgPath],
+      { encoding: 'utf8', cwd: tmp }
+    );
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(tmp, 'my-overviews'))).toBe(true);
   });
 });
 
@@ -104,12 +153,15 @@ describe('CLI --overview flag', () => {
 
   test('--overview with path writes a single .overview.md file', () => {
     write(path.join(tmp, 'scenario', 'Branches', 'hero', 'Story Cards', 'Char', 'x.md'), 'content');
-    const outDir = path.join(tmp, 'out');
-    fs.mkdirSync(outDir);
 
-    const result = run(['--overview', path.join(tmp, 'scenario'), outDir]);
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '--overview', path.join(tmp, 'scenario')],
+      { encoding: 'utf8', cwd: tmp }
+    );
     expect(result.status).toBe(0);
 
+    const outDir = path.join(tmp, 'overview');
     const files = fs.readdirSync(outDir);
     expect(files).toHaveLength(1);
     expect(files[0]).toMatch(/\.overview\.md$/);
@@ -117,11 +169,14 @@ describe('CLI --overview flag', () => {
 
   test('-o short flag is accepted', () => {
     write(path.join(tmp, 'scenario', 'Story Cards', 'Char', 'x.md'), 'content');
-    const outDir = path.join(tmp, 'out');
-    fs.mkdirSync(outDir);
 
-    const result = run(['-o', path.join(tmp, 'scenario'), outDir]);
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '-o', path.join(tmp, 'scenario')],
+      { encoding: 'utf8', cwd: tmp }
+    );
     expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(tmp, 'overview'))).toBe(true);
   });
 
   test('--overview with missing scenario root exits nonzero', () => {
@@ -130,10 +185,12 @@ describe('CLI --overview flag', () => {
     expect(result.stderr).toMatch(/not found/i);
   });
 
-  test('--overview without args exits nonzero with usage message', () => {
-    const result = run(['--overview']);
+  test('--overview without args and no compile.yaml exits nonzero', () => {
+    const emptyDir = path.join(tmp, 'empty');
+    fs.mkdirSync(emptyDir);
+    const result = run(['--overview'], emptyDir);
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toMatch(/usage/i);
+    expect(result.stderr).toMatch(/compile\.yaml/i);
   });
 
   test('--overview with no output-dir defaults to <cwd>/overview', () => {
@@ -147,9 +204,100 @@ describe('CLI --overview flag', () => {
     expect(fs.existsSync(path.join(tmp, 'overview'))).toBe(true);
   });
 
+  test('--overview with compile.yaml uses config output as scenario root', () => {
+    const cfgPath = path.join(tmp, 'compile.yaml');
+    const outputDir = path.join(tmp, 'output');
+    write(path.join(outputDir, 'Branches', 'alpha', 'Story Cards', 'T', 'c.md'), 'c');
+    write(cfgPath, MINIMAL_COMPILE_YAML);
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '--overview', cfgPath],
+      { encoding: 'utf8', cwd: tmp }
+    );
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(outputDir, 'Overview'))).toBe(true);
+  });
+
+  test('--overview with compile.yaml uses structure.overview when set', () => {
+    const cfgPath = path.join(tmp, 'compile.yaml');
+    const outputDir = path.join(tmp, 'output');
+    write(path.join(outputDir, 'Story Cards', 'T', 'c.md'), 'c');
+    write(cfgPath, COMPILE_YAML_WITH_OVERVIEW);
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '--overview', cfgPath],
+      { encoding: 'utf8', cwd: tmp }
+    );
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(tmp, 'my-overviews'))).toBe(true);
+  });
+
   test('no args prints usage and exits nonzero', () => {
     const result = run([]);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/usage/i);
+  });
+});
+
+// ── --leafReview + --overview combined ────────────────────────────────────────
+
+describe('CLI --leafReview + --overview combined', () => {
+  let tmp;
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cli-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true });
+  });
+
+  test('both flags together write both leaf and tree overview files', () => {
+    write(path.join(tmp, 'scenario', 'Branches', 'hero', 'Story Cards', 'Char', 'x.md'), 'content');
+    write(path.join(tmp, 'scenario', 'Branches', 'villain', 'Story Cards', 'Char', 'y.md'), 'content');
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '--leafReview', '--overview', path.join(tmp, 'scenario')],
+      { encoding: 'utf8', cwd: tmp }
+    );
+    expect(result.status).toBe(0);
+
+    const outDir = path.join(tmp, 'overview');
+    const files = fs.readdirSync(outDir).filter(f => f.endsWith('.overview.md'));
+    // leaf review: one per leaf (hero, villain); overview: one for whole tree
+    expect(files.length).toBe(3);
+  });
+
+  test('-l -o short flags combined work', () => {
+    write(path.join(tmp, 'scenario', 'Story Cards', 'T', 'c.md'), 'c');
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '-l', '-o', path.join(tmp, 'scenario')],
+      { encoding: 'utf8', cwd: tmp }
+    );
+    expect(result.status).toBe(0);
+  });
+
+  test('both flags with compile.yaml derive all paths from config', () => {
+    const cfgPath = path.join(tmp, 'compile.yaml');
+    const outputDir = path.join(tmp, 'output');
+    write(path.join(outputDir, 'Branches', 'alpha', 'Story Cards', 'T', 'c.md'), 'c');
+    write(cfgPath, COMPILE_YAML_WITH_OVERVIEW);
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '--leafReview', '--overview', cfgPath],
+      { encoding: 'utf8', cwd: tmp }
+    );
+    expect(result.status).toBe(0);
+
+    const overviewDir = path.join(tmp, 'my-overviews');
+    expect(fs.existsSync(overviewDir)).toBe(true);
+    const files = fs.readdirSync(overviewDir).filter(f => f.endsWith('.overview.md'));
+    expect(files.length).toBeGreaterThan(0);
   });
 });

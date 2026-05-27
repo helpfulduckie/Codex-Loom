@@ -153,9 +153,10 @@ function getEffectivePronounSet(cardOrPronouns, cardId, branchProtagonist) {
  *   opts.card            - the card being processed
  *   opts.registry        - full card registry Map
  *   opts.branchProtagonist - lowercase protagonist ID or null
+ *   opts.resolvedById    - optional Map of post-variant resolved cards by lowercase id
  */
 function applyTokenPass(str, opts) {
-  const { card, registry, branchProtagonist } = opts;
+  const { card, registry, branchProtagonist, resolvedById } = opts;
   const cardId = (card.id || '').toLowerCase();
   const cardPronounSet = getEffectivePronounSet(card, cardId, branchProtagonist);
 
@@ -192,7 +193,7 @@ function applyTokenPass(str, opts) {
 
       // Is prefix a registry ID?
       if (registry.has(prefixLower)) {
-        const refCard = registry.get(prefixLower);
+        const refCard = (resolvedById && resolvedById.get(prefixLower)) || registry.get(prefixLower);
         const refPronounSet = getEffectivePronounSet(refCard, prefixLower, branchProtagonist);
 
         // Is rest a pronoun token?
@@ -220,7 +221,7 @@ function applyTokenPass(str, opts) {
 
     // Is it a registry ID? → character reference
     if (registry.has(innerLower)) {
-      const refCard = registry.get(innerLower);
+      const refCard = (resolvedById && resolvedById.get(innerLower)) || registry.get(innerLower);
       const refPronounSet = getEffectivePronounSet(refCard, innerLower, branchProtagonist);
       // Sets conjugation scope
       currentScope = refPronounSet || 'nonbinary';
@@ -310,10 +311,10 @@ function applyCrossCardRefs(resolvedCards, registry) {
  * @param {Map} registry
  * @param {string|null} branchProtagonist - lowercase protagonist ID
  */
-function applyPronounPasses(card, registry, branchProtagonist) {
+function applyPronounPasses(card, registry, branchProtagonist, resolvedById) {
   if (!card.body) return;
 
-  const opts = { card, registry, branchProtagonist };
+  const opts = { card, registry, branchProtagonist, resolvedById };
 
   function walkBody(obj) {
     if (!obj || typeof obj !== 'object') return;

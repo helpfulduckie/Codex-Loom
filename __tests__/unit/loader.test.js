@@ -304,6 +304,16 @@ describe('loadCompileConfig', () => {
     expect(loadCompileConfig(cfgPath)._resolvedOutput).toBe(path.resolve(tmpDir, 'output'));
   });
 
+  test('resolves structure.overview relative to config dir', () => {
+    const cfgPath = writeConfig('structure:\n  output: ./out\n  overview: ./reviews\n');
+    expect(loadCompileConfig(cfgPath)._resolvedOverview).toBe(path.resolve(tmpDir, 'reviews'));
+  });
+
+  test('_resolvedOverview is null when structure.overview is not specified', () => {
+    const cfgPath = writeConfig('structure:\n  output: ./out\n');
+    expect(loadCompileConfig(cfgPath)._resolvedOverview).toBeNull();
+  });
+
   test('resolves cards sequence to absolute paths', () => {
     const cfgPath = writeConfig('structure:\n  input:\n    cards:\n      - ./cards\n');
     expect(loadCompileConfig(cfgPath)._resolvedCards)

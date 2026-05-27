@@ -9,7 +9,16 @@ function findFiles(dir, ext) {
   if (!fs.existsSync(dir)) return results;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
+    if (entry.isSymbolicLink()) {
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) {
+          results.push(...findFiles(full, ext));
+        } else if (stat.isFile() && entry.name.toLowerCase().endsWith(ext)) {
+          results.push(full);
+        }
+      } catch (_) { /* broken symlink — skip */ }
+    } else if (entry.isDirectory()) {
       results.push(...findFiles(full, ext));
     } else if (entry.isFile() && entry.name.toLowerCase().endsWith(ext)) {
       results.push(full);

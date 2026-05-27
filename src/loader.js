@@ -47,8 +47,16 @@ function loadCardsFromDir(dirs) {
   for (const dir of dirs) {
     for (const file of findFiles(dir, '.yaml')) {
       const data = loadYaml(file);
+      if (data === null || data === undefined) {
+        console.warn(`  WARN: empty file skipped: ${file}`);
+        continue;
+      }
       const entries = Array.isArray(data) ? data : [data];
       for (const entry of entries) {
+        if (entry === null || entry === undefined) {
+          console.warn(`  WARN: null document in "${file}" — skipped`);
+          continue;
+        }
         cards.push({ ...normalizeCardVarField(entry), _source: file });
       }
     }
@@ -160,6 +168,7 @@ function expandPathTokens(str, variables, canonMap) {
  *         authorsNote:
  *         scripts:
  *     output:       # single folder path
+ *     overview:     # optional; where to write overview/leaf-review files (default: {output}/Overview)
  *   protagonist:
  *   components:     # root component specs (file path | literal | {@Key})
  *   variables:      # mapping
@@ -178,6 +187,10 @@ function loadCompileConfig(configPath) {
   const resolvedOutput = structure.output
     ? path.resolve(base, String(structure.output))
     : path.resolve(base, 'output');
+
+  const resolvedOverview = structure.overview
+    ? path.resolve(base, String(structure.overview))
+    : null;
 
   const resolvedCards = resolveSequence(input.cards, base);
 
@@ -231,6 +244,7 @@ function loadCompileConfig(configPath) {
   return {
     _base: base,
     _resolvedOutput: resolvedOutput,
+    _resolvedOverview: resolvedOverview,
     _resolvedCards: resolvedCards,
     _resolvedCanon: resolvedCanon,
     _resolvedTemplates: resolvedTemplates,

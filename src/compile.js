@@ -297,6 +297,9 @@ function resolveIncludes(cardDefs, canonRegistry, config) {
       return match;
     });
 
+    // Normalize separators (handles mixed forward/back slashes from {@var}/path expansion)
+    includePath = path.normalize(includePath);
+
     // Resolve relative to config base or as absolute
     const fullPath = path.isAbsolute(includePath) ? includePath : path.resolve(config._base, includePath);
     if (!fs.existsSync(fullPath)) {
@@ -366,7 +369,8 @@ function compileBranchPhaseA(allCardDefs, registry, branchPath, variables) {
       card = resolveCard(cardDef, registry, branchPath);
     } catch (err) {
       const label = cardDef.id || cardDef.import || cardDef.name || '?';
-      console.error(`  ERR resolving card "${label}": ${err.message}`);
+      const src = cardDef._source ? ` (${cardDef._source})` : '';
+      console.error(`  ERR resolving card "${label}"${src}: ${err.message}`);
       continue;
     }
 
@@ -391,10 +395,16 @@ function compileBranchPhaseB(resolvedCards, registry, templates, partials, outpu
     applyFieldRenderFunctions(card);
   }
 
+  const resolvedById = new Map();
+  for (const card of resolvedCards) {
+    const id = (card.id || '').toLowerCase();
+    if (id) resolvedById.set(id, card);
+  }
+
   const grouped = new Map();
 
   for (const card of resolvedCards) {
-    applyPronounPasses(card, registry, branchProtagonist);
+    applyPronounPasses(card, registry, branchProtagonist, resolvedById);
 
     if (suppressIds.has((card.id || '').toLowerCase())) continue; // fully rendered in PE; skip story card
 
@@ -402,7 +412,8 @@ function compileBranchPhaseB(resolvedCards, registry, templates, partials, outpu
     if (!template) {
       const name = card.id || (typeof card.name === 'string' ? card.name : String(card.name));
       const type = (card.aid && card.aid.type) || (card.render && card.render.template) || '?';
-      console.error(`  ERR: no template found for card "${name}" (type: ${type})`);
+      const src = card._source ? ` (${card._source})` : '';
+      console.error(`  ERR: no template found for card "${name}"${src} (type: ${type})`);
       continue;
     }
 
@@ -422,7 +433,8 @@ function compileBranchPhaseB(resolvedCards, registry, templates, partials, outpu
       rendered = render(template, context, partials, variables);
     } catch (err) {
       const name = card.id || String(card.name);
-      console.error(`  ERR rendering card "${name}": ${err.message}`);
+      const src = card._source ? ` (${card._source})` : '';
+      console.error(`  ERR rendering card "${name}"${src}: ${err.message}`);
       continue;
     }
 
@@ -699,7 +711,7 @@ function compile(configPath, options = {}) {
 
   // Overview (leaf review) — always generated after compile
   const { runLeafReviewMode } = require('./overview');
-  const overviewDir = path.join(config._resolvedOutput, 'Overview');
+  const overviewDir = config._resolvedOverview || path.join(config._resolvedOutput, 'Overview');
   fs.mkdirSync(overviewDir, { recursive: true });
   console.log('\nGenerating overview...');
   runLeafReviewMode(config._resolvedOutput, overviewDir);
@@ -729,6 +741,29 @@ module.exports = {
   writeOpeningsRecursive,
 };
 
+/**
+ * Resolve scenarioRoot and outputDir for overview/leaf-review CLI modes.
+ * If `arg` is a .yaml/.yml file, load it as a compile config and derive both paths from it.
+ * Otherwise treat `arg` as the scenario root directory.
+ *
+ * @param {string}      arg         - path argument from CLI
+ * @param {string}      defaultOut  - fallback output dir name when arg is a directory
+ * @returns {{ scenarioRoot: string, outputDir: string }}
+ */
+function resolveReviewArgs(arg, defaultOut) {
+  if (/\.ya?ml$/i.test(arg)) {
+    const cfg = loadCompileConfig(path.resolve(arg));
+    return {
+      scenarioRoot: cfg._resolvedOutput,
+      outputDir:    cfg._resolvedOverview || path.join(cfg._resolvedOutput, 'Overview'),
+    };
+  }
+  return {
+    scenarioRoot: path.resolve(arg),
+    outputDir:    path.resolve(defaultOut),
+  };
+}
+
 // ── CLI entry point ───────────────────────────────────────────────────────────
 
 if (require.main === module) {
@@ -736,10 +771,13 @@ if (require.main === module) {
 
   const leafReviewIdx = rawArgs.findIndex(a => a === '--leafReview' || a === '-l');
   const overviewIdx   = rawArgs.findIndex(a => a === '--overview'   || a === '-o');
+  const doLeafReview  = leafReviewIdx !== -1;
+  const doOverview    = overviewIdx   !== -1;
 
-  if (leafReviewIdx !== -1) {
-    const { runLeafReviewMode } = require('./overview');
-    const rest = rawArgs.filter((_, i) => i !== leafReviewIdx);
+  if (doLeafReview || doOverview) {
+    const { runLeafReviewMode, runOverviewMode } = require('./overview');
+    const flagIdxs = new Set([leafReviewIdx, overviewIdx].filter(i => i !== -1));
+    const rest = rawArgs.filter((_, i) => !flagIdxs.has(i));
     let scenarioRoot, outputDir;
 
     if (rest.length === 0) {
@@ -750,10 +788,9 @@ if (require.main === module) {
       }
       const cfg = loadCompileConfig(cfgPath);
       scenarioRoot = cfg._resolvedOutput;
-      outputDir = path.resolve(path.dirname(cfgPath), 'leaf-review');
+      outputDir = cfg._resolvedOverview || path.resolve(path.dirname(cfgPath), 'leaf-review');
     } else {
-      scenarioRoot = path.resolve(rest[0]);
-      outputDir    = path.resolve(rest[1] || 'leaf-review');
+      ({ scenarioRoot, outputDir } = resolveReviewArgs(rest[0], 'overview'));
     }
 
     if (!fs.existsSync(scenarioRoot)) {
@@ -761,40 +798,20 @@ if (require.main === module) {
       process.exit(1);
     }
 
+    const modeLabel = [doLeafReview && 'leaf-review', doOverview && 'overview'].filter(Boolean).join(' + ');
     fs.mkdirSync(outputDir, { recursive: true });
-    console.log(`\nLeaf review mode\nScenario root : ${scenarioRoot}\nOutput dir    : ${outputDir}\n`);
+    console.log(`\n${modeLabel} mode\nScenario root : ${scenarioRoot}\nOutput dir    : ${outputDir}\n`);
 
     try {
-      const written = runLeafReviewMode(scenarioRoot, outputDir);
-      console.log(`\nDone. Wrote ${written.length} leaf review file(s) to:\n  ${outputDir}\n`);
-    } catch (err) {
-      console.error(`\nFatal: ${err.message}`);
-      process.exit(1);
-    }
-
-  } else if (overviewIdx !== -1) {
-    const { runOverviewMode } = require('./overview');
-    const rest = rawArgs.filter((_, i) => i !== overviewIdx);
-
-    if (rest.length === 0) {
-      console.error('Usage: codex-loom --overview|-o <scenario-root> [<output-dir>]');
-      process.exit(1);
-    }
-
-    const scenarioRoot = path.resolve(rest[0]);
-    const outputDir    = path.resolve(rest[1] || 'overview');
-
-    if (!fs.existsSync(scenarioRoot)) {
-      console.error(`Scenario root not found: ${scenarioRoot}`);
-      process.exit(1);
-    }
-
-    fs.mkdirSync(outputDir, { recursive: true });
-    console.log(`\nOverview mode\nScenario root : ${scenarioRoot}\nOutput dir    : ${outputDir}\n`);
-
-    try {
-      runOverviewMode(scenarioRoot, outputDir);
-      console.log(`\nDone. Wrote overview file to:\n  ${outputDir}\n`);
+      if (doLeafReview) {
+        const written = runLeafReviewMode(scenarioRoot, outputDir);
+        console.log(`\nWrote ${written.length} leaf review file(s) to:\n  ${outputDir}`);
+      }
+      if (doOverview) {
+        runOverviewMode(scenarioRoot, outputDir);
+        console.log(`\nWrote overview file to:\n  ${outputDir}`);
+      }
+      console.log('');
     } catch (err) {
       console.error(`\nFatal: ${err.message}`);
       process.exit(1);
@@ -808,8 +825,7 @@ if (require.main === module) {
     if (compileArgs.length === 0) {
       console.error(
         'Usage: codex-loom [--clean|-c] <path/to/compile.yaml or project/>\n' +
-        '       codex-loom --leafReview|-l [<scenario-root>] [<output-dir>]\n' +
-        '       codex-loom --overview|-o <scenario-root> [<output-dir>]'
+        '       codex-loom [--leafReview|-l] [--overview|-o] [<scenario-root | compile.yaml>]'
       );
       process.exit(1);
     }

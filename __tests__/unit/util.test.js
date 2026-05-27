@@ -191,11 +191,15 @@ describe('findFiles', () => {
     expect(findFiles('/nonexistent', '.yaml')).toEqual([]);
   });
 
+  const file  = (name) => ({ name, isDirectory: () => false, isFile: () => true,  isSymbolicLink: () => false });
+  const dir   = (name) => ({ name, isDirectory: () => true,  isFile: () => false, isSymbolicLink: () => false });
+  const link  = (name) => ({ name, isDirectory: () => false, isFile: () => false, isSymbolicLink: () => true  });
+
   test('returns files matching extension', () => {
     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
     jest.spyOn(fs, 'readdirSync').mockReturnValue([
-      { name: 'cards.yaml', isDirectory: () => false, isFile: () => true },
-      { name: 'readme.txt', isDirectory: () => false, isFile: () => true },
+      file('cards.yaml'),
+      file('readme.txt'),
     ]);
     const result = findFiles('/dir', '.yaml');
     expect(result).toHaveLength(1);
@@ -204,21 +208,15 @@ describe('findFiles', () => {
 
   test('filters by extension case-insensitively', () => {
     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    jest.spyOn(fs, 'readdirSync').mockReturnValue([
-      { name: 'CARDS.YAML', isDirectory: () => false, isFile: () => true },
-    ]);
+    jest.spyOn(fs, 'readdirSync').mockReturnValue([file('CARDS.YAML')]);
     expect(findFiles('/dir', '.yaml')).toHaveLength(1);
   });
 
   test('recurses into subdirectories', () => {
     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
     jest.spyOn(fs, 'readdirSync')
-      .mockReturnValueOnce([
-        { name: 'sub', isDirectory: () => true, isFile: () => false },
-      ])
-      .mockReturnValueOnce([
-        { name: 'nested.yaml', isDirectory: () => false, isFile: () => true },
-      ]);
+      .mockReturnValueOnce([dir('sub')])
+      .mockReturnValueOnce([file('nested.yaml')]);
     const result = findFiles('/dir', '.yaml');
     expect(result).toHaveLength(1);
     expect(result[0]).toContain('nested.yaml');
@@ -227,12 +225,39 @@ describe('findFiles', () => {
   test('ignores files with non-matching extension', () => {
     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
     jest.spyOn(fs, 'readdirSync').mockReturnValue([
-      { name: 'file.template', isDirectory: () => false, isFile: () => true },
-      { name: 'file.yaml', isDirectory: () => false, isFile: () => true },
+      file('file.template'),
+      file('file.yaml'),
     ]);
     const result = findFiles('/dir', '.template');
     expect(result).toHaveLength(1);
     expect(result[0]).toContain('file.template');
+  });
+
+  test('follows symlinks to files', () => {
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readdirSync').mockReturnValue([link('linked.yaml')]);
+    jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false, isFile: () => true });
+    const result = findFiles('/dir', '.yaml');
+    expect(result).toHaveLength(1);
+    expect(result[0]).toContain('linked.yaml');
+  });
+
+  test('follows symlinks to directories', () => {
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readdirSync')
+      .mockReturnValueOnce([link('subdir')])
+      .mockReturnValueOnce([file('deep.yaml')]);
+    jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true, isFile: () => false });
+    const result = findFiles('/dir', '.yaml');
+    expect(result).toHaveLength(1);
+    expect(result[0]).toContain('deep.yaml');
+  });
+
+  test('skips broken symlinks', () => {
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    jest.spyOn(fs, 'readdirSync').mockReturnValue([link('broken.yaml')]);
+    jest.spyOn(fs, 'statSync').mockImplementation(() => { throw new Error('ENOENT'); });
+    expect(findFiles('/dir', '.yaml')).toHaveLength(0);
   });
 });
 
