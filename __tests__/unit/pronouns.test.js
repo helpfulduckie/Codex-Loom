@@ -183,6 +183,57 @@ describe('applyTokenPass — character references {$Id}', () => {
   });
 });
 
+describe("applyTokenPass — possessive character reference {$Id's}", () => {
+  test("{$Aness's} → \"Aness's\" when not protagonist", () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass("It was {$Aness's} choice", { card, registry, branchProtagonist: null }))
+      .toBe("It was Aness's choice");
+  });
+
+  test("{$aness's} → \"your\" when protagonist (lowercase token → lowercase your)", () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass("It was {$aness's} choice", { card, registry, branchProtagonist: 'aness' }))
+      .toBe("It was your choice");
+  });
+
+  test("{$aness's} (lowercase token) → \"Aness's\" — name always uses YAML casing", () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass("{$aness's} voice", { card, registry, branchProtagonist: null }))
+      .toBe("Aness's voice");
+  });
+
+  test("{$Aness's} uppercase token → \"Your\" when protagonist", () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass("{$Aness's} choice", { card, registry, branchProtagonist: 'aness' }))
+      .toBe("Your choice");
+  });
+
+  test("{$aness's} lowercase token → \"your\" when protagonist", () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass("{$aness's} choice", { card, registry, branchProtagonist: 'aness' }))
+      .toBe("your choice");
+  });
+
+  test("{$Marcus's} — name ending in s gets 's appended", () => {
+    const card = { id: 'marcus', name: 'Marcus', pronouns: 'male' };
+    const registry = new Map([['marcus', card]]);
+    expect(applyTokenPass("{$Marcus's} sword", { card, registry, branchProtagonist: null }))
+      .toBe("Marcus's sword");
+  });
+
+  test("{$nobody's} — unknown id left as-is", () => {
+    const card = makeCard('aness', 'female');
+    const registry = new Map([['aness', card]]);
+    expect(applyTokenPass("{$nobody's} hat", { card, registry, branchProtagonist: null }))
+      .toBe("{$nobody's} hat");
+  });
+});
+
 describe('applyTokenPass — scoped pronoun tokens {$Id.pronoun}', () => {
   test('{$Id.she} → "you" when protagonist', () => {
     const card = makeCard('aness', 'female');

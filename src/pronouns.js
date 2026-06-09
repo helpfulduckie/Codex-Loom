@@ -6,6 +6,7 @@
  * Braced token forms in templates and field text:
  *   {$she} {$her~} etc.        - unscoped; resolves against card's own pronouns field
  *   {$Id}                      - character reference; "you" if Id is protagonist, else name.display
+ *   {$Id's}                    - possessive name; "your" if Id is protagonist, else "Name's"
  *   {$Id.she} {$Id.her~} etc.  - scoped pronoun; resolves vs Id's pronouns, protagonist-aware
  *
  * Verb conjugation:
@@ -218,6 +219,17 @@ function applyTokenPass(str, opts) {
 
     // No dot — single segment
     const innerLower = inner.toLowerCase();
+
+    // Possessive character reference: {$Aness's} → "Aness's" or "your" if protagonist
+    if (innerLower.endsWith("'s")) {
+      const baseId = innerLower.slice(0, -2);
+      if (registry.has(baseId)) {
+        const refCard = (resolvedById && resolvedById.get(baseId)) || registry.get(baseId);
+        const isProtagonist = branchProtagonist && branchProtagonist === baseId;
+        if (isProtagonist) return matchCase('your', inner);
+        return getDisplayName(refCard) + "'s";
+      }
+    }
 
     // Is it a registry ID? → character reference
     if (registry.has(innerLower)) {

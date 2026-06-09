@@ -164,6 +164,9 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
     aid:            (overlay?.aid !== undefined && blockDef.aid !== undefined)
                       ? applyFieldOp(overlay.aid, blockDef.aid)
                       : (blockDef.aid ?? overlay?.aid),
+    render:         (overlay?.render !== undefined && blockDef.render !== undefined)
+                      ? applyFieldOp(overlay.render, blockDef.render)
+                      : (blockDef.render ?? overlay?.render),
     v:              (overlay?.v !== undefined && blockDef.v !== undefined)
                       ? applyFieldOp(overlay.v, blockDef.v)
                       : (blockDef.v ?? overlay?.v),
@@ -178,15 +181,6 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
   }
 
   if (!card) return null;
-
-  if (renderOpts.template) {
-    if (!card.render) card.render = {};
-    card.render.template = renderOpts.template;
-  }
-  if (renderOpts.wrapper) {
-    if (!card.render) card.render = {};
-    card.render.wrapper = renderOpts.wrapper;
-  }
 
   applyFieldInterpolation(card);
   applyVariableInterpolation(card, variables);

@@ -686,19 +686,33 @@ function compile(configPath, options = {}) {
     // AI Instructions
     const ainSpec = compileContext.componentRefs.aiInstructions;
     if (ainSpec && typeof ainSpec === 'string' && fs.existsSync(ainSpec)) {
-      const ainDoc = loadAINConfig(ainSpec);
-      const { ain } = compileAIN(ainDoc, registry, compileContext);
-      const ainPath = writeAIN(outputDir, ain);
-      if (ainPath) { console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
+      const ainExt = path.extname(ainSpec).toLowerCase();
+      if (ainExt === '.md' || ainExt === '.txt') {
+        const content = fs.readFileSync(ainSpec, 'utf8').trimEnd() || null;
+        const ainPath = writeAIN(outputDir, content);
+        if (ainPath) { console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
+      } else {
+        const ainDoc = loadAINConfig(ainSpec);
+        const { ain } = compileAIN(ainDoc, registry, compileContext);
+        const ainPath = writeAIN(outputDir, ain);
+        if (ainPath) { console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
+      }
     }
 
     // Author's Note
     const anSpec = compileContext.componentRefs.authorsNote;
     if (anSpec && typeof anSpec === 'string' && fs.existsSync(anSpec)) {
-      const anDoc = loadANConfig(anSpec);
-      const anContent = compileAN(anDoc, registry, compileContext);
-      const anPath = writeAN(outputDir, anContent);
-      if (anPath) { console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
+      const anExt = path.extname(anSpec).toLowerCase();
+      if (anExt === '.md' || anExt === '.txt') {
+        const content = fs.readFileSync(anSpec, 'utf8').trimEnd() || null;
+        const anPath = writeAN(outputDir, content);
+        if (anPath) { console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
+      } else {
+        const anDoc = loadANConfig(anSpec);
+        const anContent = compileAN(anDoc, registry, compileContext);
+        const anPath = writeAN(outputDir, anContent);
+        if (anPath) { console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
+      }
     }
 
     // Scripts
