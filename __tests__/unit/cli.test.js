@@ -301,3 +301,89 @@ describe('CLI --leafReview + --overview combined', () => {
     expect(files.length).toBeGreaterThan(0);
   });
 });
+
+// ── --compile / -C flag ───────────────────────────────────────────────────────
+
+describe('CLI --compile flag', () => {
+  let tmp;
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cli-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true });
+  });
+
+  test('-C with compile.yaml compiles the project', () => {
+    const cfgPath = path.join(tmp, 'compile.yaml');
+    write(cfgPath, MINIMAL_COMPILE_YAML);
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '-C', cfgPath],
+      { encoding: 'utf8', cwd: tmp }
+    );
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(tmp, 'output'))).toBe(true);
+  });
+
+  test('-C -l with compile.yaml compiles then writes leaf-review files', () => {
+    const cfgPath = path.join(tmp, 'compile.yaml');
+    write(cfgPath, MINIMAL_COMPILE_YAML);
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '-C', '-l', cfgPath],
+      { encoding: 'utf8', cwd: tmp }
+    );
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(tmp, 'output'))).toBe(true);
+    expect(fs.existsSync(path.join(tmp, 'output', 'Overview'))).toBe(true);
+  });
+
+  test('-C -l -o with compile.yaml compiles then runs all three modes', () => {
+    const cfgPath = path.join(tmp, 'compile.yaml');
+    write(cfgPath, MINIMAL_COMPILE_YAML);
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '-C', '-l', '-o', cfgPath],
+      { encoding: 'utf8', cwd: tmp }
+    );
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(tmp, 'output'))).toBe(true);
+    expect(fs.existsSync(path.join(tmp, 'output', 'Overview'))).toBe(true);
+  });
+
+  test('-C with directory arg auto-detects compile.yaml inside it', () => {
+    write(path.join(tmp, 'project', 'compile.yaml'), MINIMAL_COMPILE_YAML);
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '-C', path.join(tmp, 'project')],
+      { encoding: 'utf8', cwd: tmp }
+    );
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(tmp, 'project', 'output'))).toBe(true);
+  });
+
+  test('-C with no compile.yaml but -l present warns and still runs leaf-review', () => {
+    write(path.join(tmp, 'scenario', 'Story Cards', 'T', 'c.md'), 'c');
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '-C', '-l', path.join(tmp, 'scenario')],
+      { encoding: 'utf8', cwd: tmp }
+    );
+    expect(result.status).toBe(0);
+    expect(result.stderr).toMatch(/compile\.yaml not found/i);
+    expect(fs.existsSync(path.join(tmp, 'overview'))).toBe(true);
+  });
+
+  test('-C with no compile.yaml and no -l/-o exits nonzero', () => {
+    const result = run(['-C', path.join(tmp, 'no-such-dir')]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/compile\.yaml/i);
+  });
+});

@@ -155,38 +155,6 @@ describe('protagonist inherited from parent branch node', () => {
   });
 });
 
-// ── overview: key integration ─────────────────────────────────────────────────
-
-describe('overview generated automatically by compile', () => {
-  // compile() always writes Overview/ inside the output dir — use the
-  // outer tmpDir/output that was already compiled in beforeAll.
-  const overviewDir = () => path.join(tmpDir, 'output', 'Overview');
-
-  test('Overview/ directory is created inside output', () => {
-    expect(fs.existsSync(overviewDir())).toBe(true);
-  });
-
-  test('one .overview.md file is written per branch leaf', () => {
-    const files = fs.readdirSync(overviewDir());
-    expect(files.every(f => f.endsWith('.overview.md'))).toBe(true);
-    expect(files).toHaveLength(3); // subject, researcher, felix
-  });
-
-  test('subject.overview.md contains subject Character card content', () => {
-    const content = fs.readFileSync(
-      path.join(overviewDir(), 'subject.overview.md'), 'utf8'
-    );
-    expect(content).toContain('Fused-Squad Subject');
-  });
-
-  test('researcher.overview.md does not contain subject-only content', () => {
-    const content = fs.readFileSync(
-      path.join(overviewDir(), 'researcher.overview.md'), 'utf8'
-    );
-    expect(content).not.toContain('Fused-Squad Subject');
-  });
-});
-
 // ── Opening.md integration ────────────────────────────────────────────────────
 
 describe('Opening.md generation', () => {

@@ -665,6 +665,8 @@ function compile(configPath, options = {}) {
   const verbose = !!options.verbose;
   const config = loadCompileConfig(configPath);
 
+  fs.mkdirSync(config._resolvedOutput, { recursive: true });
+
   const { templates, partials } = loadTemplates(config._resolvedTemplates);
   console.log(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
@@ -902,13 +904,6 @@ function compile(configPath, options = {}) {
   }
   console.log(`\n${allCardIds.size} unique cards across project. Wrote ${totalFiles} file(s).`);
 
-  // Overview (leaf review) — always generated after compile
-  const { runLeafReviewMode } = require('./overview');
-  const overviewDir = config._resolvedOverview || path.join(config._resolvedOutput, 'Overview');
-  fs.mkdirSync(overviewDir, { recursive: true });
-  console.log('\nGenerating overview...');
-  runLeafReviewMode(config._resolvedOutput, overviewDir);
-
   // Canon dependency manifest
   const canonManifest = buildCanonManifest(config);
   if (Object.keys(canonManifest).length > 0) {
@@ -949,25 +944,46 @@ module.exports = {
 };
 
 /**
- * Resolve scenarioRoot and outputDir for overview/leaf-review CLI modes.
- * If `arg` is a .yaml/.yml file, load it as a compile config and derive both paths from it.
- * Otherwise treat `arg` as the scenario root directory.
+ * Resolve configPath, scenarioRoot, and outputDir from a CLI positional argument.
+ * Accepts a folder (looks for compile.yaml inside), a compile.yaml path, or undefined (uses cwd).
  *
- * @param {string}      arg         - path argument from CLI
- * @param {string}      defaultOut  - fallback output dir name when arg is a directory
- * @returns {{ scenarioRoot: string, outputDir: string }}
+ * @param {string|undefined} positional
+ * @returns {{ configPath: string|null, scenarioRoot: string|null, outputDir: string|null, hasConfig: boolean }}
  */
-function resolveReviewArgs(arg, defaultOut) {
-  if (/\.ya?ml$/i.test(arg)) {
-    const cfg = loadCompileConfig(path.resolve(arg));
+function resolveArgs(positional) {
+  let cfgPath = null;
+
+  if (positional) {
+    if (/\.ya?ml$/i.test(positional)) {
+      cfgPath = path.resolve(positional);
+    } else {
+      const candidate = path.join(path.resolve(positional), 'compile.yaml');
+      if (fs.existsSync(candidate)) cfgPath = candidate;
+    }
+  } else {
+    const candidate = path.join(process.cwd(), 'compile.yaml');
+    if (fs.existsSync(candidate)) cfgPath = candidate;
+  }
+
+  if (cfgPath) {
+    const cfg = loadCompileConfig(cfgPath);
     return {
+      configPath:   cfgPath,
       scenarioRoot: cfg._resolvedOutput,
       outputDir:    cfg._resolvedOverview || path.join(cfg._resolvedOutput, 'Overview'),
+      hasConfig:    true,
     };
   }
+
+  if (!positional) {
+    return { configPath: null, scenarioRoot: null, outputDir: null, hasConfig: false };
+  }
+
   return {
-    scenarioRoot: path.resolve(arg),
-    outputDir:    path.resolve(defaultOut),
+    configPath:   null,
+    scenarioRoot: path.resolve(positional),
+    outputDir:    path.resolve('overview'),
+    hasConfig:    false,
   };
 }
 
@@ -976,78 +992,98 @@ function resolveReviewArgs(arg, defaultOut) {
 if (require.main === module) {
   const rawArgs = process.argv.slice(2);
 
-  const leafReviewIdx = rawArgs.findIndex(a => a === '--leafReview' || a === '-l');
-  const overviewIdx   = rawArgs.findIndex(a => a === '--overview'   || a === '-o');
-  const doLeafReview  = leafReviewIdx !== -1;
-  const doOverview    = overviewIdx   !== -1;
+  const knownFlags = [
+    ['compile',    ['--compile',    '-C']],
+    ['leafReview', ['--leafReview', '-l']],
+    ['overview',   ['--overview',   '-o']],
+    ['clean',      ['--clean',      '-c']],
+    ['verbose',    ['--verbose',    '-v']],
+  ];
 
-  if (doLeafReview || doOverview) {
-    const { runLeafReviewMode, runOverviewMode } = require('./overview');
-    const flagIdxs = new Set([leafReviewIdx, overviewIdx].filter(i => i !== -1));
-    const rest = rawArgs.filter((_, i) => !flagIdxs.has(i));
-    let scenarioRoot, outputDir;
+  const flags = {};
+  const flagIdxs = new Set();
+  for (const [key, aliases] of knownFlags) {
+    const idx = rawArgs.findIndex(a => aliases.includes(a));
+    flags[key] = idx !== -1;
+    if (idx !== -1) flagIdxs.add(idx);
+  }
 
-    if (rest.length === 0) {
-      const cfgPath = path.join(process.cwd(), 'compile.yaml');
-      if (!fs.existsSync(cfgPath)) {
+  const positional = rawArgs.filter((_, i) => !flagIdxs.has(i));
+
+  const doCompile    = flags.compile || (!flags.leafReview && !flags.overview);
+  const doLeafReview = flags.leafReview;
+  const doOverview   = flags.overview;
+
+  if (positional.length === 0 && !flags.compile && !flags.leafReview && !flags.overview) {
+    console.error(
+      'Usage: codex-loom [--compile|-C] [--clean|-c] [--verbose|-v] [--leafReview|-l] [--overview|-o] [<folder | compile.yaml>]'
+    );
+    process.exit(1);
+  }
+
+  const { configPath, scenarioRoot, outputDir, hasConfig } = resolveArgs(positional[0]);
+
+  // ── Compile ──
+  if (doCompile) {
+    if (!hasConfig) {
+      if (!scenarioRoot) {
         console.error('No compile.yaml in current directory and no path given.');
         process.exit(1);
       }
-      const cfg = loadCompileConfig(cfgPath);
-      scenarioRoot = cfg._resolvedOutput;
-      outputDir = cfg._resolvedOverview || path.resolve(path.dirname(cfgPath), 'leaf-review');
+      if (doLeafReview || doOverview) {
+        console.warn('Warning: compile.yaml not found; skipping compile.');
+      } else {
+        console.error(`No compile.yaml found at ${path.resolve(positional[0] || '.')}.`);
+        process.exit(1);
+      }
     } else {
-      ({ scenarioRoot, outputDir } = resolveReviewArgs(rest[0], 'overview'));
+      try {
+        compile(configPath, { clean: flags.clean, verbose: flags.verbose });
+      } catch (err) {
+        console.error(`\nFatal: ${err.message}`);
+        process.exit(1);
+      }
     }
+  }
 
+  // ── Leaf-review / Overview ──
+  if (doLeafReview || doOverview) {
+    if (!scenarioRoot) {
+      console.error('No compile.yaml in current directory and no path given.');
+      process.exit(1);
+    }
     if (!fs.existsSync(scenarioRoot)) {
       console.error(`Scenario root not found: ${scenarioRoot}`);
       process.exit(1);
     }
 
-    const modeLabel = [doLeafReview && 'leaf-review', doOverview && 'overview'].filter(Boolean).join(' + ');
     fs.mkdirSync(outputDir, { recursive: true });
-    console.log(`\n${modeLabel} mode\nScenario root : ${scenarioRoot}\nOutput dir    : ${outputDir}\n`);
+
+    if (flags.verbose) {
+      const modeLabel = [doLeafReview && 'leaf-review', doOverview && 'overview'].filter(Boolean).join(' + ');
+      console.log(`\n${modeLabel} mode\nScenario root : ${scenarioRoot}\nOutput dir    : ${outputDir}\n`);
+    }
 
     try {
+      const { runLeafReviewMode, runOverviewMode } = require('./overview');
+      let leafCount = 0;
       if (doLeafReview) {
-        const written = runLeafReviewMode(scenarioRoot, outputDir);
-        console.log(`\nWrote ${written.length} leaf review file(s) to:\n  ${outputDir}`);
+        const written = runLeafReviewMode(scenarioRoot, outputDir, flags.verbose);
+        leafCount = written.length;
       }
       if (doOverview) {
-        runOverviewMode(scenarioRoot, outputDir);
-        console.log(`\nWrote overview file to:\n  ${outputDir}`);
+        runOverviewMode(scenarioRoot, outputDir, flags.verbose);
       }
-      console.log('');
-    } catch (err) {
-      console.error(`\nFatal: ${err.message}`);
-      process.exit(1);
-    }
 
-  } else {
-    const cleanIdx   = rawArgs.findIndex(a => a === '--clean'   || a === '-c');
-    const verboseIdx = rawArgs.findIndex(a => a === '--verbose' || a === '-v');
-    const isClean   = cleanIdx   !== -1;
-    const isVerbose = verboseIdx !== -1;
-    const compileArgs = rawArgs.filter((_, i) => i !== cleanIdx && i !== verboseIdx);
-
-    if (compileArgs.length === 0) {
-      console.error(
-        'Usage: codex-loom [--clean|-c] [--verbose|-v] <path/to/compile.yaml or project/>\n' +
-        '       codex-loom [--leafReview|-l] [--overview|-o] [<scenario-root | compile.yaml>]'
-      );
-      process.exit(1);
-    }
-
-    let configPath = compileArgs[0];
-    try {
-      if (fs.statSync(configPath).isDirectory()) {
-        configPath = path.join(configPath, 'compile.yaml');
+      let summary;
+      if (doLeafReview && doOverview) {
+        summary = `Wrote ${leafCount} leaf review file(s) and overview file to:`;
+      } else if (doLeafReview) {
+        summary = `Wrote ${leafCount} leaf review file(s) to:`;
+      } else {
+        summary = `Wrote overview file to:`;
       }
-    } catch (_) {}
-
-    try {
-      compile(configPath, { clean: isClean, verbose: isVerbose });
+      console.log(`\n${summary}\n  ${outputDir}\n`);
     } catch (err) {
       console.error(`\nFatal: ${err.message}`);
       process.exit(1);

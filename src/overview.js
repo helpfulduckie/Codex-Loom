@@ -191,7 +191,7 @@ function collectOverviewSections(branchDir, branchNames, rootDirName) {
  * Compile a single leaf node into a .overview.md file and write it to outputDir.
  * Filename: sanitize(branchNames.join(" - ") || rootDirName) + ".overview.md"
  */
-function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf) {
+function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose = false) {
   const { branchNames, cards, leafDir } = leaf;
 
   // Walk up from the leaf to find the nearest versions of each component file.
@@ -235,7 +235,7 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf) {
   if (cards.length > 0) parts.push(`# Story Cards\n\n${cards.join('\n\n')}`);
 
   fs.writeFileSync(outPath, parts.join('\n\n'), 'utf8');
-  console.log(`  ✓  ${filename}`);
+  if (verbose) console.log(`  ✓  ${filename}`);
 }
 
 // ── exported runners ──────────────────────────────────────────────────────────
@@ -244,7 +244,7 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf) {
  * Run leaves mode on a scenario root: discover all leaves, compile each one.
  * Returns the list of output file paths written.
  */
-function runLeafReviewMode(scenarioRoot, outputDir) {
+function runLeafReviewMode(scenarioRoot, outputDir, verbose = false) {
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
   const leaves      = discoverLeaves(rootAbs, [], []);
@@ -265,7 +265,7 @@ function runLeafReviewMode(scenarioRoot, outputDir) {
     const filename  = sanitizeFilename(fileBase || rootDirName) + '.overview.md';
     written.push(path.join(outputDir, filename));
 
-    compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf);
+    compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose);
   }
 
   return written;
@@ -275,7 +275,7 @@ function runLeafReviewMode(scenarioRoot, outputDir) {
  * Run overview mode: produce one .overview.md covering the whole tree.
  * Returns the output file path written.
  */
-function runOverviewMode(scenarioRoot, outputDir) {
+function runOverviewMode(scenarioRoot, outputDir, verbose = false) {
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
   const filename    = sanitizeFilename(rootDirName) + '.overview.md';
@@ -284,7 +284,7 @@ function runOverviewMode(scenarioRoot, outputDir) {
   const sections = collectOverviewSections(rootAbs, [], rootDirName);
   const doc = [`# ${rootDirName}`, ...sections].join('\n\n');
   fs.writeFileSync(outPath, doc, 'utf8');
-  console.log(`  ✓  ${filename}`);
+  if (verbose) console.log(`  ✓  ${filename}`);
   return outPath;
 }
 

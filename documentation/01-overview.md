@@ -17,25 +17,50 @@ After installing globally, the `codex-loom` command is available anywhere.
 
 ## CLI Usage
 
-```bash
-# Compile a project from its config file
-codex-loom path/to/compile.yaml
+All flags are combinable. The positional argument is either a `compile.yaml` path or a project folder (Codex Loom looks for `compile.yaml` inside it). If omitted, the current directory is used.
 
-# Compile from a project directory (looks for compile.yaml inside)
+```bash
+# Compile a project
+codex-loom path/to/compile.yaml
 codex-loom path/to/project/
 
-# Generate one leaf-review file per branch leaf from an already-compiled output
-codex-loom --leafReview path/to/output [output-dir]
-codex-loom -l path/to/output [output-dir]
+# Compile with verbose output (prints every file written)
+codex-loom --verbose path/to/project/
+codex-loom -v path/to/project/
 
-# Generate a single whole-tree overview file (one section per branch node)
-codex-loom --overview path/to/output [output-dir]
-codex-loom -o path/to/output [output-dir]
+# Compile and wipe stale branch folders first
+codex-loom --clean path/to/project/
+codex-loom -c path/to/project/
+
+# Generate one leaf-review file per branch leaf
+codex-loom --leafReview path/to/project/
+codex-loom -l path/to/project/
+
+# Generate a single whole-tree overview file
+codex-loom --overview path/to/project/
+codex-loom -o path/to/project/
+
+# Combine: compile then generate both review files in one run
+codex-loom --compile --leafReview --overview path/to/project/
+codex-loom -C -l -o path/to/project/
 ```
 
-If `output-dir` is omitted for `--leafReview`, files are written to `./leaf-review/`. For `--overview`, files are written to `./overview/`.
+**Mode flags** — `-C`/`--compile`, `-l`/`--leafReview`, `-o`/`--overview` — control what runs. Any combination is valid:
 
-A leaf-review overview is also **generated automatically** after every compile into `{output}/Overview/`.
+| Flags | What happens |
+|---|---|
+| *(none)* | Compile only (default) |
+| `-C` | Compile only (explicit) |
+| `-l` | Leaf-review only |
+| `-o` | Overview only |
+| `-l -o` | Both review modes, no compile |
+| `-C -l` | Compile, then leaf-review |
+| `-C -o` | Compile, then overview |
+| `-C -l -o` | Compile, then both review modes |
+
+`-c`/`--clean` and `-v`/`--verbose` only apply to the compile step.
+
+**Path resolution** — When given a project folder (or no argument), Codex Loom looks for `compile.yaml` inside it to derive the output path and overview path. If no `compile.yaml` is found, it treats the folder as an already-compiled scenario root and runs any requested review modes directly on it — with a warning if `-C` was also requested.
 
 ---
 
@@ -90,9 +115,6 @@ output/
       Components/
         Opening.md
         Plot Essentials.md
-  Overview/                      ← leaf-review files (generated automatically)
-    subject.overview.md
-    researcher.overview.md
 ```
 
 For nested branches (e.g. branch `A` with children `X` and `Y`), the path is `Branches/A/Branches/X/`.
