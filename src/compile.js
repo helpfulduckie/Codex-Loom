@@ -17,6 +17,8 @@ const { resolveVariables } = require('./util');
 const { loadPEConfig, compilePE, writePE } = require('./pe');
 const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
 const { loadANConfig, compileAN, writeAN } = require('./an');
+const { loadDescConfig, extractScriptBanner, writeDescription } = require('./description');
+const { loadOpeningConfig, compileOpening } = require('./opening');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -282,6 +284,7 @@ function resolveIncludes(cardDefs, canonRegistry, config) {
   if (includeDefs.length === 0) return [];
 
   const included = [];
+  const seenFiles = new Map(); // fullPath → [importer _source, ...]
   for (const def of includeDefs) {
     // Resolve {@Key} in include path
     let includePath = String(def.include);
@@ -306,6 +309,18 @@ function resolveIncludes(cardDefs, canonRegistry, config) {
       console.warn(`  WARN: include path not found: ${fullPath}`);
       continue;
     }
+
+    const importerSource = def._source || '(unknown)';
+    if (seenFiles.has(fullPath)) {
+      seenFiles.get(fullPath).push(importerSource);
+      const allImporters = seenFiles.get(fullPath);
+      throw new Error(
+        `File included more than once: ${fullPath}\n` +
+        `Included by:\n` +
+        allImporters.map(s => `  ${s}`).join('\n')
+      );
+    }
+    seenFiles.set(fullPath, [importerSource]);
 
     const raw = loadYaml(fullPath);
     const cards = Array.isArray(raw) ? raw : [raw];
@@ -349,6 +364,21 @@ function buildCanonRegistry(resolvedCanon) {
     }
   }
   return registry;
+}
+
+/**
+ * Build a canon dependency manifest for the output JSON file.
+ */
+function buildCanonManifest(config) {
+  const { findFiles } = require('./loader');
+  const manifest = {};
+  for (const [name, resolvedPath] of config._resolvedCanon) {
+    const expression = config._canonRaw ? String(config._canonRaw[name] ?? resolvedPath) : resolvedPath;
+    const missing = !fs.existsSync(resolvedPath);
+    const files = missing ? [] : findFiles(resolvedPath, '.yaml');
+    manifest[name] = { expression, resolvedPath, files, ...(missing ? { missing: true } : {}) };
+  }
+  return manifest;
 }
 
 /**
@@ -492,26 +522,52 @@ function writeComponentFile(outputDir, filename, content) {
 }
 
 /**
+ * Detect whether a raw opening spec resolves to a .yaml/.yml file.
+ * Returns the absolute path if it is a YAML file, otherwise null.
+ */
+function resolveYamlOpeningPath(spec, base, variables) {
+  if (spec == null || typeof spec !== 'string') return null;
+  const expanded = variables ? resolveVariables(spec, variables) : spec;
+  const absPath = path.resolve(base, expanded);
+  if (fs.existsSync(absPath) && fs.statSync(absPath).isFile() && /\.ya?ml$/i.test(absPath)) {
+    return absPath;
+  }
+  return null;
+}
+
+/**
  * Recursively write opening / openingChoice files through the branch tree.
  *
  * Rules:
  *   opening:       inherits down; written ONLY to leaf nodes' Components/Opening.md
+ *                  If the resolved spec is a .yaml file, compiled as block-opening sequence.
  *   openingChoice: does NOT inherit; written to branch NODE's Components/Opening.md
  *                  if present on leaf, warn and skip
  *
  * @param {object} branches - branch tree
- * @param {string} baseOutput - base output directory
+ * @param {string} outputBase - base output directory
  * @param {string} configBase - base path for resolving relative file paths
- * @param {string|null} inheritedOpening - effective opening carried from ancestor
- * @param {boolean} isLeaf - whether this level is a leaf (no sub-branches)
+ * @param {string|null} inheritedOpening - effective opening spec carried from ancestor
+ * @param {object} variables - merged branch variables
+ * @param {object} componentDirs - resolved component directory map
+ * @param {string[]} currentPath - branch path segments accumulated while descending
  */
-function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables, componentDirs) {
+function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables, componentDirs, currentPath = []) {
   if (!branches || typeof branches !== 'object') {
     // We're at the root level with no branches — the root itself is the only leaf
     if (inheritedOpening != null) {
-      const content = resolveOpeningContent(inheritedOpening, configBase, variables);
-      const outPath = writeComponentFile(outputBase, 'Opening.md', content);
-      console.log(`    OK: Opening → ${outPath}`);
+      const yamlPath = resolveYamlOpeningPath(inheritedOpening, configBase, variables);
+      let content;
+      if (yamlPath) {
+        const blocks = loadOpeningConfig(yamlPath);
+        content = compileOpening(blocks, currentPath, variables, configBase);
+      } else {
+        content = resolveOpeningContent(inheritedOpening, configBase, variables);
+      }
+      if (content) {
+        const outPath = writeComponentFile(outputBase, 'Opening.md', content);
+        console.log(`    OK: Opening → ${outPath}`);
+      }
     }
     return;
   }
@@ -554,13 +610,23 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
     if (isLeafNode) {
       // Write the inherited/overridden opening to this leaf
       if (effectiveOpening != null) {
-        const content = resolveOpeningContent(effectiveOpening, configBase, branchVars);
-        const outPath = writeComponentFile(nodeOutput, 'Opening.md', content);
-        console.log(`    OK: Opening → ${outPath}`);
+        const leafPath = [...currentPath, name];
+        const yamlPath = resolveYamlOpeningPath(effectiveOpening, configBase, branchVars);
+        let content;
+        if (yamlPath) {
+          const blocks = loadOpeningConfig(yamlPath);
+          content = compileOpening(blocks, leafPath, branchVars, configBase);
+        } else {
+          content = resolveOpeningContent(effectiveOpening, configBase, branchVars);
+        }
+        if (content) {
+          const outPath = writeComponentFile(nodeOutput, 'Opening.md', content);
+          console.log(`    OK: Opening → ${outPath}`);
+        }
       }
     } else {
-      // Recurse into sub-branches
-      writeOpeningsRecursive(subBranches, nodeOutput, configBase, effectiveOpening, branchVars, componentDirs);
+      // Recurse into sub-branches, tracking the current path
+      writeOpeningsRecursive(subBranches, nodeOutput, configBase, effectiveOpening, branchVars, componentDirs, [...currentPath, name]);
     }
   }
 }
@@ -752,12 +818,52 @@ function compile(configPath, options = {}) {
     rootOpening, config.variables || {}, config._resolvedComponents
   );
 
+  // Description (project-level, written once to output root alongside Branches/)
+  const descSpec = config.components && config.components.description != null
+    ? resolveComponentSpec(config.components.description, config._base, config._resolvedComponents)
+    : null;
+  if (descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec)) {
+    const ext = path.extname(descSpec).toLowerCase();
+    let bodyContent = null;
+    let bannerContent = null;
+
+    if (ext === '.md' || ext === '.txt') {
+      bodyContent = fs.readFileSync(descSpec, 'utf8').trimEnd() || null;
+    } else if (ext === '.js') {
+      bannerContent = extractScriptBanner(descSpec, {});
+    } else {
+      const descCfg = loadDescConfig(descSpec, config._base, config._resolvedComponents, config.variables || {});
+      if (descCfg.bodyPath && fs.existsSync(descCfg.bodyPath))
+        bodyContent = fs.readFileSync(descCfg.bodyPath, 'utf8').trimEnd() || null;
+      if (descCfg.scriptPath && fs.existsSync(descCfg.scriptPath))
+        bannerContent = extractScriptBanner(descCfg.scriptPath, { stripTrailingInstructions: descCfg.stripTrailingInstructions });
+    }
+
+    const combined = [bodyContent, bannerContent].filter(Boolean).join('\n');
+    const descPath = writeDescription(config._resolvedOutput, combined);
+    if (descPath) console.log(`  OK: Description → ${descPath}`);
+  }
+
   // Overview (leaf review) — always generated after compile
   const { runLeafReviewMode } = require('./overview');
   const overviewDir = config._resolvedOverview || path.join(config._resolvedOutput, 'Overview');
   fs.mkdirSync(overviewDir, { recursive: true });
   console.log('\nGenerating overview...');
   runLeafReviewMode(config._resolvedOutput, overviewDir);
+
+  // Canon dependency manifest
+  const canonManifest = buildCanonManifest(config);
+  if (Object.keys(canonManifest).length > 0) {
+    const manifestPath = path.join(config._resolvedOutput, 'canon-dependencies.json');
+    const manifestData = {
+      generatedAt: new Date().toISOString(),
+      compileYaml: path.resolve(configPath),
+      variables: config.variables || {},
+      canon: canonManifest,
+    };
+    fs.writeFileSync(manifestPath, JSON.stringify(manifestData, null, 2), 'utf8');
+    console.log(`  OK: Canon manifest → ${manifestPath}`);
+  }
 }
 
 /**

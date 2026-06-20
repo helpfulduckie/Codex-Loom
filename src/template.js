@@ -194,7 +194,7 @@ function evaluateKeys(inner, data) {
   if (val === null) return '';
   if (typeof val === 'object' && !Array.isArray(val)) {
     return Object.entries(val)
-      .map(([k, v]) => `${k}: ${v}`)
+      .map(([k, v]) => `- ${k}: ${v}`)
       .join('\n');
   }
   return renderScalar(val);

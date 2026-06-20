@@ -42,6 +42,8 @@ structure:
         default: ./openings
       scripts:
         default: ./scripts
+      description:
+        default: ./description.yaml
   output: ./output
 
 protagonist: Aness                # global default protagonist ID
@@ -158,6 +160,7 @@ Named directory (or file) mappings for each component type. These are referenced
 | `opening` | `Components/Opening.md` |
 | `openingChoice` | `Components/Opening.md` (branch-point nodes only) |
 | `scripts` | `Scripts/` (directory copy) |
+| `description` | `Description.md` (output root, written once — not per-branch) |
 
 ```yaml
 components:
@@ -214,11 +217,14 @@ components:
   aiInstructions: "{@default}"                # component key reference
   authorsNote: ./authors-note.yaml
   scripts: ./scripts
+  description: ./description.yaml             # project-level description
 ```
 
 **`opening:`** — Written to `{output}/Components/Opening.md`. Inherits down to leaf branches unless overridden.
 
 **`openingChoice:`** — Written to branch-point nodes' `Components/Opening.md`. Does **not** inherit; ignored on leaf nodes with a warning.
+
+**`description:`** — Written once to `{output}/Description.md` after all branches compile. Accepts a `.md`/`.txt` file (body only), a `.js` file (script banner only), or a `.yaml` config combining both. Not per-branch; branch-level overrides are ignored. See [Components → Description](09-components.md#description) for full details.
 
 ### `branches`
 

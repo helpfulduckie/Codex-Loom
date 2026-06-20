@@ -6,6 +6,7 @@ const fs = require('fs');
 const {
   getTemplate, writeOpening, resolveOpeningContent, resolveBranchFolderPath,
   buildBranchOutputDir, buildCompileContext, writeOutput, writeOpeningsRecursive,
+  resolveIncludes,
 } = require('../../src/compile');
 
 describe('getTemplate', () => {
@@ -383,5 +384,118 @@ describe('writeOpeningsRecursive — branch variable merging', () => {
       'Components', 'Opening.md'
     );
     expect(fs.readFileSync(petOut, 'utf8').trim()).toBe('Felix pet opening');
+  });
+});
+
+// ── resolveIncludes — duplicate file detection ────────────────────────────────
+
+describe('resolveIncludes — duplicate file detection', () => {
+  let tmpDir;
+
+  const makeConfig = (base) => ({
+    _base: base,
+    _resolvedComponents: {},
+    _resolvedCanon: new Map(),
+  });
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-includes-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('single include of a file succeeds and returns its cards', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: CardA\n  name: CardA\n', 'utf8');
+
+    const cardDefs = [{ include: shared, _source: path.join(tmpDir, 'project.yaml') }];
+    const result = resolveIncludes(cardDefs, new Map(), makeConfig(tmpDir));
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('CardA');
+  });
+
+  test('duplicate include from two different source files throws an error', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: CardA\n  name: CardA\n', 'utf8');
+
+    const source1 = path.join(tmpDir, 'first.yaml');
+    const source2 = path.join(tmpDir, 'second.yaml');
+    const cardDefs = [
+      { include: shared, _source: source1 },
+      { include: shared, _source: source2 },
+    ];
+
+    expect(() => resolveIncludes(cardDefs, new Map(), makeConfig(tmpDir)))
+      .toThrow(/File included more than once/);
+  });
+
+  test('error message contains the duplicated file path', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: CardA\n  name: CardA\n', 'utf8');
+
+    const cardDefs = [
+      { include: shared, _source: path.join(tmpDir, 'a.yaml') },
+      { include: shared, _source: path.join(tmpDir, 'b.yaml') },
+    ];
+
+    let err;
+    try { resolveIncludes(cardDefs, new Map(), makeConfig(tmpDir)); }
+    catch (e) { err = e; }
+
+    expect(err.message).toContain(shared);
+  });
+
+  test('error message lists both source files that include the duplicate', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: CardA\n  name: CardA\n', 'utf8');
+
+    const source1 = path.join(tmpDir, 'a.yaml');
+    const source2 = path.join(tmpDir, 'b.yaml');
+    const cardDefs = [
+      { include: shared, _source: source1 },
+      { include: shared, _source: source2 },
+    ];
+
+    let err;
+    try { resolveIncludes(cardDefs, new Map(), makeConfig(tmpDir)); }
+    catch (e) { err = e; }
+
+    expect(err.message).toContain(source1);
+    expect(err.message).toContain(source2);
+  });
+
+  test('duplicate include within the same source file throws and lists the source', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: CardA\n  name: CardA\n', 'utf8');
+
+    const source = path.join(tmpDir, 'cards.yaml');
+    const cardDefs = [
+      { include: shared, _source: source },
+      { include: shared, _source: source },
+    ];
+
+    let err;
+    try { resolveIncludes(cardDefs, new Map(), makeConfig(tmpDir)); }
+    catch (e) { err = e; }
+
+    expect(err.message).toContain(shared);
+    expect(err.message).toContain(source);
+  });
+
+  test('two includes of different files succeeds and returns all cards', () => {
+    const fileA = path.join(tmpDir, 'a.yaml');
+    const fileB = path.join(tmpDir, 'b.yaml');
+    fs.writeFileSync(fileA, '- id: CardA\n  name: CardA\n', 'utf8');
+    fs.writeFileSync(fileB, '- id: CardB\n  name: CardB\n', 'utf8');
+
+    const cardDefs = [
+      { include: fileA, _source: path.join(tmpDir, 'project.yaml') },
+      { include: fileB, _source: path.join(tmpDir, 'project.yaml') },
+    ];
+    const result = resolveIncludes(cardDefs, new Map(), makeConfig(tmpDir));
+    expect(result).toHaveLength(2);
+    expect(result.map(c => c.id)).toEqual(expect.arrayContaining(['CardA', 'CardB']));
   });
 });

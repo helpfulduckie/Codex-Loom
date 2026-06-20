@@ -487,3 +487,202 @@ describe('cross-card refs inside body field render functions', () => {
     expect(content).toContain('Carol (blond; green)');
   });
 });
+
+// ── YAML block-opening (opening.yaml) integration ─────────────────────────────
+
+describe('YAML block opening (opening.yaml)', () => {
+  let blkTmpDir;
+
+  beforeAll(() => {
+    blkTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-blk-opening-'));
+
+    fs.mkdirSync(path.join(blkTmpDir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(blkTmpDir, 'templates'), { recursive: true });
+    fs.mkdirSync(path.join(blkTmpDir, 'paragraphs'), { recursive: true });
+
+    fs.writeFileSync(path.join(blkTmpDir, 'cards', 'cards.yaml'), [
+      '- id: Widget',
+      '  name: Widget',
+      '  aid: { type: Item, title: Widget }',
+      '  render: { template: Item }',
+      '  body: { Desc: a widget }',
+    ].join('\n'), 'utf8');
+
+    fs.writeFileSync(path.join(blkTmpDir, 'templates', 'Item.template'), [
+      '## {$aid.title}',
+      '~~~',
+      '{$body.Desc}',
+    ].join('\n'), 'utf8');
+
+    // A paragraph stored as an external file
+    fs.writeFileSync(
+      path.join(blkTmpDir, 'paragraphs', 'knight-oath.md'),
+      'You have sworn an oath to protect the realm.',
+      'utf8'
+    );
+
+    // The opening.yaml block sequence
+    // Note: _: ~ is the fallback key for "exclude unmatched branches"
+    fs.writeFileSync(path.join(blkTmpDir, 'opening.yaml'), [
+      // Universal block — no branches: key
+      '- text: "A world of magic and intrigue awaits."',
+      '',
+      // Role blocks — [] = include with no variant; _: ~ = exclude unmatched branches
+      '- text: "You serve the empire as a subject."',
+      '  branches:',
+      '    subject: []',
+      '    _: ~',
+      '',
+      '- text: "You investigate ancient mysteries as a researcher."',
+      '  branches:',
+      '    researcher: []',
+      '    _: ~',
+      '',
+      // Specialisation block with a variant — shared across subject/mage and researcher/mage
+      '- text: "You have mastered the arcane arts."',
+      '  variants:',
+      '    researcher-mage:',
+      '      text: "You have mastered the arcane arts, informed by archival research."',
+      '  branches:',
+      '    subject:',
+      '      branches:',
+      '        mage: []',
+      '        _: ~',
+      '    researcher:',
+      '      branches:',
+      '        mage: researcher-mage',
+      '        _: ~',
+      '    _: ~',
+      '',
+      // File-path text block — knight leaves only
+      `- text: ./paragraphs/knight-oath.md`,
+      '  branches:',
+      '    subject:',
+      '      branches:',
+      '        knight: []',
+      '        _: ~',
+      '    researcher:',
+      '      branches:',
+      '        knight: []',
+      '        _: ~',
+      '    _: ~',
+      '',
+      // Variable expansion block
+      '- text: "Your role is {%role}."',
+    ].join('\n'), 'utf8');
+
+    fs.writeFileSync(path.join(blkTmpDir, 'compile.yaml'), [
+      'structure:',
+      '  input:',
+      `    cards: [${blkTmpDir}/cards]`,
+      `    templates: [${blkTmpDir}/templates]`,
+      `  output: ${blkTmpDir}/output`,
+      'components:',
+      `  opening: ${blkTmpDir}/opening.yaml`,
+      'branches:',
+      '  subject:',
+      '    variables:',
+      '      role: subject',
+      '    branches:',
+      '      mage: {}',
+      '      knight: {}',
+      '  researcher:',
+      '    variables:',
+      '      role: researcher',
+      '    branches:',
+      '      mage: {}',
+      '      knight: {}',
+    ].join('\n'), 'utf8');
+
+    compile(path.join(blkTmpDir, 'compile.yaml'));
+  });
+
+  afterAll(() => {
+    fs.rmSync(blkTmpDir, { recursive: true, force: true });
+  });
+
+  function opening(branchPath) {
+    const segments = branchPath.split('/');
+    let p = path.join(blkTmpDir, 'output', 'Branches');
+    for (const s of segments) p = path.join(p, s, segments.indexOf(s) < segments.length - 1 ? 'Branches' : '');
+    // rebuild cleanly
+    p = path.join(blkTmpDir, 'output');
+    for (const s of segments) p = path.join(p, 'Branches', s);
+    return fs.readFileSync(path.join(p, 'Components', 'Opening.md'), 'utf8');
+  }
+
+  test('universal block (no branches:) appears in all leaves', () => {
+    expect(opening('subject/mage')).toContain('A world of magic and intrigue awaits.');
+    expect(opening('subject/knight')).toContain('A world of magic and intrigue awaits.');
+    expect(opening('researcher/mage')).toContain('A world of magic and intrigue awaits.');
+    expect(opening('researcher/knight')).toContain('A world of magic and intrigue awaits.');
+  });
+
+  test('role block included only for its top-level branch', () => {
+    expect(opening('subject/mage')).toContain('You serve the empire as a subject.');
+    expect(opening('subject/knight')).toContain('You serve the empire as a subject.');
+    expect(opening('researcher/mage')).not.toContain('You serve the empire as a subject.');
+    expect(opening('researcher/mage')).toContain('You investigate ancient mysteries as a researcher.');
+    expect(opening('subject/mage')).not.toContain('You investigate ancient mysteries as a researcher.');
+  });
+
+  test('mage block shared across subject/mage and researcher/mage, absent from knight leaves', () => {
+    expect(opening('subject/mage')).toContain('You have mastered the arcane arts.');
+    expect(opening('researcher/mage')).toContain('You have mastered the arcane arts');
+    expect(opening('subject/knight')).not.toContain('You have mastered the arcane arts');
+    expect(opening('researcher/knight')).not.toContain('You have mastered the arcane arts');
+  });
+
+  test('variant text applied for researcher/mage', () => {
+    expect(opening('researcher/mage')).toContain('informed by archival research');
+    expect(opening('subject/mage')).not.toContain('informed by archival research');
+  });
+
+  test('file-path text block resolved for knight leaves', () => {
+    expect(opening('subject/knight')).toContain('You have sworn an oath to protect the realm.');
+    expect(opening('researcher/knight')).toContain('You have sworn an oath to protect the realm.');
+    expect(opening('subject/mage')).not.toContain('You have sworn an oath');
+  });
+
+  test('variable expansion in block text', () => {
+    expect(opening('subject/mage')).toContain('Your role is subject.');
+    expect(opening('researcher/knight')).toContain('Your role is researcher.');
+  });
+
+  test('paragraphs joined with double newline', () => {
+    const content = opening('subject/mage');
+    expect(content).toContain('awaits.\n\nYou serve');
+  });
+
+  test('existing .md opening still works (regression)', () => {
+    // Use a separate minimal project that points opening: to a .md file
+    const mdDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-blk-md-'));
+    try {
+      fs.mkdirSync(path.join(mdDir, 'cards'), { recursive: true });
+      fs.mkdirSync(path.join(mdDir, 'templates'), { recursive: true });
+      fs.writeFileSync(path.join(mdDir, 'cards', 'c.yaml'), [
+        '- id: W',
+        '  name: W',
+        '  aid: { type: Item, title: W }',
+        '  render: { template: Item }',
+        '  body: { Desc: w }',
+      ].join('\n'), 'utf8');
+      fs.writeFileSync(path.join(mdDir, 'templates', 'Item.template'), '## {$aid.title}\n~~~\n{$body.Desc}', 'utf8');
+      fs.writeFileSync(path.join(mdDir, 'opening.md'), 'Legacy inline opening.', 'utf8');
+      fs.writeFileSync(path.join(mdDir, 'compile.yaml'), [
+        'structure:',
+        `  input: { cards: [${mdDir}/cards], templates: [${mdDir}/templates] }`,
+        `  output: ${mdDir}/output`,
+        'components:',
+        `  opening: ${mdDir}/opening.md`,
+        'branches:',
+        '  only: {}',
+      ].join('\n'), 'utf8');
+      compile(path.join(mdDir, 'compile.yaml'));
+      const p = path.join(mdDir, 'output', 'Branches', 'only', 'Components', 'Opening.md');
+      expect(fs.readFileSync(p, 'utf8').trim()).toBe('Legacy inline opening.');
+    } finally {
+      fs.rmSync(mdDir, { recursive: true, force: true });
+    }
+  });
+});

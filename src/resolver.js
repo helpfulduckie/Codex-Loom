@@ -170,6 +170,9 @@ function hasVariant(cardDef, variantPath) {
 /**
  * Walk a variant path (slash-separated) on a card definition and collect deltas.
  * e.g. "human/noble" → apply 'human' variant delta, then 'noble' child of 'human'.
+ *
+ * Returns null if any segment of the path resolves to a null variant (~), which
+ * signals that the card should be excluded from output entirely.
  */
 function collectVariantDeltas(cardDef, variantPath) {
   const deltas = [];
@@ -189,6 +192,7 @@ function collectVariantDeltas(cardDef, variantPath) {
       break;
     }
     const variantDef = variantTree[actualKey];
+    if (variantDef === null) return null; // null variant (~) = exclude card
     deltas.push(variantDef);
     variantTree = variantDef.variants;
   }
@@ -353,7 +357,9 @@ function resolveCard(cardDef, registry, branchPath) {
 
     // Apply importVariants from the import def (top-level, before branch dispatch)
     for (const vPath of parseVariantsList(cardDef.importVariants)) {
-      for (const delta of collectVariantDeltas(canonCard, vPath)) {
+      const ivDeltas = collectVariantDeltas(canonCard, vPath);
+      if (ivDeltas === null) return null; // null variant = exclude
+      for (const delta of ivDeltas) {
         applyDelta(card, delta);
       }
     }
@@ -379,11 +385,14 @@ function resolveCard(cardDef, registry, branchPath) {
       // use it (allowing project-level overrides); otherwise fall back to the canon card.
       const variantSource = hasVariant(cardDef, vName) ? cardDef : canonCard;
       const deltas = collectVariantDeltas(variantSource, vName);
+      if (deltas === null) return null; // null variant = exclude
       for (const delta of deltas) {
         // Apply any importVariants declared inside this local variant from canon
         if (delta.importVariants && canonCard) {
           for (const cvPath of parseVariantsList(delta.importVariants)) {
-            for (const canonDelta of collectVariantDeltas(canonCard, cvPath)) {
+            const canonDeltas = collectVariantDeltas(canonCard, cvPath);
+            if (canonDeltas === null) return null; // null variant = exclude
+            for (const canonDelta of canonDeltas) {
               applyDelta(card, canonDelta);
             }
           }
@@ -400,7 +409,9 @@ function resolveCard(cardDef, registry, branchPath) {
     // Handle included cards that carry importVariants from the include directive
     if (cardDef._include_variants) {
       for (const vPath of parseVariantsList(cardDef._include_variants)) {
-        for (const delta of collectVariantDeltas(cardDef, vPath)) {
+        const incDeltas = collectVariantDeltas(cardDef, vPath);
+        if (incDeltas === null) return null; // null variant = exclude
+        for (const delta of incDeltas) {
           applyDelta(card, delta);
         }
       }
@@ -414,7 +425,9 @@ function resolveCard(cardDef, registry, branchPath) {
     if (branchVariantNames === null) return null; // excluded
 
     for (const vName of branchVariantNames) {
-      for (const delta of collectVariantDeltas(sourceCardForVariants, vName)) {
+      const localDeltas = collectVariantDeltas(sourceCardForVariants, vName);
+      if (localDeltas === null) return null; // null variant = exclude
+      for (const delta of localDeltas) {
         applyDelta(card, delta);
       }
     }

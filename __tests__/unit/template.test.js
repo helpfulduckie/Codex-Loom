@@ -664,8 +664,8 @@ describe('evaluateBlock', () => {
 });
 
 describe('evaluateKeys', () => {
-  test('object field → key: value per line', () => {
-    expect(evaluateKeys('keys($body.Traits)', evalData)).toBe('hair: silver\neyes: grey');
+  test('object field → - key: value per line', () => {
+    expect(evaluateKeys('keys($body.Traits)', evalData)).toBe('- hair: silver\n- eyes: grey');
   });
 
   test('null field → empty string', () => {

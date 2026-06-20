@@ -53,6 +53,93 @@ branches:
 
 If `openingChoice:` is declared on a leaf node, it is ignored with a warning.
 
+### YAML block openings
+
+When `components.opening` points to a `.yaml` (or `.yml`) file, the compiler treats it as a **sequence of paragraph blocks** rather than a single text file. Each block can carry its own branch dispatch and variant, allowing paragraphs to be shared across non-sibling branches, interleaved conditionally, or varied by branch — without duplicating text.
+
+```yaml
+# compile.yaml
+components:
+  opening: ./opening.yaml
+```
+
+```yaml
+# opening.yaml
+# Universal block — no branches: key → appears in every leaf
+- text: "A world of magic and intrigue awaits."
+
+# Role paragraph — included only for subject/* leaves
+- text: "You serve the empire as its subject."
+  branches:
+    subject: []   # [] = include with no variant
+    _: ~          # _: ~ = exclude from all unmatched branches
+
+# Role paragraph — included only for researcher/* leaves
+- text: "You investigate ancient mysteries as a researcher."
+  branches:
+    researcher: []
+    _: ~
+
+# Mage specialization — shared across subject/mage and researcher/mage,
+# with a variant for the researcher path
+- text: "You have mastered the arcane arts."
+  variants:
+    researcher-mage:
+      text: "You have mastered the arcane arts, informed by archival research."
+  branches:
+    subject:
+      branches:
+        mage: []
+        _: ~
+    researcher:
+      branches:
+        mage: researcher-mage
+        _: ~
+    _: ~
+
+# Knight oath from an external file — included for */knight leaves
+- text: ./paragraphs/knight-oath.md
+  branches:
+    '*':
+      branches:
+        knight: []
+        _: ~
+
+# Variable expansion works in block text
+- text: "Your role as a {%role} defines your approach."
+```
+
+Included blocks are resolved in order and joined with `\n\n` to form the leaf's `Opening.md` content.
+
+#### Block schema
+
+| Key | Required | Description |
+|---|---|---|
+| `text` | yes | Inline string or path to a `.md`/`.txt` file. `{%variable}` tokens expanded. |
+| `branches` | no | Branch dispatch map — same syntax as PE/card dispatch. Absent = include in all leaves. |
+| `variants` | no | Named text deltas: `variantName: { text: "..." }` |
+
+#### Branch dispatch for opening blocks
+
+| `branches:` pattern | Effect |
+|---|---|
+| Absent | Block appears in all leaves |
+| `branchName: []` | Include with base text for that branch (no variant) |
+| `branchName: variantName` | Include with variant text for that branch |
+| `branchName: ~` | Exclude from that branch |
+| `_: ~` | Exclude from any branch not explicitly listed above |
+| `'*': { branches: { mage: '*', _: ~ } }` | Wildcard at top level; nested rule selects mage only |
+
+Dispatch uses the same `resolveBranchSpec` logic as Plot Essentials blocks and story card branch dispatch. See `documentation/02-compile-yaml.md` for the full dispatch syntax.
+
+#### Text file paths
+
+`text:` values that resolve to an existing file are read at compile time. Paths are relative to the directory of `compile.yaml` (same as all other file references). Variable tokens in the path are expanded before resolution, so `text: ./paragraphs/{%role}.md` works.
+
+#### Existing opening behavior is unchanged
+
+A `components.opening` pointing to a `.md`, `.txt`, or inline string continues to work exactly as before. YAML block mode activates only when the path ends with `.yaml` or `.yml`.
+
 ### Output paths
 
 | Declaration | Output path |
@@ -397,3 +484,96 @@ components:
 ```
 
 No processing is applied — files are copied as-is.
+
+---
+
+## Description
+
+`Description.md` is a **project-level** file written once to the output root, at the same level as the `Branches/` folder. Unlike other components it is not written per-branch.
+
+Its content can come from a plain body file, from a cleaned-up banner extracted from a JavaScript script file, or both.
+
+### Declaration modes
+
+`components.description` accepts three formats based on file extension:
+
+```yaml
+components:
+  description: ./description.md        # .md or .txt → body content only
+  description: ./scripts/library.js    # .js → script banner only
+  description: ./description.yaml      # .yaml → full config (body + script)
+```
+
+### Description config file (`.yaml`)
+
+When pointing to a YAML file, the following keys are supported:
+
+```yaml
+# description.yaml
+body:   ./components/description.md   # optional: path to body text file
+script: ./scripts/library.js          # optional: path to JS file to extract banner from
+stripTrailingInstructions: true        # optional; default false
+```
+
+All path values in the config file support `{%variable}` and `{@Key}` token expansion, resolved the same way as `include:` paths — relative to `compile.yaml`.
+
+```yaml
+# description.yaml with token expansion
+body:   '{@bodyKey}'                   # {@Key} resolved from structure.input.components
+script: '{@scripts}/library.js'        # {@ dir key} + path suffix
+```
+
+### Script banner extraction
+
+When a `.js` file is specified (via `script:` or directly), the compiler reads the top contiguous `//` comment block and transforms it:
+
+| Line (after stripping `//`) | Treatment |
+|---|---|
+| All `=` characters | Skipped (pure separator) |
+| Text padded with `=` on both sides | Condensed to `=== text ===` |
+| Empty | Skipped |
+| Anything else | Kept as-is |
+
+Example — this comment block:
+
+```js
+// ============================================================
+// ============= Standard Build - 26.9.6 - library ============
+// ============================================================
+// - UnifiedSettings@1.1.2
+// - DuckieDebug@1.0.3
+// ============================================================
+// Paste this ONLY into the library tab in AI Dungeon scripting
+// ============================================================
+```
+
+Becomes:
+
+```
+=== Standard Build - 26.9.6 - library ===
+- UnifiedSettings@1.1.2
+- DuckieDebug@1.0.3
+Paste this ONLY into the library tab in AI Dungeon scripting
+```
+
+#### `stripTrailingInstructions`
+
+When `true`, the compiler checks whether the final group of lines (content between the last separator block and end of the comment) contains no list items (lines starting with `-` or `*`), while at least one earlier group did. If so, that final group is dropped.
+
+This automatically removes footer instructions like "Paste this into…" without hardcoding any text.
+
+### Combined output
+
+When both `body:` and `script:` are set, the body content comes first, followed by a blank line, then the extracted banner:
+
+```
+[body content]
+
+=== Standard Build - 26.9.6 - library ===
+- UnifiedSettings@1.1.2
+...
+```
+
+### Output path
+
+`{output}/Description.md` — written once after all branches compile, alongside `Branches/` and `Overview/`. It is not written per-branch and cannot be declared at branch level.

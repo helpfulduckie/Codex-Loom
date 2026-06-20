@@ -215,6 +215,8 @@ function loadCompileConfig(configPath) {
     }
   }
 
+  config._canonRaw = canonRaw;
+
   // Templates: expand {%variables} and {@canonName} before resolving paths.
   const templatesRaw = input.templates
     ? (Array.isArray(input.templates) ? input.templates : [input.templates])
@@ -224,7 +226,7 @@ function loadCompileConfig(configPath) {
     return path.resolve(base, expanded);
   });
 
-  const componentTypes = ['aiInstructions', 'opening', 'openingChoice', 'plotEssential', 'authorsNote', 'scripts'];
+  const componentTypes = ['aiInstructions', 'opening', 'openingChoice', 'plotEssential', 'authorsNote', 'scripts', 'description'];
   const resolvedComponents = {};
   for (const type of componentTypes) {
     resolvedComponents[type] = resolveMapping(components[type], base, type === 'openingChoice');

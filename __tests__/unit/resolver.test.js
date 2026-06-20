@@ -162,6 +162,27 @@ describe('collectVariantDeltas', () => {
   test('null path returns empty array', () => {
     expect(collectVariantDeltas(canonCard, null)).toEqual([]);
   });
+
+  test('null variant (~) returns null to signal card exclusion', () => {
+    const cardWithNullVariant = {
+      id: 'example',
+      variants: { omit: null },
+    };
+    expect(collectVariantDeltas(cardWithNullVariant, 'omit')).toBeNull();
+  });
+
+  test('null variant at nested path returns null', () => {
+    const cardWithNullVariant = {
+      id: 'example',
+      variants: {
+        human: {
+          body: { race: 'human' },
+          variants: { ghost: null },
+        },
+      },
+    };
+    expect(collectVariantDeltas(cardWithNullVariant, 'human/ghost')).toBeNull();
+  });
 });
 
 describe('enumerateLeaves', () => {
@@ -355,6 +376,35 @@ describe('resolveCard', () => {
     const card = resolveCard(cardDef, registry, []);
     expect(card.body.role).toBe('mage');
     expect(card.body.magic).toBe('yes');
+  });
+
+  test('importVariants with null variant (~) excludes the card', () => {
+    const canonWithNull = {
+      id: 'ghost',
+      name: 'Ghost',
+      aid: { type: 'Character' },
+      render: { template: 'Character' },
+      body: { role: 'spirit' },
+      variants: { omit: null },
+    };
+    const reg = new Map([['ghost', canonWithNull]]);
+    const cardDef = { import: 'ghost', importVariants: ['omit'] };
+    expect(resolveCard(cardDef, reg, [])).toBeNull();
+  });
+
+  test('branch dispatch to null variant (~) excludes the card', () => {
+    const canonWithNull = {
+      id: 'ghost',
+      name: 'Ghost',
+      aid: { type: 'Character' },
+      render: { template: 'Character' },
+      body: { role: 'spirit' },
+      variants: { hidden: null },
+    };
+    const reg = new Map([['ghost', canonWithNull]]);
+    const cardDef = { import: 'ghost', branches: { stealth: 'hidden', '*': [] } };
+    expect(resolveCard(cardDef, reg, ['stealth'])).toBeNull();
+    expect(resolveCard(cardDef, reg, ['other'])).not.toBeNull();
   });
 
   test('body override in cardDef overwrites base body fields', () => {

@@ -134,13 +134,13 @@ Renders each array element on its own line with no prefix. For a plain string, o
 
 ### `{keys($body.mapping)}`
 
-Renders a mapping as `key: value` pairs, one per line.
+Renders a mapping as `key: value` pairs, one per line, each prefixed with `- `.
 
 ```
 {keys($body.Physical Traits)}
-→  gender: female
-   age: mid 20s
-   hair: black hair, braided, waist-length
+→  - gender: female
+   - age: mid 20s
+   - hair: black hair, braided, waist-length
 ```
 
 ### `{inline($body.mapping)}`
