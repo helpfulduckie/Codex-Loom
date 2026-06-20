@@ -379,6 +379,7 @@ function resolveCard(cardDef, registry, branchPath) {
     // Resolve branch spec → variant names to apply
     const branchVariantNames = resolveBranchSpec(cardDef.branches, branchPath);
     if (branchVariantNames === null) return null; // excluded
+    card._hasVariant = branchVariantNames.length > 0;
 
     for (const vName of branchVariantNames) {
       // Branch variant names dispatch local-first: if the import def defines the variant,
@@ -423,6 +424,7 @@ function resolveCard(cardDef, registry, branchPath) {
       branchPath
     );
     if (branchVariantNames === null) return null; // excluded
+    card._hasVariant = branchVariantNames.length > 0;
 
     for (const vName of branchVariantNames) {
       const localDeltas = collectVariantDeltas(sourceCardForVariants, vName);

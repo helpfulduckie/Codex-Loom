@@ -488,6 +488,71 @@ describe('cross-card refs inside body field render functions', () => {
   });
 });
 
+// ── opening {@Key} token resolving to a .yaml block file ─────────────────────
+
+describe('opening {@Key} resolving to YAML block file', () => {
+  let opKeyTmpDir;
+
+  beforeAll(() => {
+    opKeyTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-opkey-int-'));
+    fs.mkdirSync(path.join(opKeyTmpDir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(opKeyTmpDir, 'templates'), { recursive: true });
+    fs.mkdirSync(path.join(opKeyTmpDir, 'components'), { recursive: true });
+
+    fs.writeFileSync(path.join(opKeyTmpDir, 'cards', 'c.yaml'), [
+      '- id: W',
+      '  name: W',
+      '  aid: { type: Item, title: W }',
+      '  render: { template: Item }',
+      '  body: { Desc: w }',
+    ].join('\n'), 'utf8');
+    fs.writeFileSync(path.join(opKeyTmpDir, 'templates', 'Item.template'),
+      '## {$aid.title}\n~~~\n{$body.Desc}', 'utf8');
+
+    fs.writeFileSync(path.join(opKeyTmpDir, 'components', 'opening.yaml'), [
+      '- text: "Universal paragraph."',
+      '- text: "Alpha-only paragraph."',
+      '  branches:',
+      '    alpha: []',
+      '    _: ~',
+    ].join('\n'), 'utf8');
+
+    fs.writeFileSync(path.join(opKeyTmpDir, 'compile.yaml'), [
+      'structure:',
+      '  input:',
+      `    cards: [${opKeyTmpDir}/cards]`,
+      `    templates: [${opKeyTmpDir}/templates]`,
+      '    components:',
+      '      opening:',
+      `        op: ${opKeyTmpDir}/components/opening.yaml`,
+      `  output: ${opKeyTmpDir}/output`,
+      'components:',
+      "  opening: '{@op}'",
+      'branches:',
+      '  alpha: {}',
+      '  beta: {}',
+    ].join('\n'), 'utf8');
+
+    compile(path.join(opKeyTmpDir, 'compile.yaml'));
+  });
+
+  afterAll(() => { fs.rmSync(opKeyTmpDir, { recursive: true, force: true }); });
+
+  test('alpha leaf contains both universal and alpha-only paragraphs', () => {
+    const p = path.join(opKeyTmpDir, 'output', 'Branches', 'alpha', 'Components', 'Opening.md');
+    const content = fs.readFileSync(p, 'utf8');
+    expect(content).toContain('Universal paragraph.');
+    expect(content).toContain('Alpha-only paragraph.');
+  });
+
+  test('beta leaf contains only universal paragraph', () => {
+    const p = path.join(opKeyTmpDir, 'output', 'Branches', 'beta', 'Components', 'Opening.md');
+    const content = fs.readFileSync(p, 'utf8');
+    expect(content).toContain('Universal paragraph.');
+    expect(content).not.toContain('Alpha-only paragraph.');
+  });
+});
+
 // ── YAML block-opening (opening.yaml) integration ─────────────────────────────
 
 describe('YAML block opening (opening.yaml)', () => {

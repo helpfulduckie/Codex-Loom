@@ -139,7 +139,7 @@ function expandPathTokens(str, variables, canonMap) {
     if (match.startsWith('{%')) {
       if (variables) {
         const entry = Object.entries(variables).find(([v]) => v.toLowerCase() === k);
-        if (entry) return entry[1];
+        if (entry) return expandPathTokens(entry[1], variables, canonMap);
       }
       return match;
     } else {

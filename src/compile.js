@@ -417,7 +417,7 @@ function compileBranchPhaseA(allCardDefs, registry, branchPath, variables) {
 /**
  * Phase B: apply cross-card refs, pronouns, render, and write output.
  */
-function compileBranchPhaseB(resolvedCards, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}) {
+function compileBranchPhaseB(resolvedCards, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}, verbose = false) {
   // Build early so render functions can resolve cross-card refs during field expansion.
   const resolvedById = new Map();
   for (const card of resolvedCards) {
@@ -496,7 +496,7 @@ function compileBranchPhaseB(resolvedCards, registry, templates, partials, outpu
   for (const [type, cards] of grouped) {
     const outPath = writeOutput(outputDir, type, cards);
     written.push(outPath);
-    console.log(`    OK: ${type} (${cards.length} card(s)) → ${outPath}`);
+    if (verbose) console.log(`    OK: ${type} (${cards.length} card(s)) → ${outPath}`);
   }
   return written;
 }
@@ -519,6 +519,24 @@ function writeComponentFile(outputDir, filename, content) {
   const outPath = path.join(dir, filename);
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
+}
+
+/**
+ * Expand {@Key} component references in an opening spec, returning the stored
+ * path/value without reading file contents (path mode vs resolveComponentKey's content mode).
+ * Used so that opening: '{@op}' resolves to the file path, not the file contents.
+ */
+function expandOpeningKeyRef(spec, componentDirs) {
+  if (!spec || typeof spec !== 'string' || !componentDirs) return spec;
+  return spec.replace(/\{@([^}]+)\}/g, (match, key) => {
+    const name = key.trim();
+    for (const [, dirMap] of Object.entries(componentDirs)) {
+      const actualKey = [...dirMap.keys()].find(k => k.toLowerCase() === name.toLowerCase());
+      if (actualKey !== undefined) return dirMap.get(actualKey);
+    }
+    console.warn(`  WARN: component key "{@${name}}" not found`);
+    return match;
+  });
 }
 
 /**
@@ -552,24 +570,28 @@ function resolveYamlOpeningPath(spec, base, variables) {
  * @param {object} componentDirs - resolved component directory map
  * @param {string[]} currentPath - branch path segments accumulated while descending
  */
-function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables, componentDirs, currentPath = []) {
+function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables, componentDirs, currentPath = [], verbose = false) {
+  const writtenLeaves = new Set();
+
   if (!branches || typeof branches !== 'object') {
     // We're at the root level with no branches — the root itself is the only leaf
     if (inheritedOpening != null) {
-      const yamlPath = resolveYamlOpeningPath(inheritedOpening, configBase, variables);
+      const expandedOpening = expandOpeningKeyRef(inheritedOpening, componentDirs);
+      const yamlPath = resolveYamlOpeningPath(expandedOpening, configBase, variables);
       let content;
       if (yamlPath) {
         const blocks = loadOpeningConfig(yamlPath);
         content = compileOpening(blocks, currentPath, variables, configBase);
       } else {
-        content = resolveOpeningContent(inheritedOpening, configBase, variables);
+        content = resolveOpeningContent(expandedOpening, configBase, variables);
       }
       if (content) {
         const outPath = writeComponentFile(outputBase, 'Opening.md', content);
-        console.log(`    OK: Opening → ${outPath}`);
+        if (verbose) console.log(`    OK: Opening → ${outPath}`);
+        writtenLeaves.add(currentPath.join('/') || '(root)');
       }
     }
-    return;
+    return writtenLeaves;
   }
 
   for (const [name, branchConfig] of Object.entries(branches)) {
@@ -603,7 +625,7 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
           : openingChoice;
         const content = resolveOpeningContent(expandedChoice, configBase, branchVars);
         const outPath = writeComponentFile(nodeOutput, 'Opening.md', content);
-        console.log(`    OK: OpeningChoice → ${outPath}`);
+        if (verbose) console.log(`    OK: OpeningChoice → ${outPath}`);
       }
     }
 
@@ -611,29 +633,36 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
       // Write the inherited/overridden opening to this leaf
       if (effectiveOpening != null) {
         const leafPath = [...currentPath, name];
-        const yamlPath = resolveYamlOpeningPath(effectiveOpening, configBase, branchVars);
+        // Expand {@Key} component references in path mode (returns path, not file contents)
+        const expandedOpening = expandOpeningKeyRef(effectiveOpening, componentDirs);
+        const yamlPath = resolveYamlOpeningPath(expandedOpening, configBase, branchVars);
         let content;
         if (yamlPath) {
           const blocks = loadOpeningConfig(yamlPath);
           content = compileOpening(blocks, leafPath, branchVars, configBase);
         } else {
-          content = resolveOpeningContent(effectiveOpening, configBase, branchVars);
+          content = resolveOpeningContent(expandedOpening, configBase, branchVars);
         }
         if (content) {
           const outPath = writeComponentFile(nodeOutput, 'Opening.md', content);
-          console.log(`    OK: Opening → ${outPath}`);
+          if (verbose) console.log(`    OK: Opening → ${outPath}`);
+          writtenLeaves.add(leafPath.join('/'));
         }
       }
     } else {
       // Recurse into sub-branches, tracking the current path
-      writeOpeningsRecursive(subBranches, nodeOutput, configBase, effectiveOpening, branchVars, componentDirs, [...currentPath, name]);
+      const sub = writeOpeningsRecursive(subBranches, nodeOutput, configBase, effectiveOpening, branchVars, componentDirs, [...currentPath, name], verbose);
+      for (const k of sub) writtenLeaves.add(k);
     }
   }
+
+  return writtenLeaves;
 }
 
 // ── Main compile function ─────────────────────────────────────────────────────
 
 function compile(configPath, options = {}) {
+  const verbose = !!options.verbose;
   const config = loadCompileConfig(configPath);
 
   const { templates, partials } = loadTemplates(config._resolvedTemplates);
@@ -676,10 +705,12 @@ function compile(configPath, options = {}) {
   console.log(`\nCompiling ${leaves.length} branch leaf/leaves...`);
 
   let totalFiles = 0;
+  const allCardIds = new Set();
+  const leafSummaries = [];
 
   for (const branchPath of leaves) {
     const label = branchPath.length > 0 ? branchPath.join('/') : '(root)';
-    console.log(`\n  Branch: ${label}`);
+    if (verbose) console.log(`\n  Branch: ${label}`);
 
     const branchConfig = getBranchConfig(config.branches, branchPath);
 
@@ -733,51 +764,61 @@ function compile(configPath, options = {}) {
     // Phase A: resolve all story cards
     const resolvedCards = compileBranchPhaseA(allCardDefs, registry, branchPath, ctx.variables);
 
+    // Accumulate unique card IDs and per-leaf stats for summary
+    for (const card of resolvedCards) {
+      if (card.id) allCardIds.add(card.id.toLowerCase());
+    }
+    const leafCards    = resolvedCards.length;
+    const leafVariants = resolvedCards.filter(c => c._hasVariant).length;
+
     // Phase B: cross-card refs + pronouns + render + write
     const written = compileBranchPhaseB(
-      resolvedCards, registry, templates, partials, outputDir, branchProtagonist, peSuppressedIds, ctx.variables
+      resolvedCards, registry, templates, partials, outputDir, branchProtagonist, peSuppressedIds, ctx.variables, verbose
     );
     totalFiles += written.length;
 
     // Plot Essentials
+    let hasPE = false;
     if (peSpec) {
       const peBlocks = loadPEConfig(typeof peSpec === 'string' && !peSpec.includes('{') ? peSpec : null);
       if (peBlocks.length > 0) {
         const peContent = compilePE(peBlocks, registry, templates, partials, compileContext, overlays);
         const pePath = writePE(outputDir, peContent);
-        if (pePath) { console.log(`    OK: PlotEssentials → ${pePath}`); totalFiles++; }
+        if (pePath) { hasPE = true; if (verbose) console.log(`    OK: PlotEssentials → ${pePath}`); totalFiles++; }
       }
     }
 
     // AI Instructions
+    let hasAIN = false;
     const ainSpec = compileContext.componentRefs.aiInstructions;
     if (ainSpec && typeof ainSpec === 'string' && fs.existsSync(ainSpec)) {
       const ainExt = path.extname(ainSpec).toLowerCase();
       if (ainExt === '.md' || ainExt === '.txt') {
         const content = fs.readFileSync(ainSpec, 'utf8').trimEnd() || null;
         const ainPath = writeAIN(outputDir, content);
-        if (ainPath) { console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
+        if (ainPath) { hasAIN = true; if (verbose) console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
       } else {
         const ainDoc = loadAINConfig(ainSpec);
         const { ain } = compileAIN(ainDoc, registry, compileContext);
         const ainPath = writeAIN(outputDir, ain);
-        if (ainPath) { console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
+        if (ainPath) { hasAIN = true; if (verbose) console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
       }
     }
 
     // Author's Note
+    let hasAN = false;
     const anSpec = compileContext.componentRefs.authorsNote;
     if (anSpec && typeof anSpec === 'string' && fs.existsSync(anSpec)) {
       const anExt = path.extname(anSpec).toLowerCase();
       if (anExt === '.md' || anExt === '.txt') {
         const content = fs.readFileSync(anSpec, 'utf8').trimEnd() || null;
         const anPath = writeAN(outputDir, content);
-        if (anPath) { console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
+        if (anPath) { hasAN = true; if (verbose) console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
       } else {
         const anDoc = loadANConfig(anSpec);
         const anContent = compileAN(anDoc, registry, compileContext);
         const anPath = writeAN(outputDir, anContent);
-        if (anPath) { console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
+        if (anPath) { hasAN = true; if (verbose) console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
       }
     }
 
@@ -786,9 +827,9 @@ function compile(configPath, options = {}) {
     if (scriptsSpec && typeof scriptsSpec === 'string') {
       copyScripts(scriptsSpec, outputDir);
     }
-  }
 
-  console.log(`\nDone. Wrote ${totalFiles} file(s).`);
+    leafSummaries.push({ label, leafCards, leafVariants, hasPE, hasAIN, hasAN });
+  }
 
   // Write Opening / OpeningChoice files (post-loop)
 
@@ -806,16 +847,17 @@ function compile(configPath, options = {}) {
         : rootOpeningChoice;
       const content = resolveOpeningContent(expandedChoice, config._base, config.variables || {});
       const outPath = writeComponentFile(config._resolvedOutput, 'Opening.md', content);
-      console.log(`    OK: Root OpeningChoice → ${outPath}`);
+      if (verbose) console.log(`    OK: Root OpeningChoice → ${outPath}`);
     }
   }
 
   const rootOpening = config.components && config.components.opening != null
     ? config.components.opening
     : null;
-  writeOpeningsRecursive(
+  const leafOpeningKeys = writeOpeningsRecursive(
     config.branches, config._resolvedOutput, config._base,
-    rootOpening, config.variables || {}, config._resolvedComponents
+    rootOpening, config.variables || {}, config._resolvedComponents,
+    [], verbose
   );
 
   // Description (project-level, written once to output root alongside Branches/)
@@ -841,8 +883,24 @@ function compile(configPath, options = {}) {
 
     const combined = [bodyContent, bannerContent].filter(Boolean).join('\n');
     const descPath = writeDescription(config._resolvedOutput, combined);
-    if (descPath) console.log(`  OK: Description → ${descPath}`);
+    if (descPath && verbose) console.log(`  OK: Description → ${descPath}`);
   }
+
+  // Per-leaf summary table (printed after all component writes so Opening status is known)
+  for (const s of leafSummaries) {
+    s.hasOpening = leafOpeningKeys.has(s.label);
+  }
+  const maxLabelLen = Math.max(...leafSummaries.map(s => s.label.length), 'Branch'.length);
+  const lp = maxLabelLen + 2;
+  const c = b => b ? ' ✓ ' : ' - ';
+  console.log(`\n  ${'Branch'.padEnd(lp)} ${'Cards'.padStart(5)}  ${'Var'.padStart(3)}   Open   PE  AIN   AN`);
+  for (const s of leafSummaries) {
+    console.log(
+      `  ${s.label.padEnd(lp)} ${String(s.leafCards).padStart(5)}  ${String(s.leafVariants).padStart(3)}  ` +
+      ` ${c(s.hasOpening)}  ${c(s.hasPE)} ${c(s.hasAIN)} ${c(s.hasAN)}`
+    );
+  }
+  console.log(`\n${allCardIds.size} unique cards across project. Wrote ${totalFiles} file(s).`);
 
   // Overview (leaf review) — always generated after compile
   const { runLeafReviewMode } = require('./overview');
@@ -862,7 +920,7 @@ function compile(configPath, options = {}) {
       canon: canonManifest,
     };
     fs.writeFileSync(manifestPath, JSON.stringify(manifestData, null, 2), 'utf8');
-    console.log(`  OK: Canon manifest → ${manifestPath}`);
+    if (verbose) console.log(`  OK: Canon manifest → ${manifestPath}`);
   }
 }
 
@@ -967,13 +1025,15 @@ if (require.main === module) {
     }
 
   } else {
-    const cleanIdx = rawArgs.findIndex(a => a === '--clean' || a === '-c');
-    const isClean = cleanIdx !== -1;
-    const compileArgs = rawArgs.filter((_, i) => i !== cleanIdx);
+    const cleanIdx   = rawArgs.findIndex(a => a === '--clean'   || a === '-c');
+    const verboseIdx = rawArgs.findIndex(a => a === '--verbose' || a === '-v');
+    const isClean   = cleanIdx   !== -1;
+    const isVerbose = verboseIdx !== -1;
+    const compileArgs = rawArgs.filter((_, i) => i !== cleanIdx && i !== verboseIdx);
 
     if (compileArgs.length === 0) {
       console.error(
-        'Usage: codex-loom [--clean|-c] <path/to/compile.yaml or project/>\n' +
+        'Usage: codex-loom [--clean|-c] [--verbose|-v] <path/to/compile.yaml or project/>\n' +
         '       codex-loom [--leafReview|-l] [--overview|-o] [<scenario-root | compile.yaml>]'
       );
       process.exit(1);
@@ -987,7 +1047,7 @@ if (require.main === module) {
     } catch (_) {}
 
     try {
-      compile(configPath, { clean: isClean });
+      compile(configPath, { clean: isClean, verbose: isVerbose });
     } catch (err) {
       console.error(`\nFatal: ${err.message}`);
       process.exit(1);
