@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadYaml } = require('./util');
+const { loadYaml, warnUnexpandedVariables } = require('./util');
 const { compileAIN, loadAINConfig, applyDocumentVariants } = require('./ain');
 const { applyTokenPass } = require('./pronouns');
 const { normalizeWhitespace } = require('./template');
@@ -97,6 +97,7 @@ function writeAN(branchOutputDir, content) {
   const dir = path.join(branchOutputDir, 'Components');
   fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, "Author's Note.md");
+  warnUnexpandedVariables(content, "component Author's Note.md");
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }

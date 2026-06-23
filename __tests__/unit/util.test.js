@@ -3,7 +3,7 @@
 const fs = require('fs');
 const {
   findFiles, loadYaml, deepClone, findKey,
-  getCI, setCI, deleteCI, normalizeVarKey, resolveVariables,
+  getCI, setCI, deleteCI, normalizeVarKey, resolveVariables, warnUnexpandedVariables,
 } = require('../../src/util');
 
 // ── deepClone ─────────────────────────────────────────────────────────────────
@@ -178,6 +178,41 @@ describe('resolveVariables', () => {
 
   test('string with no tokens passes through unchanged', () => {
     expect(resolveVariables('plain text', { x: 'y' })).toBe('plain text');
+  });
+});
+
+// ── warnUnexpandedVariables ───────────────────────────────────────────────────
+
+describe('warnUnexpandedVariables', () => {
+  test('warns once per distinct {%token} and returns true', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    const found = warnUnexpandedVariables('a {%role} b {%role} c {%era}', 'card "X" (Y)');
+    expect(found).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(2); // {%role} deduped, {%era}
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('{%role}'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('{%era}'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('card "X" (Y)'));
+    warn.mockRestore();
+  });
+
+  test('ignores {@name} references and returns false', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    const found = warnUnexpandedVariables('see {@main}/x for details', 'component Opening.md');
+    expect(found).toBe(false);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  test('clean text returns false and warns nothing', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    expect(warnUnexpandedVariables('fully resolved', 'x')).toBe(false);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  test('non-string input returns false', () => {
+    expect(warnUnexpandedVariables(null, 'x')).toBe(false);
+    expect(warnUnexpandedVariables(42, 'x')).toBe(false);
   });
 });
 

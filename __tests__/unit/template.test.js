@@ -779,6 +779,42 @@ describe('applyVariableInterpolation', () => {
     expect(card.body.Tagline).toBe('Role: knight');
   });
 
+  // {@name} is a path/prose-only construct; it must NOT be expanded in card bodies.
+  // Guards against accidentally wiring component-key expansion into body rendering.
+  test('leaves {@name} references untouched in body strings', () => {
+    const card = { body: { Tagline: '{@main}/x and {%role}' } };
+    applyVariableInterpolation(card, { role: 'knight' });
+    expect(card.body.Tagline).toBe('{@main}/x and knight');
+  });
+
+  test('expands {%var} in aid.title and aid.triggers', () => {
+    const card = { body: {}, aid: { title: '{%role} Codex', triggers: ['{%role}', 'Voss'] } };
+    applyVariableInterpolation(card, { role: 'Knight' });
+    expect(card.aid.title).toBe('Knight Codex');
+    expect(card.aid.triggers).toEqual(['Knight', 'Voss']);
+  });
+
+  test('expands {%var} in render.template and render.wrapper', () => {
+    const card = { body: {}, render: { template: '{%kind}', wrapper: '{%wrap}' } };
+    applyVariableInterpolation(card, { kind: 'Character', wrap: 'curly' });
+    expect(card.render.template).toBe('Character');
+    expect(card.render.wrapper).toBe('curly');
+  });
+
+  test('leaves non-string aid/render fields untouched', () => {
+    const card = { body: {}, aid: { encapsulate: true, known: false }, render: { position: 5 } };
+    applyVariableInterpolation(card, { x: 'y' });
+    expect(card.aid.encapsulate).toBe(true);
+    expect(card.aid.known).toBe(false);
+    expect(card.render.position).toBe(5);
+  });
+
+  test('leaves {@name} untouched in aid fields', () => {
+    const card = { body: {}, aid: { title: '{@main} Codex' } };
+    applyVariableInterpolation(card, { role: 'x' });
+    expect(card.aid.title).toBe('{@main} Codex');
+  });
+
   test('mutates body in place', () => {
     const body = { Tagline: '{%x}' };
     const card = { body };

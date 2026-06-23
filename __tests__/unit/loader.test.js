@@ -320,6 +320,23 @@ describe('loadCompileConfig', () => {
       .toEqual([path.resolve(tmpDir, 'cards')]);
   });
 
+  test('expands {%variable} and {@canon} in cards paths (parity with templates)', () => {
+    const cfgPath = writeConfig([
+      'variables:',
+      '  root: shared',
+      'structure:',
+      '  input:',
+      '    canon:',
+      '      Base: ./base',
+      '    cards:',
+      '      - "{%root}/Canon"',
+      '      - "{@Base}/extra"',
+    ].join('\n') + '\n');
+    const { _resolvedCards } = loadCompileConfig(cfgPath);
+    expect(_resolvedCards[0]).toBe(path.resolve(tmpDir, 'shared/Canon'));
+    expect(_resolvedCards[1]).toBe(path.resolve(tmpDir, 'base/extra'));
+  });
+
   test('resolves canon mapping entries to absolute paths', () => {
     const cfgPath = writeConfig('structure:\n  input:\n    canon:\n      Core: ./canon/core\n');
     const { _resolvedCanon } = loadCompileConfig(cfgPath);

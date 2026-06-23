@@ -83,7 +83,7 @@ All path resolution happens under `structure:`.
 
 ### `structure.input.cards`
 
-A sequence of directories to load project card YAML files from. All `.yaml` files are loaded recursively.
+A sequence of directories to load project card YAML files from. All `.yaml` files are loaded recursively. Entries support the same `{%variable}` and `{@canonName}` token expansion as `structure.input.templates` (resolved before the path is made absolute), so a shared path prefix variable can be reused here.
 
 ```yaml
 cards: [./cards]
@@ -204,11 +204,11 @@ variables:
 
 Used in a template as: `The year is {%year}.`
 
-Top-level variables are also expanded in `structure.input.canon` values and `structure.input.templates` entries before path resolution, making them useful as shared path prefixes across the config (see the `structure.input.canon` section above for an example).
+`{%key}` is expanded consistently across card bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and the config path fields (`structure.input.cards`, `structure.input.canon`, and `structure.input.templates`), making variables useful both as content values and as shared path prefixes across the config (see the `structure.input.canon` section above for an example). The one exception is `include:`/`import:` paths, which resolve once before branches are enumerated and therefore see **root** variables only, not per-branch overrides.
 
 ### `components`
 
-Specifies what content to write for root-level component files. Each value is an inline string, a relative file path, or a `{@key}` reference to a named directory/file in `structure.input.components`.
+Specifies what content to write for root-level component files. Each value is an inline string, a relative file path, a `{%variable}`, or a `{@key}` reference to a named directory/file in `structure.input.components` (or a canon entry — `{@key}` resolves against components first, then canon).
 
 ```yaml
 components:

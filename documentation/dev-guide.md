@@ -216,8 +216,18 @@ Phase A (`compileBranchPhaseA`) resolves all cards for a branch and applies fiel
 
 `structure.input.canon` is a named mapping (`{main: ./path}`) rather than a plain string or array. Names serve two purposes: they appear in error messages (`Duplicate card ID "x" across canon dirs: canon:main`) and enable `{@main}` reference resolution in `include:` paths. A plain path string would require either path-based display (brittle) or `{@}` syntax without a name.
 
-**Token expansion in config paths**
+**Token expansion (`{%}` and `{@}`) — single shared expander**
 
-Canon values and template path entries support `{%variable}` and `{@canonName}` substitution before `path.resolve()` runs. This is handled in `loadCompileConfig()` in `loader.js` via the `expandPathTokens()` helper, using the same `/\{[@%]([^}]+)\}/g` regex pattern as the rest of the codebase.
+All `{%variable}` and `{@name}` expansion routes through one helper, `expandTokens()` in `src/tokens.js`. It handles both sigils in a single `/\{([@%])([^}]+)\}/g` pass:
 
-Canon resolution uses a two-pass approach: plain-path entries (no `{@}` tokens after variable expansion) are resolved in pass 1, forming the lookup table for pass 2 which handles entries that reference sibling canon names. Template paths are expanded after both passes, so they can reference any named canon entry. Unresolved tokens pass through unchanged, causing the standard missing-path warning to fire with the unexpanded token visible in the path string.
+- `{%}` always delegates to `util.resolveVariables` — the canonical `%` core, which is recursive, cycle-detecting, and warns on undeclared variables. There is no second `%` implementation.
+- `{@}` resolves a name against **components first, then canon** (case-insensitive). `mode: 'path'` returns the resolved path; `mode: 'content'` reads a resolved *file* to its contents (directories always return the path). `warnMissing` controls whether an unresolved `{@}` emits a warning or passes through silently (path contexts pass through so the standard missing-path warning fires instead).
+
+Every call site is a thin wrapper over `expandTokens`: `loader.expandPathTokens` (canon/template config paths), `compile.resolveComponentSpec`/`resolveComponentKey`/`expandOpeningKeyRef`, the `include:`-path block in `resolveIncludes`, and `description.loadDescConfig`. When adding a new context that needs tokens, call `expandTokens` rather than re-deriving the regex.
+
+Coverage notes:
+- `{%}` is expanded in card bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and config paths. In `include:`/`import:` paths it uses **root** `config.variables` only, because `resolveIncludes` runs once before branch enumeration — branch-merged variables do not exist yet.
+- `{@}` is deliberately **not** expanded in card bodies or `.template` files; it is a path/prose construct only.
+- The `{$…}` field-reference family (`{$v.field}`, `{$Id.body.field}`) is a separate system (field interpolation + pronoun passes) and is **not** part of `expandTokens`. Folding it in is a possible future consolidation; see `07-templates.md` "Token Systems at a Glance".
+
+Canon resolution still uses a two-pass approach: plain-path entries (no `{@}` tokens after variable expansion) are resolved in pass 1, forming the lookup table for pass 2 which handles entries that reference sibling canon names. Template paths are expanded after both passes, so they can reference any named canon entry. Unresolved tokens pass through unchanged, causing the standard missing-path warning to fire with the unexpanded token visible in the path string.

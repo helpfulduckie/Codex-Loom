@@ -104,4 +104,28 @@ function resolveVariables(text, variables, _resolving) {
   });
 }
 
-module.exports = { findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey, resolveVariables };
+/**
+ * Final safety net: warn about any {%variable} token left unexpanded in rendered
+ * output (a card or component). Emits one warning per distinct leftover token.
+ *
+ * Targets {%...} only — {@...} is intentionally not expanded in card content, so
+ * a literal {@...} here is expected and must not be flagged.
+ *
+ * @param {string} text   - the fully-rendered output to scan
+ * @param {string} label  - human-readable location, e.g. 'card "Aria" (Character)'
+ * @returns {boolean}     - true if any unexpanded variable was found
+ */
+function warnUnexpandedVariables(text, label) {
+  if (typeof text !== 'string') return false;
+  const seen = new Set();
+  const re = /\{%[^}]+\}/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (seen.has(m[0])) continue;
+    seen.add(m[0]);
+    console.warn(`  WARN: unexpanded variable ${m[0]} in ${label}`);
+  }
+  return seen.size > 0;
+}
+
+module.exports = { findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey, resolveVariables, warnUnexpandedVariables };

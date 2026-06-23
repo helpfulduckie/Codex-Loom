@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadYaml, resolveVariables } = require('./util');
+const { loadYaml, resolveVariables, warnUnexpandedVariables } = require('./util');
 const { resolveCard, resolveBranchSpec, applyFieldsDelta, applyFieldOp } = require('./resolver');
 const { applyPronounPasses } = require('./pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions, applyWrapper, resolveTemplateName } = require('./template');
@@ -336,6 +336,7 @@ function writePE(branchOutputDir, content) {
   const dir = path.join(branchOutputDir, 'Components');
   fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, 'Plot Essentials.md');
+  warnUnexpandedVariables(content, 'component Plot Essentials.md');
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }

@@ -15,7 +15,9 @@ Loads all cards from a canonical YAML file. Cards are compiled exactly as define
 - include: "{@main}/Characters/Felicia.yaml"
 ```
 
-`{@main}` in an include path resolves to the **directory path** for the `main` canon entry declared in `compile.yaml`. This is different from how `{@Key}` works in prose contexts (openings, component text), where it returns the file's contents. In an `include:` path, it always returns the path string so the compiler can locate the file.
+`{@main}` in an include path resolves to the **directory path** for the `main` canon entry declared in `compile.yaml`. This is different from how `{@Key}` works in prose contexts (openings, component text), where it returns the file's contents. In an `include:` path, it always returns the path string so the compiler can locate the file. `{@Key}` is matched against named components first, then canon entries.
+
+Include and import paths also support `{%variable}` expansion, but — because includes are resolved once, before branches are enumerated — only **root-level** `variables:` are available there, not per-branch overrides.
 
 ```yaml
 structure:

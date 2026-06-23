@@ -10,8 +10,8 @@ const { normalizeVarKey, resolveVariables } = require('./util');
  *   {$body.FieldName}            - body field (case-insensitive)
  *   {$body.FieldName.subfield}   - nested body subfield
  *   {$otherid.body.FieldName}    - cross-card reference (second-pass, left as-is here)
- *   {%variable}                  - branch variable (pre-expanded before render)
- *   {@ComponentKey}              - component key ref (pre-expanded before render)
+ *   {%variable}                  - branch variable (expanded at render step 0)
+ *   (note: {@ComponentKey} is a path/prose construct only and is NOT expanded in templates)
  *
  * Render functions:
  *   {inline($name)}              - space-join all subfields of a mapping
@@ -438,8 +438,13 @@ function applyFieldRenderFunctions(card, cardMap) {
 }
 
 /**
- * Expand {%varName} compile-time variable tokens in all string values in card.body.
+ * Expand {%varName} compile-time variable tokens in all string values in a card's
+ * id, name, body, aid, and render blocks.
  * Called after applyFieldInterpolation, before cross-card refs and pronoun passes.
+ *
+ * Only string values are rewritten (arrays are mapped, objects recursed), so
+ * non-string control fields — render.position, aid.encapsulate/known — are left
+ * untouched while aid.title, aid.triggers, render.template/wrapper, etc. expand.
  */
 function applyVariableInterpolation(card, variables) {
   if (!variables) return;
@@ -450,7 +455,9 @@ function applyVariableInterpolation(card, variables) {
     card.name = resolveVariables(card.name, variables);
   }
   if (typeof card.id === 'string') card.id = resolveVariables(card.id, variables);
-  if (card.body) applyVariableInterpolationRecursive(card.body, variables);
+  if (card.body)   applyVariableInterpolationRecursive(card.body, variables);
+  if (card.aid)    applyVariableInterpolationRecursive(card.aid, variables);
+  if (card.render) applyVariableInterpolationRecursive(card.render, variables);
 }
 
 function applyVariableInterpolationRecursive(obj, variables) {

@@ -125,6 +125,8 @@ aid:
 
 `aid.type` and `render.template` default to each other — if one is set the other is filled in automatically. If neither is set, the card cannot be rendered and a warning is emitted.
 
+String values in `aid:` (e.g. `title`, `triggers`) support `{%variable}` expansion, the same as `body:`. **`aid.type` is validated after expansion** — since it becomes a folder and filename, an illegal path segment (`< > : " / \ | ? *`, control chars, `.`/`..`, or a trailing space/period) aborts the compile.
+
 ---
 
 ## `render:` Block
@@ -141,6 +143,8 @@ render:
 |---|---|
 | `template` | Filename of the `.template` file to use (case-insensitive match). Defaults to `aid.type` if absent. |
 | `wrapper` | Wraps the entire rendered output or a `{wrapper}...{/wrapper}` block. `square` → `[ ... ]`, `curly` → `{ ... }`, `none` → raw text. |
+
+String values in `render:` support `{%variable}` expansion too, so `template`/`wrapper` can be variable-driven. A variable that fails to resolve in `render.template` leaves the literal token as the template name, which surfaces as a "no template found" error (and an unexpanded-variable warning).
 
 ---
 
@@ -208,6 +212,8 @@ In templates, access as `{$v.affiliation}`, `{$v.role}`, etc.
 | `variables` | `variables:` |
 
 You can write any alias in your card YAML, in a variant delta, or in a template token — they all resolve to the same data. If multiple aliases appear as sibling top-level keys on the same card or within the same variant delta, a warning is emitted and their subfields are merged (last-writer-wins per subfield).
+
+> **Card variables vs. compile variables.** `{$v.key}` (this block) is *per-card* data resolved through the `{$…}` field-reference system. It is a different mechanism from the `{%key}` *compile variables* declared in `compile.yaml` `variables:`, which are branch-scoped string values. The `variable`/`variables` alias above applies only to the card `v:` block, not to `{%}`. See [07-templates.md](07-templates.md) "Token Systems at a Glance" for the full comparison.
 
 ---
 

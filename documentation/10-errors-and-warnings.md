@@ -20,6 +20,7 @@ These abort compilation entirely.
 | `AIN file must be a YAML mapping: <path>` | The AI Instructions YAML file is not a mapping. | Ensure the file is a YAML object with `sections:` etc. |
 | `AN file must be a YAML mapping: <path>` | The Author's Note YAML file is not a mapping. | Ensure the file is a YAML object with `sections:` etc. |
 | `Failed to load YAML at <path>: <reason>` | A YAML file could not be parsed. | Fix the YAML syntax error in the file. |
+| `Invalid aid.type "<type>" for card "<id>": <reason>` | After `{%variable}` expansion, a card's `aid.type` is not a legal folder/file name (illegal char `< > : " / \ | ? *`, control char, `.`/`..`, or trailing space/period). `aid.type` becomes `Story Cards/{type}/{type}.md`. | Fix the `aid.type` value (or the variable feeding it) so it is a valid path segment. Spaces inside the name are fine. |
 
 ---
 
@@ -56,6 +57,7 @@ Warnings indicate likely authoring mistakes but do not stop compilation.
 | `WARN: card "<name>" has neither aid.type nor render.template` | A card has no type information — it cannot be rendered. | Add `aid.type:` or `render.template:` to the card. |
 | `WARN: cycle detected in variable "{%key}"` | A `{%variable}` reference forms a cycle with another variable. | Remove the circular reference in `variables:`. |
 | `WARN: variable "{%key}" not declared` | A `{%key}` reference in a template or field has no matching entry in `variables:`. | Declare the variable in `compile.yaml` or fix the typo. |
+| `WARN: unexpanded variable {%key} in <label>` | A `{%key}` token survived into a rendered story card or component output. Usually the variable was undeclared (you'll also see `not declared`), or it was introduced by a later pass (cross-card ref / render function). Targets `{%}` only — a literal `{@…}` in a body is never flagged. | Declare the variable, fix the typo, or remove the stray token. |
 | `WARN: component key "{@name}" not found` | A `{@name}` reference doesn't match any name in `structure.input.components`. | Check the component key spelling and configuration. |
 | `WARN: openingChoice on leaf branch "<name>" — ignoring` | `openingChoice:` was declared on a leaf branch (it only applies to non-leaf nodes). | Move it to a non-leaf branch node, or use `opening:` instead. |
 | `WARN: cross-card ref {$Id.body.FieldName} — card not found` | A cross-card body reference references a card ID not found in the compiled output. | Check that the referenced card is included in this branch and has the correct ID. |

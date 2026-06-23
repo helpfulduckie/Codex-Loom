@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { findFiles, loadYaml, VAR_ALIASES, deepClone } = require('./util');
+const { expandTokens } = require('./tokens');
 
 /**
  * Normalize variable-block aliases (v/var/vars/variable/variables) to canonical 'v'.
@@ -102,16 +103,6 @@ function loadTemplates(dirs) {
 }
 
 /**
- * Resolve a sequence field (cards, templates) to an array of absolute paths.
- * Accepts: string, or array of strings. Normalises scalar → [scalar].
- */
-function resolveSequence(raw, base) {
-  if (!raw) return [];
-  const arr = Array.isArray(raw) ? raw : [raw];
-  return arr.map(p => path.resolve(base, String(p)));
-}
-
-/**
  * Resolve a mapping field (canon, component dirs) to a Map<name, absolutePath>.
  * Accepts: an object whose values are path strings.
  * When lenient=true, stores the raw string for values that don't resolve to an existing file/dir
@@ -132,23 +123,14 @@ function resolveMapping(raw, base, lenient = false) {
  * variables: plain object (config.variables).
  * canonMap:  Map<name, absolutePath> (may be partially built for two-pass canon resolution).
  * Case-insensitive. Unresolved tokens are left as-is.
+ *
+ * Thin wrapper over the shared tokens.expandTokens (path mode). {@} resolves
+ * against the canon map only here — components are not yet resolved during the
+ * canon/template two-pass. warnMissing is suppressed so unresolved {@} tokens
+ * pass through to trigger the standard missing-path warning instead.
  */
 function expandPathTokens(str, variables, canonMap) {
-  return str.replace(/\{[@%]([^}]+)\}/g, (match, key) => {
-    const k = key.trim().toLowerCase();
-    if (match.startsWith('{%')) {
-      if (variables) {
-        const entry = Object.entries(variables).find(([v]) => v.toLowerCase() === k);
-        if (entry) return expandPathTokens(entry[1], variables, canonMap);
-      }
-      return match;
-    } else {
-      for (const [name, value] of canonMap) {
-        if (name.toLowerCase() === k) return value;
-      }
-      return match;
-    }
-  });
+  return expandTokens(String(str), { variables, canon: canonMap, mode: 'path', warnMissing: false });
 }
 
 /**
@@ -192,8 +174,6 @@ function loadCompileConfig(configPath) {
     ? path.resolve(base, String(structure.overview))
     : null;
 
-  const resolvedCards = resolveSequence(input.cards, base);
-
   // Canon: two-pass resolution so entries can reference {%variables} and sibling {@canonName} entries.
   // Pass 1: expand {%variables}, then resolve entries with no remaining {@ tokens.
   // Pass 2: expand {%variables} + {@canonName} in the remainder using pass-1 results.
@@ -222,6 +202,15 @@ function loadCompileConfig(configPath) {
     ? (Array.isArray(input.templates) ? input.templates : [input.templates])
     : [];
   const resolvedTemplates = templatesRaw.map(p => {
+    const expanded = expandPathTokens(String(p), variables, resolvedCanon);
+    return path.resolve(base, expanded);
+  });
+
+  // Cards: same token expansion as templates ({%variables} + {@canonName}) before resolving paths.
+  const cardsRaw = input.cards
+    ? (Array.isArray(input.cards) ? input.cards : [input.cards])
+    : [];
+  const resolvedCards = cardsRaw.map(p => {
     const expanded = expandPathTokens(String(p), variables, resolvedCanon);
     return path.resolve(base, expanded);
   });

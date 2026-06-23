@@ -40,12 +40,20 @@ codex-loom -l path/to/project/
 codex-loom --overview path/to/project/
 codex-loom -o path/to/project/
 
+# Generate a seed map (see below)
+codex-loom --seed-map path/to/project/
+codex-loom -s path/to/project/
+
+# Generate a card body size report (see below)
+codex-loom --card-sizes path/to/project/
+codex-loom -b path/to/project/
+
 # Combine: compile then generate both review files in one run
 codex-loom --compile --leafReview --overview path/to/project/
 codex-loom -C -l -o path/to/project/
 ```
 
-**Mode flags** — `-C`/`--compile`, `-l`/`--leafReview`, `-o`/`--overview` — control what runs. Any combination is valid:
+**Mode flags** — `-C`/`--compile`, `-l`/`--leafReview`, `-o`/`--overview`, `-s`/`--seed-map`, `-b`/`--card-sizes` — control what runs. Any combination is valid:
 
 | Flags | What happens |
 |---|---|
@@ -53,12 +61,35 @@ codex-loom -C -l -o path/to/project/
 | `-C` | Compile only (explicit) |
 | `-l` | Leaf-review only |
 | `-o` | Overview only |
+| `-s` | Seed map only |
+| `-b` | Card sizes only |
 | `-l -o` | Both review modes, no compile |
 | `-C -l` | Compile, then leaf-review |
 | `-C -o` | Compile, then overview |
+| `-C -s` | Compile, then seed map |
+| `-C -b` | Compile, then card sizes |
 | `-C -l -o` | Compile, then both review modes |
 
 `-c`/`--clean` and `-v`/`--verbose` only apply to the compile step.
+
+**Seed map** (`-s`/`--seed-map`) — Reads compiled output and reports which cards' body text contains other cards' triggers. When Card A's body mentions a word from Card B's trigger list, the Storyteller AI pulling Card A into context may also pull Card B — a "seed." The seed map makes these relationships visible so you can spot unintended context cascade or find cards that nothing seeds.
+
+Two files are written to the overview folder:
+
+| File | Contents |
+|---|---|
+| `{name}.seedmap.md` | Per-branch listing of every card with its trigger list and which other cards seed it |
+| `{name}.seedmap.csv` | `Branch, Title, Triggers, Seeded By` — sort by **Seeded By** ascending to find cards that never get seeded |
+
+"Seeded By" counts distinct seeder cards, not individual trigger matches. Cards with a count of 0 are never organically pulled in by another card's body text.
+
+**Card sizes** (`-b`/`--card-sizes`) — Reads compiled output and reports the character count of each card's body text. One CSV is written to the overview folder:
+
+| File | Contents |
+|---|---|
+| `{name}.bodysize.csv` | `Branch, Title, Body Size` — character count of each compiled card body, sorted by branch |
+
+Sort by **Body Size** ascending to spot cards that variants may have gutted, or descending to find cards that are likely too large for AID's context window. For single-branch scenarios the `Branch` column is omitted.
 
 **Path resolution** — When given a project folder (or no argument), Codex Loom looks for `compile.yaml` inside it to derive the output path and overview path. If no `compile.yaml` is found, it treats the folder as an already-compiled scenario root and runs any requested review modes directly on it — with a warning if `-C` was also requested.
 

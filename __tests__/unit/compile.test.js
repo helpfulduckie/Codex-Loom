@@ -4,7 +4,7 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const {
-  getTemplate, writeOpening, resolveOpeningContent, resolveBranchFolderPath,
+  getTemplate, validateCardType, writeOpening, resolveOpeningContent, resolveBranchFolderPath,
   buildBranchOutputDir, buildCompileContext, writeOutput, writeOpeningsRecursive,
   resolveIncludes,
 } = require('../../src/compile');
@@ -497,5 +497,142 @@ describe('resolveIncludes — duplicate file detection', () => {
     const result = resolveIncludes(cardDefs, new Map(), makeConfig(tmpDir));
     expect(result).toHaveLength(2);
     expect(result.map(c => c.id)).toEqual(expect.arrayContaining(['CardA', 'CardB']));
+  });
+
+  test('expands {%rootVar} and {@canon} in an include path', () => {
+    const charDir = path.join(tmpDir, 'Characters');
+    fs.mkdirSync(charDir);
+    fs.writeFileSync(path.join(charDir, 'Aria.yaml'), '- id: Aria\n  name: Aria\n', 'utf8');
+
+    const config = {
+      _base: tmpDir,
+      _resolvedComponents: {},
+      _resolvedCanon: new Map([['main', tmpDir]]),
+      variables: { who: 'Aria' },
+    };
+    const cardDefs = [{ include: '{@main}/Characters/{%who}.yaml', _source: path.join(tmpDir, 'p.yaml') }];
+    const result = resolveIncludes(cardDefs, new Map(), config);
+    expect(result.map(c => c.id)).toContain('Aria');
+  });
+});
+
+// ── token coverage: % in component specs + @ canon in specs ───────────────────
+
+describe('buildCompileContext — % and @ in component specs', () => {
+  let tmpDir;
+  beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-spec-')); });
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+
+  const makeConfig = (over) => ({
+    _base: tmpDir,
+    _resolvedComponents: {},
+    _resolvedCanon: new Map(),
+    variables: {},
+    components: {},
+    branches: null,
+    ...over,
+  });
+
+  test('{%var} in a component spec resolves to the matching file path', () => {
+    fs.writeFileSync(path.join(tmpDir, 'pe-knight.yaml'), 'x\n', 'utf8');
+    const config = makeConfig({
+      variables: { role: 'pe-knight' },
+      components: { plotEssential: '{%role}.yaml' },
+    });
+    const { componentRefs } = buildCompileContext(config, []);
+    expect(componentRefs.plotEssential).toBe(path.join(tmpDir, 'pe-knight.yaml'));
+  });
+
+  test('branch variable overrides root in a component spec', () => {
+    fs.writeFileSync(path.join(tmpDir, 'pe-mage.yaml'), 'x\n', 'utf8');
+    const config = makeConfig({
+      variables: { role: 'pe-knight' },
+      components: { plotEssential: '{%role}.yaml' },
+      branches: { mage: { variables: { role: 'pe-mage' } } },
+    });
+    const { componentRefs } = buildCompileContext(config, ['mage']);
+    expect(componentRefs.plotEssential).toBe(path.join(tmpDir, 'pe-mage.yaml'));
+  });
+
+  test('{@canon} reference resolves in a component spec', () => {
+    const peDir = path.join(tmpDir, 'shared');
+    fs.mkdirSync(peDir);
+    fs.writeFileSync(path.join(peDir, 'pe.yaml'), 'x\n', 'utf8');
+    const config = makeConfig({
+      _resolvedCanon: new Map([['lore', peDir]]),
+      components: { plotEssential: '{@lore}/pe.yaml' },
+    });
+    const { componentRefs } = buildCompileContext(config, []);
+    expect(componentRefs.plotEssential).toBe(path.join(peDir, 'pe.yaml'));
+  });
+});
+
+// ── token coverage: % in branch title (resolveBranchFolderPath) ───────────────
+
+describe('resolveBranchFolderPath — {%var} in title', () => {
+  test('expands {%var} in a branch title using root variables', () => {
+    const branches = { knight: { title: 'The {%era} Knight' } };
+    expect(resolveBranchFolderPath(branches, ['knight'], { era: 'Iron Age' }))
+      .toEqual(['The Iron Age Knight']);
+  });
+
+  test('ancestor title uses variables merged only down to that node (stable across siblings)', () => {
+    const branches = {
+      tier: {
+        title: '{%era} Tier',
+        variables: { era: 'Bronze' },
+        branches: {
+          a: { title: 'A', variables: { era: 'Gold' } },
+          b: { title: 'B' },
+        },
+      },
+    };
+    // Leaf "a" overrides era, but the ancestor folder must stay "Bronze Tier"
+    expect(resolveBranchFolderPath(branches, ['tier', 'a'], {})).toEqual(['Bronze Tier', 'A']);
+    expect(resolveBranchFolderPath(branches, ['tier', 'b'], {})).toEqual(['Bronze Tier', 'B']);
+  });
+
+  test('falls back to key when no title and leaves plain names unchanged', () => {
+    const branches = { plain: {} };
+    expect(resolveBranchFolderPath(branches, ['plain'], {})).toEqual(['plain']);
+  });
+});
+
+// ── validateCardType (aid.type must be a legal folder/file name) ──────────────
+
+describe('validateCardType', () => {
+  const card = (type) => ({ id: 'X', _source: 'cards.yaml', aid: { type } });
+
+  test('accepts a normal type', () => {
+    expect(() => validateCardType(card('Character'))).not.toThrow();
+  });
+
+  test('accepts a type containing spaces', () => {
+    expect(() => validateCardType(card('Story Card'))).not.toThrow();
+  });
+
+  test('no-op when aid.type is absent', () => {
+    expect(() => validateCardType({ id: 'X', aid: {} })).not.toThrow();
+    expect(() => validateCardType({ id: 'X' })).not.toThrow();
+  });
+
+  test.each(['a/b', 'a\\b', 'con:', 'a*b', 'a?b', 'a|b', '<x>', '"q"'])(
+    'throws on illegal path character: %s', (bad) => {
+      expect(() => validateCardType(card(bad))).toThrow(/Invalid aid\.type/);
+    }
+  );
+
+  test('throws on "." and ".."', () => {
+    expect(() => validateCardType(card('.'))).toThrow(/Invalid aid\.type/);
+    expect(() => validateCardType(card('..'))).toThrow(/Invalid aid\.type/);
+  });
+
+  test('throws on trailing space or period (Windows-hostile)', () => {
+    expect(() => validateCardType(card('Character '))).toThrow(/Invalid aid\.type/);
+    expect(() => validateCardType(card('Character.'))).toThrow(/Invalid aid\.type/);
+  });
+
+  test('error names the offending type and the card', () => {
+    expect(() => validateCardType(card('a/b'))).toThrow(/"a\/b".*"X"/);
   });
 });

@@ -13,7 +13,8 @@ const {
 } = require('./resolver');
 const { applyPronounPasses, applyCrossCardRefs } = require('./pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
-const { resolveVariables } = require('./util');
+const { resolveVariables, warnUnexpandedVariables } = require('./util');
+const { expandTokens } = require('./tokens');
 const { loadPEConfig, compilePE, writePE } = require('./pe');
 const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
 const { loadANConfig, compileAN, writeAN } = require('./an');
@@ -21,6 +22,32 @@ const { loadDescConfig, extractScriptBanner, writeDescription } = require('./des
 const { loadOpeningConfig, compileOpening } = require('./opening');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Characters illegal in a Windows/Unix path segment (mirrors overview.js sanitizeFilename
+// plus control chars). aid.type becomes both a folder and a filename, so it must be safe.
+const INVALID_TYPE_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
+
+/**
+ * Validate a card's aid.type after variable expansion. aid.type is written to disk
+ * as Story Cards/{type}/{type}.md, so it must be a legal path segment. Throws (aborts
+ * the compile) on an invalid type. No-op when the card has no aid.type (that case is
+ * already warned about during card resolution).
+ */
+function validateCardType(card) {
+  const type = card.aid && card.aid.type;
+  if (typeof type !== 'string' || type === '') return;
+  const trimmed = type.trim();
+  const name = card.id || (typeof card.name === 'string' ? card.name : '(unknown)');
+  const src = card._source ? ` (${card._source})` : '';
+  let reason = null;
+  if (trimmed === '') reason = 'is empty/whitespace';
+  else if (INVALID_TYPE_CHARS.test(type)) reason = 'contains an illegal path character (one of < > : " / \\ | ? *)';
+  else if (trimmed === '.' || trimmed === '..') reason = 'is "." or ".."';
+  else if (/[ .]$/.test(type)) reason = 'ends with a space or period';
+  if (reason) {
+    throw new Error(`Invalid aid.type "${type}" for card "${name}"${src}: ${reason}. aid.type becomes a folder/file name and must be a legal path segment.`);
+  }
+}
 
 /**
  * Get the template for a card. Checks render.template first, then aid.type.
@@ -53,50 +80,29 @@ function resolveOpeningContent(opening, base, variables) {
 }
 
 /**
- * Expand {@Key} component key references in text (content mode: returns file contents).
+ * Expand {@Key} references in text (content mode: returns file contents).
+ * Resolves against components first, then canon.
  */
-function resolveComponentKey(text, componentDirs) {
+function resolveComponentKey(text, componentDirs, canon) {
   if (!componentDirs || typeof text !== 'string') return text;
-  return text.replace(/\{@([^}]+)\}/g, (match, key) => {
-    const name = key.trim();
-    // Search all component dir maps for a matching name
-    for (const [type, dirMap] of Object.entries(componentDirs)) {
-      const actualKey = [...dirMap.keys()].find(k => k.toLowerCase() === name.toLowerCase());
-      if (actualKey !== undefined) {
-        const dirPath = dirMap.get(actualKey);
-        // Content mode: if it's a file read it, if a dir return path string
-        if (fs.existsSync(dirPath)) {
-          const stat = fs.statSync(dirPath);
-          if (stat.isFile()) return fs.readFileSync(dirPath, 'utf8').trim();
-          return dirPath; // folder — caller handles
-        }
-        return dirPath;
-      }
-    }
-    console.warn(`  WARN: component key "{@${name}}" not found`);
-    return match;
-  });
+  return expandTokens(text, { components: componentDirs, canon, mode: 'content' });
 }
 
 /**
- * Resolve a component spec value (file path | literal string | {@Key}) to a file path.
+ * Resolve a component spec value (file path | literal string | {%var} | {@Key}) to a file path.
  * Returns null if spec is null/undefined.
  * Returns a resolved absolute path if the spec points to an existing file.
  * Returns the literal string (for opening/openingChoice inline text).
+ *
+ * {@Key} resolves against components then canon (path mode); {%var} expands from
+ * the supplied branch-merged variables. Missing {@Key} tokens pass through silently
+ * (the spec may legitimately be inline text rather than a reference).
  */
-function resolveComponentSpec(spec, base, componentDirs) {
+function resolveComponentSpec(spec, base, componentDirs, canon, variables) {
   if (spec == null) return null;
-  // Expand {@Key} references (path mode: returns the folder/file path)
   let resolved = spec;
   if (typeof resolved === 'string') {
-    resolved = resolved.replace(/\{@([^}]+)\}/g, (match, key) => {
-      const name = key.trim();
-      for (const [, dirMap] of Object.entries(componentDirs)) {
-        const actualKey = [...dirMap.keys()].find(k => k.toLowerCase() === name.toLowerCase());
-        if (actualKey !== undefined) return dirMap.get(actualKey);
-      }
-      return match;
-    });
+    resolved = expandTokens(resolved, { variables, components: componentDirs, canon, mode: 'path', warnMissing: false });
   }
   // Try resolving as file or directory path
   const filePath = path.resolve(base, String(resolved));
@@ -132,7 +138,7 @@ function buildCompileContext(config, branchPath) {
   const componentRefs = {};
   for (const type of componentTypes) {
     const spec = components[type] !== undefined ? components[type] : null;
-    componentRefs[type] = resolveComponentSpec(spec, config._base, config._resolvedComponents);
+    componentRefs[type] = resolveComponentSpec(spec, config._base, config._resolvedComponents, config._resolvedCanon, variables);
   }
 
   return { variables, componentRefs };
@@ -195,7 +201,7 @@ function cleanAndArchive(config, leaves) {
 
   const expectedDirs = new Set();
   for (const branchPath of leaves) {
-    const folderPath = resolveBranchFolderPath(config.branches, branchPath);
+    const folderPath = resolveBranchFolderPath(config.branches, branchPath, config.variables);
     expectedDirs.add(path.resolve(buildBranchOutputDir(baseOutput, folderPath)));
   }
   if (leaves.length === 1 && leaves[0].length === 0) {
@@ -242,13 +248,19 @@ function buildBranchOutputDir(baseOutput, branchPath) {
  * Resolve the output folder path for a branch identifier path.
  * Uses each node's `title` field as the folder name when present; falls back to the key.
  *
+ * A node's `title` may contain {%var} tokens; each is expanded using the variables
+ * merged down to that node (root → this node), so an ancestor folder name stays
+ * stable across its sibling leaves even if a deeper leaf overrides the variable.
+ *
  * @param {object|null} branches - root branches mapping from config
  * @param {string[]}    idPath   - branch identifier path (e.g. ['tier2', 'alpha'])
+ * @param {object}      [rootVariables] - config.variables (for {%var} expansion in titles)
  * @returns {string[]}           - folder name path (e.g. ['Tier Two', 'Alpha Path'])
  */
-function resolveBranchFolderPath(branches, idPath) {
+function resolveBranchFolderPath(branches, idPath, rootVariables) {
   const folderPath = [];
   let currentMap = branches;
+  let variables = Object.assign({}, rootVariables || {});
   for (const id of idPath) {
     if (!currentMap || typeof currentMap !== 'object') {
       folderPath.push(id);
@@ -256,7 +268,9 @@ function resolveBranchFolderPath(branches, idPath) {
     }
     const actualKey = Object.keys(currentMap).find(k => k.toLowerCase() === id.toLowerCase());
     const node = actualKey !== undefined ? currentMap[actualKey] : null;
-    folderPath.push((node && node.title) || (actualKey || id));
+    if (node && node.variables) variables = Object.assign(variables, node.variables);
+    const rawName = (node && node.title) || (actualKey || id);
+    folderPath.push(resolveVariables(rawName, variables));
     currentMap = node && node.branches ? node.branches : null;
   }
   return folderPath;
@@ -286,18 +300,14 @@ function resolveIncludes(cardDefs, canonRegistry, config) {
   const included = [];
   const seenFiles = new Map(); // fullPath → [importer _source, ...]
   for (const def of includeDefs) {
-    // Resolve {@Key} in include path
-    let includePath = String(def.include);
-    includePath = includePath.replace(/\{@([^}]+)\}/g, (match, key) => {
-      const name = key.trim();
-      for (const [, dirMap] of Object.entries(config._resolvedComponents)) {
-        const actualKey = [...dirMap.keys()].find(k => k.toLowerCase() === name.toLowerCase());
-        if (actualKey !== undefined) return dirMap.get(actualKey);
-      }
-      // Also check canon dirs
-      const actualCanonKey = [...config._resolvedCanon.keys()].find(k => k.toLowerCase() === name.toLowerCase());
-      if (actualCanonKey) return config._resolvedCanon.get(actualCanonKey);
-      return match;
+    // Resolve {%var} (root variables only — includes resolve once, before branch
+    // enumeration) and {@Key} references (components then canon) in the include path.
+    let includePath = expandTokens(String(def.include), {
+      variables: config.variables || null,
+      components: config._resolvedComponents,
+      canon: config._resolvedCanon,
+      mode: 'path',
+      warnMissing: false,
     });
 
     // Normalize separators (handles mixed forward/back slashes from {@var}/path expansion)
@@ -408,6 +418,7 @@ function compileBranchPhaseA(allCardDefs, registry, branchPath, variables) {
 
     applyFieldInterpolation(card);
     applyVariableInterpolation(card, variables);
+    validateCardType(card);
     resolvedCards.push(card);
   }
 
@@ -488,6 +499,8 @@ function compileBranchPhaseB(resolvedCards, registry, templates, partials, outpu
     }
 
     const type = (card.aid && card.aid.type) || 'Uncategorized';
+    const cardLabel = card.id || (typeof card.name === 'string' ? card.name : String(card.name));
+    warnUnexpandedVariables(rendered, `card "${cardLabel}" (${type})`);
     if (!grouped.has(type)) grouped.set(type, []);
     grouped.get(type).push(rendered);
   }
@@ -517,6 +530,7 @@ function writeComponentFile(outputDir, filename, content) {
   const dir = path.join(outputDir, 'Components');
   fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, filename);
+  warnUnexpandedVariables(content, `component ${filename}`);
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }
@@ -526,17 +540,9 @@ function writeComponentFile(outputDir, filename, content) {
  * path/value without reading file contents (path mode vs resolveComponentKey's content mode).
  * Used so that opening: '{@op}' resolves to the file path, not the file contents.
  */
-function expandOpeningKeyRef(spec, componentDirs) {
+function expandOpeningKeyRef(spec, componentDirs, canon) {
   if (!spec || typeof spec !== 'string' || !componentDirs) return spec;
-  return spec.replace(/\{@([^}]+)\}/g, (match, key) => {
-    const name = key.trim();
-    for (const [, dirMap] of Object.entries(componentDirs)) {
-      const actualKey = [...dirMap.keys()].find(k => k.toLowerCase() === name.toLowerCase());
-      if (actualKey !== undefined) return dirMap.get(actualKey);
-    }
-    console.warn(`  WARN: component key "{@${name}}" not found`);
-    return match;
-  });
+  return expandTokens(spec, { components: componentDirs, canon, mode: 'path' });
 }
 
 /**
@@ -568,15 +574,16 @@ function resolveYamlOpeningPath(spec, base, variables) {
  * @param {string|null} inheritedOpening - effective opening spec carried from ancestor
  * @param {object} variables - merged branch variables
  * @param {object} componentDirs - resolved component directory map
+ * @param {Map} canon - resolved canon name → path map (for {@Key} references)
  * @param {string[]} currentPath - branch path segments accumulated while descending
  */
-function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables, componentDirs, currentPath = [], verbose = false) {
+function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables, componentDirs, canon, currentPath = [], verbose = false) {
   const writtenLeaves = new Set();
 
   if (!branches || typeof branches !== 'object') {
     // We're at the root level with no branches — the root itself is the only leaf
     if (inheritedOpening != null) {
-      const expandedOpening = expandOpeningKeyRef(inheritedOpening, componentDirs);
+      const expandedOpening = expandOpeningKeyRef(inheritedOpening, componentDirs, canon);
       const yamlPath = resolveYamlOpeningPath(expandedOpening, configBase, variables);
       let content;
       if (yamlPath) {
@@ -621,7 +628,7 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
         console.warn(`  WARN: openingChoice on leaf branch "${name}" — ignoring`);
       } else {
         const expandedChoice = (componentDirs && typeof openingChoice === 'string')
-          ? resolveComponentKey(openingChoice, componentDirs)
+          ? resolveComponentKey(openingChoice, componentDirs, canon)
           : openingChoice;
         const content = resolveOpeningContent(expandedChoice, configBase, branchVars);
         const outPath = writeComponentFile(nodeOutput, 'Opening.md', content);
@@ -634,7 +641,7 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
       if (effectiveOpening != null) {
         const leafPath = [...currentPath, name];
         // Expand {@Key} component references in path mode (returns path, not file contents)
-        const expandedOpening = expandOpeningKeyRef(effectiveOpening, componentDirs);
+        const expandedOpening = expandOpeningKeyRef(effectiveOpening, componentDirs, canon);
         const yamlPath = resolveYamlOpeningPath(expandedOpening, configBase, branchVars);
         let content;
         if (yamlPath) {
@@ -651,7 +658,7 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
       }
     } else {
       // Recurse into sub-branches, tracking the current path
-      const sub = writeOpeningsRecursive(subBranches, nodeOutput, configBase, effectiveOpening, branchVars, componentDirs, [...currentPath, name], verbose);
+      const sub = writeOpeningsRecursive(subBranches, nodeOutput, configBase, effectiveOpening, branchVars, componentDirs, canon, [...currentPath, name], verbose);
       for (const k of sub) writtenLeaves.add(k);
     }
   }
@@ -727,11 +734,12 @@ function compile(configPath, options = {}) {
       if (node && node.protagonist) inheritedProtagonist = node.protagonist;
       walkMap = node && node.branches ? node.branches : null;
     }
-    const branchProtagonist = inheritedProtagonist.toLowerCase() || null;
-
-    const folderPath = resolveBranchFolderPath(config.branches, branchPath);
+    const folderPath = resolveBranchFolderPath(config.branches, branchPath, config.variables);
     const outputDir = buildBranchOutputDir(config._resolvedOutput, folderPath);
     const ctx = buildCompileContext(config, branchPath);
+    // Expand {%var} in protagonist using branch-merged variables, before the
+    // case-insensitive match against card ids.
+    const branchProtagonist = resolveVariables(inheritedProtagonist, ctx.variables).toLowerCase() || null;
     const compileContext = { branchPath, branchProtagonist, ...ctx };
 
     // Pre-scan PE blocks: full-style card imports suppress story card generation
@@ -845,7 +853,7 @@ function compile(configPath, options = {}) {
       console.warn(`  WARN: root openingChoice with no branches — ignoring`);
     } else {
       const expandedChoice = typeof rootOpeningChoice === 'string'
-        ? resolveComponentKey(rootOpeningChoice, config._resolvedComponents)
+        ? resolveComponentKey(rootOpeningChoice, config._resolvedComponents, config._resolvedCanon)
         : rootOpeningChoice;
       const content = resolveOpeningContent(expandedChoice, config._base, config.variables || {});
       const outPath = writeComponentFile(config._resolvedOutput, 'Opening.md', content);
@@ -858,13 +866,13 @@ function compile(configPath, options = {}) {
     : null;
   const leafOpeningKeys = writeOpeningsRecursive(
     config.branches, config._resolvedOutput, config._base,
-    rootOpening, config.variables || {}, config._resolvedComponents,
+    rootOpening, config.variables || {}, config._resolvedComponents, config._resolvedCanon,
     [], verbose
   );
 
   // Description (project-level, written once to output root alongside Branches/)
   const descSpec = config.components && config.components.description != null
-    ? resolveComponentSpec(config.components.description, config._base, config._resolvedComponents)
+    ? resolveComponentSpec(config.components.description, config._base, config._resolvedComponents, config._resolvedCanon, config.variables || null)
     : null;
   if (descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec)) {
     const ext = path.extname(descSpec).toLowerCase();
@@ -876,7 +884,7 @@ function compile(configPath, options = {}) {
     } else if (ext === '.js') {
       bannerContent = extractScriptBanner(descSpec, {});
     } else {
-      const descCfg = loadDescConfig(descSpec, config._base, config._resolvedComponents, config.variables || {});
+      const descCfg = loadDescConfig(descSpec, config._base, config._resolvedComponents, config.variables || {}, config._resolvedCanon);
       if (descCfg.bodyPath && fs.existsSync(descCfg.bodyPath))
         bodyContent = fs.readFileSync(descCfg.bodyPath, 'utf8').trimEnd() || null;
       if (descCfg.scriptPath && fs.existsSync(descCfg.scriptPath))
@@ -932,6 +940,7 @@ module.exports = {
   compileBranchPhaseA,
   compileBranchPhaseB,
   getTemplate,
+  validateCardType,
   writeOutput,
   resolveIncludes,
   buildCompileContext,
@@ -996,6 +1005,8 @@ if (require.main === module) {
     ['compile',    ['--compile',    '-C']],
     ['leafReview', ['--leafReview', '-l']],
     ['overview',   ['--overview',   '-o']],
+    ['seedMap',    ['--seed-map',   '-s']],
+    ['cardSizes',  ['--card-sizes', '-b']],
     ['clean',      ['--clean',      '-c']],
     ['verbose',    ['--verbose',    '-v']],
   ];
@@ -1010,13 +1021,15 @@ if (require.main === module) {
 
   const positional = rawArgs.filter((_, i) => !flagIdxs.has(i));
 
-  const doCompile    = flags.compile || (!flags.leafReview && !flags.overview);
+  const doCompile    = flags.compile || (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes);
   const doLeafReview = flags.leafReview;
   const doOverview   = flags.overview;
+  const doSeedMap    = flags.seedMap;
+  const doCardSizes  = flags.cardSizes;
 
-  if (positional.length === 0 && !flags.compile && !flags.leafReview && !flags.overview) {
+  if (positional.length === 0 && !flags.compile && !flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes) {
     console.error(
-      'Usage: codex-loom [--compile|-C] [--clean|-c] [--verbose|-v] [--leafReview|-l] [--overview|-o] [<folder | compile.yaml>]'
+      'Usage: codex-loom [--compile|-C] [--clean|-c] [--verbose|-v] [--leafReview|-l] [--overview|-o] [--seed-map|-s] [--card-sizes|-b] [<folder | compile.yaml>]'
     );
     process.exit(1);
   }
@@ -1046,8 +1059,8 @@ if (require.main === module) {
     }
   }
 
-  // ── Leaf-review / Overview ──
-  if (doLeafReview || doOverview) {
+  // ── Reports (leaf-review, overview, seed-map, card-sizes) ──
+  if (doLeafReview || doOverview || doSeedMap || doCardSizes) {
     if (!scenarioRoot) {
       console.error('No compile.yaml in current directory and no path given.');
       process.exit(1);
@@ -1060,30 +1073,48 @@ if (require.main === module) {
     fs.mkdirSync(outputDir, { recursive: true });
 
     if (flags.verbose) {
-      const modeLabel = [doLeafReview && 'leaf-review', doOverview && 'overview'].filter(Boolean).join(' + ');
+      const modeLabel = [
+        doLeafReview && 'leaf-review',
+        doOverview   && 'overview',
+        doSeedMap    && 'seed-map',
+        doCardSizes  && 'card-sizes',
+      ].filter(Boolean).join(' + ');
       console.log(`\n${modeLabel} mode\nScenario root : ${scenarioRoot}\nOutput dir    : ${outputDir}\n`);
     }
 
     try {
-      const { runLeafReviewMode, runOverviewMode } = require('./overview');
-      let leafCount = 0;
+      const summaryParts = [];
+
       if (doLeafReview) {
+        const { runLeafReviewMode } = require('./overview');
         const written = runLeafReviewMode(scenarioRoot, outputDir, flags.verbose);
-        leafCount = written.length;
-      }
-      if (doOverview) {
-        runOverviewMode(scenarioRoot, outputDir, flags.verbose);
+        summaryParts.push(`${written.length} leaf review file(s)`);
       }
 
-      let summary;
-      if (doLeafReview && doOverview) {
-        summary = `Wrote ${leafCount} leaf review file(s) and overview file to:`;
-      } else if (doLeafReview) {
-        summary = `Wrote ${leafCount} leaf review file(s) to:`;
-      } else {
-        summary = `Wrote overview file to:`;
+      if (doSeedMap) {
+        const { runSeedMapMode } = require('./seedmap');
+        const result = runSeedMapMode(scenarioRoot, outputDir, flags.verbose);
+        if (result) summaryParts.push('2 seed map files');
       }
-      console.log(`\n${summary}\n  ${outputDir}\n`);
+
+      if (doOverview) {
+        const { runOverviewMode } = require('./overview');
+        runOverviewMode(scenarioRoot, outputDir, flags.verbose);
+        summaryParts.push('an overview file');
+      }
+
+      if (doCardSizes) {
+        const { runBodySizeMode } = require('./bodysize');
+        const result = runBodySizeMode(scenarioRoot, outputDir, flags.verbose);
+        if (result) summaryParts.push('a card sizes file');
+      }
+
+      if (summaryParts.length > 0) {
+        const joined = summaryParts.length === 1
+          ? summaryParts[0]
+          : summaryParts.slice(0, -1).join(', ') + ', and ' + summaryParts.at(-1);
+        console.log(`\nWrote ${joined} to:\n  ${outputDir}\n`);
+      }
     } catch (err) {
       console.error(`\nFatal: ${err.message}`);
       process.exit(1);

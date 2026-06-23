@@ -3,7 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const { loadYaml } = require('./loader');
-const { resolveVariables } = require('./util');
+const { expandTokens } = require('./tokens');
+const { warnUnexpandedVariables } = require('./util');
 
 /**
  * Load a description YAML config file.
@@ -18,8 +19,9 @@ const { resolveVariables } = require('./util');
  * @param {string} configBase        - compile.yaml directory (config._base)
  * @param {object} resolvedComponents - config._resolvedComponents (for {@Key} expansion)
  * @param {object} variables          - config.variables (for {%var} expansion)
+ * @param {Map}    [canon]            - config._resolvedCanon (for {@Key} canon references)
  */
-function loadDescConfig(specPath, configBase, resolvedComponents, variables) {
+function loadDescConfig(specPath, configBase, resolvedComponents, variables, canon) {
   if (!specPath) return {};
   if (!fs.existsSync(specPath)) {
     console.warn(`  WARN: description config not found: ${specPath}`);
@@ -33,19 +35,7 @@ function loadDescConfig(specPath, configBase, resolvedComponents, variables) {
 
   function expandValue(val) {
     if (!val || typeof val !== 'string') return val;
-    let result = val;
-    if (variables) result = resolveVariables(result, variables);
-    if (resolvedComponents) {
-      result = result.replace(/\{@([^}]+)\}/g, (match, key) => {
-        const name = key.trim();
-        for (const [, dirMap] of Object.entries(resolvedComponents)) {
-          const actualKey = [...dirMap.keys()].find(k => k.toLowerCase() === name.toLowerCase());
-          if (actualKey !== undefined) return dirMap.get(actualKey);
-        }
-        return match;
-      });
-    }
-    return result;
+    return expandTokens(val, { variables, components: resolvedComponents, canon, mode: 'path', warnMissing: false });
   }
 
   return {
@@ -136,6 +126,7 @@ function writeDescription(outputDir, content) {
   if (!content) return null;
   fs.mkdirSync(outputDir, { recursive: true });
   const outPath = path.join(outputDir, 'Description.md');
+  warnUnexpandedVariables(content, 'component Description.md');
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }

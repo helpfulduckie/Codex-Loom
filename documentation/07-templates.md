@@ -269,7 +269,33 @@ Setting: {%setting}
 Year: {%year}
 ```
 
-Component key references (`{@name}`) expand to a file path or file contents and are pre-expanded before template rendering.
+`{%key}` is expanded at the start of template rendering (and in card body fields before rendering), so it can appear anywhere in template or card content.
+
+Component key references (`{@name}`) are **not** expanded in templates or card bodies. They are resolved only in path/prose contexts — `compile.yaml` config paths (canon, templates, components), component specs, `include:` paths, opening prose, and description config. Do not use `{@name}` inside a card `body:` or a `.template`; it will be emitted verbatim. See the comparison below.
+
+---
+
+## Token Systems at a Glance
+
+Codex Loom has three token families that look similar but resolve through different machinery. `{%}` and `{@}` are the compile-time *path/value* family (covered here); the `{$…}` family is the *field-reference* system documented earlier in this file.
+
+| Token | Name | Declared in | Resolves to | Available in |
+|---|---|---|---|---|
+| `{%key}` | Compile variable | `compile.yaml` `variables:` (root + per-branch) | a string value (recursive, cycle-detected; warns if undeclared) | card `id`/`name`/`body`/`aid`/`render` (string values), templates, opening prose, component specs, config paths (cards/canon/templates/components), `include:` paths, branch `title`/`protagonist` |
+| `{@key}` | Named reference | `structure.input.canon` + `structure.input.components` | a path (path mode) or file contents (content mode) | config paths, component specs, `include:` paths, opening prose, description config — **not** card bodies/templates |
+| `{$v.key}` / `{$Id.body.field}` | Field reference | a card's `v:` block / another card's fields | a card field value | card bodies/templates only (the `{$…}` interpolation + cross-card pass) |
+
+**`{%}` vs `{@}` are intentionally distinct:** `{%}` substitutes a *value*; `{@}` resolves a *named resource* (a directory, file path, or file contents). Both route through the single shared expander (`src/tokens.js`), so their scope, lookup order (components then canon for `{@}`), warnings, and cycle handling are identical at every call site.
+
+**Scope caveat:** `{%}` in `include:`/`import:` paths uses **root** `variables:` only — includes resolve once, before branches are enumerated, so per-branch variable overrides are not in scope there. Everywhere else `{%}` uses the full root → branch merge.
+
+**`aid`/`render` expansion:** `{%}` expands in `aid` (e.g. `title`, `triggers`) and `render` (e.g. `template`, `wrapper`) string values, so template/type selection can be variable-driven. Only strings are touched — numeric/boolean fields like `render.position` and `aid.encapsulate` are left as-is.
+
+**`aid.type` validation:** because `aid.type` becomes both a folder and a filename (`Story Cards/{type}/{type}.md`), it is validated *after* expansion. An illegal path segment (`< > : " / \ | ? *`, control chars, `.`/`..`, or a trailing space/period) **aborts the compile** with an error naming the card and type. Spaces elsewhere are fine.
+
+**Unexpanded-variable warning:** as a final safety net, every rendered story card and component output is scanned for any leftover `{%…}` token; each distinct one emits a `WARN: unexpanded variable {%x} in …`. This is `{%}`-only — a literal `{@…}` in a card body is expected (it is never expanded there) and is not flagged. An *undeclared* variable therefore produces two complementary messages: `"{%x}" not declared` at expansion and the residual warning at output.
+
+**Future consolidation:** the `{$…}` field-reference family (`{$v.field}` card variables and `{$Id.body.field}` cross-card references) is a separate system from `{%}`/`{@}` and was deliberately left untouched in the token-unification pass. The naming overlap is a known source of confusion — note that `variable`/`variables` are accepted aliases for *both* the `{%}` declaration intent (`compile.yaml` `variables:`) and the card-level `v:` block (`{$variables.key}`). Whether the `{$…}` family should fold into the shared expander is an open question for a later pass; see `dev-guide.md`.
 
 ---
 
