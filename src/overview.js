@@ -206,7 +206,7 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose = false
       if (opening === null) opening = readFile(path.join(compDir, 'Opening.md'));
       if (plotEss === null) plotEss = readFile(path.join(compDir, 'Plot Essentials.md'));
       if (ainText === null) ainText = readFile(path.join(compDir, 'AI Instructions.md'));
-      if (anText  === null) anText  = readFile(path.join(compDir, "Author's Note.md"));
+      if (anText  === null) anText  = readFile(path.join(compDir, "Author Notes.md"));
     }
     if (opening !== null && plotEss !== null && ainText !== null && anText !== null) break;
     const parent     = path.dirname(dir);

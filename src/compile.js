@@ -9,7 +9,6 @@ const {
 } = require('./loader');
 const {
   resolveCard, enumerateLeaves, getBranchConfig,
-  resolveBranchSpec, parseVariantsList,
 } = require('./resolver');
 const { applyPronounPasses, applyCrossCardRefs } = require('./pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
@@ -755,31 +754,24 @@ function compile(configPath, options = {}) {
     const branchProtagonist = resolveVariables(inheritedProtagonist, ctx.variables).toLowerCase() || null;
     const compileContext = { branchPath, branchProtagonist, ...ctx };
 
-    // Pre-scan PE blocks: full-style card imports suppress story card generation
+    // Compile Plot Essentials BEFORE story cards so suppression follows exactly what
+    // PE actually emitted. A full-style import that renders into PE suppresses its
+    // story card; one that PE excludes (or fails to render) is left as a story card —
+    // PE can never cause a card to vanish from both outputs.
     const peSpec = compileContext.componentRefs.plotEssential;
     const peSuppressedIds = new Set();
-    if (peSpec && typeof peSpec === 'string' && !peSpec.includes('{')) {
-      const peBlocksForScan = loadPEConfig(peSpec);
-      for (const block of peBlocksForScan) {
-        if (block.blocks) {
-          // Section block — apply section-level branch filter then walk children
-          const sectionBranch = resolveBranchSpec(block.branches, branchPath);
-          if (sectionBranch === null) continue;
-          for (const child of block.blocks) {
-            if (!child.import) continue;
-            const childBranch = resolveBranchSpec(child.branches, branchPath);
-            if (childBranch === null) continue;
-            const style = ((child.render && child.render.style) || 'full').toLowerCase();
-            if (style === 'full') peSuppressedIds.add(String(child.import).toLowerCase());
-          }
-          continue;
-        }
-        if (!block.import) continue;
-        const branchResult = resolveBranchSpec(block.branches, branchPath);
-        if (branchResult === null) continue;
-        const style = ((block.render && block.render.style) || 'full').toLowerCase();
-        if (style === 'full') {
-          peSuppressedIds.add(String(block.import).toLowerCase());
+    let peContent = null;
+    let peUnresolved = false;
+    let peNoBlocks = false;
+    if (peSpec) {
+      if (typeof peSpec === 'string' && peSpec.includes('{')) {
+        peUnresolved = true;
+      } else {
+        const peBlocks = loadPEConfig(typeof peSpec === 'string' ? peSpec : null);
+        if (peBlocks.length === 0) {
+          peNoBlocks = true;
+        } else {
+          peContent = compilePE(peBlocks, registry, templates, partials, compileContext, overlays, peSuppressedIds);
         }
       }
     }
@@ -800,21 +792,17 @@ function compile(configPath, options = {}) {
     );
     totalFiles += written.length;
 
-    // Plot Essentials
+    // Plot Essentials — write the content compiled above and record any gaps.
     let hasPE = false;
     if (peSpec) {
-      if (typeof peSpec === 'string' && peSpec.includes('{')) {
+      if (peUnresolved) {
         recordGap(label, 'Plot Essentials', peSpec, 'unresolved reference — token did not expand to a path');
+      } else if (peNoBlocks) {
+        recordGap(label, 'Plot Essentials', peSpec, 'source loaded no blocks (missing or empty file)');
       } else {
-        const peBlocks = loadPEConfig(typeof peSpec === 'string' ? peSpec : null);
-        if (peBlocks.length === 0) {
-          recordGap(label, 'Plot Essentials', peSpec, 'source loaded no blocks (missing or empty file)');
-        } else {
-          const peContent = compilePE(peBlocks, registry, templates, partials, compileContext, overlays);
-          const pePath = writePE(outputDir, peContent);
-          if (pePath) { hasPE = true; if (verbose) console.log(`    OK: PlotEssentials → ${pePath}`); totalFiles++; }
-          else recordGap(label, 'Plot Essentials', peSpec, 'compiled to empty content (all blocks excluded or produced nothing)');
-        }
+        const pePath = writePE(outputDir, peContent);
+        if (pePath) { hasPE = true; if (verbose) console.log(`    OK: PlotEssentials → ${pePath}`); totalFiles++; }
+        else recordGap(label, 'Plot Essentials', peSpec, 'compiled to empty content (all blocks excluded or produced nothing)');
       }
     }
 

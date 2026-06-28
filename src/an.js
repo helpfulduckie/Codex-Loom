@@ -96,9 +96,9 @@ function writeAN(branchOutputDir, content) {
   if (!content) return null;
   const dir = path.join(branchOutputDir, 'Components');
   fs.mkdirSync(dir, { recursive: true });
-  const outPath = path.join(dir, "Author's Note.md");
-  warnUnexpandedVariables(content, "component Author's Note.md");
-  warnUnresolvedFieldTokens(content, "component Author's Note.md");
+  const outPath = path.join(dir, "Author Notes.md");
+  warnUnexpandedVariables(content, "component Author Notes.md");
+  warnUnresolvedFieldTokens(content, "component Author Notes.md");
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }

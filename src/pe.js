@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens } = require('./util');
-const { resolveCard, resolveBranchSpec, applyFieldsDelta, applyFieldOp } = require('./resolver');
+const { resolveCard, resolveBranchSpec, mergeBranchSpecs, applyFieldsDelta, applyFieldOp } = require('./resolver');
 const { applyPronounPasses } = require('./pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions, applyWrapper, resolveTemplateName } = require('./template');
 
@@ -156,7 +156,7 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
   // When neither the PE block nor the overlay specify branches, inherit from the card definition.
   const peHasBranches = blockDef.branches !== undefined || overlay?.branches !== undefined;
   const resolvedBranches = (overlay?.branches !== undefined && blockDef.branches !== undefined)
-    ? applyFieldOp(overlay.branches, blockDef.branches)
+    ? mergeBranchSpecs(overlay.branches, blockDef.branches)
     : (blockDef.branches ?? overlay?.branches ?? canonCard.branches);
 
   const importDef = {
@@ -238,7 +238,7 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
  * @param {Map}    overlays
  * @returns {{ text: string, position: number } | null}
  */
-function renderPESection(sectionDef, registry, templates, partials, compileContext, overlays) {
+function renderPESection(sectionDef, registry, templates, partials, compileContext, overlays, emittedFullImportIds = null) {
   const { branchPath } = compileContext;
   const renderOpts   = sectionDef.render || {};
   const position     = renderOpts.position !== undefined ? renderOpts.position : 5;
@@ -272,6 +272,13 @@ function renderPESection(sectionDef, registry, templates, partials, compileConte
     );
     if (!result) continue;
 
+    // Record full-style import children that actually rendered, so the caller
+    // suppresses exactly the story cards PE emitted (never more).
+    if (emittedFullImportIds && childDef.import &&
+        (childRenderOpts.style || 'full').toLowerCase() === 'full') {
+      emittedFullImportIds.add(String(childDef.import).toLowerCase());
+    }
+
     childSegments.push({ body: result.body, position: childPosition });
   }
 
@@ -302,8 +309,13 @@ function renderPESection(sectionDef, registry, templates, partials, compileConte
  * @param {Map}      templates         - loaded template map
  * @param {Map}      partials          - loaded partials map
  * @param {object}   compileContext    - { branchPath, branchProtagonist }
+ * @param {Map}      overlays
+ * @param {Set|null} emittedFullImportIds - optional out-param; receives the lowercase
+ *                   ids of import blocks that actually rendered at full style. The
+ *                   caller uses this to suppress exactly those story cards — so a card
+ *                   PE excludes (or fails to render) is never dropped from Story Cards.
  */
-function compilePE(peBlocks, registry, templates, partials, compileContext, overlays = new Map()) {
+function compilePE(peBlocks, registry, templates, partials, compileContext, overlays = new Map(), emittedFullImportIds = null) {
   const { branchPath } = compileContext;
   const segments = [];
 
@@ -313,7 +325,7 @@ function compilePE(peBlocks, registry, templates, partials, compileContext, over
       const branchResult = resolveBranchSpec(blockDef.branches, branchPath);
       if (branchResult === null) continue;
 
-      const segment = renderPESection(blockDef, registry, templates, partials, compileContext, overlays);
+      const segment = renderPESection(blockDef, registry, templates, partials, compileContext, overlays, emittedFullImportIds);
       if (segment) segments.push(segment);
       continue;
     }
@@ -330,6 +342,11 @@ function compilePE(peBlocks, registry, templates, partials, compileContext, over
 
     const result = renderPEBlock(blockDef, renderOpts, registry, templates, partials, compileContext, overlays);
     if (!result) continue;
+
+    // Record full-style imports that actually rendered (see emittedFullImportIds).
+    if (emittedFullImportIds && blockDef.import && style === 'full') {
+      emittedFullImportIds.add(String(blockDef.import).toLowerCase());
+    }
 
     segments.push({ text: applyWrapper(result.body, result.wrapper), position });
   }
