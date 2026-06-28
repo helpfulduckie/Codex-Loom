@@ -1,5 +1,7 @@
 'use strict';
 
+const { walkCardTextFields } = require('./util');
+
 /**
  * Pronoun resolution for Codex Loom v3.
  *
@@ -296,22 +298,8 @@ function applyCrossCardRefs(resolvedCards, registry) {
     });
   }
 
-  function walkBody(obj) {
-    if (!obj || typeof obj !== 'object') return;
-    for (const key of Object.keys(obj)) {
-      const val = obj[key];
-      if (typeof val === 'string') {
-        obj[key] = processValue(val);
-      } else if (Array.isArray(val)) {
-        obj[key] = val.map(item => typeof item === 'string' ? processValue(item) : item);
-      } else if (typeof val === 'object' && val !== null) {
-        walkBody(val);
-      }
-    }
-  }
-
   for (const card of resolvedCards) {
-    if (card.body) walkBody(card.body);
+    walkCardTextFields(card, processValue);
   }
 }
 
@@ -324,25 +312,8 @@ function applyCrossCardRefs(resolvedCards, registry) {
  * @param {string|null} branchProtagonist - lowercase protagonist ID
  */
 function applyPronounPasses(card, registry, branchProtagonist, resolvedById) {
-  if (!card.body) return;
-
   const opts = { card, registry, branchProtagonist, resolvedById };
-
-  function walkBody(obj) {
-    if (!obj || typeof obj !== 'object') return;
-    for (const key of Object.keys(obj)) {
-      const val = obj[key];
-      if (typeof val === 'string') {
-        obj[key] = applyTokenPass(val, opts);
-      } else if (Array.isArray(val)) {
-        obj[key] = val.map(item => typeof item === 'string' ? applyTokenPass(item, opts) : item);
-      } else if (typeof val === 'object' && val !== null) {
-        walkBody(val);
-      }
-    }
-  }
-
-  walkBody(card.body);
+  walkCardTextFields(card, s => applyTokenPass(s, opts));
 }
 
 module.exports = {

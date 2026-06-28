@@ -4,6 +4,7 @@ const fs = require('fs');
 const {
   findFiles, loadYaml, deepClone, findKey,
   getCI, setCI, deleteCI, normalizeVarKey, resolveVariables, warnUnexpandedVariables,
+  walkCardTextFields, warnUnresolvedFieldTokens,
 } = require('../../src/util');
 
 // ── deepClone ─────────────────────────────────────────────────────────────────
@@ -213,6 +214,65 @@ describe('warnUnexpandedVariables', () => {
   test('non-string input returns false', () => {
     expect(warnUnexpandedVariables(null, 'x')).toBe(false);
     expect(warnUnexpandedVariables(42, 'x')).toBe(false);
+  });
+});
+
+// ── walkCardTextFields ────────────────────────────────────────────────────────
+
+describe('walkCardTextFields', () => {
+  test('visits strings in body, aid, render, and name (incl. arrays + nesting)', () => {
+    const card = {
+      body: { Tagline: 'a', Traits: { hair: 'b' }, Keywords: ['c', 'd'] },
+      aid: { title: 'e', triggers: ['f'] },
+      render: { wrapper: 'g' },
+      name: { display: 'h', full: 'i' },
+    };
+    walkCardTextFields(card, s => s.toUpperCase());
+    expect(card.body.Tagline).toBe('A');
+    expect(card.body.Traits.hair).toBe('B');
+    expect(card.body.Keywords).toEqual(['C', 'D']);
+    expect(card.aid.title).toBe('E');
+    expect(card.aid.triggers).toEqual(['F']);
+    expect(card.render.wrapper).toBe('G');
+    expect(card.name.full).toBe('I');
+  });
+
+  test('leaves non-string values (numbers, booleans) untouched', () => {
+    const card = { aid: { encapsulate: true }, render: { position: 5 }, body: {} };
+    walkCardTextFields(card, () => 'X');
+    expect(card.aid.encapsulate).toBe(true);
+    expect(card.render.position).toBe(5);
+  });
+
+  test('no-op on missing card / sections', () => {
+    expect(() => walkCardTextFields(undefined, s => s)).not.toThrow();
+    expect(() => walkCardTextFields({ id: 'x' }, s => s)).not.toThrow();
+  });
+});
+
+// ── warnUnresolvedFieldTokens ─────────────────────────────────────────────────
+
+describe('warnUnresolvedFieldTokens', () => {
+  test('warns once per distinct {$token} and returns true', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    const found = warnUnresolvedFieldTokens('{$she} and {$she} and {$Aria}', 'card "X" (Y)');
+    expect(found).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('{$she}'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('{$Aria}'));
+    warn.mockRestore();
+  });
+
+  test('ignores {%…} and {@…} tokens', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    expect(warnUnresolvedFieldTokens('{%role} {@main}/x', 'x')).toBe(false);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  test('clean text and non-string return false', () => {
+    expect(warnUnresolvedFieldTokens('resolved text', 'x')).toBe(false);
+    expect(warnUnresolvedFieldTokens(null, 'x')).toBe(false);
   });
 });
 

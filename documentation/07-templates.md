@@ -29,7 +29,7 @@ Templates receive a card context with these top-level keys:
 | `body` | `{$body.FieldName}`, `{$body.Nested.sub}` |
 | `v` | `{$v.key}` — also accessible as `{$var.key}`, `{$vars.key}`, `{$variable.key}`, `{$variables.key}` |
 
-Body fields are matched case-insensitively. Missing fields silently resolve to empty string.
+Body fields are matched case-insensitively. A field ref that resolves to nothing renders as empty string. Dotted field refs (`{$body.X}`, `{$v.X}`, `{$aid.X}`, `{$render.X}`, `{$name.X}`) also resolve inside card `aid`/`render`/`name` fields, not just `body` — bare single-segment `{$X}` stays in the pronoun/character-ref namespace. A `{$…}` token that survives unresolved into final output triggers `WARN: unresolved token {$x} in …` (a literal field-ref miss in a *template* still renders empty and is not flagged).
 
 ---
 
@@ -283,7 +283,7 @@ Codex Loom has three token families that look similar but resolve through differ
 |---|---|---|---|---|
 | `{%key}` | Compile variable | `compile.yaml` `variables:` (root + per-branch) | a string value (recursive, cycle-detected; warns if undeclared) | card `id`/`name`/`body`/`aid`/`render` (string values), templates, opening prose, component specs, config paths (cards/canon/templates/components), `include:` paths, branch `title`/`protagonist` |
 | `{@key}` | Named reference | `structure.input.canon` + `structure.input.components` | a path (path mode) or file contents (content mode) | config paths, component specs, `include:` paths, opening prose, description config — **not** card bodies/templates |
-| `{$v.key}` / `{$Id.body.field}` | Field reference | a card's `v:` block / another card's fields | a card field value | card bodies/templates only (the `{$…}` interpolation + cross-card pass) |
+| `{$v.key}` / `{$Id.body.field}` | Field reference | a card's `v:` block / another card's fields | a card field value | templates, and card `body`/`aid`/`render`/`name` fields (the `{$…}` interpolation + cross-card + pronoun passes) |
 
 **`{%}` vs `{@}` are intentionally distinct:** `{%}` substitutes a *value*; `{@}` resolves a *named resource* (a directory, file path, or file contents). Both route through the single shared expander (`src/tokens.js`), so their scope, lookup order (components then canon for `{@}`), warnings, and cycle handling are identical at every call site.
 
@@ -295,7 +295,7 @@ Codex Loom has three token families that look similar but resolve through differ
 
 **Unexpanded-variable warning:** as a final safety net, every rendered story card and component output is scanned for any leftover `{%…}` token; each distinct one emits a `WARN: unexpanded variable {%x} in …`. This is `{%}`-only — a literal `{@…}` in a card body is expected (it is never expanded there) and is not flagged. An *undeclared* variable therefore produces two complementary messages: `"{%x}" not declared` at expansion and the residual warning at output.
 
-**Future consolidation:** the `{$…}` field-reference family (`{$v.field}` card variables and `{$Id.body.field}` cross-card references) is a separate system from `{%}`/`{@}` and was deliberately left untouched in the token-unification pass. The naming overlap is a known source of confusion — note that `variable`/`variables` are accepted aliases for *both* the `{%}` declaration intent (`compile.yaml` `variables:`) and the card-level `v:` block (`{$variables.key}`). Whether the `{$…}` family should fold into the shared expander is an open question for a later pass; see `dev-guide.md`.
+**`{$…}` family status:** it is a separate system from `{%}`/`{@}`. It has been standardized for *coverage* (resolves in `body`/`aid`/`render`/`name`), *surface* (dotted field refs accepted in card data), and *failure visibility* (residual unresolved-token warning). What remains **deferred** is collapsing its four resolvers (`processFieldInterpolation`/`processInline` + `applyTokenPass`/`applyCrossCardRefs`) into one dispatcher — high risk because of pronoun scope, verb conjugation, the two-pass cross-card ordering, and protagonist "you". The naming overlap is also a known confusion point: `variable`/`variables` are aliases for *both* the `{%}` declaration intent (`compile.yaml` `variables:`) and the card-level `v:` block (`{$variables.key}`). See `dev-guide.md`.
 
 ---
 

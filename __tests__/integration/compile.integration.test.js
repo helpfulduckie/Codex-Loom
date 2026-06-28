@@ -719,3 +719,84 @@ describe('YAML block opening (opening.yaml)', () => {
     }
   });
 });
+
+// ── Requested-but-unwritten component detection ───────────────────────────────
+
+describe('component gap detection', () => {
+  // Build a minimal project; `extraComponents` lines are spliced into components:.
+  function makeProject(extraComponents) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-gap-'));
+    fs.mkdirSync(path.join(dir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'cards', 'c.yaml'), [
+      '- id: W',
+      '  name: W',
+      '  aid: { type: Item, title: W }',
+      '  render: { template: Item }',
+      '  body: { Desc: w }',
+    ].join('\n'), 'utf8');
+    fs.writeFileSync(path.join(dir, 'templates', 'Item.template'), '## {$aid.title}\n~~~\n{$body.Desc}', 'utf8');
+    fs.writeFileSync(path.join(dir, 'compile.yaml'), [
+      'structure:',
+      `  input: { cards: [${dir}/cards], templates: [${dir}/templates] }`,
+      `  output: ${dir}/output`,
+      'components:',
+      ...extraComponents.map(l => `  ${l}`),
+    ].join('\n'), 'utf8');
+    return dir;
+  }
+
+  test('missing Author\'s Note source throws', () => {
+    const dir = makeProject([`authorsNote: ${'./does-not-exist.yaml'}`]);
+    try {
+      expect(() => compile(path.join(dir, 'compile.yaml'))).toThrow(/component\(s\) were not written/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('missing Description source throws', () => {
+    const dir = makeProject([`description: ${'./missing-desc.md'}`]);
+    try {
+      expect(() => compile(path.join(dir, 'compile.yaml'))).toThrow(/component\(s\) were not written/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('unresolved {@key} Plot Essentials reference throws', () => {
+    const dir = makeProject(['plotEssential: "{@nope}"']);
+    try {
+      expect(() => compile(path.join(dir, 'compile.yaml'))).toThrow(/component\(s\) were not written/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('no components requested does not throw', () => {
+    const dir = makeProject([]);
+    // makeProject always writes a `components:` header; an empty mapping is fine.
+    fs.writeFileSync(path.join(dir, 'compile.yaml'), [
+      'structure:',
+      `  input: { cards: [${dir}/cards], templates: [${dir}/templates] }`,
+      `  output: ${dir}/output`,
+    ].join('\n'), 'utf8');
+    try {
+      expect(() => compile(path.join(dir, 'compile.yaml'))).not.toThrow();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('valid Author\'s Note source does not throw', () => {
+    const dir = makeProject([`authorsNote: ${'./an.md'}`]);
+    fs.writeFileSync(path.join(dir, 'an.md'), 'Keep the tension high.', 'utf8');
+    try {
+      expect(() => compile(path.join(dir, 'compile.yaml'))).not.toThrow();
+      const p = path.join(dir, 'output', "Components", "Author's Note.md");
+      expect(fs.existsSync(p)).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

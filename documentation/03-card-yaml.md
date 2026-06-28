@@ -175,7 +175,7 @@ In templates, body fields are accessed as `{$body.Tagline}`, `{$body.Physical Tr
 
 ### Field Interpolation
 
-Within body field values, you can reference other body fields using `{$body.X}` syntax. This is resolved before pronoun tokens.
+Within field values you can reference other fields using dotted `{$…}` syntax. These resolve before pronoun tokens.
 
 ```yaml
 body:
@@ -184,7 +184,13 @@ body:
     - Graduated Primary Education in {$body.graduation year}.
 ```
 
-Cross-card body references (`{$OtherId.body.FieldName}`) are also supported and resolved in a second pass after all cards for a branch are compiled. See [Pronoun System](08-pronouns.md).
+Supported roots in card data: `{$body.X}`, `{$v.X}` (and the `var`/`vars`/`variable`/`variables` aliases), `{$aid.X}`, `{$render.X}`, and `{$name.display}`/`{$name.full}`. These resolve in `body`, `aid`, `render`, and `name` fields alike (not only `body`).
+
+> **Dotted only.** Only dotted refs are field interpolation. Bare single-segment `{$X}` belongs to the pronoun/character-ref system (`{$she}`, `{$Aria}`) — so bare `{$id}` and bare `{$name}` are **template-only**; in card data use `{$name.full}`/`{$name.display}`. See [07-templates.md](07-templates.md) "Token Systems at a Glance".
+
+Cross-card body references (`{$OtherId.body.FieldName}`) are also supported and resolved in a second pass after all cards for a branch are compiled (in `body`, `aid`, `render`, and `name`). See [Pronoun System](08-pronouns.md).
+
+A `{$…}` token that no pass resolves and that survives into output triggers a `WARN: unresolved token {$x} in …`.
 
 ---
 

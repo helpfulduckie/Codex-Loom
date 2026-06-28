@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { loadYaml } = require('./loader');
 const { expandTokens } = require('./tokens');
-const { warnUnexpandedVariables } = require('./util');
+const { warnUnexpandedVariables, warnUnresolvedFieldTokens } = require('./util');
 
 /**
  * Load a description YAML config file.
@@ -127,6 +127,7 @@ function writeDescription(outputDir, content) {
   fs.mkdirSync(outputDir, { recursive: true });
   const outPath = path.join(outputDir, 'Description.md');
   warnUnexpandedVariables(content, 'component Description.md');
+  warnUnresolvedFieldTokens(content, 'component Description.md');
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }

@@ -13,7 +13,7 @@ const {
 } = require('./resolver');
 const { applyPronounPasses, applyCrossCardRefs } = require('./pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
-const { resolveVariables, warnUnexpandedVariables } = require('./util');
+const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens } = require('./util');
 const { expandTokens } = require('./tokens');
 const { loadPEConfig, compilePE, writePE } = require('./pe');
 const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
@@ -418,7 +418,6 @@ function compileBranchPhaseA(allCardDefs, registry, branchPath, variables) {
 
     applyFieldInterpolation(card);
     applyVariableInterpolation(card, variables);
-    validateCardType(card);
     resolvedCards.push(card);
   }
 
@@ -468,6 +467,10 @@ function compileBranchPhaseB(resolvedCards, registry, templates, partials, outpu
 
     if (suppressIds.has((card.id || '').toLowerCase())) continue; // fully rendered in PE; skip story card
 
+    // Validate the fully-resolved aid.type (it becomes a folder/file name). Runs here,
+    // after all {%}/{$} passes, so it sees the final on-disk type. Aborts on invalid.
+    validateCardType(card);
+
     const template = getTemplate(card, templates);
     if (!template) {
       const name = card.id || (typeof card.name === 'string' ? card.name : String(card.name));
@@ -501,6 +504,7 @@ function compileBranchPhaseB(resolvedCards, registry, templates, partials, outpu
     const type = (card.aid && card.aid.type) || 'Uncategorized';
     const cardLabel = card.id || (typeof card.name === 'string' ? card.name : String(card.name));
     warnUnexpandedVariables(rendered, `card "${cardLabel}" (${type})`);
+    warnUnresolvedFieldTokens(rendered, `card "${cardLabel}" (${type})`);
     if (!grouped.has(type)) grouped.set(type, []);
     grouped.get(type).push(rendered);
   }
@@ -531,6 +535,7 @@ function writeComponentFile(outputDir, filename, content) {
   fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, filename);
   warnUnexpandedVariables(content, `component ${filename}`);
+  warnUnresolvedFieldTokens(content, `component ${filename}`);
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }
@@ -717,6 +722,14 @@ function compile(configPath, options = {}) {
   const allCardIds = new Set();
   const leafSummaries = [];
 
+  // Track components that were requested (a spec/path was provided) but produced
+  // no output file. A requested-but-unwritten component is almost always a silent
+  // failure (bad path, unexpanded {%var}/{@key}, empty source) rather than intent —
+  // collected here and reported as an error at the end of the compile.
+  const componentGaps = [];
+  const recordGap = (leaf, component, spec, reason) =>
+    componentGaps.push({ leaf, component, spec: spec == null ? '(none)' : String(spec), reason });
+
   for (const branchPath of leaves) {
     const label = branchPath.length > 0 ? branchPath.join('/') : '(root)';
     if (verbose) console.log(`\n  Branch: ${label}`);
@@ -790,45 +803,62 @@ function compile(configPath, options = {}) {
     // Plot Essentials
     let hasPE = false;
     if (peSpec) {
-      const peBlocks = loadPEConfig(typeof peSpec === 'string' && !peSpec.includes('{') ? peSpec : null);
-      if (peBlocks.length > 0) {
-        const peContent = compilePE(peBlocks, registry, templates, partials, compileContext, overlays);
-        const pePath = writePE(outputDir, peContent);
-        if (pePath) { hasPE = true; if (verbose) console.log(`    OK: PlotEssentials → ${pePath}`); totalFiles++; }
+      if (typeof peSpec === 'string' && peSpec.includes('{')) {
+        recordGap(label, 'Plot Essentials', peSpec, 'unresolved reference — token did not expand to a path');
+      } else {
+        const peBlocks = loadPEConfig(typeof peSpec === 'string' ? peSpec : null);
+        if (peBlocks.length === 0) {
+          recordGap(label, 'Plot Essentials', peSpec, 'source loaded no blocks (missing or empty file)');
+        } else {
+          const peContent = compilePE(peBlocks, registry, templates, partials, compileContext, overlays);
+          const pePath = writePE(outputDir, peContent);
+          if (pePath) { hasPE = true; if (verbose) console.log(`    OK: PlotEssentials → ${pePath}`); totalFiles++; }
+          else recordGap(label, 'Plot Essentials', peSpec, 'compiled to empty content (all blocks excluded or produced nothing)');
+        }
       }
     }
 
     // AI Instructions
     let hasAIN = false;
     const ainSpec = compileContext.componentRefs.aiInstructions;
-    if (ainSpec && typeof ainSpec === 'string' && fs.existsSync(ainSpec)) {
-      const ainExt = path.extname(ainSpec).toLowerCase();
-      if (ainExt === '.md' || ainExt === '.txt') {
-        const content = fs.readFileSync(ainSpec, 'utf8').trimEnd() || null;
-        const ainPath = writeAIN(outputDir, content);
-        if (ainPath) { hasAIN = true; if (verbose) console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
+    if (ainSpec) {
+      if (typeof ainSpec !== 'string' || !fs.existsSync(ainSpec)) {
+        recordGap(label, 'AI Instructions', ainSpec, 'source not found');
       } else {
-        const ainDoc = loadAINConfig(ainSpec);
-        const { ain } = compileAIN(ainDoc, registry, compileContext);
-        const ainPath = writeAIN(outputDir, ain);
-        if (ainPath) { hasAIN = true; if (verbose) console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
+        const ainExt = path.extname(ainSpec).toLowerCase();
+        if (ainExt === '.md' || ainExt === '.txt') {
+          const content = fs.readFileSync(ainSpec, 'utf8').trimEnd() || null;
+          const ainPath = writeAIN(outputDir, content);
+          if (ainPath) { hasAIN = true; if (verbose) console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
+        } else {
+          const ainDoc = loadAINConfig(ainSpec);
+          const { ain } = compileAIN(ainDoc, registry, compileContext);
+          const ainPath = writeAIN(outputDir, ain);
+          if (ainPath) { hasAIN = true; if (verbose) console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
+        }
+        if (!hasAIN) recordGap(label, 'AI Instructions', ainSpec, 'compiled to empty content');
       }
     }
 
     // Author's Note
     let hasAN = false;
     const anSpec = compileContext.componentRefs.authorsNote;
-    if (anSpec && typeof anSpec === 'string' && fs.existsSync(anSpec)) {
-      const anExt = path.extname(anSpec).toLowerCase();
-      if (anExt === '.md' || anExt === '.txt') {
-        const content = fs.readFileSync(anSpec, 'utf8').trimEnd() || null;
-        const anPath = writeAN(outputDir, content);
-        if (anPath) { hasAN = true; if (verbose) console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
+    if (anSpec) {
+      if (typeof anSpec !== 'string' || !fs.existsSync(anSpec)) {
+        recordGap(label, "Author's Note", anSpec, 'source not found');
       } else {
-        const anDoc = loadANConfig(anSpec);
-        const anContent = compileAN(anDoc, registry, compileContext);
-        const anPath = writeAN(outputDir, anContent);
-        if (anPath) { hasAN = true; if (verbose) console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
+        const anExt = path.extname(anSpec).toLowerCase();
+        if (anExt === '.md' || anExt === '.txt') {
+          const content = fs.readFileSync(anSpec, 'utf8').trimEnd() || null;
+          const anPath = writeAN(outputDir, content);
+          if (anPath) { hasAN = true; if (verbose) console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
+        } else {
+          const anDoc = loadANConfig(anSpec);
+          const anContent = compileAN(anDoc, registry, compileContext);
+          const anPath = writeAN(outputDir, anContent);
+          if (anPath) { hasAN = true; if (verbose) console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
+        }
+        if (!hasAN) recordGap(label, "Author's Note", anSpec, 'compiled to empty content');
       }
     }
 
@@ -871,10 +901,13 @@ function compile(configPath, options = {}) {
   );
 
   // Description (project-level, written once to output root alongside Branches/)
-  const descSpec = config.components && config.components.description != null
+  const descRequested = config.components && config.components.description != null;
+  const descSpec = descRequested
     ? resolveComponentSpec(config.components.description, config._base, config._resolvedComponents, config._resolvedCanon, config.variables || null)
     : null;
-  if (descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec)) {
+  if (descRequested && !(descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec))) {
+    recordGap('(project)', 'Description', descSpec, 'source not found');
+  } else if (descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec)) {
     const ext = path.extname(descSpec).toLowerCase();
     let bodyContent = null;
     let bannerContent = null;
@@ -893,7 +926,8 @@ function compile(configPath, options = {}) {
 
     const combined = [bodyContent, bannerContent].filter(Boolean).join('\n');
     const descPath = writeDescription(config._resolvedOutput, combined);
-    if (descPath && verbose) console.log(`  OK: Description → ${descPath}`);
+    if (descPath) { if (verbose) console.log(`  OK: Description → ${descPath}`); }
+    else recordGap('(project)', 'Description', descSpec, 'compiled to empty content');
   }
 
   // Per-leaf summary table (printed after all component writes so Opening status is known)
@@ -924,6 +958,19 @@ function compile(configPath, options = {}) {
     };
     fs.writeFileSync(manifestPath, JSON.stringify(manifestData, null, 2), 'utf8');
     if (verbose) console.log(`  OK: Canon manifest → ${manifestPath}`);
+  }
+
+  // Requested-but-unwritten components: surface as an error so the gap is never silent.
+  if (componentGaps.length > 0) {
+    console.error(`\nERROR: ${componentGaps.length} requested component(s) produced no output:`);
+    for (const g of componentGaps) {
+      console.error(`  - [${g.leaf}] ${g.component}: ${g.reason}`);
+      console.error(`      spec: ${g.spec}`);
+    }
+    throw new Error(
+      `${componentGaps.length} requested component(s) were not written — see errors above. ` +
+      `Fix the source path/reference, or remove the component from compile.yaml if it is not wanted.`
+    );
   }
 }
 

@@ -1,6 +1,6 @@
 'use strict';
 
-const { normalizeVarKey, resolveVariables } = require('./util');
+const { normalizeVarKey, resolveVariables, walkCardTextFields } = require('./util');
 
 /**
  * Template engine for Codex Loom v3.
@@ -365,12 +365,11 @@ function normalizeWhitespace(str) {
 }
 
 /**
- * Apply field interpolation to all string values in card.body recursively.
- * Handles {$body.X} references within field values.
+ * Apply field interpolation to all string values in a card's text sections
+ * (body, aid, render, name). Handles dotted field refs ({$body.X}, {$v.X},
+ * {$aid.X}, {$render.X}, {$name.X}) within field values.
  */
 function applyFieldInterpolation(card) {
-  if (!card.body) return;
-
   const context = {
     body: card.body,
     name: card.name,
@@ -381,28 +380,15 @@ function applyFieldInterpolation(card) {
     v: card.v || {},
   };
 
-  applyInterpolationRecursive(card.body, context);
-}
-
-function applyInterpolationRecursive(obj, context) {
-  if (!obj || typeof obj !== 'object') return;
-  for (const key of Object.keys(obj)) {
-    const val = obj[key];
-    if (typeof val === 'string') {
-      obj[key] = processFieldInterpolation(val, context);
-    } else if (Array.isArray(val)) {
-      obj[key] = val.map(item => typeof item === 'string' ? processFieldInterpolation(item, context) : item);
-    } else if (typeof val === 'object' && val !== null) {
-      applyInterpolationRecursive(val, context);
-    }
-  }
+  walkCardTextFields(card, s => processFieldInterpolation(s, context));
 }
 
 function processFieldInterpolation(value, context) {
   if (typeof value !== 'string') return value;
-  // Expand {$body.X} and {$v.X} (+ all v aliases) refs within field values.
-  // Pronoun tokens ({$she} etc.) and {$Id} refs are left for the pronoun pass.
-  return value.replace(/\{(\$(body|v|var|vars|variable|variables)\.[^{}]+)\}/gi, function(match, ref) {
+  // Expand dotted field refs ({$body.X}, {$v.X} + aliases, {$aid.X}, {$render.X},
+  // {$name.X}) within field values. The required dot keeps single-segment tokens —
+  // pronoun tokens ({$she}) and {$Id} character refs — for the pronoun pass.
+  return value.replace(/\{(\$(body|v|var|vars|variable|variables|aid|render|name)\.[^{}]+)\}/gi, function(match, ref) {
     const resolved = resolveField(ref.trim(), context);
     if (resolved === null) return '';
     return renderScalar(resolved);

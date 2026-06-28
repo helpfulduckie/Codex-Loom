@@ -105,6 +105,62 @@ function resolveVariables(text, variables, _resolving) {
 }
 
 /**
+ * Walk the text-bearing sections of a card (body, aid, render, name) and apply
+ * `transform(str) → str` to every string value (array elements mapped, nested
+ * objects recursed). Mutates the card in place.
+ *
+ * This is the single place the set of `{$…}`/text sections lives, so the field
+ * interpolation, cross-card, and pronoun passes all reach the same fields.
+ * `name` is normalized to an object ({display, full, …}) by resolveCard before
+ * any of these passes run.
+ */
+function walkCardTextFields(card, transform) {
+  if (!card) return;
+  for (const section of [card.body, card.aid, card.render, card.name]) {
+    if (section && typeof section === 'object') walkTextRecursive(section, transform);
+  }
+}
+
+function walkTextRecursive(obj, transform) {
+  if (!obj || typeof obj !== 'object') return;
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (typeof val === 'string') {
+      obj[key] = transform(val);
+    } else if (Array.isArray(val)) {
+      obj[key] = val.map(item => typeof item === 'string' ? transform(item) : item);
+    } else if (typeof val === 'object' && val !== null) {
+      walkTextRecursive(val, transform);
+    }
+  }
+}
+
+/**
+ * Final safety net: warn about any {$…} field/pronoun/character token left
+ * unresolved in rendered output (a card or component). Emits one warning per
+ * distinct leftover token.
+ *
+ * Targets {$…} only — {%…} is handled by warnUnexpandedVariables, and {@…} is
+ * intentionally never expanded in card content.
+ *
+ * @param {string} text   - the fully-rendered output to scan
+ * @param {string} label  - human-readable location, e.g. 'card "Aria" (Character)'
+ * @returns {boolean}     - true if any unresolved token was found
+ */
+function warnUnresolvedFieldTokens(text, label) {
+  if (typeof text !== 'string') return false;
+  const seen = new Set();
+  const re = /\{\$[^{}]+\}/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (seen.has(m[0])) continue;
+    seen.add(m[0]);
+    console.warn(`  WARN: unresolved token ${m[0]} in ${label}`);
+  }
+  return seen.size > 0;
+}
+
+/**
  * Final safety net: warn about any {%variable} token left unexpanded in rendered
  * output (a card or component). Emits one warning per distinct leftover token.
  *
@@ -128,4 +184,4 @@ function warnUnexpandedVariables(text, label) {
   return seen.size > 0;
 }
 
-module.exports = { findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey, resolveVariables, warnUnexpandedVariables };
+module.exports = { findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey, resolveVariables, warnUnexpandedVariables, walkCardTextFields, warnUnresolvedFieldTokens };

@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadYaml, resolveVariables, warnUnexpandedVariables } = require('./util');
+const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens } = require('./util');
 const { resolveCard, resolveBranchSpec, applyFieldsDelta, applyFieldOp } = require('./resolver');
 const { applyPronounPasses } = require('./pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions, applyWrapper, resolveTemplateName } = require('./template');
@@ -110,6 +110,17 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
 
     const templateOverride = renderOpts.template;
     const wrapper = renderOpts.wrapper || (syntheticCard.render && syntheticCard.render.wrapper) || 'none';
+    const bodyText = syntheticCard.body
+      ? (syntheticCard.body.text || syntheticCard.body.content || '')
+      : '';
+    // Template resolution mirrors getCardTemplate: explicit render.template wins,
+    // then fall back to the block's aid.type (so PE block types like
+    // genreSettingBlock select their matching template without an explicit override).
+    const inlineTemplateName = templateOverride
+      || (syntheticCard.render && syntheticCard.render.template)
+      || (syntheticCard.aid && syntheticCard.aid.type)
+      || null;
+    const cardForRender = { ...syntheticCard, render: { ...syntheticCard.render, wrapper: 'none' } };
     let rendered;
     if (templateOverride) {
       const t = templates.get(templateOverride.toLowerCase());
@@ -117,12 +128,12 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
         console.warn(`  WARN [PE]: template "${templateOverride}" not found for inline block`);
         return null;
       }
-      const cardForRender = { ...syntheticCard, render: { ...syntheticCard.render, wrapper: 'none' } };
       rendered = render(t.content, cardForRender, partials, variables);
-    } else if (syntheticCard.body && Object.keys(syntheticCard.body).length > 0) {
-      const bodyText = syntheticCard.body.text || syntheticCard.body.content || '';
-      if (!bodyText) return null;
+    } else if (bodyText) {
       rendered = resolveVariables(String(bodyText).trim(), variables);
+    } else if (inlineTemplateName && templates.get(inlineTemplateName.toLowerCase())) {
+      const t = templates.get(inlineTemplateName.toLowerCase());
+      rendered = render(t.content, cardForRender, partials, variables);
     } else {
       return null;
     }
@@ -337,6 +348,7 @@ function writePE(branchOutputDir, content) {
   fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, 'Plot Essentials.md');
   warnUnexpandedVariables(content, 'component Plot Essentials.md');
+  warnUnresolvedFieldTokens(content, 'component Plot Essentials.md');
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }

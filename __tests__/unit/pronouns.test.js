@@ -478,6 +478,15 @@ describe('applyCrossCardRefs', () => {
     expect(cards[0].body.Keywords[1]).toBe('brave');
   });
 
+  test('resolves {$Id.body.field} inside an aid field (coverage parity)', () => {
+    const cards = [
+      { id: 'aria',   aid: { title: '{$mentor.body.Tagline}' }, body: {} },
+      { id: 'mentor', body: { Tagline: 'Archivist' } },
+    ];
+    applyCrossCardRefs(cards, new Map());
+    expect(cards[0].aid.title).toBe('Archivist');
+  });
+
   test('falls back to registry when card not in resolved set', () => {
     const registryCard = { id: 'mentor', body: { Tagline: 'Sage' } };
     const registry = new Map([['mentor', registryCard]]);
@@ -552,5 +561,24 @@ describe('applyPronounPasses', () => {
     applyPronounPasses(card, new Map(), null);
     expect(card.body).toBe(body);
     expect(body.Tagline).toBe('she leads');
+  });
+
+  // Coverage parity: pronoun/character refs now resolve in aid and render too.
+  test('resolves {$token} in aid.title and aid.triggers', () => {
+    const card = {
+      id: 'hero', pronouns: 'female',
+      aid: { title: '{$she} the Bold', triggers: ['{$she}', 'Hero'] },
+      body: {},
+    };
+    applyPronounPasses(card, new Map(), null);
+    expect(card.aid.title).toBe('she the Bold');
+    expect(card.aid.triggers).toEqual(['she', 'Hero']);
+  });
+
+  test('resolves {$Id} character ref in an aid field', () => {
+    const registry = new Map([['mentor', { id: 'mentor', name: { display: 'Roshan' } }]]);
+    const card = { id: 'hero', aid: { title: "{$Mentor}'s student" }, body: {} };
+    applyPronounPasses(card, registry, null);
+    expect(card.aid.title).toBe("Roshan's student");
   });
 });

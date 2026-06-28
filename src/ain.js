@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadYaml, resolveVariables, warnUnexpandedVariables } = require('./util');
+const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens } = require('./util');
 const { applyFieldOp } = require('./resolver');
 const { applyTokenPass } = require('./pronouns');
 const { normalizeWhitespace } = require('./template');
@@ -271,6 +271,7 @@ function writeAIN(branchOutputDir, content) {
   fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, 'AI Instructions.md');
   warnUnexpandedVariables(content, 'component AI Instructions.md');
+  warnUnresolvedFieldTokens(content, 'component AI Instructions.md');
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }

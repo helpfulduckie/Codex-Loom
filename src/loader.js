@@ -108,11 +108,12 @@ function loadTemplates(dirs) {
  * When lenient=true, stores the raw string for values that don't resolve to an existing file/dir
  * (used for openingChoice, where values may be literal question strings rather than paths).
  */
-function resolveMapping(raw, base, lenient = false) {
+function resolveMapping(raw, base, lenient = false, variables = null, canon = null) {
   const result = new Map();
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return result;
   for (const [name, p] of Object.entries(raw)) {
-    const resolved = path.resolve(base, String(p));
+    const expanded = expandPathTokens(String(p), variables, canon);
+    const resolved = path.resolve(base, expanded);
     result.set(name, (lenient && !fs.existsSync(resolved)) ? String(p) : resolved);
   }
   return result;
@@ -218,7 +219,7 @@ function loadCompileConfig(configPath) {
   const componentTypes = ['aiInstructions', 'opening', 'openingChoice', 'plotEssential', 'authorsNote', 'scripts', 'description'];
   const resolvedComponents = {};
   for (const type of componentTypes) {
-    resolvedComponents[type] = resolveMapping(components[type], base, type === 'openingChoice');
+    resolvedComponents[type] = resolveMapping(components[type], base, type === 'openingChoice', variables, resolvedCanon);
   }
 
   // Warn on missing declared paths

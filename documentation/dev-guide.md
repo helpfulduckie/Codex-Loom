@@ -40,11 +40,12 @@ FOR EACH LEAF:
   compileBranchPhaseA()          → resolvedCards[]
     FOR EACH cardDef:
       resolveCard()              → resolved card object or null (excluded)
-      applyFieldInterpolation()  → {$body.X} refs expanded in body fields
+      applyFieldInterpolation()  → dotted {$body/v/aid/render/name.X} refs expanded
   compileBranchPhaseB()
     applyCrossCardRefs()         → {$Id.body.Field} refs resolved across all cards
     FOR EACH resolvedCard:
       applyPronounPasses()       → pronoun + conjugation tokens resolved
+      validateCardType()         → abort if resolved aid.type is not a legal path segment
       render()                   → markdown string
     writeOutput()                → Story Cards/{type}/{type}.md
   compilePE() / writeAIN() / writeAN()
@@ -178,7 +179,7 @@ Post-render: if `data.render.wrapper` is non-`none` and no `{wrapper}` block was
 - `{$Id.body.Field}` (registry ID + body path) → left as-is for Pass 2.
 - `[s]` / `[es]` / `[is]` / `[was]` / `[has]` → conjugate using the current scope (or card's own pronouns if no scope set).
 
-**Pass 2 — `applyCrossCardRefs`** is run once after **all cards for a branch are resolved** (before `applyPronounPasses` is called individually per card — actually cross-card refs are resolved first in Phase B). It replaces `{$Id.body.FieldPath}` patterns by looking up the resolved card for `Id` and reading its body field.
+**Pass 2 — `applyCrossCardRefs`** is run once after **all cards for a branch are resolved** (before `applyPronounPasses` is called individually per card — actually cross-card refs are resolved first in Phase B). It replaces `{$Id.body.FieldPath}` patterns by looking up the resolved card for `Id` and reading its body field. Like the other `{$…}` passes it walks `body`/`aid`/`render`/`name` (via `walkCardTextFields`); the cross-card source path itself is still `.body.`-only.
 
 Scope tracking via `currentScope` is local to each string processed by `applyTokenPass`, reset for each call.
 
@@ -186,11 +187,13 @@ Scope tracking via `currentScope` is local to each string processed by `applyTok
 
 ## Field Interpolation
 
-`applyFieldInterpolation(card)` in `template.js` runs after `resolveCard()` but before pronoun passes. It expands `{$body.X}` references within `body` field values only.
+`applyFieldInterpolation(card)` in `template.js` runs after `resolveCard()` but before pronoun passes. It expands dotted field refs within the card's text sections.
 
-Pronoun tokens (`{$she}`, `{$Id}` etc.) are deliberately left alone by field interpolation. The regex only matches `{$body.X}` patterns. This ordering matters: interpolating `{$body.year}` into another field must happen before pronoun resolution so the interpolated content can itself contain pronoun tokens that get resolved in the pronoun pass.
+**Coverage:** all three `{$…}` card-data walkers — `applyFieldInterpolation` (here), `applyCrossCardRefs`, and `applyPronounPasses` — route through the shared `walkCardTextFields(card, transform)` in `util.js`, which visits string values in `card.body`, `card.aid`, `card.render`, and `card.name`. That helper is the single place the section list lives, so the three passes always reach the same fields. (`name` is already normalized to an object before these passes run.)
 
-`processFieldInterpolation(value, context)` in `template.js` handles the per-string expansion. It uses `resolveField` for lookup but only matches the `{$body.X}` prefix form.
+**Surface:** `processFieldInterpolation(value, context)` matches dotted refs rooted at `body`, `v` (+ aliases), `aid`, `render`, or `name`, and resolves them via `resolveField`. The **required dot** is deliberate: bare single-segment `{$X}` (pronoun tokens like `{$she}`, character refs like `{$Id}`) is left for the pronoun pass. This ordering matters — interpolating `{$body.year}` into another field must happen before pronoun resolution so the interpolated content can itself contain pronoun tokens.
+
+**Failure visibility:** `warnUnresolvedFieldTokens(text, label)` (`util.js`) scans final rendered cards and component outputs for any surviving `{$…}` and warns once per distinct token (sibling of the `{%}` `warnUnexpandedVariables` sweep). Template field-ref *misses* resolve to empty at render time and are not flagged; only verbatim survivors are.
 
 ---
 
@@ -228,6 +231,6 @@ Every call site is a thin wrapper over `expandTokens`: `loader.expandPathTokens`
 Coverage notes:
 - `{%}` is expanded in card bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and config paths. In `include:`/`import:` paths it uses **root** `config.variables` only, because `resolveIncludes` runs once before branch enumeration — branch-merged variables do not exist yet.
 - `{@}` is deliberately **not** expanded in card bodies or `.template` files; it is a path/prose construct only.
-- The `{$…}` field-reference family (`{$v.field}`, `{$Id.body.field}`) is a separate system (field interpolation + pronoun passes) and is **not** part of `expandTokens`. Folding it in is a possible future consolidation; see `07-templates.md` "Token Systems at a Glance".
+- The `{$…}` field-reference family (`{$v.field}`, `{$Id.body.field}`) is a separate system (field interpolation + pronoun passes) and is **not** part of `expandTokens`. It has been standardized for coverage (`body`/`aid`/`render`/`name` via `walkCardTextFields`), surface (dotted field refs in card data), and failure visibility (`warnUnresolvedFieldTokens`); only collapsing its four resolvers into one dispatcher remains deferred. See `07-templates.md` "Token Systems at a Glance".
 
 Canon resolution still uses a two-pass approach: plain-path entries (no `{@}` tokens after variable expansion) are resolved in pass 1, forming the lookup table for pass 2 which handles entries that reference sibling canon names. Template paths are expanded after both passes, so they can reference any named canon entry. Unresolved tokens pass through unchanged, causing the standard missing-path warning to fire with the unexpanded token visible in the path string.

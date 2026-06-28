@@ -758,6 +758,38 @@ describe('applyFieldInterpolation', () => {
     applyFieldInterpolation(card);
     expect(card.body).toBe(body);
   });
+
+  // Field-ref surface parity: dotted aid/render/name refs now resolve in card data.
+  test('expands {$aid.X}, {$name.full}, {$render.X} in a body field', () => {
+    const card = {
+      id: 'hero',
+      name: { display: 'Aria', full: 'Aria Voss' },
+      aid: { title: 'The Bold' },
+      render: { wrapper: 'curly' },
+      body: { Tagline: '{$aid.title} / {$name.full} / {$render.wrapper}' },
+    };
+    applyFieldInterpolation(card);
+    expect(card.body.Tagline).toBe('The Bold / Aria Voss / curly');
+  });
+
+  // Namespace boundary: bare single-segment {$X} stays for the pronoun/char-ref pass.
+  test('leaves bare {$she} and {$Aria} untouched (no dot → not a field ref)', () => {
+    const card = { id: 'hero', body: { Tagline: '{$she} meets {$Aria}' }, aid: {}, render: {} };
+    applyFieldInterpolation(card);
+    expect(card.body.Tagline).toBe('{$she} meets {$Aria}');
+  });
+
+  // Coverage parity: field refs resolve inside aid/render/name fields too.
+  test('expands {$body.X} placed inside an aid field', () => {
+    const card = {
+      id: 'hero',
+      body: { Title: 'Guard Captain' },
+      aid: { title: 'Rank: {$body.Title}' },
+      render: {},
+    };
+    applyFieldInterpolation(card);
+    expect(card.aid.title).toBe('Rank: Guard Captain');
+  });
 });
 
 // ── applyVariableInterpolation ────────────────────────────────────────────────
