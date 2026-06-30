@@ -53,7 +53,7 @@ describe('CLI --leafReview flag', () => {
     fs.rmSync(tmp, { recursive: true });
   });
 
-  test('--leafReview with path writes one .overview.md per leaf', () => {
+  test('--leafReview with path writes one .leaf.md per leaf', () => {
     write(path.join(tmp, 'scenario', 'Branches', 'hero', 'Story Cards', 'Char', 'x.md'), 'content');
 
     const result = spawnSync(
@@ -66,7 +66,7 @@ describe('CLI --leafReview flag', () => {
     const outDir = path.join(tmp, 'overview');
     const files = fs.readdirSync(outDir);
     expect(files.length).toBeGreaterThan(0);
-    expect(files.every(f => f.endsWith('.overview.md'))).toBe(true);
+    expect(files.every(f => f.endsWith('.leaf.md'))).toBe(true);
   });
 
   test('-l short flag is accepted', () => {
@@ -266,9 +266,10 @@ describe('CLI --leafReview + --overview combined', () => {
     expect(result.status).toBe(0);
 
     const outDir = path.join(tmp, 'overview');
-    const files = fs.readdirSync(outDir).filter(f => f.endsWith('.overview.md'));
+    const allFiles = fs.readdirSync(outDir);
     // leaf review: one per leaf (hero, villain); overview: one for whole tree
-    expect(files.length).toBe(3);
+    expect(allFiles.filter(f => f.endsWith('.leaf.md')).length).toBe(2);
+    expect(allFiles.filter(f => f.endsWith('.overview.md')).length).toBe(1);
   });
 
   test('-l -o short flags combined work', () => {
@@ -297,8 +298,9 @@ describe('CLI --leafReview + --overview combined', () => {
 
     const overviewDir = path.join(tmp, 'my-overviews');
     expect(fs.existsSync(overviewDir)).toBe(true);
-    const files = fs.readdirSync(overviewDir).filter(f => f.endsWith('.overview.md'));
-    expect(files.length).toBeGreaterThan(0);
+    const allFiles = fs.readdirSync(overviewDir);
+    expect(allFiles.filter(f => f.endsWith('.leaf.md')).length).toBeGreaterThan(0);
+    expect(allFiles.filter(f => f.endsWith('.overview.md')).length).toBeGreaterThan(0);
   });
 });
 

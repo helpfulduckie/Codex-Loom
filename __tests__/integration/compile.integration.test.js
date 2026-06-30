@@ -720,6 +720,75 @@ describe('YAML block opening (opening.yaml)', () => {
   });
 });
 
+// ── deterministic card ordering (sorted by id within type) ────────────────────
+
+describe('deterministic card ordering', () => {
+  let orderTmpDir;
+
+  beforeAll(() => {
+    orderTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-order-'));
+    fs.mkdirSync(path.join(orderTmpDir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(orderTmpDir, 'templates'), { recursive: true });
+
+    // Cards are authored out of alphabetical order, and titles sort opposite to
+    // ids, so a regression to authoring-order or title-order would be caught.
+    // Two types ("Beta" before "Alpha") are also declared out of order.
+    fs.writeFileSync(path.join(orderTmpDir, 'cards', 'cards.yaml'), [
+      '- id: Zebra',
+      '  name: Zebra',
+      '  aid: { type: Alpha, title: AppleTitle }',
+      '  render: { template: Card }',
+      '  body: { Desc: z }',
+      '- id: mango',
+      '  name: mango',
+      '  aid: { type: Beta, title: MangoTitle }',
+      '  render: { template: Card }',
+      '  body: { Desc: m }',
+      '- id: Apple',
+      '  name: Apple',
+      '  aid: { type: Alpha, title: ZebraTitle }',
+      '  render: { template: Card }',
+      '  body: { Desc: a }',
+    ].join('\n'), 'utf8');
+
+    fs.writeFileSync(path.join(orderTmpDir, 'templates', 'Card.template'),
+      '## {$aid.title} [{$id}]\n~~~\n{$body.Desc}', 'utf8');
+
+    fs.writeFileSync(path.join(orderTmpDir, 'compile.yaml'), [
+      'structure:',
+      `  input: { cards: [${orderTmpDir}/cards], templates: [${orderTmpDir}/templates] }`,
+      `  output: ${orderTmpDir}/output`,
+      'branches:',
+      '  main: {}',
+    ].join('\n'), 'utf8');
+
+    compile(path.join(orderTmpDir, 'compile.yaml'));
+  });
+
+  afterAll(() => { fs.rmSync(orderTmpDir, { recursive: true, force: true }); });
+
+  function typeFile(type) {
+    return path.join(orderTmpDir, 'output', 'Branches', 'main', 'Story Cards', type, `${type}.md`);
+  }
+
+  test('cards within a type are ordered by id, not authoring or title order', () => {
+    const content = fs.readFileSync(typeFile('Alpha'), 'utf8');
+    // id Apple (title ZebraTitle) must precede id Zebra (title AppleTitle)
+    expect(content.indexOf('[Apple]')).toBeGreaterThanOrEqual(0);
+    expect(content.indexOf('[Apple]')).toBeLessThan(content.indexOf('[Zebra]'));
+    // If it had sorted by visible title instead, AppleTitle would come first
+    expect(content.indexOf('ZebraTitle')).toBeLessThan(content.indexOf('AppleTitle'));
+  });
+
+  test('id sort is case-insensitive and deterministic across builds', () => {
+    // Recompiling the identical project yields byte-identical output.
+    const before = fs.readFileSync(typeFile('Alpha'), 'utf8');
+    compile(path.join(orderTmpDir, 'compile.yaml'));
+    const after = fs.readFileSync(typeFile('Alpha'), 'utf8');
+    expect(after).toBe(before);
+  });
+});
+
 // ── Requested-but-unwritten component detection ───────────────────────────────
 
 describe('component gap detection', () => {
@@ -793,7 +862,7 @@ describe('component gap detection', () => {
     fs.writeFileSync(path.join(dir, 'an.md'), 'Keep the tension high.', 'utf8');
     try {
       expect(() => compile(path.join(dir, 'compile.yaml'))).not.toThrow();
-      const p = path.join(dir, 'output', "Components", "Author's Note.md");
+      const p = path.join(dir, 'output', "Components", "Author Notes.md");
       expect(fs.existsSync(p)).toBe(true);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

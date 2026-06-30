@@ -51,7 +51,7 @@ FOR EACH LEAF:
   compilePE() / writeAIN() / writeAN()
   copyScripts()
 writeOpeningsRecursive()         → Components/Opening.md at leaf/node levels
-runLeafReviewMode()              → Overview/*.overview.md
+runLeafReviewMode()              → Overview/*.leaf.md
 ```
 
 ---

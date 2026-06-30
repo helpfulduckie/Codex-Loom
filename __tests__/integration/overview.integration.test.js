@@ -49,37 +49,37 @@ describe('runLeafReviewMode on two-branch fixture', () => {
     expect(files).toHaveLength(2);
   });
 
-  test('all output files have .overview.md extension', () => {
+  test('all output files have .leaf.md extension', () => {
     const files = fs.readdirSync(outDir);
-    expect(files.every(f => f.endsWith('.overview.md'))).toBe(true);
+    expect(files.every(f => f.endsWith('.leaf.md'))).toBe(true);
   });
 
-  test('subject.overview.md is created', () => {
-    expect(fs.existsSync(path.join(outDir, 'subject.overview.md'))).toBe(true);
+  test('subject.leaf.md is created', () => {
+    expect(fs.existsSync(path.join(outDir, 'subject.leaf.md'))).toBe(true);
   });
 
-  test('researcher.overview.md is created', () => {
-    expect(fs.existsSync(path.join(outDir, 'researcher.overview.md'))).toBe(true);
+  test('researcher.leaf.md is created', () => {
+    expect(fs.existsSync(path.join(outDir, 'researcher.leaf.md'))).toBe(true);
   });
 
-  test('subject.overview.md contains its own card content', () => {
-    const content = fs.readFileSync(path.join(outDir, 'subject.overview.md'), 'utf8');
+  test('subject.leaf.md contains its own card content', () => {
+    const content = fs.readFileSync(path.join(outDir, 'subject.leaf.md'), 'utf8');
     expect(content).toContain('Subject character content');
   });
 
-  test('subject.overview.md contains inherited Opening', () => {
-    const content = fs.readFileSync(path.join(outDir, 'subject.overview.md'), 'utf8');
+  test('subject.leaf.md contains inherited Opening', () => {
+    const content = fs.readFileSync(path.join(outDir, 'subject.leaf.md'), 'utf8');
     expect(content).toContain('Once upon a time...');
   });
 
-  test('researcher.overview.md does not contain subject-only card content', () => {
-    const content = fs.readFileSync(path.join(outDir, 'researcher.overview.md'), 'utf8');
+  test('researcher.leaf.md does not contain subject-only card content', () => {
+    const content = fs.readFileSync(path.join(outDir, 'researcher.leaf.md'), 'utf8');
     expect(content).not.toContain('Subject character content');
   });
 
-  test('no non-.overview.md files are written to outputDir', () => {
+  test('no non-.leaf.md files are written to outputDir', () => {
     const files = fs.readdirSync(outDir);
-    expect(files.filter(f => !f.endsWith('.overview.md'))).toHaveLength(0);
+    expect(files.filter(f => !f.endsWith('.leaf.md'))).toHaveLength(0);
   });
 });
 
@@ -105,8 +105,8 @@ describe('runLeafReviewMode on single-leaf fixture', () => {
   test('single file uses root folder name', () => {
     const files = fs.readdirSync(outDir);
     expect(files).toHaveLength(1);
-    // filename should be the tmp folder's basename + .overview.md
-    const expected = path.basename(tmp) + '.overview.md';
+    // filename should be the tmp folder's basename + .leaf.md
+    const expected = path.basename(tmp) + '.leaf.md';
     expect(files[0]).toBe(expected);
   });
 });

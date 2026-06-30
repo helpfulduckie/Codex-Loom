@@ -166,13 +166,13 @@ describe('writeAN', () => {
     expect(writeFileSpy).not.toHaveBeenCalled();
   });
 
-  test("writes to Components/Author's Note.md", () => {
+  test("writes to Components/Author Notes.md", () => {
     const writeFileSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation();
     jest.spyOn(fs, 'mkdirSync').mockImplementation();
     const outPath = writeAN('/output/branch', 'content');
-    expect(outPath).toContain("Author's Note.md");
+    expect(outPath).toContain("Author Notes.md");
     expect(writeFileSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Author's Note.md"),
+      expect.stringContaining("Author Notes.md"),
       'content\n',
       'utf8'
     );

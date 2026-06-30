@@ -505,11 +505,20 @@ function compileBranchPhaseB(resolvedCards, registry, templates, partials, outpu
     warnUnexpandedVariables(rendered, `card "${cardLabel}" (${type})`);
     warnUnresolvedFieldTokens(rendered, `card "${cardLabel}" (${type})`);
     if (!grouped.has(type)) grouped.set(type, []);
-    grouped.get(type).push(rendered);
+    // Carry a sort key (the card's real id, lowercased) so output order is
+    // deterministic regardless of authoring order in the source YAML.
+    grouped.get(type).push({ sortKey: String(cardLabel).toLowerCase(), rendered });
   }
 
+  // Emit types alphabetically, and cards within each type sorted by id, so the
+  // compiled Story Cards (and every downstream review/seed-map artifact) diff
+  // cleanly across branches and builds. Story Cards load by trigger in AID, so
+  // physical order has no gameplay effect.
   const written = [];
-  for (const [type, cards] of grouped) {
+  for (const type of [...grouped.keys()].sort((a, b) => a.localeCompare(b))) {
+    const cards = grouped.get(type)
+      .sort((a, b) => a.sortKey.localeCompare(b.sortKey) || a.rendered.localeCompare(b.rendered))
+      .map(c => c.rendered);
     const outPath = writeOutput(outputDir, type, cards);
     written.push(outPath);
     if (verbose) console.log(`    OK: ${type} (${cards.length} card(s)) → ${outPath}`);

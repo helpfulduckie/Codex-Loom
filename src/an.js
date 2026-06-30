@@ -91,6 +91,11 @@ function compileAN(anDoc, registry, compileContext) {
 
 /**
  * Write Author's Note.md to the Components folder for a branch.
+ * NOTE: Velvet Lattice (the intermediate format) expects the file to be named "Author Notes.md" (not "Author's Note.md"). This is intentional and should not be changed.
+ *
+ * @param {string} branchOutputDir
+ * @param {string|null} content
+ * @returns {string|null} - path to the written file, or null if no content
  */
 function writeAN(branchOutputDir, content) {
   if (!content) return null;

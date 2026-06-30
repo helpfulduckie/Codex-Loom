@@ -134,7 +134,7 @@ describe('discoverLeaves', () => {
 // ── compileLeaf ───────────────────────────────────────────────────────────────
 
 describe('compileLeaf', () => {
-  test('output filename uses .overview.md extension', () => {
+  test('output filename uses .leaf.md extension', () => {
     const tmp    = makeTmp();
     const outDir = path.join(tmp, 'out');
     fs.mkdirSync(outDir);
@@ -142,7 +142,7 @@ describe('compileLeaf', () => {
     compileLeaf(leaf, outDir, 'MyScenario', false);
     const files = fs.readdirSync(outDir);
     expect(files).toHaveLength(1);
-    expect(files[0]).toBe('subject.overview.md');
+    expect(files[0]).toBe('subject.leaf.md');
     fs.rmSync(tmp, { recursive: true });
   });
 
@@ -153,7 +153,7 @@ describe('compileLeaf', () => {
     const leaf = { branchNames: [], cards: [], leafDir: tmp };
     compileLeaf(leaf, outDir, 'MyScenario', true);
     const files = fs.readdirSync(outDir);
-    expect(files[0]).toBe('MyScenario.overview.md');
+    expect(files[0]).toBe('MyScenario.leaf.md');
     fs.rmSync(tmp, { recursive: true });
   });
 
@@ -163,9 +163,9 @@ describe('compileLeaf', () => {
     fs.mkdirSync(outDir);
     const leaf = { branchNames: ['hero'], cards: ['Card content here'], leafDir: tmp };
     compileLeaf(leaf, outDir, 'Root', false);
-    const content = fs.readFileSync(path.join(outDir, 'hero.overview.md'), 'utf8');
-    expect(content).toContain('# hero');
-    expect(content).toContain('# Story Cards');
+    const content = fs.readFileSync(path.join(outDir, 'hero.leaf.md'), 'utf8');
+    expect(content).toContain('# Root: hero');
+    expect(content).toContain('## Story Cards');
     expect(content).toContain('Card content here');
     fs.rmSync(tmp, { recursive: true });
   });
@@ -178,10 +178,10 @@ describe('compileLeaf', () => {
     write(path.join(tmp, 'Components', 'Plot Essentials.md'), 'The quest begins.');
     const leaf = { branchNames: ['alpha'], cards: [], leafDir: tmp };
     compileLeaf(leaf, outDir, 'Root', false);
-    const content = fs.readFileSync(path.join(outDir, 'alpha.overview.md'), 'utf8');
-    expect(content).toContain('# Opening');
+    const content = fs.readFileSync(path.join(outDir, 'alpha.leaf.md'), 'utf8');
+    expect(content).toContain('## Opening');
     expect(content).toContain('Welcome!');
-    expect(content).toContain('# Plot Essentials');
+    expect(content).toContain('## Plot Essentials');
     expect(content).toContain('The quest begins.');
     fs.rmSync(tmp, { recursive: true });
   });
@@ -208,7 +208,7 @@ describe('runLeafReviewMode', () => {
     write(path.join(tmp, 'Branches', 'B', 'Story Cards', 'T', 'y.md'), 'y');
     const written = runLeafReviewMode(tmp, outDir);
     expect(written).toHaveLength(2);
-    expect(written.every(p => p.endsWith('.overview.md'))).toBe(true);
+    expect(written.every(p => p.endsWith('.leaf.md'))).toBe(true);
     fs.rmSync(tmp, { recursive: true });
   });
 

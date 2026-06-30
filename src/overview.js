@@ -116,7 +116,7 @@ function discoverLeaves(branchDir, ancestorCards, branchNames) {
 
   const myCards = [...ancestorCards];
   if (fs.existsSync(storyCardsDir)) {
-    const block = buildStoryCardsBlock(storyCardsDir, 2);
+    const block = buildStoryCardsBlock(storyCardsDir, 3);
     if (block) myCards.push(block);
   }
 
@@ -188,8 +188,8 @@ function collectOverviewSections(branchDir, branchNames, rootDirName) {
 // ── exported leaf compiler ────────────────────────────────────────────────────
 
 /**
- * Compile a single leaf node into a .overview.md file and write it to outputDir.
- * Filename: sanitize(branchNames.join(" - ") || rootDirName) + ".overview.md"
+ * Compile a single leaf node into a .leaf.md file and write it to outputDir.
+ * Filename: sanitize(branchNames.join(" - ") || rootDirName) + ".leaf.md"
  */
 function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose = false) {
   const { branchNames, cards, leafDir } = leaf;
@@ -216,23 +216,23 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose = false
   }
 
   const title = branchNames.length > 0
-    ? branchNames[branchNames.length - 1]
+    ? `${rootDirName}: ${branchNames.join(' - ')}`
     : rootDirName;
 
   const fileBase = isSingleLeaf && branchNames.length === 0
     ? rootDirName
     : branchNames.join(' - ');
 
-  const filename = sanitizeFilename(fileBase || rootDirName) + '.overview.md';
+  const filename = sanitizeFilename(fileBase || rootDirName) + '.leaf.md';
   const outPath  = path.join(outputDir, filename);
 
   const parts = [];
   parts.push(`# ${title}`);
-  if (opening)  parts.push(`# Opening\n\n${opening}`);
-  if (plotEss)  parts.push(`# Plot Essentials\n\n\`\`\`\n${plotEss}\n\`\`\``);
-  if (ainText)  parts.push(`# AI Instructions\n\n\`\`\`\n${ainText}\n\`\`\``);
-  if (anText)   parts.push(`# Author's Note\n\n${anText}`);
-  if (cards.length > 0) parts.push(`# Story Cards\n\n${cards.join('\n\n')}`);
+  if (opening)  parts.push(`## Opening\n\n${opening}`);
+  if (plotEss)  parts.push(`## Plot Essentials\n\n\`\`\`\n${plotEss}\n\`\`\``);
+  if (ainText)  parts.push(`## AI Instructions\n\n\`\`\`\n${ainText}\n\`\`\``);
+  if (anText)   parts.push(`## Author's Note\n\n${anText}`);
+  if (cards.length > 0) parts.push(`## Story Cards\n\n${cards.join('\n\n')}`);
 
   fs.writeFileSync(outPath, parts.join('\n\n'), 'utf8');
   if (verbose) console.log(`  ✓  ${filename}`);
@@ -262,7 +262,7 @@ function runLeafReviewMode(scenarioRoot, outputDir, verbose = false) {
     const fileBase  = isSingleLeaf && branchNames.length === 0
       ? rootDirName
       : branchNames.join(' - ');
-    const filename  = sanitizeFilename(fileBase || rootDirName) + '.overview.md';
+    const filename  = sanitizeFilename(fileBase || rootDirName) + '.leaf.md';
     written.push(path.join(outputDir, filename));
 
     compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose);
