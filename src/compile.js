@@ -156,13 +156,15 @@ function writeOutput(outputDir, type, renderedCards) {
 }
 
 /**
- * Delete Story Cards, Components, and Scripts subdirs from a branch output dir.
+ * Delete Story Cards, Components, Scripts subdirs and Label.md from a branch output dir.
  */
 function cleanBranchOutputDir(dir) {
   for (const sub of ['Story Cards', 'Components', 'Scripts']) {
     const target = path.join(dir, sub);
     if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
   }
+  const label = path.join(dir, 'Label.md');
+  if (fs.existsSync(label)) fs.rmSync(label);
 }
 
 /**
@@ -200,7 +202,7 @@ function cleanAndArchive(config, leaves) {
 
   const expectedDirs = new Set();
   for (const branchPath of leaves) {
-    const folderPath = resolveBranchFolderPath(config.branches, branchPath, config.variables);
+    const folderPath = resolveBranchFolderPath(config.branches, branchPath);
     expectedDirs.add(path.resolve(buildBranchOutputDir(baseOutput, folderPath)));
   }
   if (leaves.length === 1 && leaves[0].length === 0) {
@@ -245,21 +247,15 @@ function buildBranchOutputDir(baseOutput, branchPath) {
 
 /**
  * Resolve the output folder path for a branch identifier path.
- * Uses each node's `title` field as the folder name when present; falls back to the key.
- *
- * A node's `title` may contain {%var} tokens; each is expanded using the variables
- * merged down to that node (root → this node), so an ancestor folder name stays
- * stable across its sibling leaves even if a deeper leaf overrides the variable.
+ * Uses the internal key name (case-preserved from the YAML) for each folder segment.
  *
  * @param {object|null} branches - root branches mapping from config
  * @param {string[]}    idPath   - branch identifier path (e.g. ['tier2', 'alpha'])
- * @param {object}      [rootVariables] - config.variables (for {%var} expansion in titles)
- * @returns {string[]}           - folder name path (e.g. ['Tier Two', 'Alpha Path'])
+ * @returns {string[]}           - folder name path (e.g. ['tier2', 'alpha'])
  */
-function resolveBranchFolderPath(branches, idPath, rootVariables) {
+function resolveBranchFolderPath(branches, idPath) {
   const folderPath = [];
   let currentMap = branches;
-  let variables = Object.assign({}, rootVariables || {});
   for (const id of idPath) {
     if (!currentMap || typeof currentMap !== 'object') {
       folderPath.push(id);
@@ -267,9 +263,7 @@ function resolveBranchFolderPath(branches, idPath, rootVariables) {
     }
     const actualKey = Object.keys(currentMap).find(k => k.toLowerCase() === id.toLowerCase());
     const node = actualKey !== undefined ? currentMap[actualKey] : null;
-    if (node && node.variables) variables = Object.assign(variables, node.variables);
-    const rawName = (node && node.title) || (actualKey || id);
-    folderPath.push(resolveVariables(rawName, variables));
+    folderPath.push(actualKey || id);
     currentMap = node && node.branches ? node.branches : null;
   }
   return folderPath;
@@ -617,8 +611,7 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
   }
 
   for (const [name, branchConfig] of Object.entries(branches)) {
-    const folderName = (branchConfig && branchConfig.title) || name;
-    const nodeOutput = path.join(outputBase, 'Branches', folderName);
+    const nodeOutput = path.join(outputBase, 'Branches', name);
     const subBranches = branchConfig && branchConfig.branches;
     const isLeafNode = !subBranches || Object.keys(subBranches).length === 0;
 
@@ -679,6 +672,31 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
   }
 
   return writtenLeaves;
+}
+
+/**
+ * Write Components/Label.md to every branch node in the output tree.
+ * The label is the branch's `title` field (with {%var} expansion), falling back to the key.
+ * This lets Velvet Lattice display the human-readable title even though the folder
+ * name is now the internal key.
+ */
+function writeLabelsRecursive(branches, outputBase, variables, verbose = false) {
+  if (!branches || typeof branches !== 'object') return;
+  for (const [name, branchConfig] of Object.entries(branches)) {
+    const nodeOutput = path.join(outputBase, 'Branches', name);
+    const branchVars = (branchConfig && branchConfig.variables)
+      ? Object.assign({}, variables, branchConfig.variables)
+      : variables;
+    const rawTitle = (branchConfig && branchConfig.title) || name;
+    const label = resolveVariables(rawTitle, branchVars);
+    fs.mkdirSync(nodeOutput, { recursive: true });
+    const outPath = path.join(nodeOutput, 'Label.md');
+    fs.writeFileSync(outPath, label + '\n', 'utf8');
+    if (verbose) console.log(`    OK: Label → ${outPath}`);
+    if (branchConfig && branchConfig.branches) {
+      writeLabelsRecursive(branchConfig.branches, nodeOutput, branchVars, verbose);
+    }
+  }
 }
 
 // ── Main compile function ─────────────────────────────────────────────────────
@@ -764,7 +782,7 @@ function compile(configPath, options = {}) {
       if (node && node.protagonist) inheritedProtagonist = node.protagonist;
       walkMap = node && node.branches ? node.branches : null;
     }
-    const folderPath = resolveBranchFolderPath(config.branches, branchPath, config.variables);
+    const folderPath = resolveBranchFolderPath(config.branches, branchPath);
     const outputDir = buildBranchOutputDir(config._resolvedOutput, folderPath);
     const ctx = buildCompileContext(config, branchPath);
     // Expand {%var} in protagonist using branch-merged variables, before the
@@ -932,6 +950,8 @@ function compile(configPath, options = {}) {
     rootOpening, config.variables || {}, config._resolvedComponents, config._resolvedCanon,
     [], verbose
   );
+
+  writeLabelsRecursive(config.branches, config._resolvedOutput, config.variables || {}, verbose);
 
   // Description (project-level, written once to output root alongside Branches/)
   const descRequested = config.components && config.components.description != null;

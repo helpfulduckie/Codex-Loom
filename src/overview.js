@@ -296,4 +296,5 @@ module.exports = {
   compileLeaf,
   runLeafReviewMode,
   runOverviewMode,
+  sanitizeFilename,
 };
