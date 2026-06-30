@@ -14,7 +14,7 @@ const { applyPronounPasses, applyCrossCardRefs } = require('./pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
 const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens } = require('./util');
 const { expandTokens } = require('./tokens');
-const { loadPEConfig, compilePE, writePE } = require('./pe');
+const { loadPEConfig, compilePE, compilePEBlocks, writePE } = require('./pe');
 const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
 const { loadANConfig, compileAN, writeAN } = require('./an');
 const { loadDescConfig, extractScriptBanner, writeDescription } = require('./description');
@@ -426,7 +426,7 @@ function compileBranchPhaseA(allCardDefs, registry, branchPath, variables) {
 /**
  * Phase B: apply cross-card refs, pronouns, render, and write output.
  */
-function compileBranchPhaseB(resolvedCards, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}, verbose = false) {
+function compileBranchPhaseB(resolvedCards, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}, verbose = false, renderedById = null) {
   // Build early so render functions can resolve cross-card refs during field expansion.
   const resolvedById = new Map();
   for (const card of resolvedCards) {
@@ -508,6 +508,8 @@ function compileBranchPhaseB(resolvedCards, registry, templates, partials, outpu
     // Carry a sort key (the card's real id, lowercased) so output order is
     // deterministic regardless of authoring order in the source YAML.
     grouped.get(type).push({ sortKey: String(cardLabel).toLowerCase(), rendered });
+    // Capture the rendered block per card id for cross-branch diff/annotate reports.
+    if (renderedById && card.id) renderedById.set(card.id.toLowerCase(), { type, rendered });
   }
 
   // Emit types alphabetically, and cards within each type sorted by id, so the
@@ -730,6 +732,13 @@ function compile(configPath, options = {}) {
   const allCardIds = new Set();
   const leafSummaries = [];
 
+  // Cross-branch review reports (--diff / --annotate) are built from data captured
+  // during compilation — the resolver materializes identity-keyed cards in memory that
+  // the on-disk markdown has already discarded. Gated so a normal compile is unchanged.
+  const captureReports = !!(options.diff || options.annotate);
+  const rootDirName = path.basename(config._resolvedOutput);
+  const leafData = [];
+
   // Track components that were requested (a spec/path was provided) but produced
   // no output file. A requested-but-unwritten component is almost always a silent
   // failure (bad path, unexpanded {%var}/{@key}, empty source) rather than intent —
@@ -772,6 +781,7 @@ function compile(configPath, options = {}) {
     let peContent = null;
     let peUnresolved = false;
     let peNoBlocks = false;
+    let peDiffBlocks = []; // per-block PE segments for cross-branch diff (capture only)
     if (peSpec) {
       if (typeof peSpec === 'string' && peSpec.includes('{')) {
         peUnresolved = true;
@@ -781,6 +791,9 @@ function compile(configPath, options = {}) {
           peNoBlocks = true;
         } else {
           peContent = compilePE(peBlocks, registry, templates, partials, compileContext, overlays, peSuppressedIds);
+          if (captureReports) {
+            peDiffBlocks = compilePEBlocks(peBlocks, registry, templates, partials, compileContext, overlays);
+          }
         }
       }
     }
@@ -796,10 +809,15 @@ function compile(configPath, options = {}) {
     const leafVariants = resolvedCards.filter(c => c._hasVariant).length;
 
     // Phase B: cross-card refs + pronouns + render + write
+    const renderedById = captureReports ? new Map() : null;
     const written = compileBranchPhaseB(
-      resolvedCards, registry, templates, partials, outputDir, branchProtagonist, peSuppressedIds, ctx.variables, verbose
+      resolvedCards, registry, templates, partials, outputDir, branchProtagonist, peSuppressedIds, ctx.variables, verbose, renderedById
     );
     totalFiles += written.length;
+
+    // Capture component text for cross-branch reports (set as each component compiles below).
+    let ainBlockText = null;
+    let anBlockText  = null;
 
     // Plot Essentials — write the content compiled above and record any gaps.
     let hasPE = false;
@@ -825,11 +843,13 @@ function compile(configPath, options = {}) {
         const ainExt = path.extname(ainSpec).toLowerCase();
         if (ainExt === '.md' || ainExt === '.txt') {
           const content = fs.readFileSync(ainSpec, 'utf8').trimEnd() || null;
+          if (captureReports) ainBlockText = content;
           const ainPath = writeAIN(outputDir, content);
           if (ainPath) { hasAIN = true; if (verbose) console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
         } else {
           const ainDoc = loadAINConfig(ainSpec);
           const { ain } = compileAIN(ainDoc, registry, compileContext);
+          if (captureReports) ainBlockText = ain;
           const ainPath = writeAIN(outputDir, ain);
           if (ainPath) { hasAIN = true; if (verbose) console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
         }
@@ -847,11 +867,13 @@ function compile(configPath, options = {}) {
         const anExt = path.extname(anSpec).toLowerCase();
         if (anExt === '.md' || anExt === '.txt') {
           const content = fs.readFileSync(anSpec, 'utf8').trimEnd() || null;
+          if (captureReports) anBlockText = content;
           const anPath = writeAN(outputDir, content);
           if (anPath) { hasAN = true; if (verbose) console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
         } else {
           const anDoc = loadANConfig(anSpec);
           const anContent = compileAN(anDoc, registry, compileContext);
+          if (captureReports) anBlockText = anContent;
           const anPath = writeAN(outputDir, anContent);
           if (anPath) { hasAN = true; if (verbose) console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
         }
@@ -863,6 +885,20 @@ function compile(configPath, options = {}) {
     const scriptsSpec = compileContext.componentRefs.scripts;
     if (scriptsSpec && typeof scriptsSpec === 'string') {
       copyScripts(scriptsSpec, outputDir);
+    }
+
+    if (captureReports) {
+      leafData.push({
+        label,
+        branchPath,
+        fileBase: branchPath.length ? branchPath.join(' - ') : rootDirName,
+        cards: renderedById,
+        components: {
+          plotEssentials: peDiffBlocks,
+          aiInstructions: ainBlockText != null ? [{ key: 'AI Instructions', text: ainBlockText }] : [],
+          authorsNote:    anBlockText  != null ? [{ key: "Author's Note",   text: anBlockText  }] : [],
+        },
+      });
     }
 
     leafSummaries.push({ label, leafCards, leafVariants, hasPE, hasAIN, hasAN });
@@ -955,6 +991,28 @@ function compile(configPath, options = {}) {
     };
     fs.writeFileSync(manifestPath, JSON.stringify(manifestData, null, 2), 'utf8');
     if (verbose) console.log(`  OK: Canon manifest → ${manifestPath}`);
+  }
+
+  // Cross-branch review reports — emitted from the per-leaf data captured above.
+  if (captureReports && leafData.length > 0) {
+    const reportBase = config._resolvedOverview || path.join(config._resolvedOutput, 'Overview');
+    const { runDiffMode, runAnnotateMode } = require('./diff');
+    const reportSummary = [];
+    if (options.diff) {
+      const diffDir = path.join(reportBase, 'diff');
+      fs.mkdirSync(diffDir, { recursive: true });
+      const w = runDiffMode(leafData, diffDir);
+      reportSummary.push(`${w.length} diff file(s) (Shared + deltas)`);
+    }
+    if (options.annotate) {
+      const annotateDir = path.join(reportBase, 'annotate');
+      fs.mkdirSync(annotateDir, { recursive: true });
+      const w = runAnnotateMode(leafData, allCardDefs, registry, annotateDir);
+      reportSummary.push(`${w.length} annotation file(s)`);
+    }
+    if (reportSummary.length > 0) {
+      console.log(`\nWrote ${reportSummary.join(' and ')} to:\n  ${reportBase}`);
+    }
   }
 
   // Requested-but-unwritten components: surface as an error so the gap is never silent.
@@ -1051,6 +1109,8 @@ if (require.main === module) {
     ['overview',   ['--overview',   '-o']],
     ['seedMap',    ['--seed-map',   '-s']],
     ['cardSizes',  ['--card-sizes', '-b']],
+    ['diff',       ['--diff',       '-d']],
+    ['annotate',   ['--annotate',   '-a']],
     ['clean',      ['--clean',      '-c']],
     ['verbose',    ['--verbose',    '-v']],
   ];
@@ -1065,15 +1125,20 @@ if (require.main === module) {
 
   const positional = rawArgs.filter((_, i) => !flagIdxs.has(i));
 
-  const doCompile    = flags.compile || (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes);
+  // --diff / --annotate need data captured during compilation (the on-disk markdown is
+  // lossy), so they are compile *options* — they force a compile rather than reading the
+  // output dir like the post-hoc report modes (--leafReview/--overview/--seed-map/--card-sizes).
+  const doCompile    = flags.compile || flags.diff || flags.annotate ||
+    (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes);
   const doLeafReview = flags.leafReview;
   const doOverview   = flags.overview;
   const doSeedMap    = flags.seedMap;
   const doCardSizes  = flags.cardSizes;
 
-  if (positional.length === 0 && !flags.compile && !flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes) {
+  if (positional.length === 0 && !flags.compile && !flags.diff && !flags.annotate &&
+      !flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes) {
     console.error(
-      'Usage: codex-loom [--compile|-C] [--clean|-c] [--verbose|-v] [--leafReview|-l] [--overview|-o] [--seed-map|-s] [--card-sizes|-b] [<folder | compile.yaml>]'
+      'Usage: codex-loom [--compile|-C] [--diff|-d] [--annotate|-a] [--clean|-c] [--verbose|-v] [--leafReview|-l] [--overview|-o] [--seed-map|-s] [--card-sizes|-b] [<folder | compile.yaml>]'
     );
     process.exit(1);
   }
@@ -1095,7 +1160,7 @@ if (require.main === module) {
       }
     } else {
       try {
-        compile(configPath, { clean: flags.clean, verbose: flags.verbose });
+        compile(configPath, { clean: flags.clean, verbose: flags.verbose, diff: flags.diff, annotate: flags.annotate });
       } catch (err) {
         console.error(`\nFatal: ${err.message}`);
         process.exit(1);
@@ -1114,8 +1179,6 @@ if (require.main === module) {
       process.exit(1);
     }
 
-    fs.mkdirSync(outputDir, { recursive: true });
-
     if (flags.verbose) {
       const modeLabel = [
         doLeafReview && 'leaf-review',
@@ -1131,25 +1194,33 @@ if (require.main === module) {
 
       if (doLeafReview) {
         const { runLeafReviewMode } = require('./overview');
-        const written = runLeafReviewMode(scenarioRoot, outputDir, flags.verbose);
+        const dir = path.join(outputDir, 'leaf-review');
+        fs.mkdirSync(dir, { recursive: true });
+        const written = runLeafReviewMode(scenarioRoot, dir, flags.verbose);
         summaryParts.push(`${written.length} leaf review file(s)`);
       }
 
       if (doSeedMap) {
         const { runSeedMapMode } = require('./seedmap');
-        const result = runSeedMapMode(scenarioRoot, outputDir, flags.verbose);
+        const dir = path.join(outputDir, 'seed-map');
+        fs.mkdirSync(dir, { recursive: true });
+        const result = runSeedMapMode(scenarioRoot, dir, flags.verbose);
         if (result) summaryParts.push('2 seed map files');
       }
 
       if (doOverview) {
         const { runOverviewMode } = require('./overview');
-        runOverviewMode(scenarioRoot, outputDir, flags.verbose);
+        const dir = path.join(outputDir, 'overview');
+        fs.mkdirSync(dir, { recursive: true });
+        runOverviewMode(scenarioRoot, dir, flags.verbose);
         summaryParts.push('an overview file');
       }
 
       if (doCardSizes) {
         const { runBodySizeMode } = require('./bodysize');
-        const result = runBodySizeMode(scenarioRoot, outputDir, flags.verbose);
+        const dir = path.join(outputDir, 'card-sizes');
+        fs.mkdirSync(dir, { recursive: true });
+        const result = runBodySizeMode(scenarioRoot, dir, flags.verbose);
         if (result) summaryParts.push('a card sizes file');
       }
 

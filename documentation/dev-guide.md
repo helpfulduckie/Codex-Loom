@@ -17,6 +17,7 @@ This document describes the internal architecture of Codex Loom v3 for maintaine
 | `src/ain.js` | AI Instructions compilation, branch dispatch, document variants |
 | `src/an.js` | Author's Note compilation (thin wrapper over `ain.js` logic) |
 | `src/overview.js` | Leaf-review and whole-tree overview file generation |
+| `src/diff.js` | Cross-branch `--diff` (Shared/delta) and `--annotate` report generation |
 | `src/util.js` | File enumeration, YAML loading, deep clone, case-insensitive object utilities |
 
 ---
@@ -52,6 +53,8 @@ FOR EACH LEAF:
   copyScripts()
 writeOpeningsRecursive()         → Components/Opening.md at leaf/node levels
 runLeafReviewMode()              → Overview/*.leaf.md
+(if --diff)     runDiffMode()     → Overview/Shared.md + Overview/*.delta.md
+(if --annotate) runAnnotateMode() → Overview/*.annotate.md
 ```
 
 ---
@@ -234,3 +237,19 @@ Coverage notes:
 - The `{$…}` field-reference family (`{$v.field}`, `{$Id.body.field}`) is a separate system (field interpolation + pronoun passes) and is **not** part of `expandTokens`. It has been standardized for coverage (`body`/`aid`/`render`/`name` via `walkCardTextFields`), surface (dotted field refs in card data), and failure visibility (`warnUnresolvedFieldTokens`); only collapsing its four resolvers into one dispatcher remains deferred. See `07-templates.md` "Token Systems at a Glance".
 
 Canon resolution still uses a two-pass approach: plain-path entries (no `{@}` tokens after variable expansion) are resolved in pass 1, forming the lookup table for pass 2 which handles entries that reference sibling canon names. Template paths are expanded after both passes, so they can reference any named canon entry. Unresolved tokens pass through unchanged, causing the standard missing-path warning to fire with the unexpanded token visible in the path string.
+
+---
+
+## Cross-Branch Review Reports (`--diff` / `--annotate`)
+
+These reports answer the authoring question "are my branches/variants wired up the way I intended?" — `--diff` for *discovery* (scan, or hand to an agent), `--annotate` for *drill-down* once discovery flags a suspect card.
+
+**They are compile options, not post-hoc report modes.** Unlike `--leafReview`/`--overview`/`--seed-map`/`--card-sizes` (which read the already-written `output/` tree from disk), `--diff`/`--annotate` need the identity-keyed, fully-resolved card objects that only exist in memory *during* compilation — the on-disk markdown has discarded `card.id` and variant-application metadata. So setting either flag forces a compile (`doCompile`) and the reports are emitted at the end of `compile()` from data captured in the per-leaf loop (`leafData`), gated behind `options.diff`/`options.annotate`. Capture overhead is zero for a normal compile.
+
+**`--diff` → `Overview/Shared.md` + `Overview/<leaf>.delta.md`** (`runDiffMode` in `diff.js`).
+Partition rule (`buildSharedAndDeltas`): for each card id and each component block, collect its rendered text from every leaf. Identical in *all* leaves → `Shared.md`. Otherwise varying → each leaf's own version goes to that leaf's `.delta.md`; leaves where it is absent (`~`-excluded) silently omit it. Each `.delta.md` is therefore self-contained ("everything this branch has that isn't universal"), read against `Shared.md` once. Rendered-block granularity, no annotation.
+
+**`--annotate` → `Overview/<leaf>.annotate.md`** (`runAnnotateMode`).
+Per leaf, per card, field-level diff of `resolveCard(cardDef, registry, branchPath)` against the **project base** `resolveCard(cardDef, registry, [])` (empty branch path = project imports/overrides applied, no branch dispatch — *not* canon base). Because both sides share the same source tokens/variables, the only differences are branch-variant effects. Each changed field is attributed to the applied variant(s) whose delta touches that path (`collectDeltaKeyPaths` + prefix match), or flagged `unexplained` (the bleed signal). `~`-nulled cards are reported explicitly; cards identical to base with no variants are omitted (they live in `Shared.md`).
+
+**Scope / current limitations.** Cards and Plot Essentials diff at block level (PE via `compilePEBlocks`, which exposes the un-joined segments with stable keys). AI Instructions and Author's Note are captured as a single whole-component block each. Opening is resolved post-loop (`writeOpeningsRecursive`) and is not yet captured. The annotate `base`/`leaf` values are the pre-render resolved field structures, so `+{}` appends show as two-element arrays.

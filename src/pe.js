@@ -316,43 +316,71 @@ function renderPESection(sectionDef, registry, templates, partials, compileConte
  *                   PE excludes (or fails to render) is never dropped from Story Cards.
  */
 function compilePE(peBlocks, registry, templates, partials, compileContext, overlays = new Map(), emittedFullImportIds = null) {
+  const segments = collectPESegments(peBlocks, registry, templates, partials, compileContext, overlays, emittedFullImportIds);
+  if (segments.length === 0) return null;
+  return sortByPosition(segments).map(s => s.text).join('\n\n');
+}
+
+/**
+ * Collect the individual rendered PE segments for a branch leaf, each tagged with a
+ * stable `key` so cross-branch diffing can compare block-by-block rather than treating
+ * Plot Essentials as one opaque blob. Shared by compilePE (which joins) and
+ * compilePEBlocks (which returns the un-joined, position-sorted blocks).
+ *
+ * Returns [{ key, position, text }].
+ */
+function collectPESegments(peBlocks, registry, templates, partials, compileContext, overlays = new Map(), emittedFullImportIds = null) {
   const { branchPath } = compileContext;
   const segments = [];
 
-  for (const blockDef of peBlocks) {
+  peBlocks.forEach((blockDef, index) => {
     // ── Section block ──────────────────────────────────────────────────────
     if (blockDef.blocks) {
       const branchResult = resolveBranchSpec(blockDef.branches, branchPath);
-      if (branchResult === null) continue;
+      if (branchResult === null) return;
 
       const segment = renderPESection(blockDef, registry, templates, partials, compileContext, overlays, emittedFullImportIds);
-      if (segment) segments.push(segment);
-      continue;
+      if (segment) segments.push({ ...segment, key: `section:${blockDef.heading || index}` });
+      return;
     }
 
     // ── Regular block (inline or import) ──────────────────────────────────
     const branchResult = resolveBranchSpec(blockDef.branches, branchPath);
-    if (branchResult === null) continue;
+    if (branchResult === null) return;
 
     const renderOpts = blockDef.render || {};
     const style = (renderOpts.style || 'full').toLowerCase();
-    if (style === 'skip') continue;
+    if (style === 'skip') return;
 
     const position = renderOpts.position !== undefined ? renderOpts.position : 5;
 
     const result = renderPEBlock(blockDef, renderOpts, registry, templates, partials, compileContext, overlays);
-    if (!result) continue;
+    if (!result) return;
 
     // Record full-style imports that actually rendered (see emittedFullImportIds).
     if (emittedFullImportIds && blockDef.import && style === 'full') {
       emittedFullImportIds.add(String(blockDef.import).toLowerCase());
     }
 
-    segments.push({ text: applyWrapper(result.body, result.wrapper), position });
-  }
+    const key = blockDef.import
+      ? `import:${String(blockDef.import).toLowerCase()}`
+      : `inline:${blockDef.id || index}`;
+    segments.push({ text: applyWrapper(result.body, result.wrapper), position, key });
+  });
 
-  if (segments.length === 0) return null;
-  return sortByPosition(segments).map(s => s.text).join('\n\n');
+  return segments;
+}
+
+/**
+ * Compile PE for a branch leaf into its individual blocks (position-sorted) instead of
+ * a single joined string. Used by the cross-branch diff/annotate reports so component
+ * differences are reported at block granularity.
+ *
+ * Returns [{ key, text }], or [] if nothing rendered.
+ */
+function compilePEBlocks(peBlocks, registry, templates, partials, compileContext, overlays = new Map()) {
+  const segments = collectPESegments(peBlocks, registry, templates, partials, compileContext, overlays, null);
+  return sortByPosition(segments).map(s => ({ key: s.key, text: s.text }));
 }
 
 /**
@@ -370,4 +398,4 @@ function writePE(branchOutputDir, content) {
   return outPath;
 }
 
-module.exports = { loadPEConfig, compilePE, writePE };
+module.exports = { loadPEConfig, compilePE, compilePEBlocks, writePE };
