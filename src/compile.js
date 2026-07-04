@@ -12,7 +12,7 @@ const {
 } = require('./resolver');
 const { applyPronounPasses, applyCrossCardRefs } = require('./pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
-const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens } = require('./util');
+const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts } = require('./util');
 const { expandTokens } = require('./tokens');
 const { loadPEConfig, compilePE, compilePEBlocks, writePE } = require('./pe');
 const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
@@ -498,6 +498,7 @@ function compileBranchPhaseB(resolvedCards, registry, templates, partials, outpu
     const cardLabel = card.id || (typeof card.name === 'string' ? card.name : String(card.name));
     warnUnexpandedVariables(rendered, `card "${cardLabel}" (${type})`);
     warnUnresolvedFieldTokens(rendered, `card "${cardLabel}" (${type})`);
+    warnMechanicalArtifacts(rendered, `card "${cardLabel}" (${type})`);
     if (!grouped.has(type)) grouped.set(type, []);
     // Carry a sort key (the card's real id, lowercased) so output order is
     // deterministic regardless of authoring order in the source YAML.
@@ -540,6 +541,7 @@ function writeComponentFile(outputDir, filename, content) {
   const outPath = path.join(dir, filename);
   warnUnexpandedVariables(content, `component ${filename}`);
   warnUnresolvedFieldTokens(content, `component ${filename}`);
+  warnMechanicalArtifacts(content, `component ${filename}`);
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }
@@ -953,6 +955,14 @@ function compile(configPath, options = {}) {
 
   writeLabelsRecursive(config.branches, config._resolvedOutput, config.variables || {}, verbose);
 
+  // Root Label (project-level, written once to output root alongside Description.md)
+  if (config.title != null) {
+    const rootLabel = resolveVariables(String(config.title), config.variables || {});
+    const labelPath = path.join(config._resolvedOutput, 'Label.md');
+    fs.writeFileSync(labelPath, rootLabel + '\n', 'utf8');
+    if (verbose) console.log(`  OK: Label → ${labelPath}`);
+  }
+
   // Description (project-level, written once to output root alongside Branches/)
   const descRequested = config.components && config.components.description != null;
   const descSpec = descRequested
@@ -1129,6 +1139,7 @@ if (require.main === module) {
     ['overview',   ['--overview',   '-o']],
     ['seedMap',    ['--seed-map',   '-s']],
     ['cardSizes',  ['--card-sizes', '-b']],
+    ['lint',       ['--lint',       '-L']],
     ['diff',       ['--diff',       '-d']],
     ['annotate',   ['--annotate',   '-a']],
     ['clean',      ['--clean',      '-c']],
@@ -1149,16 +1160,17 @@ if (require.main === module) {
   // lossy), so they are compile *options* — they force a compile rather than reading the
   // output dir like the post-hoc report modes (--leafReview/--overview/--seed-map/--card-sizes).
   const doCompile    = flags.compile || flags.diff || flags.annotate ||
-    (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes);
+    (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint);
   const doLeafReview = flags.leafReview;
   const doOverview   = flags.overview;
   const doSeedMap    = flags.seedMap;
   const doCardSizes  = flags.cardSizes;
+  const doLint       = flags.lint;
 
   if (positional.length === 0 && !flags.compile && !flags.diff && !flags.annotate &&
-      !flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes) {
+      !flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint) {
     console.error(
-      'Usage: codex-loom [--compile|-C] [--diff|-d] [--annotate|-a] [--clean|-c] [--verbose|-v] [--leafReview|-l] [--overview|-o] [--seed-map|-s] [--card-sizes|-b] [<folder | compile.yaml>]'
+      'Usage: codex-loom [--compile|-C] [--diff|-d] [--annotate|-a] [--clean|-c] [--verbose|-v] [--leafReview|-l] [--overview|-o] [--seed-map|-s] [--card-sizes|-b] [--lint|-L] [<folder | compile.yaml>]'
     );
     process.exit(1);
   }
@@ -1188,8 +1200,8 @@ if (require.main === module) {
     }
   }
 
-  // ── Reports (leaf-review, overview, seed-map, card-sizes) ──
-  if (doLeafReview || doOverview || doSeedMap || doCardSizes) {
+  // ── Reports (leaf-review, overview, seed-map, card-sizes, lint) ──
+  if (doLeafReview || doOverview || doSeedMap || doCardSizes || doLint) {
     if (!scenarioRoot) {
       console.error('No compile.yaml in current directory and no path given.');
       process.exit(1);
@@ -1205,6 +1217,7 @@ if (require.main === module) {
         doOverview   && 'overview',
         doSeedMap    && 'seed-map',
         doCardSizes  && 'card-sizes',
+        doLint       && 'lint',
       ].filter(Boolean).join(' + ');
       console.log(`\n${modeLabel} mode\nScenario root : ${scenarioRoot}\nOutput dir    : ${outputDir}\n`);
     }
@@ -1242,6 +1255,14 @@ if (require.main === module) {
         fs.mkdirSync(dir, { recursive: true });
         const result = runBodySizeMode(scenarioRoot, dir, flags.verbose);
         if (result) summaryParts.push('a card sizes file');
+      }
+
+      if (doLint) {
+        const { runLintMode } = require('./lint');
+        const dir = path.join(outputDir, 'lint');
+        fs.mkdirSync(dir, { recursive: true });
+        const result = runLintMode(scenarioRoot, dir, flags.verbose);
+        if (result) summaryParts.push(`a lint report (${result.errorCount} error(s), ${result.warnCount} warning(s))`);
       }
 
       if (summaryParts.length > 0) {

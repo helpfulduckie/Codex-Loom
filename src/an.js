@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadYaml, warnUnexpandedVariables, warnUnresolvedFieldTokens } = require('./util');
+const { loadYaml, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts } = require('./util');
 const { compileAIN, loadAINConfig, applyDocumentVariants } = require('./ain');
 const { applyTokenPass } = require('./pronouns');
 const { normalizeWhitespace } = require('./template');
@@ -104,6 +104,7 @@ function writeAN(branchOutputDir, content) {
   const outPath = path.join(dir, "Author Notes.md");
   warnUnexpandedVariables(content, "component Author Notes.md");
   warnUnresolvedFieldTokens(content, "component Author Notes.md");
+  warnMechanicalArtifacts(content, "component Author Notes.md");
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }

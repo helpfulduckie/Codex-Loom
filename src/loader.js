@@ -153,6 +153,7 @@ function expandPathTokens(str, variables, canonMap) {
  *     output:       # single folder path
  *     overview:     # optional; where to write overview/leaf-review files (default: {output}/Overview)
  *   protagonist:
+ *   title:          # optional; scenario title, written once to {output}/Label.md
  *   components:     # root component specs (file path | literal | {@Key})
  *   variables:      # mapping
  *   branches:       # branch tree
@@ -242,6 +243,7 @@ function loadCompileConfig(configPath) {
     _resolvedTemplates: resolvedTemplates,
     _resolvedComponents: resolvedComponents,
     protagonist: config.protagonist || null,
+    title:       config.title       || null,
     components:  config.components  || null,
     variables:   config.variables   || null,
     branches:    config.branches    || null,

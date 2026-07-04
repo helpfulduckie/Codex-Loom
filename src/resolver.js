@@ -229,7 +229,8 @@ function parseVariantsList(variants) {
  * @returns {object} merged branches mapping
  */
 function mergeBranchSpecs(base, override) {
-  if (override === null || override === undefined) return override;
+  if (override === undefined) return base;
+  if (override === null) return override; // explicit exclusion wins
   if (typeof override !== 'object' || Array.isArray(override)) return override;
   if (base === null || base === undefined || typeof base !== 'object' || Array.isArray(base)) {
     return deepClone(override);
@@ -241,14 +242,25 @@ function mergeBranchSpecs(base, override) {
     const baseVal = baseKey !== undefined ? result[baseKey] : undefined;
     const targetKey = baseKey !== undefined ? baseKey : key;
 
-    if (overrideVal !== null && typeof overrideVal === 'object' && !Array.isArray(overrideVal) &&
+    if (overrideVal === null || overrideVal === undefined) {
+      // Explicit exclusion (or override omits this key) — override wins.
+      result[targetKey] = overrideVal;
+    } else if (typeof overrideVal === 'object' && !Array.isArray(overrideVal) &&
         baseVal !== null && typeof baseVal === 'object' && !Array.isArray(baseVal)) {
       result[targetKey] = mergeBranchSpecs(baseVal, overrideVal);
+    } else if (baseVal !== null && baseVal !== undefined) {
+      // Leaf override (array/scalar/apply-only mapping) stacked on a present base value:
+      // compose apply lists and keep descending into the base's sub-branches unless the
+      // override supplies its own — a block-level visibility override like `[]` must not
+      // silently discard the card's nested route-variant tree.
+      const baseApply = extractApplyList(baseVal);
+      const overrideApply = extractApplyList(overrideVal);
+      const mergedApply = [...baseApply, ...overrideApply];
+      const mergedSub = extractSubBranches(overrideVal) || extractSubBranches(baseVal);
+      result[targetKey] = mergedSub ? { apply: mergedApply, branches: mergedSub } : mergedApply;
     } else {
-      // Leaf (array/scalar/null) or type mismatch → override replaces.
-      result[targetKey] = overrideVal === null || overrideVal === undefined
-        ? overrideVal
-        : deepClone(overrideVal);
+      // No base value at this key — override replaces outright.
+      result[targetKey] = deepClone(overrideVal);
     }
   }
   return result;

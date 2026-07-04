@@ -131,25 +131,25 @@ describe('resolveBranchFolderPath', () => {
     expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['alpha', 'beta']);
   });
 
-  test('uses title when present on a node', () => {
+  test('ignores title when present on a node, uses key instead', () => {
     const branches = {
       alpha: { title: 'The Alpha Path', branches: { beta: {} } },
     };
-    expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['The Alpha Path', 'beta']);
+    expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['alpha', 'beta']);
   });
 
-  test('uses title on nested node', () => {
+  test('ignores title on nested node, uses key instead', () => {
     const branches = {
       alpha: { branches: { beta: { title: 'Beta Run' } } },
     };
-    expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['alpha', 'Beta Run']);
+    expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['alpha', 'beta']);
   });
 
-  test('uses title at all levels when both present', () => {
+  test('ignores title at all levels when both present, uses keys instead', () => {
     const branches = {
       alpha: { title: 'Alpha Stage', branches: { beta: { title: 'Beta Stage' } } },
     };
-    expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['Alpha Stage', 'Beta Stage']);
+    expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['alpha', 'beta']);
   });
 
   test('falls back to key when title is empty string', () => {
@@ -173,11 +173,11 @@ describe('resolveBranchFolderPath', () => {
     expect(resolveBranchFolderPath(branches, ['alpha', 'unknown'])).toEqual(['alpha', 'unknown']);
   });
 
-  test('id lookup is case-insensitive', () => {
+  test('id lookup is case-insensitive, returns actual key casing', () => {
     const branches = {
       Alpha: { title: 'The Alpha Path' },
     };
-    expect(resolveBranchFolderPath(branches, ['alpha'])).toEqual(['The Alpha Path']);
+    expect(resolveBranchFolderPath(branches, ['alpha'])).toEqual(['Alpha']);
   });
 
   test('empty id path returns empty folder path', () => {
@@ -380,7 +380,7 @@ describe('writeOpeningsRecursive — branch variable merging', () => {
     writeOpeningsRecursive(branches, outputDir, tmpDir, null, {});
 
     const petOut = path.join(
-      outputDir, 'Branches', 'Personal Mage', 'Branches', 'Felix', 'Branches', 'Pet',
+      outputDir, 'Branches', 'personalMage', 'Branches', 'felix', 'Branches', 'pet',
       'Components', 'Opening.md'
     );
     expect(fs.readFileSync(petOut, 'utf8').trim()).toBe('Felix pet opening');
@@ -567,16 +567,16 @@ describe('buildCompileContext — % and @ in component specs', () => {
   });
 });
 
-// ── token coverage: % in branch title (resolveBranchFolderPath) ───────────────
+// ── token coverage: {%var} in branch title is not expanded (title is ignored) ─
 
 describe('resolveBranchFolderPath — {%var} in title', () => {
-  test('expands {%var} in a branch title using root variables', () => {
+  test('does not expand {%var} in a branch title; key is used unchanged', () => {
     const branches = { knight: { title: 'The {%era} Knight' } };
     expect(resolveBranchFolderPath(branches, ['knight'], { era: 'Iron Age' }))
-      .toEqual(['The Iron Age Knight']);
+      .toEqual(['knight']);
   });
 
-  test('ancestor title uses variables merged only down to that node (stable across siblings)', () => {
+  test('ancestor and leaf folder names come from keys regardless of title/variables', () => {
     const branches = {
       tier: {
         title: '{%era} Tier',
@@ -587,9 +587,8 @@ describe('resolveBranchFolderPath — {%var} in title', () => {
         },
       },
     };
-    // Leaf "a" overrides era, but the ancestor folder must stay "Bronze Tier"
-    expect(resolveBranchFolderPath(branches, ['tier', 'a'], {})).toEqual(['Bronze Tier', 'A']);
-    expect(resolveBranchFolderPath(branches, ['tier', 'b'], {})).toEqual(['Bronze Tier', 'B']);
+    expect(resolveBranchFolderPath(branches, ['tier', 'a'], {})).toEqual(['tier', 'a']);
+    expect(resolveBranchFolderPath(branches, ['tier', 'b'], {})).toEqual(['tier', 'b']);
   });
 
   test('falls back to key when no title and leaves plain names unchanged', () => {

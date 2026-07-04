@@ -4,7 +4,7 @@ const fs = require('fs');
 const {
   findFiles, loadYaml, deepClone, findKey,
   getCI, setCI, deleteCI, normalizeVarKey, resolveVariables, warnUnexpandedVariables,
-  walkCardTextFields, warnUnresolvedFieldTokens,
+  walkCardTextFields, warnUnresolvedFieldTokens, warnMechanicalArtifacts, maskFencedRegions,
 } = require('../../src/util');
 
 // ── deepClone ─────────────────────────────────────────────────────────────────
@@ -273,6 +273,65 @@ describe('warnUnresolvedFieldTokens', () => {
   test('clean text and non-string return false', () => {
     expect(warnUnresolvedFieldTokens('resolved text', 'x')).toBe(false);
     expect(warnUnresolvedFieldTokens(null, 'x')).toBe(false);
+  });
+});
+
+describe('warnMechanicalArtifacts', () => {
+  test('flags a guessed verb marker like [does] instead of silently passing it through', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    const found = warnMechanicalArtifacts('Aness love[does] magic research', 'card "X" (Y)');
+    expect(found).toBe(true);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[does]'));
+    warn.mockRestore();
+  });
+
+  test('does not flag real verb markers or [e] as suspect', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    const found = warnMechanicalArtifacts('[e] Aness love[s] magic', 'card "X" (Y)');
+    // [s] itself is still flagged as an unresolved *real* marker, but not as "suspect"
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("isn't a recognized"));
+    warn.mockRestore();
+  });
+
+  test('does not flag a single-word trigger in the fence as a suspect marker', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    const rendered = '## Door\n\n~~~\ntriggers: [door]\nencapsulate: true\n~~~\n\n[e] A plain wooden door.';
+    warnMechanicalArtifacts(rendered, 'card "Door" (Location)');
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("isn't a recognized"));
+    warn.mockRestore();
+  });
+
+  test('flags leaked template functions, tags, and JS artifacts', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    warnMechanicalArtifacts('{join("; ", $body.Tagline)} {if $x}{/if} [object Object] undefined', 'card "X" (Y)');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('leaked render function'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('leaked template tag'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('JS interpolation artifact'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('possible JS interpolation artifact "undefined"'));
+    warn.mockRestore();
+  });
+
+  test('clean text returns false', () => {
+    expect(warnMechanicalArtifacts('Aness loves magic research.', 'x')).toBe(false);
+  });
+});
+
+describe('maskFencedRegions', () => {
+  test('blanks out fence content, preserving newlines and non-fence text', () => {
+    const text = 'before\n~~~\ntriggers: [door]\nencapsulate: true\n~~~\nafter';
+    const masked = maskFencedRegions(text);
+    expect(masked).not.toContain('[door]');
+    expect(masked.split('\n').length).toBe(text.split('\n').length);
+    expect(masked.startsWith('before\n')).toBe(true);
+    expect(masked.endsWith('\nafter')).toBe(true);
+  });
+
+  test('leaves text with no fence unchanged', () => {
+    expect(maskFencedRegions('no fence here')).toBe('no fence here');
+  });
+
+  test('non-string input passes through', () => {
+    expect(maskFencedRegions(null)).toBeNull();
   });
 });
 

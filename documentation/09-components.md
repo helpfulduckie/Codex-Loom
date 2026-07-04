@@ -577,3 +577,14 @@ When both `body:` and `script:` are set, the body content comes first, followed 
 ### Output path
 
 `{output}/Description.md` — written once after all branches compile, alongside `Branches/` and `Overview/`. It is not written per-branch and cannot be declared at branch level.
+
+---
+
+## Label
+
+`Label.md` holds a human-readable title and is written by two independent, same-named mechanisms depending on where `title:` is declared:
+
+- **Root `title:`** (top-level of `compile.yaml`, sibling of `protagonist:`) — written once to `{output}/Label.md`, alongside `Description.md`. See [Root-Level Keys → title](02-compile-yaml.md#title).
+- **Branch `title:`** (inside a `branches:` node) — written to that branch's own output folder (`Branches/<path>/Label.md`), falling back to the branch key when omitted. See [Branch Tree & Variant Dispatch](05-branches-and-variants.md).
+
+Both expand `{%variable}` tokens against the variables in scope (root variables for the root label; branch-merged variables for a branch label). Neither accepts a file path or `{@Key}` reference — the value is used as literal text.

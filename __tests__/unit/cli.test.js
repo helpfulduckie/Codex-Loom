@@ -63,7 +63,7 @@ describe('CLI --leafReview flag', () => {
     );
     expect(result.status).toBe(0);
 
-    const outDir = path.join(tmp, 'overview');
+    const outDir = path.join(tmp, 'overview', 'leaf-review');
     const files = fs.readdirSync(outDir);
     expect(files.length).toBeGreaterThan(0);
     expect(files.every(f => f.endsWith('.leaf.md'))).toBe(true);
@@ -161,7 +161,7 @@ describe('CLI --overview flag', () => {
     );
     expect(result.status).toBe(0);
 
-    const outDir = path.join(tmp, 'overview');
+    const outDir = path.join(tmp, 'overview', 'overview');
     const files = fs.readdirSync(outDir);
     expect(files).toHaveLength(1);
     expect(files[0]).toMatch(/\.overview\.md$/);
@@ -266,10 +266,11 @@ describe('CLI --leafReview + --overview combined', () => {
     expect(result.status).toBe(0);
 
     const outDir = path.join(tmp, 'overview');
-    const allFiles = fs.readdirSync(outDir);
     // leaf review: one per leaf (hero, villain); overview: one for whole tree
-    expect(allFiles.filter(f => f.endsWith('.leaf.md')).length).toBe(2);
-    expect(allFiles.filter(f => f.endsWith('.overview.md')).length).toBe(1);
+    const leafFiles = fs.readdirSync(path.join(outDir, 'leaf-review'));
+    const overviewFiles = fs.readdirSync(path.join(outDir, 'overview'));
+    expect(leafFiles.filter(f => f.endsWith('.leaf.md')).length).toBe(2);
+    expect(overviewFiles.filter(f => f.endsWith('.overview.md')).length).toBe(1);
   });
 
   test('-l -o short flags combined work', () => {
@@ -298,9 +299,10 @@ describe('CLI --leafReview + --overview combined', () => {
 
     const overviewDir = path.join(tmp, 'my-overviews');
     expect(fs.existsSync(overviewDir)).toBe(true);
-    const allFiles = fs.readdirSync(overviewDir);
-    expect(allFiles.filter(f => f.endsWith('.leaf.md')).length).toBeGreaterThan(0);
-    expect(allFiles.filter(f => f.endsWith('.overview.md')).length).toBeGreaterThan(0);
+    const leafFiles = fs.readdirSync(path.join(overviewDir, 'leaf-review'));
+    const overviewFiles = fs.readdirSync(path.join(overviewDir, 'overview'));
+    expect(leafFiles.filter(f => f.endsWith('.leaf.md')).length).toBeGreaterThan(0);
+    expect(overviewFiles.filter(f => f.endsWith('.overview.md')).length).toBeGreaterThan(0);
   });
 });
 

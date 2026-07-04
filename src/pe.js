@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens } = require('./util');
+const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts } = require('./util');
 const { resolveCard, resolveBranchSpec, mergeBranchSpecs, applyFieldsDelta, applyFieldOp } = require('./resolver');
 const { applyPronounPasses } = require('./pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions, applyWrapper, resolveTemplateName } = require('./template');
@@ -153,11 +153,14 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
   const overlayKey = String(blockDef.import).toLowerCase();
   const overlay = overlays.get(overlayKey) || null;
 
-  // When neither the PE block nor the overlay specify branches, inherit from the card definition.
-  const peHasBranches = blockDef.branches !== undefined || overlay?.branches !== undefined;
-  const resolvedBranches = (overlay?.branches !== undefined && blockDef.branches !== undefined)
-    ? mergeBranchSpecs(overlay.branches, blockDef.branches)
-    : (blockDef.branches ?? overlay?.branches ?? canonCard.branches);
+  // Block-level and overlay-level branches compose with the canon card's own branches
+  // tree (canon → overlay → block) rather than replacing it — a PE block's `branches:`
+  // is usually just visibility gating and must not discard the card's own route-variant
+  // dispatch tree. See mergeBranchSpecs in resolver.js.
+  const resolvedBranches = mergeBranchSpecs(
+    mergeBranchSpecs(canonCard.branches, overlay?.branches),
+    blockDef.branches
+  );
 
   const importDef = {
     import:         blockDef.import,
@@ -166,10 +169,9 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
     body:           (overlay?.body !== undefined && blockDef.body !== undefined)
                       ? applyFieldOp(overlay.body, blockDef.body)
                       : (blockDef.body ?? overlay?.body),
-    // When inheriting card branches, also fold in card variants so dispatched variant names resolve.
-    variants:       peHasBranches
-                      ? Object.assign({}, overlay?.variants, blockDef.variants)
-                      : Object.assign({}, canonCard.variants, overlay?.variants, blockDef.variants),
+    // Canon variants are always in scope so variant names dispatched from the merged
+    // branches tree above resolve, regardless of whether the block/overlay add their own.
+    variants:       Object.assign({}, canonCard.variants, overlay?.variants, blockDef.variants),
     name:           blockDef.name     ?? overlay?.name,
     pronouns:       blockDef.pronouns ?? overlay?.pronouns,
     aid:            (overlay?.aid !== undefined && blockDef.aid !== undefined)
@@ -394,6 +396,7 @@ function writePE(branchOutputDir, content) {
   const outPath = path.join(dir, 'Plot Essentials.md');
   warnUnexpandedVariables(content, 'component Plot Essentials.md');
   warnUnresolvedFieldTokens(content, 'component Plot Essentials.md');
+  warnMechanicalArtifacts(content, 'component Plot Essentials.md');
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }

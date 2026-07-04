@@ -47,6 +47,7 @@ structure:
   output: ./output
 
 protagonist: Aness                # global default protagonist ID
+title: The Royal Academy          # optional; written once to {output}/Label.md
 
 variables:                        # key-value pairs; used in templates as {%key}
   setting: The Royal Academy
@@ -190,6 +191,14 @@ Global default protagonist ID. Used when a branch doesn't declare its own. Match
 
 ```yaml
 protagonist: Aness
+```
+
+### `title`
+
+Optional scenario title. Written once to `{output}/Label.md` after all branches compile, expanding `{%variable}` tokens against root `variables`. This is distinct from a branch's own `title:` field, which writes `Label.md` into that branch's own output folder (see [Branch Tree & Variant Dispatch](05-branches-and-variants.md)) — the root `title` only ever produces the single top-level file, alongside `Description.md`.
+
+```yaml
+title: The Royal Academy
 ```
 
 ### `variables`

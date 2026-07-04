@@ -10,6 +10,15 @@ function sanitizeFilename(name) {
   return name.replace(/[<>:"/\\|?*]/g, '_').trim();
 }
 
+/** Shift markdown heading levels down by `shift` (capped at level 6), matching overview/leaf reports. */
+function shiftHeadings(content, shift) {
+  if (shift <= 0) return content;
+  return content.replace(/^(#{1,6})(?= )/gm, (_, hashes) => {
+    const newLevel = Math.min(hashes.length + shift, 6);
+    return '#'.repeat(newLevel);
+  });
+}
+
 /** Component families captured per leaf, in display order. */
 const COMPONENT_FAMILIES = [
   ['plotEssentials', 'Plot Essentials'],
@@ -113,7 +122,7 @@ function renderCardSection(cards) {
   const parts = ['## Story Cards'];
   for (const type of [...byType.keys()].sort((a, b) => a.localeCompare(b))) {
     parts.push(`### ${type}`);
-    for (const c of byType.get(type)) parts.push(c.rendered);
+    for (const c of byType.get(type)) parts.push(shiftHeadings(c.rendered, 2));
   }
   return parts.join('\n\n');
 }
@@ -123,7 +132,9 @@ function renderComponentSections(components) {
   for (const [fam, title] of COMPONENT_FAMILIES) {
     const blocks = components[fam] || [];
     if (blocks.length === 0) continue;
-    out.push(`## ${title}\n\n` + blocks.map(b => b.text).join('\n\n'));
+    const fenced = fam === 'plotEssentials' || fam === 'aiInstructions';
+    const body   = blocks.map(b => fenced ? `\`\`\`\n${b.text}\n\`\`\`` : b.text).join('\n\n');
+    out.push(`## ${title}\n\n${body}`);
   }
   return out;
 }

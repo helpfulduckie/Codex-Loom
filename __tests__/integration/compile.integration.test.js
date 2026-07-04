@@ -326,13 +326,13 @@ describe('openingChoice {@Key} resolution', () => {
   });
 
   test('employer branch openingChoice {@mageChoice} resolves to literal string', () => {
-    const p = path.join(atKeyTmpDir, 'output', 'Branches', 'Employer', 'Components', 'Opening.md');
+    const p = path.join(atKeyTmpDir, 'output', 'Branches', 'employer', 'Components', 'Opening.md');
     expect(fs.existsSync(p)).toBe(true);
     expect(fs.readFileSync(p, 'utf8')).toBe('Who is your mage?\n');
   });
 
   test('mage branch openingChoice {@employerChoice} resolves to literal string', () => {
-    const p = path.join(atKeyTmpDir, 'output', 'Branches', 'Personal Mage', 'Components', 'Opening.md');
+    const p = path.join(atKeyTmpDir, 'output', 'Branches', 'mage', 'Components', 'Opening.md');
     expect(fs.existsSync(p)).toBe(true);
     expect(fs.readFileSync(p, 'utf8')).toBe('Who is your employer?\n');
   });
@@ -864,6 +864,76 @@ describe('component gap detection', () => {
       expect(() => compile(path.join(dir, 'compile.yaml'))).not.toThrow();
       const p = path.join(dir, 'output', "Components", "Author Notes.md");
       expect(fs.existsSync(p)).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── Root `title` → top-level Label.md ──────────────────────────────────────────
+
+describe('root title -> Label.md', () => {
+  function makeTitleProject(extraLines) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-title-'));
+    fs.mkdirSync(path.join(dir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'cards', 'c.yaml'), [
+      '- id: W',
+      '  name: W',
+      '  aid: { type: Item, title: W }',
+      '  render: { template: Item }',
+      '  body: { Desc: w }',
+    ].join('\n'), 'utf8');
+    fs.writeFileSync(path.join(dir, 'templates', 'Item.template'), '## {$aid.title}\n~~~\n{$body.Desc}', 'utf8');
+    fs.writeFileSync(path.join(dir, 'compile.yaml'), [
+      'structure:',
+      `  input: { cards: [${dir}/cards], templates: [${dir}/templates] }`,
+      `  output: ${dir}/output`,
+      ...extraLines,
+    ].join('\n'), 'utf8');
+    return dir;
+  }
+
+  test('root title writes {output}/Label.md with expanded content', () => {
+    const dir = makeTitleProject([
+      'title: "{%setting}"',
+      'variables:',
+      '  setting: The Royal Academy',
+    ]);
+    try {
+      compile(path.join(dir, 'compile.yaml'));
+      const p = path.join(dir, 'output', 'Label.md');
+      expect(fs.existsSync(p)).toBe(true);
+      expect(fs.readFileSync(p, 'utf8')).toBe('The Royal Academy\n');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('no root title does not write Label.md at output root', () => {
+    const dir = makeTitleProject([]);
+    try {
+      compile(path.join(dir, 'compile.yaml'));
+      const p = path.join(dir, 'output', 'Label.md');
+      expect(fs.existsSync(p)).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('root title and branch title independently write their own Label.md files', () => {
+    const dir = makeTitleProject([
+      'title: Root Scenario',
+      'branches:',
+      '  alpha:',
+      '    title: Alpha Branch',
+    ]);
+    try {
+      compile(path.join(dir, 'compile.yaml'));
+      const rootLabel = path.join(dir, 'output', 'Label.md');
+      const branchLabel = path.join(dir, 'output', 'Branches', 'alpha', 'Label.md');
+      expect(fs.readFileSync(rootLabel, 'utf8')).toBe('Root Scenario\n');
+      expect(fs.readFileSync(branchLabel, 'utf8')).toBe('Alpha Branch\n');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
