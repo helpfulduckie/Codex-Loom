@@ -10,6 +10,7 @@
     "test": "jest",
     "test:unit": "jest __tests__/unit",
     "test:integration": "jest __tests__/integration",
+    "test:fixtures": "jest __tests__/fixtures",
     "test:coverage": "jest --coverage",
     "compile": "node src/compile.js test/compile.yaml"
   },

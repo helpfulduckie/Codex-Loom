@@ -1,2 +1,9 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Golden fixtures are compared byte-for-byte (v4 spec §14.3), so Git must not translate
+# line endings in either direction. Without this, a fresh clone on a machine with
+# core.autocrlf=true rewrites the frozen baselines to CRLF while the compiler still
+# emits LF, and every fixture comparison fails for a reason that has nothing to do
+# with the compiler.
+/goldenFixtures/** -text
