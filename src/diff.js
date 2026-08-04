@@ -1,5 +1,7 @@
 'use strict';
 
+const { consoleWarner } = require('./util');
+
 const fs   = require('fs');
 const path = require('path');
 const { resolveCard, resolveBranchSpec, collectVariantDeltas } = require('./resolver');
@@ -283,7 +285,7 @@ function attributeChanges(cardDef, registry, branchVariantNames, changes) {
 }
 
 function safeResolve(cardDef, registry, branchPath) {
-  try { return resolveCard(cardDef, registry, branchPath); }
+  try { return resolveCard(cardDef, registry, branchPath, consoleWarner); }
   catch { return null; }
 }
 

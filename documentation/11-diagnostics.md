@@ -105,6 +105,19 @@ Spelling suggestions use Damerau-Levenshtein, which counts a transposition as on
 Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein scores
 `titel` against `title` as 2 and misses the single commonest typo there is.
 
+### CL03xx — items
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `CL0320` | WARN | A variant delta declares more than one `v:` alias; they are merged. |
+| `CL0321` | WARN | A named variant does not exist in the item's variant tree. |
+| `CL0322` | WARN | An item has neither `aid.type` nor `render.template`. |
+| `CL0330` | WARN | A cross-item reference names an item that does not exist. |
+
+`model/` uses neither `fs` nor `console` (§3.3), so these are reported through a
+caller-supplied `onWarn(code, message)` rather than printed where they arise. Reserved:
+`CL0310`, unresolvable branch dispatch.
+
 ### CL05xx — tokens
 
 | Code | Severity | Meaning |

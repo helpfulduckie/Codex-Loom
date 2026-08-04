@@ -1,6 +1,11 @@
 'use strict';
 
-const { walkCardTextFields } = require('./util');
+const { walkCardTextFields } = require('../util');
+
+// Pure by contract (§3.3): warnings go to a caller-supplied onWarn(code, message).
+const CODES = Object.freeze({
+  CROSS_ITEM_REF_MISSING: 'CL0330',
+});
 
 /**
  * Pronoun resolution for Codex Loom v3.
@@ -263,7 +268,7 @@ function applyTokenPass(str, opts) {
  * @param {object[]} resolvedCards - all cards compiled for this branch
  * @param {Map} registry - full card registry (for fallback to canonical base)
  */
-function applyCrossCardRefs(resolvedCards, registry) {
+function applyCrossCardRefs(resolvedCards, registry, onWarn) {
   // Build a quick lookup by id for the resolved cards
   const resolvedById = new Map();
   for (const card of resolvedCards) {
@@ -277,7 +282,7 @@ function applyCrossCardRefs(resolvedCards, registry) {
     const lower = refId.toLowerCase();
     const sourceCard = resolvedById.get(lower) || registry.get(lower);
     if (!sourceCard) {
-      console.warn(`  WARN: cross-card ref {$${refId}.body.${fieldPath}} — card not found`);
+      if (onWarn) onWarn(CODES.CROSS_ITEM_REF_MISSING, `cross-card ref {${refId}.body.${fieldPath}} — card not found`);
       return null;
     }
     const parts = fieldPath.split('.');
@@ -317,6 +322,7 @@ function applyPronounPasses(card, registry, branchProtagonist, resolvedById) {
 }
 
 module.exports = {
+  CODES,
   applyPronounPasses,
   applyTokenPass,
   applyCrossCardRefs,

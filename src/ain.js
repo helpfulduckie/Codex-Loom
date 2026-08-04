@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts } = require('./util');
 const { applyFieldOp } = require('./resolver');
-const { applyTokenPass } = require('./pronouns');
+const { applyTokenPass } = require('./model/pronouns');
 const { normalizeWhitespace } = require('./template');
 
 /**

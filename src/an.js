@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { loadYaml, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts } = require('./util');
 const { compileAIN, loadAINConfig, applyDocumentVariants } = require('./ain');
-const { applyTokenPass } = require('./pronouns');
+const { applyTokenPass } = require('./model/pronouns');
 const { normalizeWhitespace } = require('./template');
 
 /**

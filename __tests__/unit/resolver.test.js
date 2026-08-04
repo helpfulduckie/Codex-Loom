@@ -148,10 +148,17 @@ describe('collectVariantDeltas', () => {
   });
 
   test('unknown segment warns and returns partial deltas', () => {
-    const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const deltas = collectVariantDeltas(canonCard, 'human/peasant');
+    // model/ is pure (§3.3): it reports through the caller's onWarn rather than printing.
+    const onWarn = jest.fn();
+    const deltas = collectVariantDeltas(canonCard, 'human/peasant', onWarn);
     expect(deltas).toHaveLength(1);
-    expect(spy).toHaveBeenCalled();
+    expect(onWarn).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('not found in variant tree'));
+  });
+
+  test('an unknown segment is silent when no reporter is supplied', () => {
+    const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(collectVariantDeltas(canonCard, 'human/peasant')).toHaveLength(1);
+    expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 

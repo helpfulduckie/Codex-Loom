@@ -8,11 +8,11 @@ const {
   buildRegistry, mergeRegistries, buildOverlays, loadYaml,
 } = require('./loader');
 const {
-  resolveCard, enumerateLeaves, getBranchConfig,
+  resolveCard, enumerateLeaves, walkBranchChain,
 } = require('./resolver');
-const { applyPronounPasses, applyCrossCardRefs } = require('./pronouns');
+const { applyPronounPasses, applyCrossCardRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
-const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts } = require('./util');
+const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, consoleWarner } = require('./util');
 const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
 const { Diagnostics } = require('./diag');
@@ -117,22 +117,9 @@ function resolveComponentSpec(spec, base, componentDirs, canon, variables) {
  * Merges variables and components from root → branch chain.
  */
 function buildCompileContext(config, branchPath) {
-  // Walk branch chain merging variables and components
-  let variables = Object.assign({}, config.variables || {});
-  let components = Object.assign({}, config.components || {});
-
-  let currentMap = config.branches;
-  for (const part of branchPath) {
-    if (!currentMap || typeof currentMap !== 'object') break;
-    const actualKey = Object.keys(currentMap).find(k => k.toLowerCase() === part.toLowerCase());
-    if (!actualKey) break;
-    const node = currentMap[actualKey];
-    if (node) {
-      if (node.variables) Object.assign(variables, node.variables);
-      if (node.components) Object.assign(components, node.components);
-    }
-    currentMap = node && node.branches ? node.branches : null;
-  }
+  const chain = walkBranchChain(config.branches, branchPath);
+  const variables = Object.assign({}, config.variables || {}, chain.variables);
+  const components = Object.assign({}, config.components || {}, chain.components);
 
   // Resolve component specs to file paths
   const componentTypes = ['aiInstructions', 'opening', 'openingChoice', 'plotEssential', 'authorsNote', 'scripts'];
@@ -256,19 +243,7 @@ function buildBranchOutputDir(baseOutput, branchPath) {
  * @returns {string[]}           - folder name path (e.g. ['tier2', 'alpha'])
  */
 function resolveBranchFolderPath(branches, idPath) {
-  const folderPath = [];
-  let currentMap = branches;
-  for (const id of idPath) {
-    if (!currentMap || typeof currentMap !== 'object') {
-      folderPath.push(id);
-      continue;
-    }
-    const actualKey = Object.keys(currentMap).find(k => k.toLowerCase() === id.toLowerCase());
-    const node = actualKey !== undefined ? currentMap[actualKey] : null;
-    folderPath.push(actualKey || id);
-    currentMap = node && node.branches ? node.branches : null;
-  }
-  return folderPath;
+  return walkBranchChain(branches, idPath).folderPath;
 }
 
 /**
@@ -301,7 +276,7 @@ function compileBranchPhaseA(allCardDefs, registry, branchPath, variables) {
 
     let card;
     try {
-      card = resolveCard(cardDef, registry, branchPath);
+      card = resolveCard(cardDef, registry, branchPath, consoleWarner);
     } catch (err) {
       const label = cardDef.id || cardDef.import || cardDef.name || '?';
       const src = cardDef._source ? ` (${cardDef._source})` : '';
@@ -330,7 +305,7 @@ function compileBranchPhaseB(resolvedCards, registry, templates, partials, outpu
     if (id) resolvedById.set(id, card);
   }
 
-  applyCrossCardRefs(resolvedCards, registry);
+  applyCrossCardRefs(resolvedCards, registry, consoleWarner);
 
   // Expand render functions in body field values now that cross-card refs are resolved.
   // Multi-pass: repeat until no body fields change, to handle order-dependent chains
@@ -701,20 +676,14 @@ function compile(configPath, options = {}) {
     const label = branchPath.length > 0 ? branchPath.join('/') : '(root)';
     if (verbose) console.log(`\n  Branch: ${label}`);
 
-    const branchConfig = getBranchConfig(config.branches, branchPath);
-
-    // Walk the full branch chain to find the nearest ancestor that declares protagonist
-    let inheritedProtagonist = config.protagonist || '';
-    let walkMap = config.branches;
-    for (const part of branchPath) {
-      if (!walkMap || typeof walkMap !== 'object') break;
-      const actualKey = Object.keys(walkMap).find(k => k.toLowerCase() === part.toLowerCase());
-      if (!actualKey) break;
-      const node = walkMap[actualKey];
-      if (node && node.protagonist) inheritedProtagonist = node.protagonist;
-      walkMap = node && node.branches ? node.branches : null;
-    }
-    const folderPath = resolveBranchFolderPath(config.branches, branchPath);
+    // One traversal now serves what used to be four: the folder path, the inherited
+    // protagonist, the terminal node, and (inside buildCompileContext) the merged
+    // variables and components.
+    const chain = walkBranchChain(config.branches, branchPath, {
+      rootProtagonist: config.protagonist || '',
+    });
+    const inheritedProtagonist = chain.protagonist;
+    const folderPath = chain.folderPath;
     const outputDir = buildBranchOutputDir(config._resolvedOutput, folderPath);
     const ctx = buildCompileContext(config, branchPath);
     // Expand {%var} in protagonist using branch-merged variables, before the

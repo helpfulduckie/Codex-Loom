@@ -3,7 +3,7 @@
 const {
   resolveProunounToken, applyTokenPass,
   getDisplayName, getFullName, applyCrossCardRefs, applyPronounPasses,
-} = require('../../src/pronouns');
+} = require('../../src/model/pronouns');
 
 // ── resolveProunounToken ────────────────────────────────────────────────────
 
@@ -442,12 +442,12 @@ describe('applyCrossCardRefs', () => {
   });
 
   test('missing card → warns and leaves token as-is', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    // model/ is pure (§3.3): it reports through the caller's onWarn rather than printing.
+    const onWarn = jest.fn();
     const cards = [{ id: 'aria', body: { Tagline: '{$nobody.body.Field}' } }];
-    applyCrossCardRefs(cards, new Map());
+    applyCrossCardRefs(cards, new Map(), onWarn);
     expect(cards[0].body.Tagline).toBe('{$nobody.body.Field}');
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+    expect(onWarn).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('card not found'));
   });
 
   test('missing field → leaves token as-is', () => {

@@ -2,9 +2,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts } = require('./util');
+const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, consoleWarner } = require('./util');
 const { resolveCard, resolveBranchSpec, mergeBranchSpecs, applyFieldsDelta, applyFieldOp } = require('./resolver');
-const { applyPronounPasses } = require('./pronouns');
+const { applyPronounPasses } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions, applyWrapper, resolveTemplateName } = require('./template');
 
 /**
@@ -187,7 +187,7 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
 
   let card;
   try {
-    card = resolveCard(importDef, registry, branchPath);
+    card = resolveCard(importDef, registry, branchPath, consoleWarner);
   } catch (err) {
     console.error(`  ERR [PE]: resolving import "${blockDef.import}": ${err.message}`);
     return null;
