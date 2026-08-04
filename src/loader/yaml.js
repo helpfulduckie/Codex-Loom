@@ -20,6 +20,8 @@
 
 const fs = require('fs');
 const YAML = require('yaml');
+const { preparse, findSwallowedTokens } = require('./preparse');
+const { CODES } = require('../diag');
 
 /**
  * Path components are joined with NUL. The separator has to be a character that cannot
@@ -120,12 +122,20 @@ function buildPositions(doc, lineCounter) {
 /**
  * Parse YAML text. Returns the value plus a SourceMap.
  *
+ * The source runs through `preparse` first (§4.1), so a leading `{$…}` or `{%…}` value
+ * needs no defensive quoting. The preparser only inserts characters within a line, so
+ * the line numbers in the SourceMap remain exact.
+ *
  * Throws on a malformed document, matching js-yaml's behavior — `yaml` collects errors
- * on the document rather than throwing, so they are raised explicitly here.
+ * on the document rather than throwing, so they are raised explicitly here — and on a
+ * token the parser swallowed as a mapping key, which is an ERROR per §4.1.
+ *
+ * `raw: true` skips the preparse, for callers that need the document exactly as written.
  */
-function parseYaml(raw, filePath) {
+function parseYaml(raw, filePath, options = {}) {
+  const source = options.raw ? raw : preparse(raw);
   const lineCounter = new YAML.LineCounter();
-  const doc = YAML.parseDocument(raw, { lineCounter, keepSourceTokens: false });
+  const doc = YAML.parseDocument(source, { lineCounter, keepSourceTokens: false });
 
   if (doc.errors.length > 0) throw new Error(doc.errors[0].message);
 
@@ -133,8 +143,20 @@ function parseYaml(raw, filePath) {
   // callers that skip empty files test for both, but the contract is worth preserving
   // exactly rather than relying on every one of them staying loose.
   const value = doc.contents === null ? undefined : doc.toJS({ maxAliasCount: -1 });
+  const sourceMap = new SourceMap(filePath, buildPositions(doc, lineCounter));
 
-  return { value, sourceMap: new SourceMap(filePath, buildPositions(doc, lineCounter)), doc };
+  const swallowed = findSwallowedTokens(value);
+  if (swallowed.length > 0) {
+    const { token, path, key } = swallowed[0];
+    const { line, col } = sourceMap.nearest([...path, key]);
+    const at = line ? ` at line ${line}, column ${col}` : '';
+    throw new Error(
+      `${CODES.TOKEN_SWALLOWED_BY_YAML}: the token ${token} was parsed as a YAML mapping key${at}. `
+      + 'Wrap the value in quotes so it is read as text.'
+    );
+  }
+
+  return { value, sourceMap, doc };
 }
 
 /**

@@ -49,6 +49,20 @@ a known, bounded shortfall of the phase ordering rather than a defect (spec §13
 | `CL0102` | ERROR | File could not be read. |
 | `CL0103` | WARN | File is empty; skipped. |
 | `CL0104` | WARN | Document within a multi-document file is null; skipped. |
+| `CL0105` | ERROR | A Codex Loom token was parsed as a YAML mapping key. |
+
+### CL0105 in detail
+
+`triggers: [{$name.display}]` is **valid YAML** — a flow sequence containing a single-key
+flow mapping — so it parses silently to `[{"$name.display": null}]` and produces a
+wrong-typed value that surfaces far from where it was written. The preparser (§4.1)
+quotes tokens in the positions it can identify; this check catches the whole class
+regardless of position, and costs one walk of the parsed tree.
+
+Only `$` reaches this check. `%` and `@` are reserved indicators in YAML, so an unquoted
+`{%role}` or `{@pe}` is a hard parse error (`CL0101`) rather than a silent swallow. The
+check covers all three sigils anyway, because a mapping of that shape can arrive from
+somewhere other than a plain parse.
 
 Codes for the remaining bands are registered as the phases that mint them land. Codes
 named by the spec and not yet implemented — `CL0210` (unknown item key with a relocation
