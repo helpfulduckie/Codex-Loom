@@ -218,8 +218,17 @@ function normalizeEmpty(value, types) {
  * normalized in place, so the caller's object is updated.
  */
 function validate(value, schema, options = {}) {
-  const { diagnostics, sourceMap, path = [], keyIndex = buildKeyIndex(schema) } = options;
+  const {
+    diagnostics, sourceMap, path = [], keyIndex = buildKeyIndex(schema),
+    // Positions and prose need different paths. A multi-item file addresses its second
+    // item as `1.aid.type` for lookup, but a reader should be told "under aid: in item
+    // Kaiden" — the array index is the compiler's business, not theirs.
+    displayOffset = 0, context = null,
+  } = options;
+
   const locate = (at) => (sourceMap ? sourceMap.nearest(at) : {});
+  const display = (at) => at.slice(displayOffset).join('.');
+  const inContext = context ? ` in ${context}` : '';
 
   const walk = (node, descriptor, currentPath) => {
     if (!descriptor) return node;
@@ -236,7 +245,7 @@ function validate(value, schema, options = {}) {
       if (diagnostics) {
         diagnostics.error(
           CODES.WRONG_TYPE,
-          `"${currentPath.join('.') || '<root>'}" must be ${typeName(types)}, but is ${describeType(normalized)}.`,
+          `"${display(currentPath) || '<root>'}" must be ${typeName(types)}, but is ${describeType(normalized)}${inContext}.`,
           locate(currentPath)
         );
       }
@@ -257,12 +266,18 @@ function validate(value, schema, options = {}) {
         const declared = Object.keys(descriptor.keys);
 
         for (const key of Object.keys(normalized)) {
+          // Keys beginning with `_` are stamped by the loader, not written by an author
+          // — `_source`, `_include_variants`, `_resolvedCanon`. Validating them would
+          // report the compiler's own bookkeeping as the author's mistake.
+          if (key.startsWith('_')) continue;
+
           const child = descriptor.keys[key];
           if (!child) {
             if (diagnostics) {
-              const { code, hint } = suggestFor(key, currentPath, declared, keyIndex);
-              const where = currentPath.length ? `under "${currentPath.join('.')}"` : 'at the top level';
-              diagnostics.error(code, `Unknown key "${key}" ${where}.`, locate([...currentPath, key]), { hint });
+              const { code, hint } = suggestFor(key, currentPath.slice(displayOffset), declared, keyIndex);
+              const shown = display(currentPath);
+              const where = shown ? `under "${shown}"` : 'at the top level';
+              diagnostics.error(code, `Unknown key "${key}" ${where}${inContext}.`, locate([...currentPath, key]), { hint });
             }
             continue;
           }
@@ -289,7 +304,7 @@ function validate(value, schema, options = {}) {
           if (child.required && normalized[key] === undefined && diagnostics) {
             diagnostics.error(
               CODES.MISSING_REQUIRED,
-              `Missing required key "${key}"${currentPath.length ? ` under "${currentPath.join('.')}"` : ''}.`,
+              `Missing required key "${key}"${display(currentPath) ? ` under "${display(currentPath)}"` : ''}${inContext}.`,
               locate(currentPath)
             );
           }

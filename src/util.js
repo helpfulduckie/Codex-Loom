@@ -4,7 +4,41 @@ const fs = require('fs');
 const path = require('path');
 const { loadYaml } = require('./loader/yaml');
 
+/**
+ * Every suffix Codex Loom will read a YAML document from (§4.6).
+ *
+ * `.cl.yaml` is what v4 authors write: once a value may legally begin with an unquoted
+ * `{$`, the file is not valid YAML, and the composite extension keeps generic YAML
+ * tooling from claiming it while still reading as YAML-shaped to a human.
+ *
+ * `.yml` is here because v3's `findFiles` matched `.yaml` alone and silently ignored
+ * `.yml` — a file that looks like it should load and simply does not. Once `.yml` is
+ * accepted, `.cl.yml` has to be too, or the composite form would be arbitrarily narrower
+ * than the plain one. §4.6 names only the `.cl.yaml`/`.yaml` pair because it was written
+ * against the assumption that `.yml` was already handled.
+ *
+ * Plain `.yaml`/`.yml` are not deprecated and get no warning; `--migrate` renames only
+ * when asked.
+ */
+const YAML_SUFFIXES = Object.freeze(['.cl.yaml', '.cl.yml', '.yaml', '.yml']);
+
+/** Config entry points, in the order they are searched (§4.6). */
+const CONFIG_BASENAMES = Object.freeze([
+  'compile.cl.yaml', 'compile.cl.yml', 'compile.yaml', 'compile.yml',
+]);
+
+function hasSuffix(name, suffixes) {
+  const lower = name.toLowerCase();
+  return suffixes.some((s) => lower.endsWith(s));
+}
+
+/**
+ * Recursively collect files matching one suffix or a list of them.
+ *
+ * Symlinks are followed, with broken ones skipped rather than thrown.
+ */
 function findFiles(dir, ext) {
+  const suffixes = Array.isArray(ext) ? ext : [ext];
   const results = [];
   if (!fs.existsSync(dir)) return results;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -13,14 +47,14 @@ function findFiles(dir, ext) {
       try {
         const stat = fs.statSync(full);
         if (stat.isDirectory()) {
-          results.push(...findFiles(full, ext));
-        } else if (stat.isFile() && entry.name.toLowerCase().endsWith(ext)) {
+          results.push(...findFiles(full, suffixes));
+        } else if (stat.isFile() && hasSuffix(entry.name, suffixes)) {
           results.push(full);
         }
       } catch (_) { /* broken symlink — skip */ }
     } else if (entry.isDirectory()) {
-      results.push(...findFiles(full, ext));
-    } else if (entry.isFile() && entry.name.toLowerCase().endsWith(ext)) {
+      results.push(...findFiles(full, suffixes));
+    } else if (entry.isFile() && hasSuffix(entry.name, suffixes)) {
       results.push(full);
     }
   }
@@ -243,6 +277,7 @@ function warnMechanicalArtifacts(text, label) {
 
 module.exports = {
   findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
+  YAML_SUFFIXES, CONFIG_BASENAMES, hasSuffix,
   resolveVariables, warnUnexpandedVariables, walkCardTextFields, warnUnresolvedFieldTokens,
   warnMechanicalArtifacts, maskFencedRegions,
   FIELD_TOKEN_RE, VAR_TOKEN_RE, TEMPLATE_FN_RE, TEMPLATE_TAG_RE, VERB_MARKER_RE, SUSPECT_VERB_MARKER_RE, JS_ARTIFACT_RE, JS_WORD_RE,

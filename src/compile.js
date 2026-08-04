@@ -14,6 +14,8 @@ const { applyPronounPasses, applyCrossCardRefs } = require('./pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
 const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts } = require('./util');
 const { expandTokens } = require('./tokens');
+const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
+const { Diagnostics } = require('./diag');
 const { loadPEConfig, compilePE, compilePEBlocks, writePE } = require('./pe');
 const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
 const { loadANConfig, compileAN, writeAN } = require('./an');
@@ -267,106 +269,6 @@ function resolveBranchFolderPath(branches, idPath) {
     currentMap = node && node.branches ? node.branches : null;
   }
   return folderPath;
-}
-
-/**
- * Resolve includes from project card defs.
- * Returns additional card definitions loaded from canon files.
- */
-function resolveIncludes(cardDefs, canonRegistry, config) {
-  const explicitIds = new Set();
-  const includeDefs = [];
-
-  for (const def of cardDefs) {
-    if (def.include) {
-      includeDefs.push(def);
-    } else if (def.import) {
-      explicitIds.add(String(def.import).toLowerCase());
-    } else if (def.id || def.name) {
-      const id = ((def.id || (typeof def.name === 'string' ? def.name : '')) || '').toLowerCase();
-      explicitIds.add(id);
-    }
-  }
-
-  if (includeDefs.length === 0) return [];
-
-  const included = [];
-  const seenFiles = new Map(); // fullPath → [importer _source, ...]
-  for (const def of includeDefs) {
-    // Resolve {%var} (root variables only — includes resolve once, before branch
-    // enumeration) and {@Key} references (components then canon) in the include path.
-    let includePath = expandTokens(String(def.include), {
-      variables: config.variables || null,
-      components: config._resolvedComponents,
-      canon: config._resolvedCanon,
-      mode: 'path',
-      warnMissing: false,
-    });
-
-    // Normalize separators (handles mixed forward/back slashes from {@var}/path expansion)
-    includePath = path.normalize(includePath);
-
-    // Resolve relative to config base or as absolute
-    const fullPath = path.isAbsolute(includePath) ? includePath : path.resolve(config._base, includePath);
-    if (!fs.existsSync(fullPath)) {
-      console.warn(`  WARN: include path not found: ${fullPath}`);
-      continue;
-    }
-
-    const importerSource = def._source || '(unknown)';
-    if (seenFiles.has(fullPath)) {
-      seenFiles.get(fullPath).push(importerSource);
-      const allImporters = seenFiles.get(fullPath);
-      throw new Error(
-        `File included more than once: ${fullPath}\n` +
-        `Included by:\n` +
-        allImporters.map(s => `  ${s}`).join('\n')
-      );
-    }
-    seenFiles.set(fullPath, [importerSource]);
-
-    const raw = loadYaml(fullPath);
-    const cards = Array.isArray(raw) ? raw : [raw];
-
-    for (const card of cards) {
-      const id = ((card.id || (typeof card.name === 'string' ? card.name : '')) || '').toLowerCase();
-      if (explicitIds.has(id)) continue; // explicit import wins
-
-      const stamped = { ...card, _source: fullPath };
-      // Stamp include-level importVariants and branches onto card for resolveCard to use
-      if (def.importVariants) stamped._include_variants = def.importVariants;
-      if (def.branches) stamped._include_branch_spec = def.branches;
-      included.push(stamped);
-    }
-  }
-
-  return included;
-}
-
-/**
- * Build the combined canon registry from all named canon dirs.
- */
-function buildCanonRegistry(resolvedCanon) {
-  const registry = new Map();
-  for (const [name, canonPath] of resolvedCanon) {
-    if (!fs.existsSync(canonPath)) {
-      console.warn(`  WARN: canon "${name}" path not found: ${canonPath}`);
-      continue;
-    }
-    const { loadCardsFromDir: lcd, buildRegistry: br } = require('./loader');
-    const cards = lcd([canonPath]);
-    const sub = br(cards, `canon:${name}`);
-    for (const [id, card] of sub) {
-      if (registry.has(id)) {
-        const existing = registry.get(id);
-        throw new Error(
-          `Duplicate card ID "${id}" across canon dirs:\n  ${existing._source}\n  ${card._source}`
-        );
-      }
-      registry.set(id, card);
-    }
-  }
-  return registry;
 }
 
 /**
@@ -701,11 +603,37 @@ function writeLabelsRecursive(branches, outputBase, variables, verbose = false) 
   }
 }
 
+/**
+ * Print what the loading phase collected, and abort if any of it is an error.
+ *
+ * Errors stop the compile before anything is written. A schema violation means some part
+ * of what the author wrote is not being read, so continuing would emit a tree that looks
+ * complete and is quietly missing something — the exact failure mode §4.3 exists to end.
+ */
+function reportLoadDiagnostics(diagnostics) {
+  if (diagnostics.isEmpty()) return;
+  for (const diag of diagnostics.all) {
+    if (diag.severity === 'error') console.error(diag.format());
+    else console.warn(diag.format());
+  }
+  if (diagnostics.hasErrors()) {
+    const count = diagnostics.errors.length;
+    throw new Error(`${count} error${count === 1 ? '' : 's'} while loading; nothing was compiled.`);
+  }
+}
+
 // ── Main compile function ─────────────────────────────────────────────────────
 
 function compile(configPath, options = {}) {
   const verbose = !!options.verbose;
-  const config = loadCompileConfig(configPath);
+
+  // One bus for everything the loading phase reports, so item schema violations are
+  // collected with their source positions and reported together rather than as a stream
+  // of console warnings interleaved with progress output. The compile phases still warn
+  // directly; they move onto the bus as their modules are decomposed.
+  const loadDiagnostics = new Diagnostics();
+
+  const config = loadCompileConfig(configPath, { diagnostics: loadDiagnostics });
 
   fs.mkdirSync(config._resolvedOutput, { recursive: true });
 
@@ -713,26 +641,28 @@ function compile(configPath, options = {}) {
   console.log(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
   // Build canon registry
-  const canonRegistry = buildCanonRegistry(config._resolvedCanon);
+  const canonRegistry = buildCanonRegistry(config._resolvedCanon, { diagnostics: loadDiagnostics });
   if (canonRegistry.size > 0) {
     console.log(`Loaded ${canonRegistry.size} canonical card(s).`);
   }
 
   // Load project cards
-  const rawProjectCards = loadCardsFromDir(config._resolvedCards);
+  const rawProjectCards = loadCardsFromDir(config._resolvedCards, { diagnostics: loadDiagnostics });
 
   // Resolve includes
-  const includedCards = resolveIncludes(rawProjectCards, canonRegistry, config);
+  const includedCards = resolveIncludes(rawProjectCards, canonRegistry, config, { diagnostics: loadDiagnostics });
   if (includedCards.length > 0) {
     console.log(`Loaded ${includedCards.length} included canonical card(s).`);
   }
+
+  reportLoadDiagnostics(loadDiagnostics);
 
   const allCardDefs = [...rawProjectCards, ...includedCards];
 
   const projectRegistry = buildRegistry(rawProjectCards, 'project');
   console.log(`Loaded ${projectRegistry.size} project card definition(s).`);
 
-  const overlays = buildOverlays(rawProjectCards);
+  const overlays = buildOverlays(rawProjectCards, { diagnostics: loadDiagnostics });
   if (overlays.size > 0) {
     console.log(`Loaded ${overlays.size} Codex overlay(s).`);
   }

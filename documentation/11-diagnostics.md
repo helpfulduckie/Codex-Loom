@@ -66,6 +66,12 @@ somewhere other than a plain parse.
 
 | `CL0110` | ERROR | `compile.yaml` is not a mapping of configuration keys. |
 | `CL0120` | WARN | A declared input path does not exist on disk. |
+| `CL0130` | WARN | An `include:` path does not exist. |
+| `CL0131` | ERROR | The same file was included more than once. |
+| `CL0140` | ERROR | An item has neither `id:` nor `name:`. |
+| `CL0141` | ERROR | Duplicate item id. |
+| `CL0142` | WARN | An item declares more than one `v:` alias; they are merged. |
+| `CL0143` | WARN | Duplicate Codex overlay for one import target; the first is kept. |
 
 ### CL02xx — schema
 
