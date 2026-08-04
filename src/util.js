@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
+const { loadYaml } = require('./loader/yaml');
 
 function findFiles(dir, ext) {
   const results = [];
@@ -27,14 +27,9 @@ function findFiles(dir, ext) {
   return results;
 }
 
-function loadYaml(filePath) {
-  try {
-    const raw = fs.readFileSync(filePath, 'utf8');
-    return yaml.load(raw);
-  } catch (err) {
-    throw new Error(`Failed to load YAML at ${filePath}: ${err.message}`);
-  }
-}
+// `loadYaml` now lives in loader/yaml.js, which parses with position tracking so
+// diagnostics can name a line and column (§4.4). It is re-exported here unchanged so
+// the existing call sites — and loader.js's own re-export — keep working.
 
 function deepClone(obj) {
   if (obj === null || typeof obj !== 'object') return obj;
