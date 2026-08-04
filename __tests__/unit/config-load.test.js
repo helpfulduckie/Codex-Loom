@@ -1,0 +1,242 @@
+'use strict';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { Diagnostics } = require('../../src/diag');
+const { loadCompileConfig, CODES } = require('../../src/config/load');
+
+let tmpDir;
+
+beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cfg-')); });
+afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+
+/** Write a config and load it into a private bus, so nothing prints or throws. */
+function load(yaml, { dirs = [] } = {}) {
+  for (const dir of dirs) fs.mkdirSync(path.join(tmpDir, dir), { recursive: true });
+  const cfgPath = path.join(tmpDir, 'compile.cl.yaml');
+  fs.writeFileSync(cfgPath, yaml, 'utf8');
+  const diagnostics = new Diagnostics();
+  const config = loadCompileConfig(cfgPath, { diagnostics });
+  return { config, diagnostics, codes: diagnostics.all.map((d) => d.code), cfgPath };
+}
+
+describe('diagnostics carry source positions (§4.4)', () => {
+  test('an unknown key names its line and column', () => {
+    const { diagnostics } = load('title: x\nbogus: y\n');
+    const diag = diagnostics.errors[0];
+    expect(diag.line).toBe(2);
+    expect(diag.col).toBe(1);
+    expect(diag.file).toContain('compile.cl.yaml');
+  });
+
+  test('a nested unknown key points at the key itself, not its parent', () => {
+    const { diagnostics } = load('structure:\n  input:\n    nope: []\n');
+    expect(diagnostics.errors[0].line).toBe(3);
+  });
+
+  test('a path warning points at the offending sequence entry', () => {
+    const { diagnostics } = load('structure:\n  input:\n    items:\n      - ./missing\n  output: ./o\n');
+    const warn = diagnostics.warnings.find((d) => d.code === CODES.PATH_NOT_FOUND);
+    expect(warn.line).toBe(4);
+  });
+});
+
+describe('variable graph checking', () => {
+  test('an undeclared reference is an ERROR naming the referring variable', () => {
+    const { diagnostics, codes } = load('variables:\n  a: "{%nope} x"\n');
+    expect(codes).toContain(CODES.VARIABLE_UNDECLARED);
+    expect(diagnostics.errors[0].message).toContain('referenced by variable "a"');
+  });
+
+  test('a cycle names every key in the loop (§6.2)', () => {
+    const { diagnostics, codes } = load('variables:\n  a: "{%b}"\n  b: "{%c}"\n  c: "{%a}"\n');
+    expect(codes).toContain(CODES.VARIABLE_CYCLE);
+    const message = diagnostics.errors[0].message;
+    for (const key of ['a', 'b', 'c']) expect(message).toContain(`"${key}"`);
+  });
+
+  test('a self-referential variable is reported once', () => {
+    const { diagnostics } = load('variables:\n  a: "{%a}"\n');
+    expect(diagnostics.errors.filter((d) => d.code === CODES.VARIABLE_CYCLE)).toHaveLength(1);
+  });
+
+  test('a cycle is reported once, not once per participant', () => {
+    const { diagnostics } = load('variables:\n  a: "{%b}"\n  b: "{%a}"\n');
+    expect(diagnostics.errors.filter((d) => d.code === CODES.VARIABLE_CYCLE)).toHaveLength(1);
+  });
+
+  test('chained references are fine in any declaration order', () => {
+    const { diagnostics } = load('variables:\n  house: "{%setting} North"\n  setting: Academy\n');
+    expect(diagnostics.hasErrors()).toBe(false);
+  });
+
+  test('references are matched case-insensitively', () => {
+    const { diagnostics } = load('variables:\n  Setting: Academy\n  house: "{%setting}"\n');
+    expect(diagnostics.hasErrors()).toBe(false);
+  });
+
+  test('a root variable may reference a name only branches declare', () => {
+    // The Institute does exactly this: openingFile is built at root from `scenario`,
+    // which every branch overrides. Reporting it as undeclared would be a false positive.
+    const { diagnostics } = load([
+      'variables:',
+      '  openingFile: "./openings/{%scenario}.md"',
+      'branches:',
+      '  free:',
+      '    variables:',
+      '      scenario: free',
+      '',
+    ].join('\n'));
+    expect(diagnostics.hasErrors()).toBe(false);
+  });
+
+  test('branch variables are collected from nested branches too', () => {
+    const { diagnostics } = load([
+      'variables:',
+      '  f: "{%deep}"',
+      'branches:',
+      '  a:',
+      '    branches:',
+      '      b:',
+      '        variables:',
+      '          deep: x',
+      '',
+    ].join('\n'));
+    expect(diagnostics.hasErrors()).toBe(false);
+  });
+
+  test('variables are not substituted at load — branch overrides must still apply', () => {
+    const { config } = load('variables:\n  a: A\n  b: "{%a}/x"\n');
+    expect(config.variables.b).toBe('{%a}/x');
+  });
+});
+
+describe('pre-branch scoping (§5.1, CL0520)', () => {
+  const CONFIG = [
+    'structure:',
+    '  input:',
+    '    items: ["./{%role}"]',   // structure resolves before branches are enumerated
+    'branches:',
+    '  subject:',
+    '    variables:',
+    '      role: research-subject',
+    '',
+  ].join('\n');
+
+  test('a branch-scoped variable in a structure path gets its own code', () => {
+    const { codes } = load(CONFIG);
+    expect(codes).toContain(CODES.VARIABLE_PRE_BRANCH);
+    expect(codes).not.toContain(CODES.VARIABLE_UNDECLARED);
+  });
+
+  test('the message says the declaration exists but is out of scope', () => {
+    const { diagnostics } = load(CONFIG);
+    const diag = diagnostics.errors.find((d) => d.code === CODES.VARIABLE_PRE_BRANCH);
+    expect(diag.message).toContain('declared only under a branch');
+    expect(diag.hint).toContain('Only root-level variables');
+  });
+
+  test('a name declared nowhere is still an ordinary undeclared ERROR', () => {
+    const { codes } = load('structure:\n  input:\n    items: ["./{%typo}"]\n');
+    expect(codes).toContain(CODES.VARIABLE_UNDECLARED);
+    expect(codes).not.toContain(CODES.VARIABLE_PRE_BRANCH);
+  });
+
+  test('a name declared at root as well as on a branch resolves normally', () => {
+    const { diagnostics } = load([
+      'variables:',
+      '  role: default',
+      'structure:',
+      '  input:',
+      '    items: ["./{%role}"]',
+      'branches:',
+      '  subject:',
+      '    variables:',
+      '      role: research-subject',
+      '',
+    ].join('\n'));
+    expect(diagnostics.hasErrors()).toBe(false);
+  });
+});
+
+describe('resolution behavior carried forward', () => {
+  test('_base is the directory holding the config', () => {
+    expect(load('title: x\n').config._base).toBe(tmpDir);
+  });
+
+  test('output resolves relative to the config directory', () => {
+    expect(load('structure:\n  output: ./out\n').config._resolvedOutput).toBe(path.join(tmpDir, 'out'));
+  });
+
+  test('output still defaults to ./output until Step 8 makes it required', () => {
+    expect(load('title: x\n').config._resolvedOutput).toBe(path.join(tmpDir, 'output'));
+  });
+
+  test('items and cards are equivalent while both are accepted', () => {
+    const viaItems = load('structure:\n  input:\n    items: [./Codex]\n', { dirs: ['Codex'] });
+    const viaCards = load('structure:\n  input:\n    cards: [./Codex]\n', { dirs: ['Codex'] });
+    expect(viaItems.config._resolvedCards).toEqual(viaCards.config._resolvedCards);
+  });
+
+  test('{%variables} expand inside structure paths', () => {
+    const { config } = load(
+      'variables:\n  root: ./Codex\nstructure:\n  input:\n    items: ["{%root}"]\n',
+      { dirs: ['Codex'] }
+    );
+    expect(config._resolvedCards).toEqual([path.join(tmpDir, 'Codex')]);
+  });
+
+  test('canon entries resolve to absolute paths', () => {
+    const { config } = load('structure:\n  input:\n    canon:\n      main: ./canon\n', { dirs: ['canon'] });
+    expect(config._resolvedCanon.get('main')).toBe(path.join(tmpDir, 'canon'));
+  });
+});
+
+describe('malformed configuration', () => {
+  test('a non-mapping document is an ERROR rather than a crash', () => {
+    const { config, codes } = load('- just\n- a list\n');
+    expect(codes).toContain(CODES.CONFIG_NOT_A_MAPPING);
+    expect(config).toBeNull();
+  });
+
+  test('an empty file is an ERROR rather than a crash', () => {
+    const { codes } = load('');
+    expect(codes).toContain(CODES.CONFIG_NOT_A_MAPPING);
+  });
+});
+
+describe('bus ownership', () => {
+  test('with a supplied bus, errors are collected rather than thrown', () => {
+    expect(() => load('bogus: 1\n')).not.toThrow();
+  });
+
+  test('without a supplied bus, errors are printed and thrown', () => {
+    const cfgPath = path.join(tmpDir, 'compile.cl.yaml');
+    fs.writeFileSync(cfgPath, 'bogus: 1\n', 'utf8');
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => loadCompileConfig(cfgPath)).toThrow('Configuration has 1 error');
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  test('warnings alone do not throw', () => {
+    const cfgPath = path.join(tmpDir, 'compile.cl.yaml');
+    fs.writeFileSync(cfgPath, 'structure:\n  input:\n    items: [./nope]\n', 'utf8');
+    const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(() => loadCompileConfig(cfgPath)).not.toThrow();
+    spy.mockRestore();
+  });
+});
+
+describe('later-phase keys are recognized, not rejected', () => {
+  test.each([
+    ['roles', 'roles:\n  protagonist: Aness\n'],
+    ['placeholders', 'placeholders:\n  heroName: Who?\n'],
+    ['lint', 'lint:\n  level: warn\n'],
+  ])('%s WARNs as unimplemented rather than erroring', (_name, yaml) => {
+    const { diagnostics } = load(yaml);
+    expect(diagnostics.hasErrors()).toBe(false);
+    expect(diagnostics.warnings.some((d) => d.message.includes('not yet implemented'))).toBe(true);
+  });
+});

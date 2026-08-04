@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { findFiles, loadYaml, VAR_ALIASES, deepClone } = require('./util');
-const { expandTokens } = require('./tokens');
+const { loadCompileConfig } = require('./config/load');
 
 /**
  * Normalize variable-block aliases (v/var/vars/variable/variables) to canonical 'v'.
@@ -102,154 +102,9 @@ function loadTemplates(dirs) {
   };
 }
 
-/**
- * Resolve a mapping field (canon, component dirs) to a Map<name, absolutePath>.
- * Accepts: an object whose values are path strings.
- * When lenient=true, stores the raw string for values that don't resolve to an existing file/dir
- * (used for openingChoice, where values may be literal question strings rather than paths).
- */
-function resolveMapping(raw, base, lenient = false, variables = null, canon = null) {
-  const result = new Map();
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return result;
-  for (const [name, p] of Object.entries(raw)) {
-    const expanded = expandPathTokens(String(p), variables, canon);
-    const resolved = path.resolve(base, expanded);
-    result.set(name, (lenient && !fs.existsSync(resolved)) ? String(p) : resolved);
-  }
-  return result;
-}
-
-/**
- * Expand {%variable} and {@canonName} tokens in a path string.
- * variables: plain object (config.variables).
- * canonMap:  Map<name, absolutePath> (may be partially built for two-pass canon resolution).
- * Case-insensitive. Unresolved tokens are left as-is.
- *
- * Thin wrapper over the shared tokens.expandTokens (path mode). {@} resolves
- * against the canon map only here — components are not yet resolved during the
- * canon/template two-pass. warnMissing is suppressed so unresolved {@} tokens
- * pass through to trigger the standard missing-path warning instead.
- */
-function expandPathTokens(str, variables, canonMap) {
-  return expandTokens(String(str), { variables, canon: canonMap, mode: 'path', warnMissing: false });
-}
-
-/**
- * Load compile.yaml and resolve all paths relative to it.
- *
- * Expected structure:
- *   structure:
- *     input:
- *       cards:      # sequence of folder paths
- *       canon:      # mapping: name → folder path
- *       templates:  # sequence of folder paths
- *       components:
- *         aiInstructions: # mapping: name → folder path
- *         opening:
- *         openingChoice:
- *         plotEssential:
- *         authorsNote:
- *         scripts:
- *     output:       # single folder path
- *     overview:     # optional; where to write overview/leaf-review files (default: {output}/Overview)
- *   protagonist:
- *   title:          # optional; scenario title, written once to {output}/Label.md
- *   components:     # root component specs (file path | literal | {@Key})
- *   variables:      # mapping
- *   branches:       # branch tree
- *
- * Returns a CompileConfig object.
- */
-function loadCompileConfig(configPath) {
-  const config = loadYaml(configPath);
-  const base = path.dirname(path.resolve(configPath));
-
-  const structure = config.structure || {};
-  const input = structure.input || {};
-  const components = input.components || {};
-
-  const resolvedOutput = structure.output
-    ? path.resolve(base, String(structure.output))
-    : path.resolve(base, 'output');
-
-  const resolvedOverview = structure.overview
-    ? path.resolve(base, String(structure.overview))
-    : null;
-
-  // Canon: two-pass resolution so entries can reference {%variables} and sibling {@canonName} entries.
-  // Pass 1: expand {%variables}, then resolve entries with no remaining {@ tokens.
-  // Pass 2: expand {%variables} + {@canonName} in the remainder using pass-1 results.
-  const canonRaw = (input.canon && typeof input.canon === 'object' && !Array.isArray(input.canon))
-    ? input.canon : {};
-  const variables = config.variables || null;
-  const resolvedCanon = new Map();
-
-  for (const [name, p] of Object.entries(canonRaw)) {
-    const afterVars = expandPathTokens(String(p), variables, resolvedCanon);
-    if (!afterVars.includes('{@')) {
-      resolvedCanon.set(name, path.resolve(base, afterVars));
-    }
-  }
-  for (const [name, p] of Object.entries(canonRaw)) {
-    if (!resolvedCanon.has(name)) {
-      const expanded = expandPathTokens(String(p), variables, resolvedCanon);
-      resolvedCanon.set(name, path.resolve(base, expanded));
-    }
-  }
-
-  config._canonRaw = canonRaw;
-
-  // Templates: expand {%variables} and {@canonName} before resolving paths.
-  const templatesRaw = input.templates
-    ? (Array.isArray(input.templates) ? input.templates : [input.templates])
-    : [];
-  const resolvedTemplates = templatesRaw.map(p => {
-    const expanded = expandPathTokens(String(p), variables, resolvedCanon);
-    return path.resolve(base, expanded);
-  });
-
-  // Cards: same token expansion as templates ({%variables} + {@canonName}) before resolving paths.
-  const cardsRaw = input.cards
-    ? (Array.isArray(input.cards) ? input.cards : [input.cards])
-    : [];
-  const resolvedCards = cardsRaw.map(p => {
-    const expanded = expandPathTokens(String(p), variables, resolvedCanon);
-    return path.resolve(base, expanded);
-  });
-
-  const componentTypes = ['aiInstructions', 'opening', 'openingChoice', 'plotEssential', 'authorsNote', 'scripts', 'description'];
-  const resolvedComponents = {};
-  for (const type of componentTypes) {
-    resolvedComponents[type] = resolveMapping(components[type], base, type === 'openingChoice', variables, resolvedCanon);
-  }
-
-  // Warn on missing declared paths
-  for (const p of resolvedCards) {
-    if (!fs.existsSync(p)) console.warn(`  WARN: cards path not found: ${p}`);
-  }
-  for (const [name, p] of resolvedCanon) {
-    if (!fs.existsSync(p)) console.warn(`  WARN: canon "${name}" path not found: ${p}`);
-  }
-  for (const p of resolvedTemplates) {
-    if (!fs.existsSync(p)) console.warn(`  WARN: templates path not found: ${p}`);
-  }
-
-  return {
-    _base: base,
-    _resolvedOutput: resolvedOutput,
-    _resolvedOverview: resolvedOverview,
-    _resolvedCards: resolvedCards,
-    _resolvedCanon: resolvedCanon,
-    _resolvedTemplates: resolvedTemplates,
-    _resolvedComponents: resolvedComponents,
-    protagonist: config.protagonist || null,
-    title:       config.title       || null,
-    components:  config.components  || null,
-    variables:   config.variables   || null,
-    branches:    config.branches    || null,
-    _structure:  structure,
-  };
-}
+// Config loading moved to config/load.js (§3.2). `loadCompileConfig` is re-exported
+// below so compile.js and the existing tests keep their import path while the rest of
+// this module is decomposed in Step 4.
 
 /**
  * Build a card registry from an array of cards.

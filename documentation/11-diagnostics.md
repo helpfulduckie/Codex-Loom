@@ -64,7 +64,61 @@ Only `$` reaches this check. `%` and `@` are reserved indicators in YAML, so an 
 check covers all three sigils anyway, because a mapping of that shape can arrive from
 somewhere other than a plain parse.
 
-Codes for the remaining bands are registered as the phases that mint them land. Codes
-named by the spec and not yet implemented — `CL0210` (unknown item key with a relocation
-suggestion), `CL0310` (unresolvable branch dispatch), `CL0520` (branch-scoped variable used
-where only root variables resolve) — are reserved and must keep those numbers.
+| `CL0110` | ERROR | `compile.yaml` is not a mapping of configuration keys. |
+| `CL0120` | WARN | A declared input path does not exist on disk. |
+
+### CL02xx — schema
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `CL0201` | ERROR | Unknown key. Carries a spelling suggestion when one is close. |
+| `CL0202` | ERROR | Key has the wrong value type. |
+| `CL0203` | ERROR | A required key is missing. |
+| `CL0204` | WARN | Key is recognized but its phase has not landed; it is ignored. |
+| `CL0205` | WARN | Key has been superseded by another spelling. |
+| `CL0210` | ERROR | Key is valid, but at a different level — with the level named. |
+
+### CL0210 in detail
+
+The more valuable half of unknown-key checking, because of an asymmetry in how the two
+kinds of mistake fail. A misspelling usually produces output that is obviously missing
+something. A *correctly spelled key in the wrong position* produces output that looks
+complete and is quietly wrong — and it can sit in shared canon, inherited by every project
+that imports it, until something else happens to point near it.
+
+So the validator checks for relocation before reaching for edit distance, and only falls
+back to spelling when no relocation match exists, which also stops the two kinds of
+suggestion competing to explain the same key.
+
+The relocation search considers **only closed, schema-validated levels**. Open namespaces
+— `body:`, `notes:`, `v:` — accept arbitrary keys by design, so indexing them would make
+every key valid somewhere and turn every typo into a technically-true, useless *"did you
+mean to nest it under `notes:`?"*.
+
+Spelling suggestions use Damerau-Levenshtein, which counts a transposition as one edit.
+Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein scores
+`titel` against `title` as 2 and misses the single commonest typo there is.
+
+### CL05xx — tokens
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `CL0510` | ERROR | A referenced variable is not declared anywhere. |
+| `CL0511` | ERROR | Variables form a reference cycle; every key in the loop is named. |
+| `CL0520` | ERROR | A branch-scoped variable was used where only root variables resolve. |
+
+### CL0520 in detail
+
+Some values resolve **once, before branch enumeration**, so they can only ever see
+root-level variables: `include:`/`import:` paths and everything under `structure:`. A
+branch-scoped variable used there is not a typo — it is a scoping mistake, and reporting
+it as undeclared would send the author hunting for a declaration that does exist.
+
+Distinguishing the two requires knowing which names branches declare, so the loader
+collects that set before resolving any path. A name declared at root *and* overridden per
+branch is not affected: it resolves at root and is overridden later, which is the normal
+pattern.
+
+Codes for the remaining bands are registered as the phases that mint them land. `CL0310`
+(unresolvable branch dispatch) is named by the spec, not yet implemented, and reserved at
+that number.
