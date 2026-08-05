@@ -276,6 +276,33 @@ function walkBranchChain(branches, branchPath, options = {}) {
   return result;
 }
 
+/**
+ * Visit every node in a branch tree, depth-first, carrying state down.
+ *
+ * The counterpart to `walkBranchChain`, and a genuinely different operation: that one
+ * looks up a known path and accumulates along it, this one enumerates. Enumeration needs
+ * no case-insensitive matching because it visits every key and the key *is* the answer.
+ *
+ * `visit({ name, node, path, isLeaf, state })` may return a new state for that node's
+ * children; returning `undefined` passes the current state through unchanged. That is
+ * what lets a caller merge variables down the tree without writing the recursion again.
+ *
+ * Two callers need this rather than `walkBranchChain`, and both write at nodes the leaf
+ * loop never reaches: `branchFraming` belongs to the node whose children it frames, and
+ * `Label.md` is written at every node.
+ */
+function walkBranchTree(branches, visit, state = null, path = []) {
+  if (!branches || typeof branches !== 'object') return;
+  for (const [name, node] of Object.entries(branches)) {
+    const childPath = [...path, name];
+    const sub = node && node.branches;
+    const isLeaf = !sub || Object.keys(sub).length === 0;
+    const next = visit({ name, node, path: childPath, isLeaf, state });
+    if (!isLeaf) walkBranchTree(sub, visit, next === undefined ? state : next, childPath);
+  }
+}
+
 module.exports = {
-  mergeBranchSpecs, resolveBranchSpec, enumerateLeaves, getBranchConfig, walkBranchChain,
+  mergeBranchSpecs, resolveBranchSpec, enumerateLeaves, getBranchConfig,
+  walkBranchChain, walkBranchTree,
 };

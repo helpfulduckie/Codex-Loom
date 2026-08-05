@@ -8,7 +8,7 @@ const {
   buildRegistry, mergeRegistries, buildOverlays, loadYaml,
 } = require('./loader');
 const {
-  resolveCard, enumerateLeaves, walkBranchChain,
+  resolveCard, enumerateLeaves, walkBranchChain, walkBranchTree,
 } = require('./resolver');
 const { applyPronounPasses, applyCrossCardRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
@@ -21,6 +21,7 @@ const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
 const { loadANConfig, compileAN, writeAN } = require('./an');
 const { loadDescConfig, extractScriptBanner, writeDescription } = require('./description');
 const { loadOpeningConfig, compileOpening } = require('./opening');
+const { DOCUMENT_COMPONENTS, emitDocumentComponent } = require('./emit/components');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -448,134 +449,101 @@ function resolveYamlOpeningPath(spec, base, variables) {
 }
 
 /**
- * Recursively write opening / openingChoice files through the branch tree.
+ * Write Opening.md across the branch tree.
  *
- * Rules:
- *   opening:       inherits down; written ONLY to leaf nodes' Components/Opening.md
- *                  If the resolved spec is a .yaml file, compiled as block-opening sequence.
- *   openingChoice: does NOT inherit; written to branch NODE's Components/Opening.md
- *                  if present on leaf, warn and skip
+ * Two components share one output file, and the difference is where they land in AID,
+ * not how they are written (§7.3). `opening` inherits down and is written at a leaf,
+ * where AID reads it as the first move. `openingChoice` — `branchFraming` in v4 — is
+ * written at a non-leaf, where AID reads it as the framing shown while the player
+ * chooses among the children below it. The inheritance asymmetry follows from that:
+ * an opening is shared across branches because straight VL cannot share one, while
+ * framing belongs to the node whose children it frames.
  *
- * @param {object} branches - branch tree
- * @param {string} outputBase - base output directory
- * @param {string} configBase - base path for resolving relative file paths
- * @param {string|null} inheritedOpening - effective opening spec carried from ancestor
- * @param {object} variables - merged branch variables
- * @param {object} componentDirs - resolved component directory map
- * @param {Map} canon - resolved canon name → path map (for {@Key} references)
- * @param {string[]} currentPath - branch path segments accumulated while descending
+ * Node-level writes are why this uses the tree visitor rather than the leaf loop.
  */
 function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables, componentDirs, canon, currentPath = [], verbose = false) {
   const writtenLeaves = new Set();
 
+  const emitOpening = (spec, outputDir, leafPath, vars) => {
+    // {@Key} expands in path mode here — the result is a path, not file contents.
+    const expanded = expandOpeningKeyRef(spec, componentDirs, canon);
+    const yamlPath = resolveYamlOpeningPath(expanded, configBase, vars);
+    const content = yamlPath
+      ? compileOpening(loadOpeningConfig(yamlPath), leafPath, vars, configBase)
+      : resolveOpeningContent(expanded, configBase, vars);
+    if (!content) return;
+    const outPath = writeComponentFile(outputDir, 'Opening.md', content);
+    if (verbose) console.log(`    OK: Opening → ${outPath}`);
+    writtenLeaves.add(leafPath.join('/') || '(root)');
+  };
+
+  // An unbranched project: the root is itself the only leaf.
   if (!branches || typeof branches !== 'object') {
-    // We're at the root level with no branches — the root itself is the only leaf
-    if (inheritedOpening != null) {
-      const expandedOpening = expandOpeningKeyRef(inheritedOpening, componentDirs, canon);
-      const yamlPath = resolveYamlOpeningPath(expandedOpening, configBase, variables);
-      let content;
-      if (yamlPath) {
-        const blocks = loadOpeningConfig(yamlPath);
-        content = compileOpening(blocks, currentPath, variables, configBase);
-      } else {
-        content = resolveOpeningContent(expandedOpening, configBase, variables);
-      }
-      if (content) {
-        const outPath = writeComponentFile(outputBase, 'Opening.md', content);
-        if (verbose) console.log(`    OK: Opening → ${outPath}`);
-        writtenLeaves.add(currentPath.join('/') || '(root)');
-      }
-    }
+    if (inheritedOpening != null) emitOpening(inheritedOpening, outputBase, currentPath, variables);
     return writtenLeaves;
   }
 
-  for (const [name, branchConfig] of Object.entries(branches)) {
-    const nodeOutput = path.join(outputBase, 'Branches', name);
-    const subBranches = branchConfig && branchConfig.branches;
-    const isLeafNode = !subBranches || Object.keys(subBranches).length === 0;
+  walkBranchTree(branches, ({ name, node, path: nodePath, isLeaf, state }) => {
+    const nodeOutput = path.join(state.outputBase, 'Branches', name);
+    const branchVars = (node && node.variables)
+      ? Object.assign({}, state.variables, node.variables)
+      : state.variables;
 
-    // Merge this branch node's variables on top of inherited variables
-    const branchVars = (branchConfig && branchConfig.variables)
-      ? Object.assign({}, variables, branchConfig.variables)
-      : variables;
+    // v3 accepted these both under components: and directly on the branch node.
+    const declaredOpening = node && node.components && node.components.opening !== undefined
+      ? node.components.opening
+      : (node && node.opening !== undefined ? node.opening : undefined);
+    const effectiveOpening = declaredOpening !== undefined ? declaredOpening : state.inheritedOpening;
 
-    // Determine effective opening for this node
-    const nodeOpening = branchConfig && branchConfig.components && branchConfig.components.opening !== undefined
-      ? branchConfig.components.opening
-      : (branchConfig && branchConfig.opening !== undefined ? branchConfig.opening : undefined);
-    const effectiveOpening = nodeOpening !== undefined ? nodeOpening : inheritedOpening;
+    const framing = node && node.components && node.components.openingChoice !== undefined
+      ? node.components.openingChoice
+      : (node && node.openingChoice !== undefined ? node.openingChoice : null);
 
-    // openingChoice on this node
-    const openingChoice = branchConfig && branchConfig.components && branchConfig.components.openingChoice !== undefined
-      ? branchConfig.components.openingChoice
-      : (branchConfig && branchConfig.openingChoice !== undefined ? branchConfig.openingChoice : null);
-
-    if (openingChoice != null) {
-      if (isLeafNode) {
+    if (framing != null) {
+      if (isLeaf) {
         console.warn(`  WARN: openingChoice on leaf branch "${name}" — ignoring`);
       } else {
-        const expandedChoice = (componentDirs && typeof openingChoice === 'string')
-          ? resolveComponentKey(openingChoice, componentDirs, canon)
-          : openingChoice;
-        const content = resolveOpeningContent(expandedChoice, configBase, branchVars);
-        const outPath = writeComponentFile(nodeOutput, 'Opening.md', content);
+        const expanded = (componentDirs && typeof framing === 'string')
+          ? resolveComponentKey(framing, componentDirs, canon)
+          : framing;
+        const outPath = writeComponentFile(
+          nodeOutput, 'Opening.md', resolveOpeningContent(expanded, configBase, branchVars)
+        );
         if (verbose) console.log(`    OK: OpeningChoice → ${outPath}`);
       }
     }
 
-    if (isLeafNode) {
-      // Write the inherited/overridden opening to this leaf
-      if (effectiveOpening != null) {
-        const leafPath = [...currentPath, name];
-        // Expand {@Key} component references in path mode (returns path, not file contents)
-        const expandedOpening = expandOpeningKeyRef(effectiveOpening, componentDirs, canon);
-        const yamlPath = resolveYamlOpeningPath(expandedOpening, configBase, branchVars);
-        let content;
-        if (yamlPath) {
-          const blocks = loadOpeningConfig(yamlPath);
-          content = compileOpening(blocks, leafPath, branchVars, configBase);
-        } else {
-          content = resolveOpeningContent(expandedOpening, configBase, branchVars);
-        }
-        if (content) {
-          const outPath = writeComponentFile(nodeOutput, 'Opening.md', content);
-          if (verbose) console.log(`    OK: Opening → ${outPath}`);
-          writtenLeaves.add(leafPath.join('/'));
-        }
-      }
-    } else {
-      // Recurse into sub-branches, tracking the current path
-      const sub = writeOpeningsRecursive(subBranches, nodeOutput, configBase, effectiveOpening, branchVars, componentDirs, canon, [...currentPath, name], verbose);
-      for (const k of sub) writtenLeaves.add(k);
+    if (isLeaf && effectiveOpening != null) {
+      emitOpening(effectiveOpening, nodeOutput, [...currentPath, ...nodePath], branchVars);
     }
-  }
+
+    return { outputBase: nodeOutput, inheritedOpening: effectiveOpening, variables: branchVars };
+  }, { outputBase, inheritedOpening, variables });
 
   return writtenLeaves;
 }
 
 /**
- * Write Components/Label.md to every branch node in the output tree.
- * The label is the branch's `title` field (with {%var} expansion), falling back to the key.
- * This lets Velvet Lattice display the human-readable title even though the folder
- * name is now the internal key.
+ * Write Label.md at every node in the branch tree.
+ *
+ * Node-level, not leaf-level, which is why it uses the tree visitor rather than the
+ * leaf loop: a branch label belongs to the node the player is choosing.
  */
 function writeLabelsRecursive(branches, outputBase, variables, verbose = false) {
-  if (!branches || typeof branches !== 'object') return;
-  for (const [name, branchConfig] of Object.entries(branches)) {
-    const nodeOutput = path.join(outputBase, 'Branches', name);
-    const branchVars = (branchConfig && branchConfig.variables)
-      ? Object.assign({}, variables, branchConfig.variables)
-      : variables;
-    const rawTitle = (branchConfig && branchConfig.title) || name;
-    const label = resolveVariables(rawTitle, branchVars);
+  walkBranchTree(branches, ({ name, node, state }) => {
+    const nodeOutput = path.join(state.outputBase, 'Branches', name);
+    const branchVars = (node && node.variables)
+      ? Object.assign({}, state.variables, node.variables)
+      : state.variables;
+
+    const rawTitle = (node && node.title) || name;
     fs.mkdirSync(nodeOutput, { recursive: true });
     const outPath = path.join(nodeOutput, 'Label.md');
-    fs.writeFileSync(outPath, label + '\n', 'utf8');
+    fs.writeFileSync(outPath, resolveVariables(rawTitle, branchVars) + '\n', 'utf8');
     if (verbose) console.log(`    OK: Label → ${outPath}`);
-    if (branchConfig && branchConfig.branches) {
-      writeLabelsRecursive(branchConfig.branches, nodeOutput, branchVars, verbose);
-    }
-  }
+
+    return { outputBase: nodeOutput, variables: branchVars };
+  }, { outputBase, variables });
 }
 
 /**
@@ -752,53 +720,25 @@ function compile(configPath, options = {}) {
       }
     }
 
-    // AI Instructions
-    let hasAIN = false;
-    const ainSpec = compileContext.componentRefs.aiInstructions;
-    if (ainSpec) {
-      if (typeof ainSpec !== 'string' || !fs.existsSync(ainSpec)) {
-        recordGap(label, 'AI Instructions', ainSpec, 'source not found');
-      } else {
-        const ainExt = path.extname(ainSpec).toLowerCase();
-        if (ainExt === '.md' || ainExt === '.txt') {
-          const content = fs.readFileSync(ainSpec, 'utf8').trimEnd() || null;
-          if (captureReports) ainBlockText = content;
-          const ainPath = writeAIN(outputDir, content);
-          if (ainPath) { hasAIN = true; if (verbose) console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
-        } else {
-          const ainDoc = loadAINConfig(ainSpec);
-          const { ain } = compileAIN(ainDoc, registry, compileContext);
-          if (captureReports) ainBlockText = ain;
-          const ainPath = writeAIN(outputDir, ain);
-          if (ainPath) { hasAIN = true; if (verbose) console.log(`    OK: AIInstructions → ${ainPath}`); totalFiles++; }
-        }
-        if (!hasAIN) recordGap(label, 'AI Instructions', ainSpec, 'compiled to empty content');
-      }
+    // Document components (AI Instructions, Author's Note) — one table, iterated once.
+    // Both were near-identical twenty-line blocks differing only in loader, compiler,
+    // writer and label; those differences are now table columns (§3.3, §7.3).
+    const componentText = {};
+    const componentWritten = {};
+    for (const descriptor of DOCUMENT_COMPONENTS) {
+      const spec = compileContext.componentRefs[descriptor.key];
+      if (!spec) continue;
+      const { content, written, gap } = emitDocumentComponent(descriptor, spec, {
+        outputDir, registry, compileContext, verbose,
+      });
+      if (captureReports) componentText[descriptor.key] = content;
+      if (written) { componentWritten[descriptor.key] = true; totalFiles++; }
+      if (gap) recordGap(label, descriptor.label, spec, gap);
     }
-
-    // Author's Note
-    let hasAN = false;
-    const anSpec = compileContext.componentRefs.authorsNote;
-    if (anSpec) {
-      if (typeof anSpec !== 'string' || !fs.existsSync(anSpec)) {
-        recordGap(label, "Author's Note", anSpec, 'source not found');
-      } else {
-        const anExt = path.extname(anSpec).toLowerCase();
-        if (anExt === '.md' || anExt === '.txt') {
-          const content = fs.readFileSync(anSpec, 'utf8').trimEnd() || null;
-          if (captureReports) anBlockText = content;
-          const anPath = writeAN(outputDir, content);
-          if (anPath) { hasAN = true; if (verbose) console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
-        } else {
-          const anDoc = loadANConfig(anSpec);
-          const anContent = compileAN(anDoc, registry, compileContext);
-          if (captureReports) anBlockText = anContent;
-          const anPath = writeAN(outputDir, anContent);
-          if (anPath) { hasAN = true; if (verbose) console.log(`    OK: AuthorsNote → ${anPath}`); totalFiles++; }
-        }
-        if (!hasAN) recordGap(label, "Author's Note", anSpec, 'compiled to empty content');
-      }
-    }
+    const hasAIN = !!componentWritten.aiInstructions;
+    const hasAN = !!componentWritten.authorsNote;
+    ainBlockText = captureReports ? (componentText.aiInstructions ?? null) : null;
+    anBlockText = captureReports ? (componentText.authorsNote ?? null) : null;
 
     // Scripts
     const scriptsSpec = compileContext.componentRefs.scripts;

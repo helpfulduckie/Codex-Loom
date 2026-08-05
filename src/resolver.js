@@ -20,7 +20,8 @@ const { deepClone } = require('./util');
 const { applyFieldOp, applyFieldsDelta, applyDelta } = require('./model/fieldops');
 const { resolveCard, collectVariantDeltas, parseVariantsList } = require('./model/item');
 const {
-  mergeBranchSpecs, resolveBranchSpec, enumerateLeaves, getBranchConfig, walkBranchChain,
+  mergeBranchSpecs, resolveBranchSpec, enumerateLeaves, getBranchConfig,
+  walkBranchChain, walkBranchTree,
 } = require('./model/branches');
 
 module.exports = {
@@ -30,6 +31,7 @@ module.exports = {
   enumerateLeaves,
   getBranchConfig,
   walkBranchChain,
+  walkBranchTree,
   deepClone,
   applyFieldsDelta,
   applyFieldOp,
