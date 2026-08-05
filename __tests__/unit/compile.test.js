@@ -332,12 +332,12 @@ describe('writeOpeningsRecursive — branch variable merging', () => {
       kaiden: {
         title: 'Kaiden',
         variables: { pcName: 'Kaiden' },
-        opening: openingSpec,
+        components: { opening: openingSpec },
       },
       zephon: {
         title: 'Zephon',
         variables: { pcName: 'Zephon' },
-        opening: openingSpec,
+        components: { opening: openingSpec },
       },
     };
 
@@ -369,7 +369,7 @@ describe('writeOpeningsRecursive — branch variable merging', () => {
             branches: {
               pet: {
                 title: 'Pet',
-                opening: path.join(openingsDir, 'PM-{%employerName}-Pet.md'),
+                components: { opening: path.join(openingsDir, 'PM-{%employerName}-Pet.md') },
               },
             },
           },
@@ -499,18 +499,19 @@ describe('resolveIncludes — duplicate file detection', () => {
     expect(result.map(c => c.id)).toEqual(expect.arrayContaining(['ItemA', 'ItemB']));
   });
 
-  test('expands {%rootVar} and {@canon} in an include path', () => {
+  test('expands a root variable and a canon name in an include path', () => {
+    // Canon names are variables now (§6.1), so `{%main}` does what `{@main}` used to.
     const charDir = path.join(tmpDir, 'Characters');
     fs.mkdirSync(charDir);
     fs.writeFileSync(path.join(charDir, 'Aria.yaml'), '- id: Aria\n  name: Aria\n', 'utf8');
 
     const config = {
       _base: tmpDir,
-      _resolvedComponents: {},
       _resolvedCanon: new Map([['main', tmpDir]]),
+      _variables: { who: 'Aria', main: tmpDir },
       variables: { who: 'Aria' },
     };
-    const itemDefs = [{ include: '{@main}/Characters/{%who}.yaml', _source: path.join(tmpDir, 'p.yaml') }];
+    const itemDefs = [{ include: '{%main}/Characters/{%who}.yaml', _source: path.join(tmpDir, 'p.yaml') }];
     const result = resolveIncludes(itemDefs, new Map(), config);
     expect(result.map(c => c.id)).toContain('Aria');
   });
@@ -554,13 +555,14 @@ describe('buildCompileContext — % and @ in component specs', () => {
     expect(componentRefs.plotEssential).toBe(path.join(tmpDir, 'pe-mage.yaml'));
   });
 
-  test('{@canon} reference resolves in a component spec', () => {
+  test('a canon name resolves in a component spec', () => {
     const peDir = path.join(tmpDir, 'shared');
     fs.mkdirSync(peDir);
     fs.writeFileSync(path.join(peDir, 'pe.yaml'), 'x\n', 'utf8');
     const config = makeConfig({
       _resolvedCanon: new Map([['lore', peDir]]),
-      components: { plotEssential: '{@lore}/pe.yaml' },
+      _variables: { lore: peDir },
+      components: { plotEssential: '{%lore}/pe.yaml' },
     });
     const { componentRefs } = buildCompileContext(config, []);
     expect(componentRefs.plotEssential).toBe(path.join(peDir, 'pe.yaml'));

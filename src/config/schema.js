@@ -9,18 +9,11 @@
  * unknown-key ERROR or silent acceptance. Writing the schema once beats editing it in
  * every phase, and an author who writes ahead of the tool gets told so plainly.
  *
- * ── Keys marked TRANSITIONAL ────────────────────────────────────────────────
- *
- * Phase 1 Step 8 makes the config break: `cards` → `items`, `overview` → `reports`,
- * `structure.input.components` and `{@}` deleted, `protagonist` → `roles.protagonist`,
- * `openingChoice` → `branchFraming`, `components.scripts` → top-level `scripts`. Until
- * that step lands, the golden fixtures still carry v3 sources and have to load, so the
- * superseded spellings are declared and accepted *silently* — not as `alias`, which
- * would warn, because a compile that is byte-for-byte correct should not be noisy about
- * a migration that has not happened yet.
- *
- * Every one is tagged TRANSITIONAL. They come out together in Step 8, at which point the
- * v4 spelling beside each is the only one left.
+ * The v3 spellings this file carried through Phase 1 — `cards`, `overview`,
+ * `structure.input.components`, `protagonist`, `openingChoice`, `components.scripts` —
+ * are gone as of the config break (§14.1). There is no compatibility mode: `version: 4`
+ * is required, and its absence is what tells a v3 project to run `--migrate` rather than
+ * producing a cascade of unknown-key errors.
  */
 
 const { TYPES } = require('../schema');
@@ -52,9 +45,6 @@ const COMPONENTS = {
     branchFraming: STRING,
     summary: { type: TYPES.STRING, note: 'Phase 6' },
 
-    // TRANSITIONAL — v3 spellings, removed in Step 8.
-    openingChoice: STRING,
-    scripts: STRING,
   },
 };
 
@@ -84,6 +74,10 @@ const BRANCH_NODE = {
     scripts: SCRIPTS,
     lint: LINT,
     components: COMPONENTS,
+    // `protagonist:` becomes `roles.protagonist` in Phase 8, not here. §14.2 lists that
+    // transformation, but roles are Phase 8 work — migrating the key before the feature
+    // exists would leave every branch without a protagonist.
+    protagonist: STRING,
     branches: null, // patched below — a node cannot reference itself during construction
   },
 };
@@ -91,25 +85,16 @@ const BRANCH_NODE = {
 const BRANCHES = { type: TYPES.RECORD, of: BRANCH_NODE };
 BRANCH_NODE.keys.branches = BRANCHES;
 
-// TRANSITIONAL — v3 put `protagonist:` on a branch node; Step 8 folds it into roles.
-BRANCH_NODE.keys.protagonist = STRING;
-// TRANSITIONAL — v3 allowed component keys directly on a branch node.
-BRANCH_NODE.keys.opening = STRING;
-BRANCH_NODE.keys.openingChoice = STRING;
 
 const CONFIG_SCHEMA = {
   type: TYPES.MAP,
   keys: {
-    version: { type: TYPES.NUMBER },
+    version: { type: TYPES.NUMBER, required: true },
     title: STRING,
 
-    // TRANSITIONAL — `structure` becomes required in Step 8, alongside
-    // `structure.output`. Both tightenings are deferred to the migration step so that
-    // every required-key change lands in one reviewed commit rather than being spread
-    // across the refactor, where a failure would be ambiguous between "the refactor
-    // broke something" and "this config was always incomplete".
     structure: {
       type: TYPES.MAP,
+      required: true,
       keys: {
         input: {
           type: TYPES.MAP,
@@ -119,23 +104,10 @@ const CONFIG_SCHEMA = {
             canon: STRING_RECORD,
             vault: { type: TYPES.STRING, note: 'Phase 7' },
 
-            // TRANSITIONAL — `cards` becomes `items` (sequence only) in Step 8; the
-            // scalar-or-sequence leniency goes with it.
-            cards: { type: [TYPES.SEQ, TYPES.STRING], of: STRING },
-            // TRANSITIONAL — deleted outright in Step 8 (§6.1); most of it is inert
-            // today, so it is accepted as an opaque block rather than described.
-            components: { type: TYPES.ANY },
           },
         },
-        // TRANSITIONAL — `output` becomes required in Step 8. v3 silently defaulted to
-        // ./output, which wrote a tree somewhere the author was not looking; a missing
-        // required key is the better failure. Not enforced yet only because the fixtures
-        // and test configs have to keep loading until the migration step.
-        output: STRING,
+        output: { type: TYPES.STRING, required: true },
         reports: STRING,
-
-        // TRANSITIONAL — `overview` becomes `reports` in Step 8.
-        overview: STRING,
       },
     },
 
@@ -146,8 +118,7 @@ const CONFIG_SCHEMA = {
     lint: LINT,
     components: COMPONENTS,
     branches: BRANCHES,
-
-    // TRANSITIONAL — becomes roles.protagonist in Step 8 (§9).
+    // See BRANCH_NODE: this moves to `roles.protagonist` in Phase 8, with the feature.
     protagonist: STRING,
   },
 };

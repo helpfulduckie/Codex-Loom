@@ -22,7 +22,6 @@ const path = require('path');
 const { Diagnostics, CODES: DIAG_CODES } = require('../diag');
 const { validate } = require('../schema');
 const { loadYamlDocument } = require('../loader/yaml');
-const { expandTokens } = require('../tokens');
 const { CONFIG_SCHEMA } = require('./schema');
 
 const CODES = Object.freeze({
@@ -32,6 +31,8 @@ const CODES = Object.freeze({
   VARIABLE_CYCLE: 'CL0511',
   /** A branch-scoped variable used where only root variables resolve (§5.1). */
   VARIABLE_PRE_BRANCH: 'CL0520',
+  /** A canon name and a declared variable share one namespace as of §6.1. */
+  CANON_NAME_COLLIDES: 'CL0521',
 });
 
 /**
@@ -196,27 +197,13 @@ function checkVariableGraph(config, diagnostics, sourceMap, names) {
 }
 
 /**
- * Expand `{%variable}` and `{@canonName}` tokens in a path string.
+ * Expand tokens in a path string.
  *
- * `{@}` resolves against the canon map only — components are not yet resolved during the
- * canon/template two-pass. It is deleted entirely in Step 8 (§6.1).
+ * There is one family left: `{%variable}`. Canon names are exposed as variables (§6.1),
+ * so a canon reference resolves through exactly the same lookup as anything else.
  */
-function expandPathTokens(str, variables, canonMap, diagnostics, location, branchOnly) {
-  const withVars = expandVariables(String(str), variables, { diagnostics, location, branchOnly });
-  return expandTokens(withVars, { canon: canonMap, mode: 'path', warnMissing: false });
-}
-
-/** Resolve a name → path mapping. `lenient` keeps the raw string when nothing exists. */
-function resolveMapping(raw, base, lenient, variables, canon, diagnostics, sourceMap, at, branchOnly) {
-  const result = new Map();
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return result;
-  for (const [name, spec] of Object.entries(raw)) {
-    const location = sourceMap ? sourceMap.nearest([...at, name]) : {};
-    const expanded = expandPathTokens(String(spec), variables, canon, diagnostics, location, branchOnly);
-    const resolved = path.resolve(base, expanded);
-    result.set(name, lenient && !fs.existsSync(resolved) ? String(spec) : resolved);
-  }
-  return result;
+function expandPathTokens(str, variables, diagnostics, location, branchOnly) {
+  return expandVariables(String(str), variables, { diagnostics, location, branchOnly });
 }
 
 /** Print collected diagnostics and abort if any of them are errors. */
@@ -262,8 +249,6 @@ function loadCompileConfig(configPath, options = {}) {
 
   const structure = config.structure || {};
   const input = structure.input || {};
-  const components = input.components || {};
-  const variables = config.variables || null;
 
   const at = (...parts) => (sourceMap ? sourceMap.nearest(parts) : {});
 
@@ -271,29 +256,44 @@ function loadCompileConfig(configPath, options = {}) {
     ? path.resolve(base, String(structure.output))
     : path.resolve(base, 'output');
 
-  const resolvedOverview = structure.overview
-    ? path.resolve(base, String(structure.overview))
+  const resolvedReports = structure.reports
+    ? path.resolve(base, String(structure.reports))
     : null;
 
-  // Canon resolves in two passes so entries can reference {%variables} and sibling
-  // {@canonName} entries. Pass 1 takes everything with no remaining {@; pass 2 uses
-  // pass-1 results to finish the rest.
   const canonRaw = (input.canon && typeof input.canon === 'object' && !Array.isArray(input.canon))
     ? input.canon
     : {};
-  const resolvedCanon = new Map();
 
-  for (const [name, spec] of Object.entries(canonRaw)) {
-    const afterVars = expandPathTokens(
-      String(spec), variables, resolvedCanon, diagnostics,
-      at('structure', 'input', 'canon', name), variableNames.branchOnly
-    );
-    if (!afterVars.includes('{@')) resolvedCanon.set(name, path.resolve(base, afterVars));
+  /**
+   * Canon names are auto-exposed as variables (§6.1), which is what replaces `{@}`.
+   * `{%characters}/Aness.yaml` now works in an include path exactly as
+   * `{@characters}/Aness.yaml` used to, leaving one naming system instead of two.
+   *
+   * A canon name colliding with a declared variable is an ERROR rather than a silent
+   * precedence rule, because there is no answer to "which one wins" that an author could
+   * predict.
+   */
+  const variables = Object.assign({}, config.variables || {});
+  for (const name of Object.keys(canonRaw)) {
+    const clash = Object.keys(variables).find((k) => k.toLowerCase() === name.toLowerCase());
+    if (clash !== undefined) {
+      diagnostics.error(
+        CODES.CANON_NAME_COLLIDES,
+        `Canon name "${name}" collides with the variable "${clash}".`,
+        at('structure', 'input', 'canon', name),
+        { hint: 'Canon names are exposed as variables, so the two share one namespace. Rename one.' }
+      );
+      continue;
+    }
+    variables[name] = String(canonRaw[name]);
   }
+
+  // Canon entries may reference variables, including other canon names, so they resolve
+  // through the same expander as everything else rather than a bespoke two-pass.
+  const resolvedCanon = new Map();
   for (const [name, spec] of Object.entries(canonRaw)) {
-    if (resolvedCanon.has(name)) continue;
     const expanded = expandPathTokens(
-      String(spec), variables, resolvedCanon, diagnostics,
+      String(spec), variables, diagnostics,
       at('structure', 'input', 'canon', name), variableNames.branchOnly
     );
     resolvedCanon.set(name, path.resolve(base, expanded));
@@ -305,28 +305,16 @@ function loadCompileConfig(configPath, options = {}) {
     const list = raw ? (Array.isArray(raw) ? raw : [raw]) : [];
     return list.map((spec, i) => {
       const location = at('structure', 'input', key, String(i));
-      return path.resolve(base, expandPathTokens(String(spec), variables, resolvedCanon, diagnostics, location, variableNames.branchOnly));
+      return path.resolve(base, expandPathTokens(String(spec), variables, diagnostics, location, variableNames.branchOnly));
     });
   };
 
   const resolvedTemplates = resolveList(input.templates, 'templates');
-  // TRANSITIONAL — `cards` becomes `items` in Step 8; both are read until then. The key
-  // that was actually written is remembered so diagnostics point at the real line.
-  const itemsKey = input.items !== undefined ? 'items' : 'cards';
-  const resolvedItems = resolveList(input[itemsKey], itemsKey);
-
-  const componentTypes = ['aiInstructions', 'opening', 'openingChoice', 'plotEssential', 'authorsNote', 'scripts', 'description'];
-  const resolvedComponents = {};
-  for (const type of componentTypes) {
-    resolvedComponents[type] = resolveMapping(
-      components[type], base, type === 'openingChoice', variables, resolvedCanon,
-      diagnostics, sourceMap, ['structure', 'input', 'components', type], variableNames.branchOnly
-    );
-  }
+  const resolvedItems = resolveList(input.items, 'items');
 
   for (const [i, p] of resolvedItems.entries()) {
     if (!fs.existsSync(p)) {
-      diagnostics.warn(CODES.PATH_NOT_FOUND, `Items path not found: ${p}`, at('structure', 'input', itemsKey, String(i)));
+      diagnostics.warn(CODES.PATH_NOT_FOUND, `Items path not found: ${p}`, at('structure', 'input', 'items', String(i)));
     }
   }
   for (const [name, p] of resolvedCanon) {
@@ -345,16 +333,28 @@ function loadCompileConfig(configPath, options = {}) {
   return {
     _base: base,
     _resolvedOutput: resolvedOutput,
-    _resolvedOverview: resolvedOverview,
+    _resolvedOverview: resolvedReports,
     _resolvedItems: resolvedItems,
     _resolvedCanon: resolvedCanon,
     _resolvedTemplates: resolvedTemplates,
-    _resolvedComponents: resolvedComponents,
     _sourceMap: sourceMap,
     protagonist: config.protagonist || null,
     title: config.title || null,
     components: config.components || null,
+    // Top-level as of §6.3, and branch-addressable, so it travels with the config rather
+    // than through `structure.input`.
+    scripts: config.scripts !== undefined ? config.scripts : null,
+    // Two variable sets, deliberately.
+    //
+    // `variables` is what the author declared. The canon dependency manifest reports it,
+    // and it should stay the author's own list — auto-exposed canon names are derived,
+    // and recording them as declarations would make the manifest describe the compiler
+    // rather than the project.
+    //
+    // `_variables` is the effective set that token expansion resolves against, with the
+    // canon names folded in (§6.1). Everything that expands a token uses this one.
     variables: config.variables || null,
+    _variables: variables,
     branches: config.branches || null,
     _structure: structure,
   };

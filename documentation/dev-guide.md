@@ -220,16 +220,15 @@ Phase A (`compileBranchPhaseA`) resolves all items for a branch and applies fiel
 
 **Canon naming (mapping not string)**
 
-`structure.input.canon` is a named mapping (`{main: ./path}`) rather than a plain string or array. Names serve two purposes: they appear in error messages (`Duplicate item ID "x" across canon dirs: canon:main`) and enable `{@main}` reference resolution in `include:` paths. A plain path string would require either path-based display (brittle) or `{@}` syntax without a name.
+`structure.input.canon` is a named mapping (`{main: ./path}`) rather than a plain string or array. Names serve two purposes: they appear in error messages (`Duplicate item ID "x" across canon dirs: canon:main`) and they are exposed as variables, so `{%main}` resolves in `include:` paths. A plain path string would require path-based display, which is brittle.
 
-**Token expansion (`{%}` and `{@}`) — single shared expander**
+**Token expansion — one family, one expander**
 
-All `{%variable}` and `{@name}` expansion routes through one helper, `expandTokens()` in `src/tokens.js`. It handles both sigils in a single `/\{([@%])([^}]+)\}/g` pass:
+All `{%variable}` expansion routes through `expandTokens()` in `src/tokens.js`, which delegates to `util.resolveVariables` — recursive, cycle-detecting, and reporting undeclared names. There is no second implementation.
 
-- `{%}` always delegates to `util.resolveVariables` — the canonical `%` core, which is recursive, cycle-detecting, and warns on undeclared variables. There is no second `%` implementation.
-- `{@}` resolves a name against **components first, then canon** (case-insensitive). `mode: 'path'` returns the resolved path; `mode: 'content'` reads a resolved *file* to its contents (directories always return the path). `warnMissing` controls whether an unresolved `{@}` emits a warning or passes through silently (path contexts pass through so the standard missing-path warning fires instead).
+v3 had a second family, `{@name}`, resolving against components then canon with a path/content mode distinction. It is removed in §6.1: the per-type component grouping never affected resolution, its one behavioral difference was already applied downstream, and the declaration subtree duplicated `variables:`. Canon names are exposed as variables instead, which is why one expander now suffices.
 
-Every call site is a thin wrapper over `expandTokens`: `loader.expandPathTokens` (canon/template config paths), `compile.resolveComponentSpec`/`resolveComponentKey`/`expandOpeningKeyRef`, the `include:`-path block in `resolveIncludes`, and `description.loadDescConfig`. When adding a new context that needs tokens, call `expandTokens` rather than re-deriving the regex.
+Call sites are thin wrappers: `config.expandPathTokens` (config paths), `compile.resolveComponentSpec`, the `include:`-path block in `loader/registry.resolveIncludes`, and `description.loadDescConfig`. When adding a context that needs tokens, call `expandTokens` rather than re-deriving the regex.
 
 Coverage notes:
 - `{%}` is expanded in item bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and config paths. In `include:`/`import:` paths it uses **root** `config.variables` only, because `resolveIncludes` runs once before branch enumeration — branch-merged variables do not exist yet.

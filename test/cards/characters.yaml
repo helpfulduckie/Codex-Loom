@@ -1,5 +1,5 @@
 # Include all cards from this canon file — Felicia will be skipped since she's imported below
-- include: "{@main}/Felicia.yaml"
+- include: "{%main}/Felicia.yaml"
 
 # Explicit import with overrides — takes precedence over the include above
 - import: Grayls

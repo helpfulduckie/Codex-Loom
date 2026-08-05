@@ -12,10 +12,10 @@ Project item files can pull in items from the canonical registry in two ways:
 Loads all items from a canonical YAML file. Items are compiled exactly as defined in canon, with no modifications unless you attach `importVariants:` or `branches:` to the include directive itself.
 
 ```yaml
-- include: "{@main}/Characters/Felicia.yaml"
+- include: "{%main}/Characters/Felicia.yaml"
 ```
 
-`{@main}` in an include path resolves to the **directory path** for the `main` canon entry declared in `compile.yaml`. This is different from how `{@Key}` works in prose contexts (openings, component text), where it returns the file's contents. In an `include:` path, it always returns the path string so the compiler can locate the file. `{@Key}` is matched against named components first, then canon entries.
+`{%main}` in an include path resolves to the **directory path** for the `main` canon entry declared in `compile.yaml`. This is different from how `{%Key}` works in prose contexts (openings, component text), where it returns the file's contents. In an `include:` path, it always returns the path string so the compiler can locate the file. `{%Key}` is matched against named components first, then canon entries.
 
 Include and import paths also support `{%variable}` expansion, but — because includes are resolved once, before branches are enumerated — only **root-level** `variables:` are available there, not per-branch overrides.
 
@@ -26,14 +26,14 @@ structure:
       main: ../../_Canon
 ```
 
-You can also use a direct relative path, but the `{@name}` form is preferred for portability.
+You can also use a direct relative path, but the `{%name}` form is preferred for portability.
 
 ### Branch filtering on includes
 
 To exclude all items in an included file from specific branches, attach a `branches:` dispatch spec to the `include:` directive. All items loaded from the file inherit it.
 
 ```yaml
-- include: "{@main}/Characters/Guards.yaml"
+- include: "{%main}/Characters/Guards.yaml"
   branches:
     '*': []         # include with no variant for all branches
     flashback: ~    # exclude all items in this file from the flashback branch
@@ -44,7 +44,7 @@ To exclude all items in an included file from specific branches, attach a `branc
 You can attach `importVariants:` to an include directive to apply a variant to every item in the file. Items that **do not define** a variant by that name are **silently skipped** (no warning). This differs from a single `import:`, where a missing variant always emits a warning.
 
 ```yaml
-- include: "{@main}/Characters/Grayls.yaml"
+- include: "{%main}/Characters/Grayls.yaml"
   importVariants: [human]    # applied to every item that defines a "human" variant;
                               # items without it are silently unaffected
 ```
@@ -55,7 +55,7 @@ If an item from an `include:` file is also listed in an explicit `import:` entry
 
 ```yaml
 # Include all items from Felicia.yaml — Felicia will be skipped below
-- include: "{@main}/Characters/Felicia.yaml"
+- include: "{%main}/Characters/Felicia.yaml"
 
 # Explicit import with overrides — takes precedence over the include
 - import: Grayls

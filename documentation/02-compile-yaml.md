@@ -9,7 +9,7 @@
 ```yaml
 structure:
   input:
-    cards: [./cards]
+    items: [./Codex]
     templates: [./templates]
   output: ./output
 ```
@@ -21,7 +21,7 @@ structure:
 ```yaml
 structure:
   input:
-    cards:                        # sequence of project item directories
+    items:                        # sequence of project item directories
       - ./cards
     canon:                        # named mapping of canonical item directories
       main: ../../_Canon
@@ -38,7 +38,7 @@ structure:
         default: ./authors-note.yaml
       opening:
         default: ./openings
-      openingChoice:
+      branchFraming:
         default: ./openings
       scripts:
         default: ./scripts
@@ -55,7 +55,7 @@ variables:                        # key-value pairs; used in templates as {%key}
 
 components:                       # root-level component specs (inline or file path)
   opening: "Who are you?"
-  plotEssential: "{@default}"     # reference to the "default" plotEssential dir/file
+  plotEssential: "{%default}"     # reference to the "default" plotEssential dir/file
 
 branches:
   subject:
@@ -70,7 +70,7 @@ branches:
       opening: "You are a researcher."
   tier2:
     components:
-      openingChoice: "Choose a specialisation."
+      branchFraming: "Choose a specialisation."
     branches:
       alpha: {}
       beta: {}
@@ -82,21 +82,21 @@ branches:
 
 All path resolution happens under `structure:`.
 
-### `structure.input.cards`
+### `structure.input.items`
 
-A sequence of directories to load project item YAML files from. All `.yaml` files are loaded recursively. Entries support the same `{%variable}` and `{@canonName}` token expansion as `structure.input.templates` (resolved before the path is made absolute), so a shared path prefix variable can be reused here.
+A sequence of directories to load project item YAML files from. All `.yaml` files are loaded recursively. Entries support the same `{%variable}` and `{%canonName}` token expansion as `structure.input.templates` (resolved before the path is made absolute), so a shared path prefix variable can be reused here.
 
 ```yaml
-cards: [./cards]
+items: [./Codex]
 # or
-cards:
+items:
   - ./cards
   - ./extra-items
 ```
 
 ### `structure.input.canon`
 
-A **named mapping** of directories containing canonical (shared) item definitions. Each name is used in `{@name}` references and when reporting errors. All `.yaml` files are loaded recursively.
+A **named mapping** of directories containing canonical (shared) item definitions. Each name is used in `{%name}` references and when reporting errors. All `.yaml` files are loaded recursively.
 
 ```yaml
 canon:
@@ -104,16 +104,16 @@ canon:
   lore: ./lore-items
 ```
 
-Canon names are matched case-insensitively in `{@key}` references. Use the name to refer to canon directories in `include:` paths:
+Canon names are matched case-insensitively in `{%key}` references. Use the name to refer to canon directories in `include:` paths:
 
 ```yaml
-- include: "{@main}/Characters/Aness.yaml"
+- include: "{%main}/Characters/Aness.yaml"
 ```
 
 **Token expansion in canon values** — Canon path values support token expansion before path resolution:
 
 - `{%variableName}` — replaced with the value from the top-level `variables:` block
-- `{@otherCanonName}` — replaced with the resolved absolute path of another canon entry
+- `{%otherCanonName}` — replaced with the resolved absolute path of another canon entry
 
 This makes it practical to define a root path once as a variable and reference it for multiple subdirectory entries, rather than repeating the full path:
 
@@ -128,7 +128,7 @@ structure:
       canonNovalune: '{%canonRoot}\StoryCards\Novalune'
 ```
 
-Canon-to-canon `{@}` references resolve after all plain-path entries are built, so an entry with no `{@}` tokens can be referenced by a later sibling that does. Unresolved tokens are left as-is and will trigger the standard missing-path warning.
+**Every canon name is also exposed as a variable**, so a canon entry can reference a sibling — `esudia: '{%canonRoot}/Esudia'` then `esudiaChars: '{%esudia}/Character'` — and so can any other path in the config. This is what replaced v3's separate `{@name}` family; a canon name colliding with a declared variable is an ERROR (`CL0521`), since the two now share one namespace.
 
 ### `structure.input.templates`
 
@@ -140,18 +140,18 @@ templates:
   - ./templates              # project overrides — same name here wins
 ```
 
-Template path entries support the same token expansion as canon values: `{%variableName}` and `{@canonName}`. The full canon map is available when templates are resolved, so any named canon entry can be referenced:
+Template path entries support the same token expansion as canon values: `{%variableName}` and `{%canonName}`. The full canon map is available when templates are resolved, so any named canon entry can be referenced:
 
 ```yaml
 templates:
   - '{%canonRoot}\templates'   # {%variable} expanded to absolute path
-  - '{@canonGeneral}\templates'  # {@ canon name} expanded to that dir's path
+  - '{%canonGeneral}\templates'  # a canon name, exposed as a variable
   - ./templates
 ```
 
-### `structure.input.components`
+### `variables`
 
-Named directory (or file) mappings for each component type. These are referenced in `components:` specs via `{@name}` tokens. The supported component types are:
+Named directory (or file) mappings for each component type. These are referenced in `components:` specs via `{%name}` tokens. The supported component types are:
 
 | Key | Written to |
 |---|---|
@@ -159,7 +159,7 @@ Named directory (or file) mappings for each component type. These are referenced
 | `plotEssential` | `Components/Plot Essentials.md` |
 | `authorsNote` | `Components/Author's Note.md` |
 | `opening` | `Components/Opening.md` |
-| `openingChoice` | `Components/Opening.md` (branch-point nodes only) |
+| `branchFraming` | `Components/Opening.md` (branch-point nodes only) |
 | `scripts` | `Scripts/` (directory copy) |
 | `description` | `Description.md` (output root, written once — not per-branch) |
 
@@ -213,17 +213,17 @@ variables:
 
 Used in a template as: `The year is {%year}.`
 
-`{%key}` is expanded consistently across item bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and the config path fields (`structure.input.cards`, `structure.input.canon`, and `structure.input.templates`), making variables useful both as content values and as shared path prefixes across the config (see the `structure.input.canon` section above for an example). The one exception is `include:`/`import:` paths, which resolve once before branches are enumerated and therefore see **root** variables only, not per-branch overrides.
+`{%key}` is expanded consistently across item bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and the config path fields (`structure.input.items`, `structure.input.canon`, and `structure.input.templates`), making variables useful both as content values and as shared path prefixes across the config (see the `structure.input.canon` section above for an example). The one exception is `include:`/`import:` paths, which resolve once before branches are enumerated and therefore see **root** variables only, not per-branch overrides.
 
 ### `components`
 
-Specifies what content to write for root-level component files. Each value is an inline string, a relative file path, a `{%variable}`, or a `{@key}` reference to a named directory/file in `structure.input.components` (or a canon entry — `{@key}` resolves against components first, then canon).
+Specifies what content to write for root-level component files. Each value is an inline string, a relative file path, a `{%variable}`, or a `{%key}` reference to a named directory/file in `variables` (or a canon entry — `{%key}` resolves against components first, then canon).
 
 ```yaml
 components:
   opening: "Who are you?"                     # inline text
   plotEssential: ./plot-essentials.yaml        # file path
-  aiInstructions: "{@default}"                # component key reference
+  aiInstructions: "{%default}"                # component key reference
   authorsNote: ./authors-note.yaml
   scripts: ./scripts
   description: ./description.yaml             # project-level description
@@ -231,7 +231,7 @@ components:
 
 **`opening:`** — Written to `{output}/Components/Opening.md`. Inherits down to leaf branches unless overridden.
 
-**`openingChoice:`** — Written to branch-point nodes' `Components/Opening.md`. Does **not** inherit; ignored on leaf nodes with a warning.
+**`branchFraming:`** — Written to branch-point nodes' `Components/Opening.md`. Does **not** inherit; ignored on leaf nodes with a warning.
 
 **`description:`** — Written once to `{output}/Description.md` after all branches compile. Accepts a `.md`/`.txt` file (body only), a `.js` file (script banner only), or a `.yaml` config combining both. Not per-branch; branch-level overrides are ignored. See [Components → Description](09-components.md#description) for full details.
 
@@ -254,7 +254,7 @@ branches:
     protagonist: Veyrn             # no title: folder is Branches/researcher/
   multipath:
     components:
-      openingChoice: "Choose a path."
+      branchFraming: "Choose a path."
     branches:
       alpha: {}
       beta: {}

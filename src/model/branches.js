@@ -239,6 +239,7 @@ function walkBranchChain(branches, branchPath, options = {}) {
     folderPath: [],
     variables: {},
     components: {},
+    scripts: undefined,
     protagonist: rootProtagonist,
     node: null,
     complete: true,
@@ -268,6 +269,9 @@ function walkBranchChain(branches, branchPath, options = {}) {
       if (node.variables) Object.assign(result.variables, node.variables);
       if (node.components) Object.assign(result.components, node.components);
       if (node.protagonist) result.protagonist = node.protagonist;
+      // `scripts:` is top-level rather than a component (§6.3) but merges the same way,
+      // so a branch can swap one hook bundle and inherit the rest.
+      if (node.scripts !== undefined) result.scripts = node.scripts;
     }
 
     currentMap = node && node.branches ? node.branches : null;

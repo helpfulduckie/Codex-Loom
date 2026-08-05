@@ -18,7 +18,7 @@ In `compile.yaml`:
 components:
   opening: "Who are you?"                    # inline text
   opening: ./openings/root.md                # file path (read and written as-is)
-  opening: "{@opening}/subject.md"           # component key reference
+  opening: "{%opening}/subject.md"           # component key reference
 ```
 
 Per branch:
@@ -37,21 +37,21 @@ branches:
 
 **Inheritance:** `opening:` inherits down to leaf nodes. A branch that doesn't declare its own `opening:` uses the nearest ancestor's value. Only leaf nodes receive an `Opening.md` file.
 
-### `openingChoice:` for branch-point nodes
+### `branchFraming:` for branch-point nodes
 
-`openingChoice:` is written to a non-leaf branch node's `Components/Opening.md`. Unlike `opening:`, it does **not** inherit — it belongs to the node where it is declared.
+`branchFraming:` is written to a non-leaf branch node's `Components/Opening.md`. Unlike `opening:`, it does **not** inherit — it belongs to the node where it is declared.
 
 ```yaml
 branches:
   tier2:
     components:
-      openingChoice: "Choose a specialisation."
+      branchFraming: "Choose a specialisation."
     branches:
       alpha: {}
       beta: {}
 ```
 
-If `openingChoice:` is declared on a leaf node, it is ignored with a warning.
+If `branchFraming:` is declared on a leaf node, it is ignored with a warning.
 
 ### YAML block openings
 
@@ -146,7 +146,7 @@ A `components.opening` pointing to a `.md`, `.txt`, or inline string continues t
 |---|---|
 | Root `components.opening` | `{output}/Components/Opening.md` |
 | Leaf branch `components.opening` | `{output}/Branches/…/leaf/Components/Opening.md` |
-| Branch-point `components.openingChoice` | `{output}/Branches/…/node/Components/Opening.md` |
+| Branch-point `components.branchFraming` | `{output}/Branches/…/node/Components/Opening.md` |
 
 ---
 
@@ -515,12 +515,12 @@ script: ./scripts/library.js          # optional: path to JS file to extract ban
 stripTrailingInstructions: true        # optional; default false
 ```
 
-All path values in the config file support `{%variable}` and `{@Key}` token expansion, resolved the same way as `include:` paths — relative to `compile.yaml`.
+All path values in the config file support `{%variable}` and `{%Key}` token expansion, resolved the same way as `include:` paths — relative to `compile.yaml`.
 
 ```yaml
 # description.yaml with token expansion
-body:   '{@bodyKey}'                   # {@Key} resolved from structure.input.components
-script: '{@scripts}/library.js'        # {@ dir key} + path suffix
+body:   '{%bodyKey}'                   # {%Key} resolved from variables
+script: '{%scripts}/library.js'        # a directory variable + path suffix
 ```
 
 ### Script banner extraction
@@ -587,4 +587,4 @@ When both `body:` and `script:` are set, the body content comes first, followed 
 - **Root `title:`** (top-level of `compile.yaml`, sibling of `protagonist:`) — written once to `{output}/Label.md`, alongside `Description.md`. See [Root-Level Keys → title](02-compile-yaml.md#title).
 - **Branch `title:`** (inside a `branches:` node) — written to that branch's own output folder (`Branches/<path>/Label.md`), falling back to the branch key when omitted. See [Branch Tree & Variant Dispatch](05-branches-and-variants.md).
 
-Both expand `{%variable}` tokens against the variables in scope (root variables for the root label; branch-merged variables for a branch label). Neither accepts a file path or `{@Key}` reference — the value is used as literal text.
+Both expand `{%variable}` tokens against the variables in scope (root variables for the root label; branch-merged variables for a branch label). Neither accepts a file path or `{%Key}` reference — the value is used as literal text.

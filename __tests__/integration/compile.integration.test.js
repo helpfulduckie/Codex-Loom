@@ -16,6 +16,7 @@ beforeAll(() => {
   // Write a patched compile.yaml (v3 structure: format) that redirects output
   // to a temp dir but uses the real test fixtures for everything else.
   const patchedConfig = [
+    'version: 4',
     'structure:',
     `  input:`,
     `    items:`,
@@ -106,6 +107,7 @@ describe('protagonist inherited from parent branch node', () => {
     nestedTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-nested-proto-'));
 
     const patchedConfig = [
+      'version: 4',
       'structure:',
       '  input:',
       `    items:`,
@@ -192,8 +194,9 @@ describe('Opening.md generation', () => {
     fs.writeFileSync(path.join(openingTmpDir, 'openings', 'b-opening.md'), 'Leaf B from file\n', 'utf8');
 
     // v3 format compile.yaml — opening under components: at root and branch levels
-    // opening: inherits to leaves; openingChoice: writes to branch node directly
+    // opening: inherits to leaves; branchFraming: writes to branch node directly
     fs.writeFileSync(path.join(openingTmpDir, 'compile.yaml'), [
+      'version: 4',
       'structure:',
       '  input:',
       `    items: [${openingTmpDir}/items]`,
@@ -203,11 +206,14 @@ describe('Opening.md generation', () => {
       '  opening: "Root question"',
       'branches:',
       '  A:',
-      '    opening: "Leaf A inline"',
+      '    components:',
+      '      opening: "Leaf A inline"',
       '  B:',
-      `    opening: ${openingTmpDir}/openings/b-opening.md`,
+      `    components:`,
+      `      opening: ${openingTmpDir}/openings/b-opening.md`,
       '  nested:',
-      '    openingChoice: "Branch question"',
+      '    components:',
+      '      branchFraming: "Branch question"',
       '    branches:',
       '      X: {}',
       '      Y: {}',
@@ -241,25 +247,25 @@ describe('Opening.md generation', () => {
     expect(fs.readFileSync(y, 'utf8')).toBe('Root question\n');
   });
 
-  test('branch-node openingChoice written to nested/Components/Opening.md', () => {
+  test('branch-node branchFraming written to nested/Components/Opening.md', () => {
     const p = path.join(openingTmpDir, 'output', 'Branches', 'nested', 'Components', 'Opening.md');
     expect(fs.existsSync(p)).toBe(true);
     expect(fs.readFileSync(p, 'utf8')).toBe('Branch question\n');
   });
 
-  test('non-leaf branch node with only openingChoice does not get a leaf Opening.md at its own level', () => {
-    // nested itself is not a leaf — its Opening.md is for openingChoice
+  test('non-leaf branch node with only branchFraming does not get a leaf Opening.md at its own level', () => {
+    // nested itself is not a leaf — its Opening.md is for branchFraming
     // but the leaves X and Y have the inherited root opening
     const nested = path.join(openingTmpDir, 'output', 'Branches', 'nested', 'Components', 'Opening.md');
     const x = path.join(openingTmpDir, 'output', 'Branches', 'nested', 'Branches', 'X', 'Components', 'Opening.md');
-    expect(fs.readFileSync(nested, 'utf8')).toBe('Branch question\n'); // openingChoice
+    expect(fs.readFileSync(nested, 'utf8')).toBe('Branch question\n'); // branchFraming
     expect(fs.readFileSync(x, 'utf8')).toBe('Root question\n');      // inherited root opening
   });
 });
 
-// ── openingChoice {@Key} token resolution ──────────────────────────────────────
+// ── branchFraming {%Key} token resolution ──────────────────────────────────────
 
-describe('openingChoice {@Key} resolution', () => {
+describe('branchFraming {%Key} resolution', () => {
   let atKeyTmpDir;
 
   beforeAll(() => {
@@ -287,29 +293,29 @@ describe('openingChoice {@Key} resolution', () => {
     ].join('\n'), 'utf8');
 
     fs.writeFileSync(path.join(atKeyTmpDir, 'compile.yaml'), [
+      'version: 4',
       'structure:',
       '  input:',
       `    items: [${atKeyTmpDir}/items]`,
       `    templates: [${atKeyTmpDir}/templates]`,
-      '    components:',
-      '      openingChoice:',
-      '        roleChoice: Are you the mage or the employer?',
-      '        mageChoice: Who is your mage?',
-      '        employerChoice: Who is your employer?',
       `  output: ${atKeyTmpDir}/output`,
+      'variables:',
+      '  roleChoice: Are you the mage or the employer?',
+      '  mageChoice: Who is your mage?',
+      '  employerChoice: Who is your employer?',
       'components:',
-      "  openingChoice: '{@roleChoice}'",
+      "  branchFraming: '{%roleChoice}'",
       'branches:',
       '  employer:',
       '    title: Employer',
       '    components:',
-      "      openingChoice: '{@mageChoice}'",
+      "      branchFraming: '{%mageChoice}'",
       '    branches:',
       '      alice: {}',
       '  mage:',
       '    title: Personal Mage',
       '    components:',
-      "      openingChoice: '{@employerChoice}'",
+      "      branchFraming: '{%employerChoice}'",
       '    branches:',
       '      bob: {}',
     ].join('\n'), 'utf8');
@@ -321,25 +327,25 @@ describe('openingChoice {@Key} resolution', () => {
     fs.rmSync(atKeyTmpDir, { recursive: true, force: true });
   });
 
-  test('root openingChoice {@roleChoice} resolves to literal string', () => {
+  test('root branchFraming {%roleChoice} resolves to literal string', () => {
     const p = path.join(atKeyTmpDir, 'output', 'Components', 'Opening.md');
     expect(fs.existsSync(p)).toBe(true);
     expect(fs.readFileSync(p, 'utf8')).toBe('Are you the mage or the employer?\n');
   });
 
-  test('employer branch openingChoice {@mageChoice} resolves to literal string', () => {
+  test('employer branch branchFraming {%mageChoice} resolves to literal string', () => {
     const p = path.join(atKeyTmpDir, 'output', 'Branches', 'employer', 'Components', 'Opening.md');
     expect(fs.existsSync(p)).toBe(true);
     expect(fs.readFileSync(p, 'utf8')).toBe('Who is your mage?\n');
   });
 
-  test('mage branch openingChoice {@employerChoice} resolves to literal string', () => {
+  test('mage branch branchFraming {%employerChoice} resolves to literal string', () => {
     const p = path.join(atKeyTmpDir, 'output', 'Branches', 'mage', 'Components', 'Opening.md');
     expect(fs.existsSync(p)).toBe(true);
     expect(fs.readFileSync(p, 'utf8')).toBe('Who is your employer?\n');
   });
 
-  test('leaf nodes do not get openingChoice Opening.md', () => {
+  test('leaf nodes do not get branchFraming Opening.md', () => {
     const alice = path.join(atKeyTmpDir, 'output', 'Branches', 'Employer', 'Branches', 'alice', 'Components', 'Opening.md');
     expect(fs.existsSync(alice)).toBe(false);
   });
@@ -418,6 +424,7 @@ describe('cross-item refs inside body field render functions', () => {
     ].join('\n'), 'utf8');
 
     fs.writeFileSync(path.join(xrefTmpDir, 'compile.yaml'), [
+      'version: 4',
       'structure:',
       '  input:',
       `    items: [${xrefTmpDir}/items]`,
@@ -458,9 +465,9 @@ describe('cross-item refs inside body field render functions', () => {
   });
 });
 
-// ── opening {@Key} token resolving to a .yaml block file ─────────────────────
+// ── opening {%Key} token resolving to a .yaml block file ─────────────────────
 
-describe('opening {@Key} resolving to YAML block file', () => {
+describe('opening {%Key} resolving to YAML block file', () => {
   let opKeyTmpDir;
 
   beforeAll(() => {
@@ -488,16 +495,16 @@ describe('opening {@Key} resolving to YAML block file', () => {
     ].join('\n'), 'utf8');
 
     fs.writeFileSync(path.join(opKeyTmpDir, 'compile.yaml'), [
+      'version: 4',
       'structure:',
       '  input:',
       `    items: [${opKeyTmpDir}/items]`,
       `    templates: [${opKeyTmpDir}/templates]`,
-      '    components:',
-      '      opening:',
-      `        op: ${opKeyTmpDir}/components/opening.yaml`,
       `  output: ${opKeyTmpDir}/output`,
+      'variables:',
+      `  op: ${opKeyTmpDir}/components/opening.yaml`,
       'components:',
-      "  opening: '{@op}'",
+      "  opening: '{%op}'",
       'branches:',
       '  alpha: {}',
       '  beta: {}',
@@ -607,6 +614,7 @@ describe('YAML block opening (opening.yaml)', () => {
     ].join('\n'), 'utf8');
 
     fs.writeFileSync(path.join(blkTmpDir, 'compile.yaml'), [
+      'version: 4',
       'structure:',
       '  input:',
       `    items: [${blkTmpDir}/items]`,
@@ -705,6 +713,7 @@ describe('YAML block opening (opening.yaml)', () => {
       fs.writeFileSync(path.join(mdDir, 'templates', 'Item.template'), '## {$aid.title}\n~~~\n{$body.Desc}', 'utf8');
       fs.writeFileSync(path.join(mdDir, 'opening.md'), 'Legacy inline opening.', 'utf8');
       fs.writeFileSync(path.join(mdDir, 'compile.yaml'), [
+        'version: 4',
         'structure:',
         `  input: { items: [${mdDir}/items], templates: [${mdDir}/templates] }`,
         `  output: ${mdDir}/output`,
@@ -757,6 +766,7 @@ describe('deterministic item ordering', () => {
       '## {$aid.title} [{$id}]\n~~~\n{$body.Desc}', 'utf8');
 
     fs.writeFileSync(path.join(orderTmpDir, 'compile.yaml'), [
+      'version: 4',
       'structure:',
       `  input: { items: [${orderTmpDir}/items], templates: [${orderTmpDir}/templates] }`,
       `  output: ${orderTmpDir}/output`,
@@ -808,6 +818,7 @@ describe('component gap detection', () => {
     ].join('\n'), 'utf8');
     fs.writeFileSync(path.join(dir, 'templates', 'Item.template'), '## {$aid.title}\n~~~\n{$body.Desc}', 'utf8');
     fs.writeFileSync(path.join(dir, 'compile.yaml'), [
+      'version: 4',
       'structure:',
       `  input: { items: [${dir}/items], templates: [${dir}/templates] }`,
       `  output: ${dir}/output`,
@@ -835,8 +846,8 @@ describe('component gap detection', () => {
     }
   });
 
-  test('unresolved {@key} Plot Essentials reference throws', () => {
-    const dir = makeProject(['plotEssential: "{@nope}"']);
+  test('unresolved {%key} Plot Essentials reference throws', () => {
+    const dir = makeProject(['plotEssential: "{%nope}"']);
     try {
       expect(() => compile(path.join(dir, 'compile.yaml'))).toThrow(/component\(s\) were not written/);
     } finally {
@@ -848,6 +859,7 @@ describe('component gap detection', () => {
     const dir = makeProject([]);
     // makeProject always writes a `components:` header; an empty mapping is fine.
     fs.writeFileSync(path.join(dir, 'compile.yaml'), [
+      'version: 4',
       'structure:',
       `  input: { items: [${dir}/items], templates: [${dir}/templates] }`,
       `  output: ${dir}/output`,
@@ -888,6 +900,7 @@ describe('root title -> Label.md', () => {
     ].join('\n'), 'utf8');
     fs.writeFileSync(path.join(dir, 'templates', 'Item.template'), '## {$aid.title}\n~~~\n{$body.Desc}', 'utf8');
     fs.writeFileSync(path.join(dir, 'compile.yaml'), [
+      'version: 4',
       'structure:',
       `  input: { items: [${dir}/items], templates: [${dir}/templates] }`,
       `  output: ${dir}/output`,

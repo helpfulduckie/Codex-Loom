@@ -196,41 +196,35 @@ describe('loadDescConfig', () => {
     expect(result.bodyPath).toBe(path.resolve(tmpDir, 'text.md'));
   });
 
+  // `{@Key}` is gone (§6.1); canon names are exposed as variables, so every reference a
+  // description file can make now goes through `{%}` and one lookup.
+
   test('{%variable} in body path is expanded before resolution', () => {
     const f = path.join(tmpDir, 'desc.yaml');
     fs.writeFileSync(f, 'body: ./{%folder}/text.md\n');
-    const result = loadDescConfig(f, tmpDir, {}, { folder: 'components' });
+    const result = loadDescConfig(f, tmpDir, { folder: 'components' });
     expect(result.bodyPath).toBe(path.resolve(tmpDir, './components/text.md'));
   });
 
-  test('{@Key} in body path is expanded before resolution', () => {
+  test('a canon name in a body path resolves as a variable', () => {
     const f = path.join(tmpDir, 'desc.yaml');
-    fs.writeFileSync(f, 'body: \'{@bodyKey}\'\n');
-    const resolvedComponents = {
-      description: new Map([['bodyKey', path.join(tmpDir, 'components', 'body.md')]]),
-    };
-    const result = loadDescConfig(f, tmpDir, resolvedComponents, {});
+    fs.writeFileSync(f, "body: '{%bodyKey}'\n");
+    const result = loadDescConfig(f, tmpDir, { bodyKey: path.join(tmpDir, 'components', 'body.md') });
     expect(result.bodyPath).toBe(path.join(tmpDir, 'components', 'body.md'));
   });
 
-  test('{@Key} in script path resolves to directory, path suffix appended', () => {
+  test('a directory variable in a script path takes a path suffix', () => {
     const f = path.join(tmpDir, 'desc.yaml');
     const scriptsDir = path.join(tmpDir, 'scripts', 'lib');
-    fs.writeFileSync(f, `script: '{@scripts}/library.js'\n`);
-    const resolvedComponents = {
-      scripts: new Map([['scripts', scriptsDir]]),
-    };
-    const result = loadDescConfig(f, tmpDir, resolvedComponents, {});
-    expect(result.scriptPath).toBe(path.resolve(tmpDir, scriptsDir + '/library.js'));
+    fs.writeFileSync(f, "script: '{%scripts}/library.js'\n");
+    const result = loadDescConfig(f, tmpDir, { scripts: scriptsDir });
+    expect(result.scriptPath).toBe(path.resolve(tmpDir, `${scriptsDir}/library.js`));
   });
 
-  test('{%variable} and {@Key} both expand in the same value', () => {
+  test('two variables expand in the same value', () => {
     const f = path.join(tmpDir, 'desc.yaml');
-    fs.writeFileSync(f, 'body: ./{%sub}/{@bodyKey}\n');
-    const resolvedComponents = {
-      description: new Map([['bodyKey', 'text.md']]),
-    };
-    const result = loadDescConfig(f, tmpDir, resolvedComponents, { sub: 'components' });
+    fs.writeFileSync(f, 'body: ./{%sub}/{%bodyKey}\n');
+    const result = loadDescConfig(f, tmpDir, { sub: 'components', bodyKey: 'text.md' });
     expect(result.bodyPath).toBe(path.resolve(tmpDir, './components/text.md'));
   });
 

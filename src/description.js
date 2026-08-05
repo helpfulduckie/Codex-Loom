@@ -12,16 +12,14 @@ const { warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifa
  * paths resolved relative to configBase (the compile.yaml directory), matching
  * how include: paths are resolved.
  *
- * {%variable} and {@Key} tokens in body/script values are expanded before
- * path resolution, using the same maps available to compile.yaml.
+ * {%variable} tokens in body/script values are expanded before path resolution. Canon
+ * names are among those variables (§6.1), which is what replaced the `{@Key}` family.
  *
- * @param {string} specPath          - absolute path to the description .yaml file
- * @param {string} configBase        - compile.yaml directory (config._base)
- * @param {object} resolvedComponents - config._resolvedComponents (for {@Key} expansion)
- * @param {object} variables          - config.variables (for {%var} expansion)
- * @param {Map}    [canon]            - config._resolvedCanon (for {@Key} canon references)
+ * @param {string} specPath   - absolute path to the description .yaml file
+ * @param {string} configBase - compile.yaml directory (config._base)
+ * @param {object} variables  - the merged variable set, canon names included
  */
-function loadDescConfig(specPath, configBase, resolvedComponents, variables, canon) {
+function loadDescConfig(specPath, configBase, variables) {
   if (!specPath) return {};
   if (!fs.existsSync(specPath)) {
     console.warn(`  WARN: description config not found: ${specPath}`);
@@ -35,7 +33,7 @@ function loadDescConfig(specPath, configBase, resolvedComponents, variables, can
 
   function expandValue(val) {
     if (!val || typeof val !== 'string') return val;
-    return expandTokens(val, { variables, components: resolvedComponents, canon, mode: 'path', warnMissing: false });
+    return expandTokens(val, { variables });
   }
 
   return {

@@ -283,9 +283,18 @@ describe('loadCompileConfig', () => {
     jest.restoreAllMocks();
   });
 
+  /**
+   * v4 requires `version:`, `structure:` and `structure.output` (§6). Each fixture below
+   * states only the keys it is actually testing, so the scaffolding is injected here —
+   * otherwise every case would repeat three lines that have nothing to do with it.
+   */
   function writeConfig(yaml) {
+    let text = yaml;
+    if (!/^version:/m.test(text)) text = `version: 4\n${text}`;
+    if (!/^structure:/m.test(text)) text += '\nstructure:\n  output: ./out\n';
+    else if (!/^ {2}output:/m.test(text)) text = text.replace(/^structure:\s*(\{\}\s*)?$/m, 'structure:\n  output: ./out');
     const p = path.join(tmpDir, 'compile.yaml');
-    fs.writeFileSync(p, yaml, 'utf8');
+    fs.writeFileSync(p, text, 'utf8');
     return p;
   }
 
@@ -299,13 +308,28 @@ describe('loadCompileConfig', () => {
     expect(loadCompileConfig(cfgPath)._resolvedOutput).toBe(path.resolve(tmpDir, 'out'));
   });
 
-  test('defaults output to ./output when not specified', () => {
-    const cfgPath = writeConfig('structure: {}\n');
-    expect(loadCompileConfig(cfgPath)._resolvedOutput).toBe(path.resolve(tmpDir, 'output'));
+  test('output is required — v3 silently defaulted it to ./output', () => {
+    // The old default wrote a tree somewhere the author was not looking. A missing
+    // required key is the better failure (§6).
+    const p = path.join(tmpDir, 'compile.yaml');
+    fs.writeFileSync(p, 'version: 4\nstructure:\n  input:\n    items: []\n', 'utf8');
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => loadCompileConfig(p)).toThrow(/Configuration has/);
+    spy.mockRestore();
   });
 
-  test('resolves structure.overview relative to config dir', () => {
-    const cfgPath = writeConfig('structure:\n  output: ./out\n  overview: ./reviews\n');
+  test('version is required — its absence is what identifies a v3 project', () => {
+    const p = path.join(tmpDir, 'compile.yaml');
+    fs.writeFileSync(p, 'structure:\n  output: ./out\n', 'utf8');
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => loadCompileConfig(p)).toThrow(/Configuration has/);
+    spy.mockRestore();
+  });
+
+  test('resolves structure.reports relative to config dir', () => {
+    // Renamed from `overview:` — the directory now holds diff, seed map, overview, item
+    // sizes, leaf review and inventory, so the old name described one of its contents.
+    const cfgPath = writeConfig('structure:\n  output: ./out\n  reports: ./reviews\n');
     expect(loadCompileConfig(cfgPath)._resolvedOverview).toBe(path.resolve(tmpDir, 'reviews'));
   });
 
@@ -320,17 +344,20 @@ describe('loadCompileConfig', () => {
       .toEqual([path.resolve(tmpDir, 'items')]);
   });
 
-  test('expands {%variable} and {@canon} in items paths (parity with templates)', () => {
+  test('expands {%variable} and canon names in items paths', () => {
+    // Canon names are auto-exposed as variables (§6.1), so `{%Base}` does what `{@Base}`
+    // used to — one naming system instead of two.
     const cfgPath = writeConfig([
       'variables:',
       '  root: shared',
       'structure:',
+      '  output: ./out',
       '  input:',
       '    canon:',
       '      Base: ./base',
       '    items:',
       '      - "{%root}/Canon"',
-      '      - "{@Base}/extra"',
+      '      - "{%Base}/extra"',
     ].join('\n') + '\n');
     const { _resolvedItems } = loadCompileConfig(cfgPath);
     expect(_resolvedItems[0]).toBe(path.resolve(tmpDir, 'shared/Canon'));
@@ -343,18 +370,38 @@ describe('loadCompileConfig', () => {
     expect(_resolvedCanon.get('Core')).toBe(path.resolve(tmpDir, 'canon/core'));
   });
 
-  test('two-pass canon: entry using {@Name} resolves after first pass', () => {
+  test('a canon entry may reference a sibling canon name', () => {
+    // v3 needed a bespoke two-pass resolver for this. Canon names are variables now, so
+    // it falls out of ordinary variable resolution.
     const cfgPath = writeConfig([
       'structure:',
+      '  output: ./out',
       '  input:',
       '    canon:',
       '      Base: ./base',
-      '      Ext: "{@Base}/ext"',
+      '      Ext: "{%Base}/ext"',
     ].join('\n') + '\n');
     const { _resolvedCanon } = loadCompileConfig(cfgPath);
     const ext = _resolvedCanon.get('Ext');
     expect(ext).toContain('base');
     expect(ext).toContain('ext');
+  });
+
+  test('a canon name colliding with a declared variable is an ERROR', () => {
+    const p = path.join(tmpDir, 'compile.yaml');
+    fs.writeFileSync(p, [
+      'version: 4',
+      'variables:',
+      '  Base: ./somewhere',
+      'structure:',
+      '  output: ./out',
+      '  input:',
+      '    canon:',
+      '      Base: ./base',
+    ].join('\n') + '\n', 'utf8');
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => loadCompileConfig(p)).toThrow(/Configuration has/);
+    spy.mockRestore();
   });
 
   test('passes through protagonist, variables, and branches', () => {

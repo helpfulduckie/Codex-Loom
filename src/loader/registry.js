@@ -233,13 +233,9 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
 
   for (const def of includeDefs) {
     // Root variables only: includes resolve once, before branches are enumerated (§5.1).
-    let includePath = expandTokens(String(def.include), {
-      variables: config.variables || null,
-      components: config._resolvedComponents,
-      canon: config._resolvedCanon,
-      mode: 'path',
-      warnMissing: false,
-    });
+    // Root variables only: includes resolve once, before branches are enumerated
+    // (§5.1). Canon names are among those variables as of §6.1.
+    let includePath = expandTokens(String(def.include), { variables: config._variables || config.variables || null });
     includePath = path.normalize(includePath);
 
     const fullPath = path.isAbsolute(includePath) ? includePath : path.resolve(config._base, includePath);

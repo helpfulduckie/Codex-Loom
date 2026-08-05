@@ -1,11 +1,12 @@
+version: 4
 structure:
   input:
-    cards:
-      - ./cards
     canon:
       main: ./canon
     templates:
       - ./templates
+    items:
+      - ./cards
   output: ./output
 
 protagonist: Aness

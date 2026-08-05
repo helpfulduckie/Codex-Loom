@@ -271,21 +271,24 @@ Year: {%year}
 
 `{%key}` is expanded at the start of template rendering (and in item body fields before rendering), so it can appear anywhere in template or item content.
 
-Component key references (`{@name}`) are **not** expanded in templates or item bodies. They are resolved only in path/prose contexts — `compile.yaml` config paths (canon, templates, components), component specs, `include:` paths, opening prose, and description config. Do not use `{@name}` inside an item `body:` or a `.template`; it will be emitted verbatim. See the comparison below.
+Component key references (`{%name}`) are **not** expanded in templates or item bodies. They are resolved only in path/prose contexts — `compile.yaml` config paths (canon, templates, components), component specs, `include:` paths, opening prose, and description config. Do not use `{%name}` inside an item `body:` or a `.template`; it will be emitted verbatim. See the comparison below.
 
 ---
 
 ## Token Systems at a Glance
 
-Codex Loom has three token families that look similar but resolve through different machinery. `{%}` and `{@}` are the compile-time *path/value* family (covered here); the `{$…}` family is the *field-reference* system documented earlier in this file.
+Codex Loom has two compile-time token families. `{%}` is the *path/value* family covered here; `{$…}` is the *field-reference* system documented earlier in this file.
 
 | Token | Name | Declared in | Resolves to | Available in |
 |---|---|---|---|---|
-| `{%key}` | Compile variable | `compile.yaml` `variables:` (root + per-branch) | a string value (recursive, cycle-detected; warns if undeclared) | item `id`/`name`/`body`/`aid`/`render` (string values), templates, opening prose, component specs, config paths (items/canon/templates/components), `include:` paths, branch `title`/`protagonist` |
-| `{@key}` | Named reference | `structure.input.canon` + `structure.input.components` | a path (path mode) or file contents (content mode) | config paths, component specs, `include:` paths, opening prose, description config — **not** item bodies/templates |
+| `{%key}` | Compile variable | `compile.yaml` `variables:` (root + per-branch), and every `structure.input.canon` name | a string value (recursive, cycle-detected; ERROR if undeclared) | item `id`/`name`/`body`/`aid`/`render` (string values), templates, opening prose, component specs, config paths, `include:` paths, branch `title`/`protagonist` |
 | `{$v.key}` / `{$Id.body.field}` | Field reference | an item's `v:` block / another item's fields | an item field value | templates, and item `body`/`aid`/`render`/`name` fields (the `{$…}` interpolation + cross-item + pronoun passes) |
 
-**`{%}` vs `{@}` are intentionally distinct:** `{%}` substitutes a *value*; `{@}` resolves a *named resource* (a directory, file path, or file contents). Both route through the single shared expander (`src/tokens.js`), so their scope, lookup order (components then canon for `{@}`), warnings, and cycle handling are identical at every call site.
+**There used to be a third: `{@key}`, a named reference declared under `structure.input.components` and `structure.input.canon`.** It is removed in v4, and deleting it cost nothing. Its lookup searched every per-type map in sequence and returned the first name match, so `{@pe}` resolved identically no matter which type declared it — no project could depend on the grouping, because the grouping never worked. Its one behavioral difference was already applied to every component spec downstream, and the declaration subtree duplicated `variables:`: both name a string for reuse.
+
+**Canon names are now auto-exposed as variables**, so `{%characters}/Aness.yaml` does what `{@characters}/Aness.yaml` used to. That leaves one naming system and removes the question *is this a `{%}` thing or a `{@}` thing?* — which had no principled answer, because the two overlapped almost entirely. A canon name colliding with a declared variable is an ERROR (`CL0521`), since the two now share a namespace.
+
+`codex-loom --migrate` rewrites `{@}` references automatically: a canon name changes sigil, and a component alias is replaced by the value it was declared as.
 
 **Scope caveat:** `{%}` in `include:`/`import:` paths uses **root** `variables:` only — includes resolve once, before branches are enumerated, so per-branch variable overrides are not in scope there. Everywhere else `{%}` uses the full root → branch merge.
 

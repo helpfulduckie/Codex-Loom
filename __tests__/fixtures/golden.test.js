@@ -34,6 +34,15 @@ const OUTPUT_SUBDIR = 'Velvet Lattice';
 /** The committed baseline, relative to the project directory. */
 const BASELINE_SUBDIR = 'v3';
 
+/**
+ * The migrated v4 sources, committed beside the frozen v3 output.
+ *
+ * The migrator runs at re-baseline time only, never here: if the test migrated on every
+ * run, a migrator bug and a compiler bug would produce the same red and there would be no
+ * way to tell them apart. `Loom/` keeps the original v3 sources for comparison.
+ */
+const SOURCE_SUBDIR = 'v4';
+
 let tmpDir;
 
 /** Collect every file under `dir` as a sorted list of paths relative to it. */
@@ -63,7 +72,11 @@ function normalizeManifest(raw, rootDir) {
   const root = rootDir.replace(/\\/g, '/').toLowerCase();
   const scrub = (value) => {
     if (typeof value === 'string') {
-      const unified = value.replace(/\\/g, '/');
+      const unified = value.replace(/\\/g, '/')
+        // The manifest records which compile.yaml produced the output. The v4 sources
+        // live in v4/ and the v3 baseline was compiled from Loom/, so that segment
+        // differs by fixture scaffolding rather than by anything about the scenario.
+        .replace(/\/(v4|Loom)\/compile\.(cl\.)?ya?ml$/, '/<SOURCE>/compile.yaml');
       return unified.toLowerCase().startsWith(root)
         ? `<ROOT>${unified.slice(root.length)}`
         : unified;
@@ -94,7 +107,7 @@ beforeAll(() => {
   const quiet = ['log', 'warn', 'error'].map((level) => jest.spyOn(console, level).mockImplementation(() => {}));
   try {
     for (const project of PROJECTS) {
-      compile(path.join(tmpDir, project.dir, 'Loom', 'compile.yaml'));
+      compile(path.join(tmpDir, project.dir, SOURCE_SUBDIR, 'compile.yaml'));
     }
   } finally {
     quiet.forEach((spy) => spy.mockRestore());

@@ -20,9 +20,10 @@ function run(args, cwd) {
 }
 
 const MINIMAL_COMPILE_YAML = `
+version: 4
 structure:
   input:
-    cards: []
+    items: []
   output: ./output
 protagonist: Test
 branches:
@@ -30,11 +31,12 @@ branches:
 `.trimStart();
 
 const COMPILE_YAML_WITH_OVERVIEW = `
+version: 4
 structure:
   input:
-    cards: []
+    items: []
   output: ./output
-  overview: ./my-overviews
+  reports: ./my-overviews
 protagonist: Test
 branches:
   only: {}

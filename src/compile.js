@@ -82,29 +82,17 @@ function resolveOpeningContent(opening, base, variables) {
 }
 
 /**
- * Expand {@Key} references in text (content mode: returns file contents).
- * Resolves against components first, then canon.
- */
-function resolveComponentKey(text, componentDirs, canon) {
-  if (!componentDirs || typeof text !== 'string') return text;
-  return expandTokens(text, { components: componentDirs, canon, mode: 'content' });
-}
-
-/**
- * Resolve a component spec value (file path | literal string | {%var} | {@Key}) to a file path.
- * Returns null if spec is null/undefined.
- * Returns a resolved absolute path if the spec points to an existing file.
- * Returns the literal string (for opening/openingChoice inline text).
+ * Resolve a component spec (a file path, or literal text) against branch-merged variables.
  *
- * {@Key} resolves against components then canon (path mode); {%var} expands from
- * the supplied branch-merged variables. Missing {@Key} tokens pass through silently
- * (the spec may legitimately be inline text rather than a reference).
+ * Returns null for an absent spec, an absolute path when the spec names a file that
+ * exists, and otherwise the literal string — `branchFraming` is often a question rather
+ * than a path, and that fallback is what lets one key carry both.
  */
-function resolveComponentSpec(spec, base, componentDirs, canon, variables) {
+function resolveComponentSpec(spec, base, variables) {
   if (spec == null) return null;
   let resolved = spec;
   if (typeof resolved === 'string') {
-    resolved = expandTokens(resolved, { variables, components: componentDirs, canon, mode: 'path', warnMissing: false });
+    resolved = expandTokens(resolved, { variables });
   }
   // Try resolving as file or directory path
   const filePath = path.resolve(base, String(resolved));
@@ -119,15 +107,22 @@ function resolveComponentSpec(spec, base, componentDirs, canon, variables) {
  */
 function buildCompileContext(config, branchPath) {
   const chain = walkBranchChain(config.branches, branchPath);
-  const variables = Object.assign({}, config.variables || {}, chain.variables);
+  const variables = Object.assign({}, config._variables || config.variables || {}, chain.variables);
   const components = Object.assign({}, config.components || {}, chain.components);
 
+  // `scripts:` is top-level as of §6.3: it is a file copy, not a rendered document, and
+  // it was the one row in the component table that shared none of the row's behavior. It
+  // still merges down the branch chain like everything else, so it is folded back in
+  // here rather than resolved separately.
+  const scripts = chain.scripts !== undefined ? chain.scripts : config.scripts;
+  if (scripts !== undefined) components.scripts = scripts;
+
   // Resolve component specs to file paths
-  const componentTypes = ['aiInstructions', 'opening', 'openingChoice', 'plotEssential', 'authorsNote', 'scripts'];
+  const componentTypes = ['aiInstructions', 'opening', 'branchFraming', 'plotEssential', 'authorsNote', 'scripts'];
   const componentRefs = {};
   for (const type of componentTypes) {
     const spec = components[type] !== undefined ? components[type] : null;
-    componentRefs[type] = resolveComponentSpec(spec, config._base, config._resolvedComponents, config._resolvedCanon, variables);
+    componentRefs[type] = resolveComponentSpec(spec, config._base, variables);
   }
 
   return { variables, componentRefs };
@@ -425,16 +420,6 @@ function writeComponentFile(outputDir, filename, content) {
 }
 
 /**
- * Expand {@Key} component references in an opening spec, returning the stored
- * path/value without reading file contents (path mode vs resolveComponentKey's content mode).
- * Used so that opening: '{@op}' resolves to the file path, not the file contents.
- */
-function expandOpeningKeyRef(spec, componentDirs, canon) {
-  if (!spec || typeof spec !== 'string' || !componentDirs) return spec;
-  return expandTokens(spec, { components: componentDirs, canon, mode: 'path' });
-}
-
-/**
  * Detect whether a raw opening spec resolves to a .yaml/.yml file.
  * Returns the absolute path if it is a YAML file, otherwise null.
  */
@@ -461,12 +446,12 @@ function resolveYamlOpeningPath(spec, base, variables) {
  *
  * Node-level writes are why this uses the tree visitor rather than the leaf loop.
  */
-function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables, componentDirs, canon, currentPath = [], verbose = false) {
+function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables, currentPath = [], verbose = false) {
   const writtenLeaves = new Set();
 
   const emitOpening = (spec, outputDir, leafPath, vars) => {
     // {@Key} expands in path mode here — the result is a path, not file contents.
-    const expanded = expandOpeningKeyRef(spec, componentDirs, canon);
+    const expanded = spec;
     const yamlPath = resolveYamlOpeningPath(expanded, configBase, vars);
     const content = yamlPath
       ? compileOpening(loadOpeningConfig(yamlPath), leafPath, vars, configBase)
@@ -492,20 +477,18 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
     // v3 accepted these both under components: and directly on the branch node.
     const declaredOpening = node && node.components && node.components.opening !== undefined
       ? node.components.opening
-      : (node && node.opening !== undefined ? node.opening : undefined);
+      : undefined;
     const effectiveOpening = declaredOpening !== undefined ? declaredOpening : state.inheritedOpening;
 
-    const framing = node && node.components && node.components.openingChoice !== undefined
-      ? node.components.openingChoice
-      : (node && node.openingChoice !== undefined ? node.openingChoice : null);
+    const framing = node && node.components && node.components.branchFraming !== undefined
+      ? node.components.branchFraming
+      : null;
 
     if (framing != null) {
       if (isLeaf) {
-        console.warn(`  WARN: openingChoice on leaf branch "${name}" — ignoring`);
+        console.warn(`  WARN: branchFraming on leaf branch "${name}" — ignoring`);
       } else {
-        const expanded = (componentDirs && typeof framing === 'string')
-          ? resolveComponentKey(framing, componentDirs, canon)
-          : framing;
+        const expanded = framing;
         const outPath = writeComponentFile(
           nodeOutput, 'Opening.md', resolveOpeningContent(expanded, configBase, branchVars)
         );
@@ -765,17 +748,17 @@ function compile(configPath, options = {}) {
 
   // Write Opening / OpeningChoice files (post-loop)
 
-  // Root-level openingChoice: non-inheriting, written at the root output dir
-  const rootOpeningChoice = config.components && config.components.openingChoice != null
-    ? config.components.openingChoice
+  // Root-level branchFraming: non-inheriting, written at the root output dir
+  const rootOpeningChoice = config.components && config.components.branchFraming != null
+    ? config.components.branchFraming
     : null;
   if (rootOpeningChoice != null) {
     const hasBranches = config.branches && Object.keys(config.branches).length > 0;
     if (!hasBranches) {
-      console.warn(`  WARN: root openingChoice with no branches — ignoring`);
+      console.warn(`  WARN: root branchFraming with no branches — ignoring`);
     } else {
       const expandedChoice = typeof rootOpeningChoice === 'string'
-        ? resolveComponentKey(rootOpeningChoice, config._resolvedComponents, config._resolvedCanon)
+        ? rootOpeningChoice
         : rootOpeningChoice;
       const content = resolveOpeningContent(expandedChoice, config._base, config.variables || {});
       const outPath = writeComponentFile(config._resolvedOutput, 'Opening.md', content);
@@ -788,11 +771,11 @@ function compile(configPath, options = {}) {
     : null;
   const leafOpeningKeys = writeOpeningsRecursive(
     config.branches, config._resolvedOutput, config._base,
-    rootOpening, config.variables || {}, config._resolvedComponents, config._resolvedCanon,
+    rootOpening, config._variables || config.variables || {},
     [], verbose
   );
 
-  writeLabelsRecursive(config.branches, config._resolvedOutput, config.variables || {}, verbose);
+  writeLabelsRecursive(config.branches, config._resolvedOutput, config._variables || config.variables || {}, verbose);
 
   // Root Label (project-level, written once to output root alongside Description.md)
   if (config.title != null) {
@@ -805,7 +788,7 @@ function compile(configPath, options = {}) {
   // Description (project-level, written once to output root alongside Branches/)
   const descRequested = config.components && config.components.description != null;
   const descSpec = descRequested
-    ? resolveComponentSpec(config.components.description, config._base, config._resolvedComponents, config._resolvedCanon, config.variables || null)
+    ? resolveComponentSpec(config.components.description, config._base, config._variables || config.variables || null)
     : null;
   if (descRequested && !(descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec))) {
     recordGap('(project)', 'Description', descSpec, 'source not found');
@@ -819,7 +802,7 @@ function compile(configPath, options = {}) {
     } else if (ext === '.js') {
       bannerContent = extractScriptBanner(descSpec, {});
     } else {
-      const descCfg = loadDescConfig(descSpec, config._base, config._resolvedComponents, config.variables || {}, config._resolvedCanon);
+      const descCfg = loadDescConfig(descSpec, config._base, config._variables || config.variables || {});
       if (descCfg.bodyPath && fs.existsSync(descCfg.bodyPath))
         bodyContent = fs.readFileSync(descCfg.bodyPath, 'utf8').trimEnd() || null;
       if (descCfg.scriptPath && fs.existsSync(descCfg.scriptPath))

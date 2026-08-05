@@ -11,11 +11,29 @@ let tmpDir;
 beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cfg-')); });
 afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
 
-/** Write a config and load it into a private bus, so nothing prints or throws. */
+/**
+ * Write a config and load it into a private bus, so nothing prints or throws.
+ *
+ * v4 requires `version:`, `structure:` and `structure.output`, which most cases here are
+ * not about. They are **appended** rather than prepended so the line numbers of the
+ * content under test are unaffected — several assertions below pin them.
+ */
 function load(yaml, { dirs = [] } = {}) {
   for (const dir of dirs) fs.mkdirSync(path.join(tmpDir, dir), { recursive: true });
+  let text = yaml;
+  // Only a mapping document gets scaffolding; the malformed-input cases below must reach
+  // the loader exactly as written.
+  const isMapping = /^[A-Za-z_]\w*:/m.test(text);
+  if (isMapping) {
+    if (!/^version:/m.test(text)) text += '\nversion: 4\n';
+    if (!/^structure:/m.test(text)) text += '\nstructure:\n  output: ./out\n';
+    else if (!/^ {2}output:/m.test(text)) {
+      // Into the existing block — a second `structure:` would be a duplicate key.
+      text = text.replace(/^structure:$/m, 'structure:\n  output: ./out');
+    }
+  }
   const cfgPath = path.join(tmpDir, 'compile.cl.yaml');
-  fs.writeFileSync(cfgPath, yaml, 'utf8');
+  fs.writeFileSync(cfgPath, text, 'utf8');
   const diagnostics = new Diagnostics();
   const config = loadCompileConfig(cfgPath, { diagnostics });
   return { config, diagnostics, codes: diagnostics.all.map((d) => d.code), cfgPath };
@@ -31,8 +49,9 @@ describe('diagnostics carry source positions (§4.4)', () => {
   });
 
   test('a nested unknown key points at the key itself, not its parent', () => {
-    const { diagnostics } = load('structure:\n  input:\n    nope: []\n');
-    expect(diagnostics.errors[0].line).toBe(3);
+    // `output:` written explicitly so the helper does not inject a line above `input:`.
+    const { diagnostics } = load('structure:\n  output: ./out\n  input:\n    nope: []\n');
+    expect(diagnostics.errors[0].line).toBe(4);
   });
 
   test('a path warning points at the offending sequence entry', () => {
@@ -169,16 +188,16 @@ describe('resolution behavior carried forward', () => {
     expect(load('structure:\n  output: ./out\n').config._resolvedOutput).toBe(path.join(tmpDir, 'out'));
   });
 
-  test('output still defaults to ./output until Step 8 makes it required', () => {
-    expect(load('title: x\n').config._resolvedOutput).toBe(path.join(tmpDir, 'output'));
+  test('the v3 cards: key is gone — it is an unknown key now', () => {
+    const { diagnostics } = load('structure:\n  output: ./out\n  input:\n    cards: [./Codex]\n');
+    expect(diagnostics.errors.some((d) => d.message.includes('Unknown key "cards"'))).toBe(true);
   });
 
-  // `cards:` is the v3 spelling and `items:` the v4 one. Both load until Step 8 makes
-  // the config break; this pins that they resolve identically in the meantime.
-  test('the v3 cards: and v4 items: keys are equivalent while both are accepted', () => {
-    const viaItems = load('structure:\n  input:\n    items: [./Codex]\n', { dirs: ['Codex'] });
-    const viaCards = load('structure:\n  input:\n    cards: [./Codex]\n', { dirs: ['Codex'] });
-    expect(viaItems.config._resolvedItems).toEqual(viaCards.config._resolvedItems);
+  test('and it names items: as the replacement, since edit distance cannot', () => {
+    const { diagnostics } = load('structure:\n  output: ./out\n  input:\n    cards: [./Codex]\n');
+    const diag = diagnostics.errors.find((d) => d.message.includes('cards'));
+    expect(diag.hint).toContain('renamed to "items" in v4');
+    expect(diag.hint).toContain('--migrate');
   });
 
   test('{%variables} expand inside structure paths', () => {
@@ -215,7 +234,7 @@ describe('bus ownership', () => {
 
   test('without a supplied bus, errors are printed and thrown', () => {
     const cfgPath = path.join(tmpDir, 'compile.cl.yaml');
-    fs.writeFileSync(cfgPath, 'bogus: 1\n', 'utf8');
+    fs.writeFileSync(cfgPath, 'version: 4\nstructure:\n  output: ./out\nbogus: 1\n', 'utf8');
     const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
     expect(() => loadCompileConfig(cfgPath)).toThrow('Configuration has 1 error');
     expect(spy).toHaveBeenCalled();
@@ -224,7 +243,11 @@ describe('bus ownership', () => {
 
   test('warnings alone do not throw', () => {
     const cfgPath = path.join(tmpDir, 'compile.cl.yaml');
-    fs.writeFileSync(cfgPath, 'structure:\n  input:\n    items: [./nope]\n', 'utf8');
+    fs.writeFileSync(
+      cfgPath,
+      'version: 4\nstructure:\n  output: ./out\n  input:\n    items: [./nope]\n',
+      'utf8'
+    );
     const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     expect(() => loadCompileConfig(cfgPath)).not.toThrow();
     spy.mockRestore();

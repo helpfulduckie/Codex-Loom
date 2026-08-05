@@ -129,7 +129,29 @@ function buildKeyIndex(schema) {
  * to edit distance only when no relocation match exists also keeps the two kinds of
  * suggestion from competing to explain the same key.
  */
+/**
+ * Keys v4 renamed, with what replaced them.
+ *
+ * Edit distance cannot help here — `cards` and `items` share one letter — so without
+ * this an author hand-migrating a project gets a bare "unknown key" for the change most
+ * likely to trip them. §14.1 relies on a missing `version:` to say "run --migrate", which
+ * does not fire once they have added it and are fixing the rest by hand.
+ */
+const RENAMED = Object.freeze({
+  cards: 'items',
+  overview: 'reports',
+  openingChoice: 'branchFraming',
+});
+
 function suggestFor(key, ownPath, declaredHere, keyIndex) {
+  const renamedTo = RENAMED[key];
+  if (renamedTo !== undefined) {
+    return {
+      code: CODES.UNKNOWN_KEY,
+      hint: `"${key}" was renamed to "${renamedTo}" in v4. Run codex-loom --migrate to convert the project.`,
+    };
+  }
+
   const elsewhere = (keyIndex.get(key) || []).filter((p) => p !== [...ownPath, key].join('.'));
   if (elsewhere.length > 0) {
     const owner = elsewhere[0].split('.').slice(0, -1).join('.');

@@ -62,8 +62,13 @@ regardless of position, and costs one walk of the parsed tree.
 Only `$` reaches this check. `%` and `@` are reserved indicators in YAML, so an unquoted
 `{%role}` or `{@pe}` is a hard parse error (`CL0101`) rather than a silent swallow. The
 check covers all three sigils anyway, because a mapping of that shape can arrive from
-somewhere other than a plain parse.
+somewhere other than a plain parse. (`{@}` is removed as a token family in §6.1, but the
+guard still recognizes the sigil so a half-migrated project fails clearly.)
 
+### CL01xx continued
+
+| Code | Severity | Meaning |
+|---|---|---|
 | `CL0110` | ERROR | `compile.yaml` is not a mapping of configuration keys. |
 | `CL0120` | WARN | A declared input path does not exist on disk. |
 | `CL0130` | WARN | An `include:` path does not exist. |
@@ -125,6 +130,11 @@ caller-supplied `onWarn(code, message)` rather than printed where they arise. Re
 | `CL0510` | ERROR | A referenced variable is not declared anywhere. |
 | `CL0511` | ERROR | Variables form a reference cycle; every key in the loop is named. |
 | `CL0520` | ERROR | A branch-scoped variable was used where only root variables resolve. |
+| `CL0521` | ERROR | A canon name collides with a declared variable. |
+
+`CL0521` exists because canon names are auto-exposed as variables (§6.1), so the two share
+one namespace. A collision is an ERROR rather than a silent precedence rule: there is no
+answer to "which one wins" that an author could predict.
 
 ### CL0520 in detail
 
