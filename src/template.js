@@ -1,6 +1,6 @@
 'use strict';
 
-const { normalizeVarKey, resolveVariables, walkCardTextFields } = require('./util');
+const { normalizeVarKey, resolveVariables, walkItemTextFields } = require('./util');
 
 /**
  * Template engine for Codex Loom v3.
@@ -380,7 +380,7 @@ function applyFieldInterpolation(card) {
     v: card.v || {},
   };
 
-  walkCardTextFields(card, s => processFieldInterpolation(s, context));
+  walkItemTextFields(card, s => processFieldInterpolation(s, context));
 }
 
 function processFieldInterpolation(value, context) {
@@ -434,7 +434,7 @@ function applyFieldRenderFunctions(card, cardMap) {
  */
 function applyVariableInterpolation(card, variables) {
   if (!variables) return;
-  // card.name is normalized to {display, full, ...} by resolveCard before this runs
+  // card.name is normalized to {display, full, ...} by resolveItem before this runs
   if (card.name && typeof card.name === 'object' && !Array.isArray(card.name)) {
     applyVariableInterpolationRecursive(card.name, variables);
   } else if (typeof card.name === 'string') {

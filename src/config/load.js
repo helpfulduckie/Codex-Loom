@@ -313,7 +313,7 @@ function loadCompileConfig(configPath, options = {}) {
   // TRANSITIONAL — `cards` becomes `items` in Step 8; both are read until then. The key
   // that was actually written is remembered so diagnostics point at the real line.
   const itemsKey = input.items !== undefined ? 'items' : 'cards';
-  const resolvedCards = resolveList(input[itemsKey], itemsKey);
+  const resolvedItems = resolveList(input[itemsKey], itemsKey);
 
   const componentTypes = ['aiInstructions', 'opening', 'openingChoice', 'plotEssential', 'authorsNote', 'scripts', 'description'];
   const resolvedComponents = {};
@@ -324,7 +324,7 @@ function loadCompileConfig(configPath, options = {}) {
     );
   }
 
-  for (const [i, p] of resolvedCards.entries()) {
+  for (const [i, p] of resolvedItems.entries()) {
     if (!fs.existsSync(p)) {
       diagnostics.warn(CODES.PATH_NOT_FOUND, `Items path not found: ${p}`, at('structure', 'input', itemsKey, String(i)));
     }
@@ -346,7 +346,7 @@ function loadCompileConfig(configPath, options = {}) {
     _base: base,
     _resolvedOutput: resolvedOutput,
     _resolvedOverview: resolvedOverview,
-    _resolvedCards: resolvedCards,
+    _resolvedItems: resolvedItems,
     _resolvedCanon: resolvedCanon,
     _resolvedTemplates: resolvedTemplates,
     _resolvedComponents: resolvedComponents,

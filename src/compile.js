@@ -8,9 +8,9 @@ const {
   buildRegistry, mergeRegistries, buildOverlays, loadYaml,
 } = require('./loader');
 const {
-  resolveCard, enumerateLeaves, walkBranchChain, walkBranchTree,
+  resolveItem, enumerateLeaves, walkBranchChain, walkBranchTree,
 } = require('./resolver');
-const { applyPronounPasses, applyCrossCardRefs } = require('./model/pronouns');
+const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
 const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, consoleWarner } = require('./util');
 const { expandTokens } = require('./tokens');
@@ -30,34 +30,34 @@ const { DOCUMENT_COMPONENTS, emitDocumentComponent } = require('./emit/component
 const INVALID_TYPE_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
 
 /**
- * Validate a card's aid.type after variable expansion. aid.type is written to disk
+ * Validate a item's aid.type after variable expansion. aid.type is written to disk
  * as Story Cards/{type}/{type}.md, so it must be a legal path segment. Throws (aborts
- * the compile) on an invalid type. No-op when the card has no aid.type (that case is
- * already warned about during card resolution).
+ * the compile) on an invalid type. No-op when the item has no aid.type (that case is
+ * already warned about during item resolution).
  */
-function validateCardType(card) {
-  const type = card.aid && card.aid.type;
+function validateCardType(item) {
+  const type = item.aid && item.aid.type;
   if (typeof type !== 'string' || type === '') return;
   const trimmed = type.trim();
-  const name = card.id || (typeof card.name === 'string' ? card.name : '(unknown)');
-  const src = card._source ? ` (${card._source})` : '';
+  const name = item.id || (typeof item.name === 'string' ? item.name : '(unknown)');
+  const src = item._source ? ` (${item._source})` : '';
   let reason = null;
   if (trimmed === '') reason = 'is empty/whitespace';
   else if (INVALID_TYPE_CHARS.test(type)) reason = 'contains an illegal path character (one of < > : " / \\ | ? *)';
   else if (trimmed === '.' || trimmed === '..') reason = 'is "." or ".."';
   else if (/[ .]$/.test(type)) reason = 'ends with a space or period';
   if (reason) {
-    throw new Error(`Invalid aid.type "${type}" for card "${name}"${src}: ${reason}. aid.type becomes a folder/file name and must be a legal path segment.`);
+    throw new Error(`Invalid aid.type "${type}" for item "${name}"${src}: ${reason}. aid.type becomes a folder/file name and must be a legal path segment.`);
   }
 }
 
 /**
- * Get the template for a card. Checks render.template first, then aid.type.
+ * Get the template for a item. Checks render.template first, then aid.type.
  */
-function getTemplate(card, templates) {
+function getTemplate(item, templates) {
   const keys = [
-    card.render && card.render.template,
-    card.aid && card.aid.type,
+    item.render && item.render.template,
+    item.aid && item.aid.type,
   ].filter(Boolean);
   for (const key of keys) {
     const t = templates.get(key.toLowerCase());
@@ -134,14 +134,14 @@ function buildCompileContext(config, branchPath) {
 }
 
 /**
- * Write compiled cards to output directory.
- * One .md file per card type: Story Cards/{type}/{type}.md
+ * Write compiled items to output directory.
+ * One .md file per item type: Story Cards/{type}/{type}.md
  */
-function writeOutput(outputDir, type, renderedCards) {
+function writeOutput(outputDir, type, renderedItems) {
   const typeDir = path.join(outputDir, 'Story Cards', type);
   fs.mkdirSync(typeDir, { recursive: true });
   const outputPath = path.join(typeDir, `${type}.md`);
-  fs.writeFileSync(outputPath, renderedCards.join('\n\n') + '\n', 'utf8');
+  fs.writeFileSync(outputPath, renderedItems.join('\n\n') + '\n', 'utf8');
   return outputPath;
 }
 
@@ -264,139 +264,139 @@ function buildCanonManifest(config) {
 
 /**
  * Compile story cards for a single branch leaf.
- * Returns array of resolved cards (after Phase A), in place for Phase B caller.
+ * Returns array of resolved items (after Phase A), in place for Phase B caller.
  *
  * Phase A: resolve + field interpolation
- * Phase B (caller): cross-card refs + pronouns + render
+ * Phase B (caller): cross-item refs + pronouns + render
  */
 function compileBranchPhaseA(allCardDefs, registry, branchPath, variables) {
-  const resolvedCards = [];
+  const resolvedItems = [];
 
-  for (const cardDef of allCardDefs) {
-    if (cardDef.include) continue; // include directives already expanded
+  for (const itemDef of allCardDefs) {
+    if (itemDef.include) continue; // include directives already expanded
 
-    let card;
+    let item;
     try {
-      card = resolveCard(cardDef, registry, branchPath, consoleWarner);
+      item = resolveItem(itemDef, registry, branchPath, consoleWarner);
     } catch (err) {
-      const label = cardDef.id || cardDef.import || cardDef.name || '?';
-      const src = cardDef._source ? ` (${cardDef._source})` : '';
-      console.error(`  ERR resolving card "${label}"${src}: ${err.message}`);
+      const label = itemDef.id || itemDef.import || itemDef.name || '?';
+      const src = itemDef._source ? ` (${itemDef._source})` : '';
+      console.error(`  ERR resolving item "${label}"${src}: ${err.message}`);
       continue;
     }
 
-    if (!card) continue; // excluded by branch spec
+    if (!item) continue; // excluded by branch spec
 
-    applyFieldInterpolation(card);
-    applyVariableInterpolation(card, variables);
-    resolvedCards.push(card);
+    applyFieldInterpolation(item);
+    applyVariableInterpolation(item, variables);
+    resolvedItems.push(item);
   }
 
-  return resolvedCards;
+  return resolvedItems;
 }
 
 /**
- * Phase B: apply cross-card refs, pronouns, render, and write output.
+ * Phase B: apply cross-item refs, pronouns, render, and write output.
  */
-function compileBranchPhaseB(resolvedCards, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}, verbose = false, renderedById = null) {
-  // Build early so render functions can resolve cross-card refs during field expansion.
+function compileBranchPhaseB(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}, verbose = false, renderedById = null) {
+  // Build early so render functions can resolve cross-item refs during field expansion.
   const resolvedById = new Map();
-  for (const card of resolvedCards) {
-    const id = (card.id || '').toLowerCase();
-    if (id) resolvedById.set(id, card);
+  for (const item of resolvedItems) {
+    const id = (item.id || '').toLowerCase();
+    if (id) resolvedById.set(id, item);
   }
 
-  applyCrossCardRefs(resolvedCards, registry, consoleWarner);
+  applyCrossItemRefs(resolvedItems, registry, consoleWarner);
 
-  // Expand render functions in body field values now that cross-card refs are resolved.
+  // Expand render functions in body field values now that cross-item refs are resolved.
   // Multi-pass: repeat until no body fields change, to handle order-dependent chains
-  // where A.field = join($B.body.x) and B.body.x itself contains a cross-card render
-  // function. Cap at N+1 passes (N = card count): a non-circular graph of N cards has
+  // where A.field = join($B.body.x) and B.body.x itself contains a cross-item render
+  // function. Cap at N+1 passes (N = item count): a non-circular graph of N items has
   // at most N-1 chain depth, so N-1 resolve passes + 1 convergence pass = N total.
   // The +1 ensures the worst-case linear chain doesn't falsely trigger the warning —
   // only a true cycle can exceed this bound.
-  const maxPasses = resolvedCards.length + 1;
+  const maxPasses = resolvedItems.length + 1;
   let changed = true;
   let pass = 0;
   while (changed && pass < maxPasses) {
     changed = false;
     pass++;
-    for (const card of resolvedCards) {
-      const snapshot = JSON.stringify(card.body);
-      applyFieldRenderFunctions(card, resolvedById);
-      if (JSON.stringify(card.body) !== snapshot) changed = true;
+    for (const item of resolvedItems) {
+      const snapshot = JSON.stringify(item.body);
+      applyFieldRenderFunctions(item, resolvedById);
+      if (JSON.stringify(item.body) !== snapshot) changed = true;
     }
   }
   if (pass === maxPasses) {
-    console.warn(`  WARN: cross-card render functions may have circular dependencies — stopped after ${maxPasses} passes`);
+    console.warn(`  WARN: cross-item render functions may have circular dependencies — stopped after ${maxPasses} passes`);
   }
 
   const grouped = new Map();
 
-  for (const card of resolvedCards) {
-    applyPronounPasses(card, registry, branchProtagonist, resolvedById);
+  for (const item of resolvedItems) {
+    applyPronounPasses(item, registry, branchProtagonist, resolvedById);
 
-    if (suppressIds.has((card.id || '').toLowerCase())) continue; // fully rendered in PE; skip story card
+    if (suppressIds.has((item.id || '').toLowerCase())) continue; // fully rendered in PE; skip story card
 
     // Validate the fully-resolved aid.type (it becomes a folder/file name). Runs here,
     // after all {%}/{$} passes, so it sees the final on-disk type. Aborts on invalid.
-    validateCardType(card);
+    validateCardType(item);
 
-    const template = getTemplate(card, templates);
+    const template = getTemplate(item, templates);
     if (!template) {
-      const name = card.id || (typeof card.name === 'string' ? card.name : String(card.name));
-      const type = (card.aid && card.aid.type) || (card.render && card.render.template) || '?';
-      const src = card._source ? ` (${card._source})` : '';
-      console.error(`  ERR: no template found for card "${name}"${src} (type: ${type})`);
+      const name = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
+      const type = (item.aid && item.aid.type) || (item.render && item.render.template) || '?';
+      const src = item._source ? ` (${item._source})` : '';
+      console.error(`  ERR: no template found for item "${name}"${src} (type: ${type})`);
       continue;
     }
 
-    // Build render context: top-level card fields + body for {$body.X} access
+    // Build render context: top-level item fields + body for {$body.X} access
     const context = {
-      id:       card.id,
-      name:     card.name,
-      pronouns: card.pronouns,
-      aid:      card.aid || {},
-      render:   card.render || {},
-      body:     card.body || {},
-      v:        card.v || {},
+      id:       item.id,
+      name:     item.name,
+      pronouns: item.pronouns,
+      aid:      item.aid || {},
+      render:   item.render || {},
+      body:     item.body || {},
+      v:        item.v || {},
     };
 
     let rendered;
     try {
       rendered = render(template, context, partials, variables);
     } catch (err) {
-      const name = card.id || String(card.name);
-      const src = card._source ? ` (${card._source})` : '';
-      console.error(`  ERR rendering card "${name}"${src}: ${err.message}`);
+      const name = item.id || String(item.name);
+      const src = item._source ? ` (${item._source})` : '';
+      console.error(`  ERR rendering item "${name}"${src}: ${err.message}`);
       continue;
     }
 
-    const type = (card.aid && card.aid.type) || 'Uncategorized';
-    const cardLabel = card.id || (typeof card.name === 'string' ? card.name : String(card.name));
-    warnUnexpandedVariables(rendered, `card "${cardLabel}" (${type})`);
-    warnUnresolvedFieldTokens(rendered, `card "${cardLabel}" (${type})`);
-    warnMechanicalArtifacts(rendered, `card "${cardLabel}" (${type})`);
+    const type = (item.aid && item.aid.type) || 'Uncategorized';
+    const itemLabel = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
+    warnUnexpandedVariables(rendered, `item "${itemLabel}" (${type})`);
+    warnUnresolvedFieldTokens(rendered, `item "${itemLabel}" (${type})`);
+    warnMechanicalArtifacts(rendered, `item "${itemLabel}" (${type})`);
     if (!grouped.has(type)) grouped.set(type, []);
-    // Carry a sort key (the card's real id, lowercased) so output order is
+    // Carry a sort key (the item's real id, lowercased) so output order is
     // deterministic regardless of authoring order in the source YAML.
-    grouped.get(type).push({ sortKey: String(cardLabel).toLowerCase(), rendered });
-    // Capture the rendered block per card id for cross-branch diff/annotate reports.
-    if (renderedById && card.id) renderedById.set(card.id.toLowerCase(), { type, rendered });
+    grouped.get(type).push({ sortKey: String(itemLabel).toLowerCase(), rendered });
+    // Capture the rendered block per item id for cross-branch diff/annotate reports.
+    if (renderedById && item.id) renderedById.set(item.id.toLowerCase(), { type, rendered });
   }
 
-  // Emit types alphabetically, and cards within each type sorted by id, so the
+  // Emit types alphabetically, and items within each type sorted by id, so the
   // compiled Story Cards (and every downstream review/seed-map artifact) diff
   // cleanly across branches and builds. Story Cards load by trigger in AID, so
   // physical order has no gameplay effect.
   const written = [];
   for (const type of [...grouped.keys()].sort((a, b) => a.localeCompare(b))) {
-    const cards = grouped.get(type)
+    const items = grouped.get(type)
       .sort((a, b) => a.sortKey.localeCompare(b.sortKey) || a.rendered.localeCompare(b.rendered))
       .map(c => c.rendered);
-    const outPath = writeOutput(outputDir, type, cards);
+    const outPath = writeOutput(outputDir, type, items);
     written.push(outPath);
-    if (verbose) console.log(`    OK: ${type} (${cards.length} card(s)) → ${outPath}`);
+    if (verbose) console.log(`    OK: ${type} (${items.length} item(s)) → ${outPath}`);
   }
   return written;
 }
@@ -586,26 +586,26 @@ function compile(configPath, options = {}) {
   // Build canon registry
   const canonRegistry = buildCanonRegistry(config._resolvedCanon, { diagnostics: loadDiagnostics });
   if (canonRegistry.size > 0) {
-    console.log(`Loaded ${canonRegistry.size} canonical card(s).`);
+    console.log(`Loaded ${canonRegistry.size} canonical item(s).`);
   }
 
-  // Load project cards
-  const rawProjectCards = loadCardsFromDir(config._resolvedCards, { diagnostics: loadDiagnostics });
+  // Load project items
+  const rawProjectItems = loadCardsFromDir(config._resolvedItems, { diagnostics: loadDiagnostics });
 
   // Resolve includes
-  const includedCards = resolveIncludes(rawProjectCards, canonRegistry, config, { diagnostics: loadDiagnostics });
-  if (includedCards.length > 0) {
-    console.log(`Loaded ${includedCards.length} included canonical card(s).`);
+  const includedItems = resolveIncludes(rawProjectItems, canonRegistry, config, { diagnostics: loadDiagnostics });
+  if (includedItems.length > 0) {
+    console.log(`Loaded ${includedItems.length} included canonical item(s).`);
   }
 
   reportLoadDiagnostics(loadDiagnostics);
 
-  const allCardDefs = [...rawProjectCards, ...includedCards];
+  const allCardDefs = [...rawProjectItems, ...includedItems];
 
-  const projectRegistry = buildRegistry(rawProjectCards, 'project');
-  console.log(`Loaded ${projectRegistry.size} project card definition(s).`);
+  const projectRegistry = buildRegistry(rawProjectItems, 'project');
+  console.log(`Loaded ${projectRegistry.size} project item definition(s).`);
 
-  const overlays = buildOverlays(rawProjectCards, { diagnostics: loadDiagnostics });
+  const overlays = buildOverlays(rawProjectItems, { diagnostics: loadDiagnostics });
   if (overlays.size > 0) {
     console.log(`Loaded ${overlays.size} Codex overlay(s).`);
   }
@@ -626,7 +626,7 @@ function compile(configPath, options = {}) {
   const leafSummaries = [];
 
   // Cross-branch review reports (--diff / --annotate) are built from data captured
-  // during compilation — the resolver materializes identity-keyed cards in memory that
+  // during compilation — the resolver materializes identity-keyed items in memory that
   // the on-disk markdown has already discarded. Gated so a normal compile is unchanged.
   const captureReports = !!(options.diff || options.annotate);
   const rootDirName = path.basename(config._resolvedOutput);
@@ -655,14 +655,14 @@ function compile(configPath, options = {}) {
     const outputDir = buildBranchOutputDir(config._resolvedOutput, folderPath);
     const ctx = buildCompileContext(config, branchPath);
     // Expand {%var} in protagonist using branch-merged variables, before the
-    // case-insensitive match against card ids.
+    // case-insensitive match against item ids.
     const branchProtagonist = resolveVariables(inheritedProtagonist, ctx.variables).toLowerCase() || null;
     const compileContext = { branchPath, branchProtagonist, ...ctx };
 
     // Compile Plot Essentials BEFORE story cards so suppression follows exactly what
     // PE actually emitted. A full-style import that renders into PE suppresses its
     // story card; one that PE excludes (or fails to render) is left as a story card —
-    // PE can never cause a card to vanish from both outputs.
+    // PE can never cause a item to vanish from both outputs.
     const peSpec = compileContext.componentRefs.plotEssential;
     const peSuppressedIds = new Set();
     let peContent = null;
@@ -686,19 +686,19 @@ function compile(configPath, options = {}) {
     }
 
     // Phase A: resolve all story cards
-    const resolvedCards = compileBranchPhaseA(allCardDefs, registry, branchPath, ctx.variables);
+    const resolvedItems = compileBranchPhaseA(allCardDefs, registry, branchPath, ctx.variables);
 
-    // Accumulate unique card IDs and per-leaf stats for summary
-    for (const card of resolvedCards) {
-      if (card.id) allCardIds.add(card.id.toLowerCase());
+    // Accumulate unique item IDs and per-leaf stats for summary
+    for (const item of resolvedItems) {
+      if (item.id) allCardIds.add(item.id.toLowerCase());
     }
-    const leafCards    = resolvedCards.length;
-    const leafVariants = resolvedCards.filter(c => c._hasVariant).length;
+    const leafItems    = resolvedItems.length;
+    const leafVariants = resolvedItems.filter(c => c._hasVariant).length;
 
-    // Phase B: cross-card refs + pronouns + render + write
+    // Phase B: cross-item refs + pronouns + render + write
     const renderedById = captureReports ? new Map() : null;
     const written = compileBranchPhaseB(
-      resolvedCards, registry, templates, partials, outputDir, branchProtagonist, peSuppressedIds, ctx.variables, verbose, renderedById
+      resolvedItems, registry, templates, partials, outputDir, branchProtagonist, peSuppressedIds, ctx.variables, verbose, renderedById
     );
     totalFiles += written.length;
 
@@ -751,7 +751,7 @@ function compile(configPath, options = {}) {
         label,
         branchPath,
         fileBase: branchPath.length ? branchPath.join(' - ') : rootDirName,
-        cards: renderedById,
+        items: renderedById,
         components: {
           plotEssentials: peDiffBlocks,
           aiInstructions: ainBlockText != null ? [{ key: 'AI Instructions', text: ainBlockText }] : [],
@@ -760,7 +760,7 @@ function compile(configPath, options = {}) {
       });
     }
 
-    leafSummaries.push({ label, leafCards, leafVariants, hasPE, hasAIN, hasAN });
+    leafSummaries.push({ label, leafItems, leafVariants, hasPE, hasAIN, hasAN });
   }
 
   // Write Opening / OpeningChoice files (post-loop)
@@ -839,14 +839,14 @@ function compile(configPath, options = {}) {
   const maxLabelLen = Math.max(...leafSummaries.map(s => s.label.length), 'Branch'.length);
   const lp = maxLabelLen + 2;
   const c = b => b ? ' ✓ ' : ' - ';
-  console.log(`\n  ${'Branch'.padEnd(lp)} ${'Cards'.padStart(5)}  ${'Var'.padStart(3)}   Open   PE  AIN   AN`);
+  console.log(`\n  ${'Branch'.padEnd(lp)} ${'Items'.padStart(5)}  ${'Var'.padStart(3)}   Open   PE  AIN   AN`);
   for (const s of leafSummaries) {
     console.log(
-      `  ${s.label.padEnd(lp)} ${String(s.leafCards).padStart(5)}  ${String(s.leafVariants).padStart(3)}  ` +
+      `  ${s.label.padEnd(lp)} ${String(s.leafItems).padStart(5)}  ${String(s.leafVariants).padStart(3)}  ` +
       ` ${c(s.hasOpening)}  ${c(s.hasPE)} ${c(s.hasAIN)} ${c(s.hasAN)}`
     );
   }
-  console.log(`\n${allCardIds.size} unique cards across project. Wrote ${totalFiles} file(s).`);
+  console.log(`\n${allCardIds.size} unique items across project. Wrote ${totalFiles} file(s).`);
 
   // Canon dependency manifest
   const canonManifest = buildCanonManifest(config);
@@ -1093,7 +1093,7 @@ if (require.main === module) {
         const dir = path.join(outputDir, 'card-sizes');
         fs.mkdirSync(dir, { recursive: true });
         const result = runBodySizeMode(scenarioRoot, dir, flags.verbose);
-        if (result) summaryParts.push('a card sizes file');
+        if (result) summaryParts.push('a item sizes file');
       }
 
       if (doLint) {

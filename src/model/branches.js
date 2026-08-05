@@ -25,7 +25,7 @@ const { deepClone, findKey } = require('../util');
  *   - A mapping in `override` recurses, merging into the matching base mapping.
  * Keys present only in `base` are kept.
  *
- * @param {object} base     - the lower-priority branches mapping (e.g. card/overlay)
+ * @param {object} base     - the lower-priority branches mapping (e.g. item/overlay)
  * @param {object} override - the higher-priority branches mapping (e.g. PE block)
  * @returns {object} merged branches mapping
  */
@@ -53,7 +53,7 @@ function mergeBranchSpecs(base, override) {
       // Leaf override (array/scalar/apply-only mapping) stacked on a present base value:
       // compose apply lists and keep descending into the base's sub-branches unless the
       // override supplies its own — a block-level visibility override like `[]` must not
-      // silently discard the card's nested route-variant tree.
+      // silently discard the item's nested route-variant tree.
       const baseApply = extractApplyList(baseVal);
       const overrideApply = extractApplyList(overrideVal);
       const mergedApply = [...baseApply, ...overrideApply];
@@ -68,10 +68,10 @@ function mergeBranchSpecs(base, override) {
 }
 
 /**
- * Resolve the branch spec for a card/block, walking the branch path.
+ * Resolve the branch spec for a item/block, walking the branch path.
  *
  * Returns:
- *   null             → card is excluded from this branch (explicit ~ on the key)
+ *   null             → item is excluded from this branch (explicit ~ on the key)
  *   string[]         → variant names to apply (may be empty)
  *
  * Resolution at each depth level:
@@ -82,7 +82,7 @@ function mergeBranchSpecs(base, override) {
  *
  * Both '*' and an explicit key can match at the same level; explicit adds to wildcard.
  *
- * @param {object|null} spec - the branches: mapping on a card def
+ * @param {object|null} spec - the branches: mapping on a item def
  * @param {string[]} branchPath - leaf branch path e.g. ['A', 'X']
  * @returns {null | string[]}
  */
@@ -99,7 +99,7 @@ function resolveBranchSpec(spec, branchPath) {
     for (const currentSpec of activeSpecs) {
       if (!currentSpec || typeof currentSpec !== 'object') continue;
 
-      // Check explicit key for null (exclude entire card)
+      // Check explicit key for null (exclude entire item)
       const exactKey = Object.keys(currentSpec).find(k => k !== '*' && k !== '_' && k.toLowerCase() === branchLower);
       if (exactKey !== undefined) {
         const exactVal = currentSpec[exactKey];

@@ -1,6 +1,6 @@
 # Branch Tree & Variant Dispatch
 
-Branches define the playable paths through your scenario. The compiler enumerates all **leaf nodes** (branches with no children) and produces one complete output folder per leaf. Variants define named deltas applied to cards; branch dispatch maps branch names to variant names so each branch gets the right version of each card.
+Branches define the playable paths through your scenario. The compiler enumerates all **leaf nodes** (branches with no children) and produces one complete output folder per leaf. Variants define named deltas applied to items; branch dispatch maps branch names to variant names so each branch gets the right version of each item.
 
 ---
 
@@ -37,11 +37,11 @@ branches:
     protagonist: Veyrn             # folder: Branches/researcher/  (no title)
 ```
 
-The `title:` value is used **only** for the filesystem path. The YAML key (`subject`, `researcher`) remains the identifier used for card `branches:` dispatch, wildcard matching, and all other internal logic.
+The `title:` value is used **only** for the filesystem path. The YAML key (`subject`, `researcher`) remains the identifier used for item `branches:` dispatch, wildcard matching, and all other internal logic.
 
 ### Branch paths
 
-Each leaf is identified by a **path** — the sequence of branch **keys** from root to leaf, joined by `/`. These paths are used by card-level `branches:` dispatch.
+Each leaf is identified by a **path** — the sequence of branch **keys** from root to leaf, joined by `/`. These paths are used by item-level `branches:` dispatch.
 
 | Leaf | Path |
 |---|---|
@@ -52,9 +52,9 @@ Each leaf is identified by a **path** — the sequence of branch **keys** from r
 
 ---
 
-## Variants on Cards
+## Variants on Items
 
-`variants:` on a card definition holds named deltas. Each variant name maps to a partial card definition — any fields present in the variant are layered on top of the current card state.
+`variants:` on an item definition holds named deltas. Each variant name maps to a partial item definition — any fields present in the variant are layered on top of the current item state.
 
 ```yaml
 - id: Felicia
@@ -84,15 +84,15 @@ Each leaf is identified by a **path** — the sequence of branch **keys** from r
 
 Variants can be **nested** to any depth. A slash-separated path `sci-fi/near-future` walks the variant tree: applies `sci-fi`, then descends into `sci-fi.variants.near-future`.
 
-Variants can modify any top-level card field: `name`, `pronouns`, `aid`, `render`, `v` (and all its aliases), and any `body` subfield.
+Variants can modify any top-level item field: `name`, `pronouns`, `aid`, `render`, `v` (and all its aliases), and any `body` subfield.
 
 The `id` field is immutable and cannot be changed by any variant.
 
 ---
 
-## Branch Dispatch on Cards
+## Branch Dispatch on Items
 
-The `branches:` key on a card or import definition maps branch names to local variant names. When the compiler processes a branch leaf, it looks up that leaf's path in the card's `branches:` spec to determine which variant(s) to apply.
+The `branches:` key on an item or import definition maps branch names to local variant names. When the compiler processes a branch leaf, it looks up that leaf's path in the item's `branches:` spec to determine which variant(s) to apply.
 
 ### Scalar form — apply one variant
 
@@ -109,11 +109,11 @@ branches:
   felix: [base, felix]
 ```
 
-### Null form — exclude card from branch
+### Null form — exclude item from branch
 
 ```yaml
 branches:
-  flashback: ~         # null; card is excluded from the flashback branch
+  flashback: ~         # null; item is excluded from the flashback branch
 ```
 
 ### Mapping form — apply variants and/or descend into sub-branches
@@ -147,11 +147,11 @@ For a leaf path `A/X`:
 1. At depth 0, check for `*` and `A` in the `branches:` spec → collect those variant names
 2. If `A`'s value is a mapping with `branches:`, descend into it for depth 1
 3. At depth 1, check for `*` and `X` → collect additional variant names
-4. All collected names are applied to the card in order
+4. All collected names are applied to the item in order
 
 ---
 
-## Excluding Cards from Branches
+## Excluding Items from Branches
 
 Branch exclusion in v3 is handled entirely through the `branches:` dispatch map by setting a branch name to null (`~`). There are no `only:` or `except:` keys — the wildcard-plus-null pattern replaces them.
 
@@ -165,19 +165,19 @@ branches:
 **Include in only one branch:**
 ```yaml
 branches:
-  subject: base    # only the subject branch gets this card
+  subject: base    # only the subject branch gets this item
   '*': ~           # all other branches: excluded
 ```
 
-**Null excludes immediately** — when `resolveBranchSpec` encounters a null for the exact branch key, it returns `null` and the card is skipped entirely for that branch, with no further wildcard processing at that level.
+**Null excludes immediately** — when `resolveBranchSpec` encounters a null for the exact branch key, it returns `null` and the item is skipped entirely for that branch, with no further wildcard processing at that level.
 
-This applies identically to local card definitions, `import:` entries, `include:` directives, and PE blocks.
+This applies identically to local item definitions, `import:` entries, `include:` directives, and PE blocks.
 
 ---
 
 ## Full Worked Example
 
-**Canon card:**
+**Canon item:**
 ```yaml
 - id: Felicia
   name: {display: Felicia, full: Felicia Grayls}

@@ -22,34 +22,34 @@ const CODES = Object.freeze({
 });
 
 /**
- * Return true if the first segment of variantPath exists on cardDef.variants.
+ * Return true if the first segment of variantPath exists on itemDef.variants.
  * Used to decide local-vs-canon dispatch without emitting a spurious warning.
  */
-function hasVariant(cardDef, variantPath) {
-  if (!cardDef.variants || typeof cardDef.variants !== 'object') return false;
+function hasVariant(itemDef, variantPath) {
+  if (!itemDef.variants || typeof itemDef.variants !== 'object') return false;
   const firstPart = variantPath.split('/')[0].trim().toLowerCase();
-  return Object.keys(cardDef.variants).some(k => k.toLowerCase() === firstPart);
+  return Object.keys(itemDef.variants).some(k => k.toLowerCase() === firstPart);
 }
 
 /**
- * Walk a variant path (slash-separated) on a card definition and collect deltas.
+ * Walk a variant path (slash-separated) on a item definition and collect deltas.
  * e.g. "human/noble" → apply 'human' variant delta, then 'noble' child of 'human'.
  *
  * Returns null if any segment of the path resolves to a null variant (~), which
- * signals that the card should be excluded from output entirely.
+ * signals that the item should be excluded from output entirely.
  */
-function collectVariantDeltas(cardDef, variantPath, onWarn) {
+function collectVariantDeltas(itemDef, variantPath, onWarn) {
   const deltas = [];
   if (!variantPath) return deltas;
   const parts = variantPath.split('/').map(p => p.trim()).filter(Boolean);
-  let variantTree = cardDef.variants;
+  let variantTree = itemDef.variants;
 
-  const src = cardDef._source ? ` (${cardDef._source})` : '';
+  const src = itemDef._source ? ` (${itemDef._source})` : '';
   for (const part of parts) {
     if (!variantTree || typeof variantTree !== 'object') {
       if (onWarn) {
         onWarn(CODES.VARIANT_NOT_FOUND,
-          `variant "${part}" not found in variant tree of "${cardDef.id || cardDef.name}"${src}`);
+          `variant "${part}" not found in variant tree of "${itemDef.id || itemDef.name}"${src}`);
       }
       break;
     }
@@ -57,12 +57,12 @@ function collectVariantDeltas(cardDef, variantPath, onWarn) {
     if (!actualKey) {
       if (onWarn) {
         onWarn(CODES.VARIANT_NOT_FOUND,
-          `variant "${part}" not found in variant tree of "${cardDef.id || cardDef.name}"${src}`);
+          `variant "${part}" not found in variant tree of "${itemDef.id || itemDef.name}"${src}`);
       }
       break;
     }
     const variantDef = variantTree[actualKey];
-    if (variantDef === null) return null; // null variant (~) = exclude card
+    if (variantDef === null) return null; // null variant (~) = exclude item
     deltas.push(variantDef);
     variantTree = variantDef.variants;
   }
@@ -82,145 +82,145 @@ function parseVariantsList(variants) {
 }
 
 /**
- * Strip compiler-internal metadata from a card before cloning.
+ * Strip compiler-internal metadata from a item before cloning.
  */
-function stripMeta(card) {
+function stripMeta(item) {
   const out = {};
   const skip = new Set(['variants', '_include_variants', '_include_variant_tree']);
-  for (const [k, v] of Object.entries(card)) {
+  for (const [k, v] of Object.entries(item)) {
     if (!skip.has(k.toLowerCase())) out[k] = v;
   }
   return out;
 }
 
 /**
- * Resolve a card fully for a given branch leaf path.
+ * Resolve a item fully for a given branch leaf path.
  *
- * @param {object} cardDef - the card or import definition
- * @param {Map} registry   - full merged card registry
+ * @param {object} itemDef - the item or import definition
+ * @param {Map} registry   - full merged item registry
  * @param {string[]} branchPath - active leaf path
- * @returns {object|null} fully resolved card, or null if excluded from this branch
+ * @returns {object|null} fully resolved item, or null if excluded from this branch
  */
-function resolveCard(cardDef, registry, branchPath, onWarn) {
-  let card;
-  let sourceCardForVariants; // the card definition that holds the variants library
+function resolveItem(itemDef, registry, branchPath, onWarn) {
+  let item;
+  let sourceCardForVariants; // the item definition that holds the variants library
 
-  if (cardDef.import) {
+  if (itemDef.import) {
     // ── Import ──────────────────────────────────────────────────────────────
-    const canonId = String(cardDef.import).toLowerCase();
-    const canonCard = registry.get(canonId);
-    if (!canonCard) {
-      throw new Error(`Import failed: no card with id "${cardDef.import}" found in registry`);
+    const canonId = String(itemDef.import).toLowerCase();
+    const canonItem = registry.get(canonId);
+    if (!canonItem) {
+      throw new Error(`Import failed: no item with id "${itemDef.import}" found in registry`);
     }
 
-    card = deepClone(stripMeta(canonCard));
-    sourceCardForVariants = canonCard;
+    item = deepClone(stripMeta(canonItem));
+    sourceCardForVariants = canonItem;
 
     // Apply importVariants from the import def (top-level, before branch dispatch)
-    for (const vPath of parseVariantsList(cardDef.importVariants)) {
-      const ivDeltas = collectVariantDeltas(canonCard, vPath, onWarn);
+    for (const vPath of parseVariantsList(itemDef.importVariants)) {
+      const ivDeltas = collectVariantDeltas(canonItem, vPath, onWarn);
       if (ivDeltas === null) return null; // null variant = exclude
       for (const delta of ivDeltas) {
-        applyDelta(card, delta, onWarn);
+        applyDelta(item, delta, onWarn);
       }
     }
 
     // Apply import-level overrides as the project base, before branch variants run.
     // Branch variants always win over these — they are defaults, not finalizers.
-    if (cardDef.body) {
-      applyFieldsDelta(card, { body: cardDef.body }, onWarn);
+    if (itemDef.body) {
+      applyFieldsDelta(item, { body: itemDef.body }, onWarn);
     }
     for (const key of ['name', 'pronouns', 'aid', 'render', 'v']) {
-      if (cardDef[key] !== undefined) {
-        const newVal = applyFieldOp(card[key], cardDef[key]);
-        if (newVal === '__DELETE__') delete card[key]; else card[key] = newVal;
+      if (itemDef[key] !== undefined) {
+        const newVal = applyFieldOp(item[key], itemDef[key]);
+        if (newVal === '__DELETE__') delete item[key]; else item[key] = newVal;
       }
     }
 
     // Resolve branch spec → variant names to apply
-    const branchVariantNames = resolveBranchSpec(cardDef.branches, branchPath);
+    const branchVariantNames = resolveBranchSpec(itemDef.branches, branchPath);
     if (branchVariantNames === null) return null; // excluded
-    card._hasVariant = branchVariantNames.length > 0;
+    item._hasVariant = branchVariantNames.length > 0;
 
     for (const vName of branchVariantNames) {
       // Branch variant names dispatch local-first: if the import def defines the variant,
-      // use it (allowing project-level overrides); otherwise fall back to the canon card.
-      const variantSource = hasVariant(cardDef, vName) ? cardDef : canonCard;
+      // use it (allowing project-level overrides); otherwise fall back to the canon item.
+      const variantSource = hasVariant(itemDef, vName) ? itemDef : canonItem;
       const deltas = collectVariantDeltas(variantSource, vName, onWarn);
       if (deltas === null) return null; // null variant = exclude
       for (const delta of deltas) {
         // Apply any importVariants declared inside this local variant from canon
-        if (delta.importVariants && canonCard) {
+        if (delta.importVariants && canonItem) {
           for (const cvPath of parseVariantsList(delta.importVariants)) {
-            const canonDeltas = collectVariantDeltas(canonCard, cvPath, onWarn);
+            const canonDeltas = collectVariantDeltas(canonItem, cvPath, onWarn);
             if (canonDeltas === null) return null; // null variant = exclude
             for (const canonDelta of canonDeltas) {
-              applyDelta(card, canonDelta, onWarn);
+              applyDelta(item, canonDelta, onWarn);
             }
           }
         }
-        applyDelta(card, delta, onWarn);
+        applyDelta(item, delta, onWarn);
       }
     }
 
   } else {
-    // ── Local card definition ────────────────────────────────────────────────
-    card = deepClone(stripMeta(cardDef));
-    sourceCardForVariants = cardDef;
+    // ── Local item definition ────────────────────────────────────────────────
+    item = deepClone(stripMeta(itemDef));
+    sourceCardForVariants = itemDef;
 
-    // Handle included cards that carry importVariants from the include directive
-    if (cardDef._include_variants) {
-      for (const vPath of parseVariantsList(cardDef._include_variants)) {
-        const incDeltas = collectVariantDeltas(cardDef, vPath, onWarn);
+    // Handle included items that carry importVariants from the include directive
+    if (itemDef._include_variants) {
+      for (const vPath of parseVariantsList(itemDef._include_variants)) {
+        const incDeltas = collectVariantDeltas(itemDef, vPath, onWarn);
         if (incDeltas === null) return null; // null variant = exclude
         for (const delta of incDeltas) {
-          applyDelta(card, delta, onWarn);
+          applyDelta(item, delta, onWarn);
         }
       }
     }
 
     // Resolve branch spec → variant names to apply
     const branchVariantNames = resolveBranchSpec(
-      cardDef._include_branch_spec || cardDef.branches,
+      itemDef._include_branch_spec || itemDef.branches,
       branchPath
     );
     if (branchVariantNames === null) return null; // excluded
-    card._hasVariant = branchVariantNames.length > 0;
+    item._hasVariant = branchVariantNames.length > 0;
 
     for (const vName of branchVariantNames) {
       const localDeltas = collectVariantDeltas(sourceCardForVariants, vName, onWarn);
       if (localDeltas === null) return null; // null variant = exclude
       for (const delta of localDeltas) {
-        applyDelta(card, delta, onWarn);
+        applyDelta(item, delta, onWarn);
       }
     }
 
   }
 
   // Normalise: ensure aid.type and render.template default to each other
-  if (!card.aid) card.aid = {};
-  if (!card.render) card.render = {};
+  if (!item.aid) item.aid = {};
+  if (!item.render) item.render = {};
 
-  if (!card.aid.type && card.render.template) card.aid.type = card.render.template;
-  if (!card.render.template && card.aid.type) card.render.template = card.aid.type;
+  if (!item.aid.type && item.render.template) item.aid.type = item.render.template;
+  if (!item.render.template && item.aid.type) item.render.template = item.aid.type;
 
-  if (!card.aid.type && !card.render.template) {
-    const name = card.id || (typeof card.name === 'string' ? card.name : '');
-    if (onWarn) onWarn(CODES.NO_TYPE_OR_TEMPLATE, `card "${name}" has neither aid.type nor render.template`);
+  if (!item.aid.type && !item.render.template) {
+    const name = item.id || (typeof item.name === 'string' ? item.name : '');
+    if (onWarn) onWarn(CODES.NO_TYPE_OR_TEMPLATE, `item "${name}" has neither aid.type nor render.template`);
   }
 
   // Normalize name to structured form so {$name.full} / {$name.display} always resolve
-  const rawName = card.name;
+  const rawName = item.name;
   if (typeof rawName === 'string' && rawName) {
     const words = rawName.trim().split(/\s+/);
-    card.name = { display: words[0], full: rawName };
+    item.name = { display: words[0], full: rawName };
   } else if (rawName && typeof rawName === 'object' && !Array.isArray(rawName)) {
-    const first = rawName.display || Object.values(rawName)[0] || card.id || '';
+    const first = rawName.display || Object.values(rawName)[0] || item.id || '';
     if (!rawName.display) rawName.display = first.split(/\s+/)[0];
     if (!rawName.full)    rawName.full    = first;
   }
 
-  return card;
+  return item;
 }
 
-module.exports = { resolveCard, collectVariantDeltas, parseVariantsList, CODES };
+module.exports = { resolveItem, collectVariantDeltas, parseVariantsList, CODES };

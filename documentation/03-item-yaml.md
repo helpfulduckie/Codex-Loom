@@ -1,6 +1,6 @@
-# Card Definition Reference
+# Item Definition Reference
 
-Cards are the atomic units of content in a Codex Loom project — a character, a location, a settings block, or any other story card. Each YAML card file is a sequence of card entries.
+Items are the atomic units of content in a Codex Loom project — a character, a location, a settings block, or any other story card. Each YAML item file is a sequence of item entries.
 
 ---
 
@@ -58,9 +58,9 @@ Cards are the atomic units of content in a Codex Loom project — a character, a
 
 ### `id`
 
-Compiler-internal identifier. Used to look up this card in the registry, in `import:` directives, and in pronoun tokens (`{$Aness}`). Defaults to `name` if absent. Case-insensitive for matching.
+Compiler-internal identifier. Used to look up this item in the registry, in `import:` directives, and in pronoun tokens (`{$Aness}`). Defaults to `name` if absent. Case-insensitive for matching.
 
-Must be unique across all canon and project cards — collision is an error.
+Must be unique across all canon and project items — collision is an error.
 
 ```yaml
 id: Aness
@@ -90,7 +90,7 @@ Templates access `{$name}` (returns `full`), `{$name.display}`, or `{$name.full}
 
 ### `pronouns`
 
-Declared pronoun set for this card. Controls how `{$she}`, `{$her~}`, `{$they}` etc. resolve within this card's field values and template.
+Declared pronoun set for this item. Controls how `{$she}`, `{$her~}`, `{$they}` etc. resolve within this item's field values and template.
 
 | Value | Pronouns |
 |---|---|
@@ -98,7 +98,7 @@ Declared pronoun set for this card. Controls how `{$she}`, `{$her~}`, `{$they}` 
 | `male` | he / him / his / himself / he's |
 | `nonbinary` (or `they`) | they / them / their / themselves / they're |
 
-When this card is the active branch protagonist, pronouns resolve to the `you` set instead. See [Pronoun System](08-pronouns.md).
+When this item is the active branch protagonist, pronouns resolve to the `you` set instead. See [Pronoun System](08-pronouns.md).
 
 ---
 
@@ -109,7 +109,7 @@ AID-specific metadata. All fields are optional.
 ```yaml
 aid:
   title: Aness Rozen        # display title in AID (can differ from name)
-  type: Character           # card type — determines output folder and default template
+  type: Character           # item type — determines output folder and default template
   triggers: [Aness, Rozen]  # trigger keywords (sequence or single string)
   encapsulate: true         # boolean; passed through to output
   known: true               # boolean; controls [e] in notes
@@ -123,7 +123,7 @@ aid:
 | `encapsulate` | Boolean. Passed through to the rendered output. |
 | `known` | Boolean. Typically used to control `[e]` annotation in the AID notes field. |
 
-`aid.type` and `render.template` default to each other — if one is set the other is filled in automatically. If neither is set, the card cannot be rendered and a warning is emitted.
+`aid.type` and `render.template` default to each other — if one is set the other is filled in automatically. If neither is set, the item cannot be rendered and a warning is emitted.
 
 String values in `aid:` (e.g. `title`, `triggers`) support `{%variable}` expansion, the same as `body:`. **`aid.type` is validated after expansion** — since it becomes a folder and filename, an illegal path segment (`< > : " / \ | ? *`, control chars, `.`/`..`, or a trailing space/period) aborts the compile.
 
@@ -131,7 +131,7 @@ String values in `aid:` (e.g. `title`, `triggers`) support `{%variable}` expansi
 
 ## `render:` Block
 
-Controls how this card is rendered.
+Controls how this item is rendered.
 
 ```yaml
 render:
@@ -150,7 +150,7 @@ String values in `render:` support `{%variable}` expansion too, so `template`/`w
 
 ## `body:` Block
 
-All card content. Values can be plain strings, block scalars, YAML sequences (arrays), or nested mappings. Field names are case-insensitive throughout — the compiler and templates match them case-insensitively.
+All item content. Values can be plain strings, block scalars, YAML sequences (arrays), or nested mappings. Field names are case-insensitive throughout — the compiler and templates match them case-insensitively.
 
 ```yaml
 body:
@@ -184,19 +184,19 @@ body:
     - Graduated Primary Education in {$body.graduation year}.
 ```
 
-Supported roots in card data: `{$body.X}`, `{$v.X}` (and the `var`/`vars`/`variable`/`variables` aliases), `{$aid.X}`, `{$render.X}`, and `{$name.display}`/`{$name.full}`. These resolve in `body`, `aid`, `render`, and `name` fields alike (not only `body`).
+Supported roots in item data: `{$body.X}`, `{$v.X}` (and the `var`/`vars`/`variable`/`variables` aliases), `{$aid.X}`, `{$render.X}`, and `{$name.display}`/`{$name.full}`. These resolve in `body`, `aid`, `render`, and `name` fields alike (not only `body`).
 
-> **Dotted only.** Only dotted refs are field interpolation. Bare single-segment `{$X}` belongs to the pronoun/character-ref system (`{$she}`, `{$Aria}`) — so bare `{$id}` and bare `{$name}` are **template-only**; in card data use `{$name.full}`/`{$name.display}`. See [07-templates.md](07-templates.md) "Token Systems at a Glance".
+> **Dotted only.** Only dotted refs are field interpolation. Bare single-segment `{$X}` belongs to the pronoun/character-ref system (`{$she}`, `{$Aria}`) — so bare `{$id}` and bare `{$name}` are **template-only**; in item data use `{$name.full}`/`{$name.display}`. See [07-templates.md](07-templates.md) "Token Systems at a Glance".
 
-Cross-card body references (`{$OtherId.body.FieldName}`) are also supported and resolved in a second pass after all cards for a branch are compiled (in `body`, `aid`, `render`, and `name`). See [Pronoun System](08-pronouns.md).
+Cross-item body references (`{$OtherId.body.FieldName}`) are also supported and resolved in a second pass after all items for a branch are compiled (in `body`, `aid`, `render`, and `name`). See [Pronoun System](08-pronouns.md).
 
 A `{$…}` token that no pass resolves and that survives into output triggers a `WARN: unresolved token {$x} in …`.
 
 ---
 
-## `v:` Block (Card Variables)
+## `v:` Block (Item Variables)
 
-Arbitrary author-defined key/value data attached to this card. Use this for metadata that isn't part of the rendered content — affiliation, faction, role, status flags, or any other per-card values you want to reference in templates or override in variants.
+Arbitrary author-defined key/value data attached to this item. Use this for metadata that isn't part of the rendered content — affiliation, faction, role, status flags, or any other per-item values you want to reference in templates or override in variants.
 
 ```yaml
 v:
@@ -217,15 +217,15 @@ In templates, access as `{$v.affiliation}`, `{$v.role}`, etc.
 | `variable` | `variable:` |
 | `variables` | `variables:` |
 
-You can write any alias in your card YAML, in a variant delta, or in a template token — they all resolve to the same data. If multiple aliases appear as sibling top-level keys on the same card or within the same variant delta, a warning is emitted and their subfields are merged (last-writer-wins per subfield).
+You can write any alias in your item YAML, in a variant delta, or in a template token — they all resolve to the same data. If multiple aliases appear as sibling top-level keys on the same item or within the same variant delta, a warning is emitted and their subfields are merged (last-writer-wins per subfield).
 
-> **Card variables vs. compile variables.** `{$v.key}` (this block) is *per-card* data resolved through the `{$…}` field-reference system. It is a different mechanism from the `{%key}` *compile variables* declared in `compile.yaml` `variables:`, which are branch-scoped string values. The `variable`/`variables` alias above applies only to the card `v:` block, not to `{%}`. See [07-templates.md](07-templates.md) "Token Systems at a Glance" for the full comparison.
+> **Item variables vs. compile variables.** `{$v.key}` (this block) is *per-item* data resolved through the `{$…}` field-reference system. It is a different mechanism from the `{%key}` *compile variables* declared in `compile.yaml` `variables:`, which are branch-scoped string values. The `variable`/`variables` alias above applies only to the item `v:` block, not to `{%}`. See [07-templates.md](07-templates.md) "Token Systems at a Glance" for the full comparison.
 
 ---
 
 ## `variants:` Block
 
-Named deltas that layer changes on top of this card definition. Variants can modify any top-level card field (`name`, `pronouns`, `aid`, `render`, `v`) and any `body` field.
+Named deltas that layer changes on top of this item definition. Variants can modify any top-level item field (`name`, `pronouns`, `aid`, `render`, `v`) and any `body` field.
 
 ```yaml
 variants:
@@ -265,7 +265,7 @@ See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) and [Field Ope
 
 ---
 
-## `branches:` Key (on local cards)
+## `branches:` Key (on local items)
 
 Maps branch names to variant names for branch-specific dispatch. Separate from `variants:` — `variants:` defines the named deltas, `branches:` dispatches to them based on which branch is being compiled.
 
@@ -284,15 +284,15 @@ See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) for the full s
 
 ---
 
-## Excluding a Card from Specific Branches
+## Excluding an Item from Specific Branches
 
-To exclude a local card from a branch, use a null (`~`) value in the `branches:` dispatch map. This is the v3 mechanism for branch exclusion — there are no `only:` or `except:` keys on cards.
+To exclude a local item from a branch, use a null (`~`) value in the `branches:` dispatch map. This is the v3 mechanism for branch exclusion — there are no `only:` or `except:` keys on items.
 
 ```yaml
-- id: ContextCard
+- id: ContextItem
   branches:
     '*': base          # apply "base" variant for all branches
-    flashback: ~       # null: exclude this card from the flashback branch entirely
+    flashback: ~       # null: exclude this item from the flashback branch entirely
   variants:
     base:
       body:
@@ -303,9 +303,9 @@ See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) for the full `
 
 ---
 
-## Card File Structure
+## Item File Structure
 
-A single `.yaml` file can contain multiple card entries as a sequence:
+A single `.yaml` file can contain multiple item entries as a sequence:
 
 ```yaml
 - id: Aness
@@ -317,6 +317,6 @@ A single `.yaml` file can contain multiple card entries as a sequence:
   ...
 ```
 
-A file can also mix local card definitions with import and include directives. All entries in a sequence are processed in order.
+A file can also mix local item definitions with import and include directives. All entries in a sequence are processed in order.
 
-Cards and templates are loaded recursively from their configured directories. Any `.yaml` file found is loaded.
+Items and templates are loaded recursively from their configured directories. Any `.yaml` file found is loaded.

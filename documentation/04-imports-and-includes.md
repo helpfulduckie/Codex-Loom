@@ -1,15 +1,15 @@
 # Imports & Includes
 
-Project card files can pull in cards from the canonical registry in two ways:
+Project item files can pull in items from the canonical registry in two ways:
 
-- **`include:`** — loads every card from a canon file as-is, with optional per-card overrides
-- **`import:`** — loads a single named card and applies variant chains, field overrides, and branch dispatch
+- **`include:`** — loads every item from a canon file as-is, with optional per-item overrides
+- **`import:`** — loads a single named item and applies variant chains, field overrides, and branch dispatch
 
 ---
 
 ## `include:` Directive
 
-Loads all cards from a canonical YAML file. Cards are compiled exactly as defined in canon, with no modifications unless you attach `importVariants:` or `branches:` to the include directive itself.
+Loads all items from a canonical YAML file. Items are compiled exactly as defined in canon, with no modifications unless you attach `importVariants:` or `branches:` to the include directive itself.
 
 ```yaml
 - include: "{@main}/Characters/Felicia.yaml"
@@ -30,31 +30,31 @@ You can also use a direct relative path, but the `{@name}` form is preferred for
 
 ### Branch filtering on includes
 
-To exclude all cards in an included file from specific branches, attach a `branches:` dispatch spec to the `include:` directive. All cards loaded from the file inherit it.
+To exclude all items in an included file from specific branches, attach a `branches:` dispatch spec to the `include:` directive. All items loaded from the file inherit it.
 
 ```yaml
 - include: "{@main}/Characters/Guards.yaml"
   branches:
     '*': []         # include with no variant for all branches
-    flashback: ~    # exclude all cards in this file from the flashback branch
+    flashback: ~    # exclude all items in this file from the flashback branch
 ```
 
 ### `importVariants:` on includes — silent skip
 
-You can attach `importVariants:` to an include directive to apply a variant to every card in the file. Cards that **do not define** a variant by that name are **silently skipped** (no warning). This differs from a single `import:`, where a missing variant always emits a warning.
+You can attach `importVariants:` to an include directive to apply a variant to every item in the file. Items that **do not define** a variant by that name are **silently skipped** (no warning). This differs from a single `import:`, where a missing variant always emits a warning.
 
 ```yaml
 - include: "{@main}/Characters/Grayls.yaml"
-  importVariants: [human]    # applied to every card that defines a "human" variant;
-                              # cards without it are silently unaffected
+  importVariants: [human]    # applied to every item that defines a "human" variant;
+                              # items without it are silently unaffected
 ```
 
 ### Include vs explicit import
 
-If a card from an `include:` file is also listed in an explicit `import:` entry, the explicit import **wins silently** — the included version is skipped. Use this to include a whole file while overriding one specific card:
+If an item from an `include:` file is also listed in an explicit `import:` entry, the explicit import **wins silently** — the included version is skipped. Use this to include a whole file while overriding one specific item:
 
 ```yaml
-# Include all cards from Felicia.yaml — Felicia will be skipped below
+# Include all items from Felicia.yaml — Felicia will be skipped below
 - include: "{@main}/Characters/Felicia.yaml"
 
 # Explicit import with overrides — takes precedence over the include
@@ -70,7 +70,7 @@ If a card from an `include:` file is also listed in an explicit `import:` entry,
 
 ## `import:` Directive
 
-Imports a single card from the canonical registry by ID and applies variant chains, field overrides, and branch dispatch.
+Imports a single item from the canonical registry by ID and applies variant chains, field overrides, and branch dispatch.
 
 ```yaml
 - import: Aness
@@ -87,13 +87,13 @@ Imports a single card from the canonical registry by ID and applies variant chai
 
 ### Import resolution order
 
-1. Load the canonical base card by ID
+1. Load the canonical base item by ID
 2. Apply the primary import path variant chain (slash-separated ID: `Zephon/human/noble`)
-3. Apply `importVariants:` list entries in order (each is a slash-separated variant path on the canon card)
+3. Apply `importVariants:` list entries in order (each is a slash-separated variant path on the canon item)
 4. Apply top-level `body:` field overrides from the import definition
 5. Apply top-level `name:`, `pronouns:`, `aid:`, `render:` overrides (if present)
 6. Resolve `branches:` dispatch → determine which local variant names apply for the active branch
-7. For each dispatched local variant, apply any `importVariants:` declared inside that variant (sourced from the canonical card's variant tree)
+7. For each dispatched local variant, apply any `importVariants:` declared inside that variant (sourced from the canonical item's variant tree)
 8. Apply each dispatched variant's delta fields
 9. Recurse into sub-branches if the dispatch spec has nested `branches:`
 
@@ -101,16 +101,16 @@ Imports a single card from the canonical registry by ID and applies variant chai
 
 ## `importVariants:`
 
-Applies named variant chains from the **canonical card's own variant tree** and folds them into the card in progress. Each entry is a slash-separated variant path, applied in order.
+Applies named variant chains from the **canonical item's own variant tree** and folds them into the item in progress. Each entry is a slash-separated variant path, applied in order.
 
 ```yaml
 - import: Zephon
   importVariants: [human/noble, sci-fi/near-future]
 ```
 
-This applies the `human` variant, then `human/noble`, then `sci-fi`, then `sci-fi/near-future` — each walking the canon card's `variants:` tree.
+This applies the `human` variant, then `human/noble`, then `sci-fi`, then `sci-fi/near-future` — each walking the canon item's `variants:` tree.
 
-`importVariants:` can also appear **inside a branch variant** on the import, where it sources from the same canonical card's variant tree:
+`importVariants:` can also appear **inside a branch variant** on the import, where it sources from the same canonical item's variant tree:
 
 ```yaml
 - import: Grayls
@@ -123,13 +123,13 @@ This applies the `human` variant, then `human/noble`, then `sci-fi`, then `sci-f
     felix: felix
 ```
 
-`importVariants:` always sources from the **original canonical card's** variant tree, not the partially resolved card. `variants:` on an import defines local named deltas for branch dispatch — it is never a list of variant chains.
+`importVariants:` always sources from the **original canonical item's** variant tree, not the partially resolved item. `variants:` on an import defines local named deltas for branch dispatch — it is never a list of variant chains.
 
 ---
 
 ## Primary Import Variant Path
 
-A slash-separated suffix on the card ID applies variant deltas before any `importVariants:` or field overrides:
+A slash-separated suffix on the item ID applies variant deltas before any `importVariants:` or field overrides:
 
 ```yaml
 - import: Zephon/human/noble

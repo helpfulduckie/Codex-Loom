@@ -4,7 +4,7 @@ const { consoleWarner } = require('./util');
 
 const fs   = require('fs');
 const path = require('path');
-const { resolveCard, resolveBranchSpec, collectVariantDeltas } = require('./resolver');
+const { resolveItem, resolveBranchSpec, collectVariantDeltas } = require('./resolver');
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 
@@ -35,37 +35,37 @@ const COMPONENT_FAMILIES = [
 /**
  * Partition captured per-leaf output into universally-shared blocks and per-leaf deltas.
  *
- * A card (keyed by id) or component block (keyed by family+key) is *shared* iff it is
+ * A item (keyed by id) or component block (keyed by family+key) is *shared* iff it is
  * present in every leaf and its rendered text is identical across all of them. Otherwise
  * it is *varying*: each leaf's own version goes into that leaf's delta, and leaves where
  * it is absent (e.g. ~-excluded) silently omit it.
  *
- * @param {Array} leafData - [{ label, fileBase, cards: Map<id,{type,rendered}>,
+ * @param {Array} leafData - [{ label, fileBase, items: Map<id,{type,rendered}>,
  *                              components: { plotEssentials:[{key,text}], ... } }]
  * @returns {{ shared: object, deltas: Map<fileBase, object> }}
  */
 function buildSharedAndDeltas(leafData) {
   const leafCount = leafData.length;
 
-  // ── Cards ──────────────────────────────────────────────────────────────────
-  const cardIds = new Set();
-  for (const leaf of leafData) for (const id of leaf.cards.keys()) cardIds.add(id);
+  // ── Items ──────────────────────────────────────────────────────────────────
+  const itemIds = new Set();
+  for (const leaf of leafData) for (const id of leaf.items.keys()) itemIds.add(id);
 
-  const sharedCards = [];                       // [{ id, type, rendered }]
+  const sharedItems = [];                       // [{ id, type, rendered }]
   const deltaCardsByLeaf = new Map();           // fileBase -> [{ id, type, rendered }]
   for (const leaf of leafData) deltaCardsByLeaf.set(leaf.fileBase, []);
 
-  for (const id of [...cardIds].sort()) {
-    const entries = leafData.map(l => l.cards.get(id));
+  for (const id of [...itemIds].sort()) {
+    const entries = leafData.map(l => l.items.get(id));
     const present = entries.filter(Boolean);
     const isShared = present.length === leafCount &&
       present.every(e => e.rendered === present[0].rendered);
 
     if (isShared) {
-      sharedCards.push({ id, type: present[0].type, rendered: present[0].rendered });
+      sharedItems.push({ id, type: present[0].type, rendered: present[0].rendered });
     } else {
       for (const leaf of leafData) {
-        const e = leaf.cards.get(id);
+        const e = leaf.items.get(id);
         if (e) deltaCardsByLeaf.get(leaf.fileBase).push({ id, type: e.type, rendered: e.rendered });
       }
     }
@@ -102,22 +102,22 @@ function buildSharedAndDeltas(leafData) {
     }
   }
 
-  const shared = { cards: sharedCards, components: sharedComponents };
+  const shared = { items: sharedItems, components: sharedComponents };
   const deltas = new Map();
   for (const leaf of leafData) {
     deltas.set(leaf.fileBase, {
       label:      leaf.label,
-      cards:      deltaCardsByLeaf.get(leaf.fileBase),
+      items:      deltaCardsByLeaf.get(leaf.fileBase),
       components: deltaComponentsByLeaf.get(leaf.fileBase),
     });
   }
   return { shared, deltas };
 }
 
-function renderCardSection(cards) {
-  if (cards.length === 0) return null;
+function renderCardSection(items) {
+  if (items.length === 0) return null;
   const byType = new Map();
-  for (const c of cards) {
+  for (const c of items) {
     if (!byType.has(c.type)) byType.set(c.type, []);
     byType.get(c.type).push(c);
   }
@@ -143,8 +143,8 @@ function renderComponentSections(components) {
 
 function writeSharedDoc(shared, outputDir) {
   const parts = ['# Shared (identical across all leaves)'];
-  const cardSection = renderCardSection(shared.cards);
-  if (cardSection) parts.push(cardSection);
+  const itemSection = renderCardSection(shared.items);
+  if (itemSection) parts.push(itemSection);
   parts.push(...renderComponentSections(shared.components));
   if (parts.length === 1) parts.push('_Nothing is identical across every leaf._');
   const outPath = path.join(outputDir, 'Shared.md');
@@ -154,8 +154,8 @@ function writeSharedDoc(shared, outputDir) {
 
 function writeDeltaDoc(fileBase, delta, outputDir) {
   const parts = [`# Delta: ${delta.label}`, '_Everything this branch has that is not in Shared.md._'];
-  const cardSection = renderCardSection(delta.cards);
-  if (cardSection) parts.push(cardSection);
+  const itemSection = renderCardSection(delta.items);
+  if (itemSection) parts.push(itemSection);
   parts.push(...renderComponentSections(delta.components));
   if (parts.length === 2) parts.push('_This branch matches the shared baseline exactly._');
   const filename = sanitizeFilename(fileBase) + '.delta.md';
@@ -185,10 +185,10 @@ function hasKeyCI(obj, name) {
 }
 
 /**
- * Flatten a card's diff-relevant fields to a map of lowercase dot-path → JSON value.
+ * Flatten a item's diff-relevant fields to a map of lowercase dot-path → JSON value.
  * Only roots in DIFF_ROOTS are walked; leaves are scalars and arrays (arrays compared whole).
  */
-function flattenCard(card) {
+function flattenItem(item) {
   const out = {};
   const walk = (val, prefix) => {
     if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
@@ -198,13 +198,13 @@ function flattenCard(card) {
     }
   };
   for (const root of DIFF_ROOTS) {
-    if (card[root] === undefined) continue;
-    walk(card[root], root);
+    if (item[root] === undefined) continue;
+    walk(item[root], root);
   }
   return out;
 }
 
-/** Diff two flattened cards → [{ path, base, leaf }] for every differing leaf-path. */
+/** Diff two flattened items → [{ path, base, leaf }] for every differing leaf-path. */
 function diffFlattened(base, leaf) {
   const paths = new Set([...Object.keys(base), ...Object.keys(leaf)]);
   const changes = [];
@@ -222,7 +222,7 @@ function diffFlattened(base, leaf) {
 
 /**
  * Collect the set of lowercase dot-paths a variant delta touches, normalized to the
- * same root namespace as flattenCard (bare keys and explicit `body:` → `body.*`).
+ * same root namespace as flattenItem (bare keys and explicit `body:` → `body.*`).
  */
 function collectDeltaKeyPaths(delta) {
   const paths = new Set();
@@ -255,18 +255,18 @@ function pathExplained(changedPath, deltaPaths) {
 }
 
 /**
- * For one card under one leaf, attribute each changed field to the applied variant(s)
+ * For one item under one leaf, attribute each changed field to the applied variant(s)
  * that touch it, or flag it `unexplained`. Returns { applied, attributions } where
  * attributions maps changedPath → array of explaining variant names (empty = unexplained).
  */
-function attributeChanges(cardDef, registry, branchVariantNames, changes) {
-  const canonCard = cardDef.import ? registry.get(String(cardDef.import).toLowerCase()) : null;
+function attributeChanges(itemDef, registry, branchVariantNames, changes) {
+  const canonItem = itemDef.import ? registry.get(String(itemDef.import).toLowerCase()) : null;
 
   const variantKeyPaths = new Map(); // variantName -> Set<dotpath>
   for (const name of branchVariantNames) {
-    const source = (cardDef.import && !hasKeyCI(cardDef.variants, name.split('/')[0]))
-      ? canonCard
-      : cardDef;
+    const source = (itemDef.import && !hasKeyCI(itemDef.variants, name.split('/')[0]))
+      ? canonItem
+      : itemDef;
     const deltas = collectVariantDeltas(source, name) || [];
     const paths = new Set();
     for (const d of deltas) for (const p of collectDeltaKeyPaths(d)) paths.add(p);
@@ -284,50 +284,50 @@ function attributeChanges(cardDef, registry, branchVariantNames, changes) {
   return attributions;
 }
 
-function safeResolve(cardDef, registry, branchPath) {
-  try { return resolveCard(cardDef, registry, branchPath, consoleWarner); }
+function safeResolve(itemDef, registry, branchPath) {
+  try { return resolveItem(itemDef, registry, branchPath, consoleWarner); }
   catch { return null; }
 }
 
 /**
- * Build the annotation document for one leaf. Iterates every card def so ~-nulled cards
- * are reported explicitly. Cards identical to their project base with no variants applied
+ * Build the annotation document for one leaf. Iterates every item def so ~-nulled items
+ * are reported explicitly. Items identical to their project base with no variants applied
  * are omitted (they belong in Shared.md, not the drill-down).
  */
 function buildLeafAnnotation(leaf, allCardDefs, registry) {
   const { label, branchPath } = leaf;
   const sections = [`# Annotations: ${label}`,
-    '_Field-level differences from each card\'s project base (no branch dispatch). ' +
+    '_Field-level differences from each item\'s project base (no branch dispatch). ' +
     'Each delta is tagged with the variant that produced it, or `unexplained`._'];
 
-  for (const cardDef of allCardDefs) {
-    if (cardDef.include) continue;
-    const cardId = cardDef.id || cardDef.import;
-    if (!cardId) continue;
+  for (const itemDef of allCardDefs) {
+    if (itemDef.include) continue;
+    const itemId = itemDef.id || itemDef.import;
+    if (!itemId) continue;
 
-    const spec = cardDef.import
-      ? cardDef.branches
-      : (cardDef._include_branch_spec || cardDef.branches);
+    const spec = itemDef.import
+      ? itemDef.branches
+      : (itemDef._include_branch_spec || itemDef.branches);
     const branchVariantNames = resolveBranchSpec(spec, branchPath);
 
     // ── Nulled (~) — excluded from this leaf ──
     if (branchVariantNames === null) {
-      sections.push(`## ${cardId}\n\n- **nulled** — excluded from this branch by \`~\` dispatch`);
+      sections.push(`## ${itemId}\n\n- **nulled** — excluded from this branch by \`~\` dispatch`);
       continue;
     }
 
-    const base = safeResolve(cardDef, registry, []);
-    const leafCard = safeResolve(cardDef, registry, branchPath);
-    if (!base || !leafCard) continue;
+    const base = safeResolve(itemDef, registry, []);
+    const leafItem = safeResolve(itemDef, registry, branchPath);
+    if (!base || !leafItem) continue;
 
-    const changes = diffFlattened(flattenCard(base), flattenCard(leafCard));
+    const changes = diffFlattened(flattenItem(base), flattenItem(leafItem));
     if (changes.length === 0 && branchVariantNames.length === 0) continue; // shared, no variants
 
-    const attributions = attributeChanges(cardDef, registry, branchVariantNames, changes);
+    const attributions = attributeChanges(itemDef, registry, branchVariantNames, changes);
 
     const head = branchVariantNames.length
-      ? `## ${cardId}\n\n_variants applied: ${branchVariantNames.join(', ')}_`
-      : `## ${cardId}`;
+      ? `## ${itemId}\n\n_variants applied: ${branchVariantNames.join(', ')}_`
+      : `## ${itemId}`;
     const lines = [head];
 
     if (changes.length === 0) {
@@ -341,7 +341,7 @@ function buildLeafAnnotation(leaf, allCardDefs, registry) {
     sections.push(lines.join('\n'));
   }
 
-  if (sections.length === 2) sections.push('_No card differs from its project base in this branch._');
+  if (sections.length === 2) sections.push('_No item differs from its project base in this branch._');
   return sections.join('\n\n');
 }
 
@@ -364,7 +364,7 @@ module.exports = {
   buildLeafAnnotation,
   runAnnotateMode,
   // exported for unit tests
-  flattenCard,
+  flattenItem,
   diffFlattened,
   collectDeltaKeyPaths,
 };

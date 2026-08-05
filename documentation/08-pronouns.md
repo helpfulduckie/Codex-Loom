@@ -1,8 +1,8 @@
 # Pronoun System
 
-Codex Loom resolves pronoun tokens in card field values and templates. Tokens are braced `{$...}` expressions. There are three forms:
+Codex Loom resolves pronoun tokens in item field values and templates. Tokens are braced `{$...}` expressions. There are three forms:
 
-1. **Unscoped pronoun tokens** — resolve against the card's own `pronouns:` field
+1. **Unscoped pronoun tokens** — resolve against the item's own `pronouns:` field
 2. **Character ID references** — resolve to "you" or the character's name based on protagonist context
 3. **Scoped pronoun tokens** — resolve against a specific character's pronouns, protagonist-aware
 
@@ -35,9 +35,9 @@ Case of the first letter is preserved: `{$She}` → `She` or `He` depending on t
 
 ## 1. Unscoped Pronoun Tokens
 
-Written as `{$she}`, `{$her~}`, etc. Resolve against the **card's own `pronouns:` field**. Do not set the conjugation scope.
+Written as `{$she}`, `{$her~}`, etc. Resolve against the **item's own `pronouns:` field**. Do not set the conjugation scope.
 
-Use these in field values and templates where the token refers to the card subject (the character the card is about).
+Use these in field values and templates where the token refers to the item subject (the character the item is about).
 
 ```yaml
 body:
@@ -49,7 +49,7 @@ body:
 If `pronouns: female`, this renders as:
 > one of the top Academy mages; has built her reputation through research...
 
-Swapping `pronouns: male` (via a variant) automatically updates all `{$her~}` tokens throughout the card.
+Swapping `pronouns: male` (via a variant) automatically updates all `{$her~}` tokens throughout the item.
 
 ---
 
@@ -126,20 +126,20 @@ When Aness is an NPC with `pronouns: female` (singular):
 - `{$Id.pronoun}` sets the scope to that character's effective pronoun set
 - `{$she}` (unscoped) does NOT set the scope
 - Scope carries forward within the string until a new `{$Id}` or `{$Id.pronoun}` is encountered
-- If no scope has been set, conjugation falls back to the card's own `pronouns:` field
+- If no scope has been set, conjugation falls back to the item's own `pronouns:` field
 
 ---
 
-## Cross-Card Field References
+## Cross-Item Field References
 
-After all cards for a branch are compiled, a second pass resolves `{$Id.body.FieldName}` references:
+After all items for a branch are compiled, a second pass resolves `{$Id.body.FieldName}` references:
 
 ```
-{$Mentor.body.Tagline}       → resolves Tagline from the card with id "Mentor"
-{$Setting.body.Era}          → resolves Era from the Setting card
+{$Mentor.body.Tagline}       → resolves Tagline from the item with id "Mentor"
+{$Setting.body.Era}          → resolves Era from the Setting item
 ```
 
-These are left as-is during the first pass and resolved in a second pass once all cards are available. The lookup checks the branch's compiled cards first; if the referenced card was excluded from this branch (via null dispatch), it falls back to the **canonical base card** in the registry. If the card is not found anywhere or the field doesn't exist, a warning is emitted and the token is left as-is.
+These are left as-is during the first pass and resolved in a second pass once all items are available. The lookup checks the branch's compiled items first; if the referenced item was excluded from this branch (via null dispatch), it falls back to the **canonical base item** in the registry. If the item is not found anywhere or the field doesn't exist, a warning is emitted and the token is left as-is.
 
 ---
 
@@ -157,7 +157,7 @@ branches:
     protagonist: Veyrn
 ```
 
-A card's `{$Id}` tokens resolve to "you" when `Id` matches the active branch protagonist. All protagonist matching is case-insensitive.
+An item's `{$Id}` tokens resolve to "you" when `Id` matches the active branch protagonist. All protagonist matching is case-insensitive.
 
 ---
 
@@ -165,8 +165,8 @@ A card's `{$Id}` tokens resolve to "you" when `Id` matches the active branch pro
 
 | Situation | Use |
 |---|---|
-| The card is about character X and refers to X's own pronouns | `{$she}` unscoped — resolves against the card's `pronouns:` |
-| Referring to a specific named character from any card | `{$Aness.she}` scoped — resolves against Aness's pronouns, protagonist-aware |
+| The item is about character X and refers to X's own pronouns | `{$she}` unscoped — resolves against the item's `pronouns:` |
+| Referring to a specific named character from any item | `{$Aness.she}` scoped — resolves against Aness's pronouns, protagonist-aware |
 | Referring to a character by name (may become "you") | `{$Aness}` ID reference |
 | Verb agreement following a character reference | `[s]`, `[is]` etc. — follows the most recent `{$Id}` scope |
 

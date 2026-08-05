@@ -130,11 +130,11 @@ function buildRegistry(items, context) {
   for (const item of items.filter((c) => !c.import && !c.include)) {
     const id = (item.id || (typeof item.name === 'string' ? item.name : null) || '').toLowerCase();
     if (!id) {
-      throw new Error(`Card in ${context} is missing both id and name fields (source: ${item._source})`);
+      throw new Error(`Item in ${context} is missing both id and name fields (source: ${item._source})`);
     }
     if (registry.has(id)) {
       throw new Error(
-        `Duplicate card ID "${id}" in ${context}:\n  ${registry.get(id)._source}\n  ${item._source}`
+        `Duplicate item ID "${id}" in ${context}:\n  ${registry.get(id)._source}\n  ${item._source}`
       );
     }
     registry.set(id, { ...item, id: item.id || item.name });
@@ -148,7 +148,7 @@ function mergeRegistries(canonRegistry, projectRegistry) {
   for (const [id, item] of projectRegistry) {
     if (merged.has(id)) {
       throw new Error(
-        `Card ID "${id}" exists in both canon and project:\n  Canon: ${merged.get(id)._source}\n  Project: ${item._source}`
+        `Item ID "${id}" exists in both canon and project:\n  Canon: ${merged.get(id)._source}\n  Project: ${item._source}`
       );
     }
     merged.set(id, item);
@@ -196,7 +196,7 @@ function buildCanonRegistry(resolvedCanon, options = {}) {
     for (const [id, item] of buildRegistry(items, `canon:${name}`)) {
       if (registry.has(id)) {
         throw new Error(
-          `Duplicate card ID "${id}" across canon sources:\n  ${registry.get(id)._source}\n  ${item._source}`
+          `Duplicate item ID "${id}" across canon sources:\n  ${registry.get(id)._source}\n  ${item._source}`
         );
       }
       registry.set(id, item);

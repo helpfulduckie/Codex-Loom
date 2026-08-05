@@ -116,7 +116,7 @@ Included blocks are resolved in order and joined with `\n\n` to form the leaf's 
 | Key | Required | Description |
 |---|---|---|
 | `text` | yes | Inline string or path to a `.md`/`.txt` file. `{%variable}` tokens expanded. |
-| `branches` | no | Branch dispatch map — same syntax as PE/card dispatch. Absent = include in all leaves. |
+| `branches` | no | Branch dispatch map — same syntax as PE/item dispatch. Absent = include in all leaves. |
 | `variants` | no | Named text deltas: `variantName: { text: "..." }` |
 
 #### Branch dispatch for opening blocks
@@ -172,9 +172,9 @@ Provides arbitrary text content. Goes through pronoun and conjugation token reso
     position: 1
 ```
 
-#### Card import block
+#### Item import block
 
-Imports a card from the registry and renders it through a template. Useful for character blocks in PE.
+Imports an item from the registry and renders it through a template. Useful for character blocks in PE.
 
 ```yaml
 - import: Aness
@@ -203,7 +203,7 @@ A section block groups multiple child blocks under a single shared wrapper with 
     position: 1
 ```
 
-With a heading and hint-style card imports:
+With a heading and hint-style item imports:
 
 ```yaml
 - blocks:
@@ -233,17 +233,17 @@ Sections are **not nestable** — a child block may not itself have a `blocks:` 
 
 | Field | Description |
 |---|---|
-| `import` | Card ID to import. If absent, block is freeform. |
-| `importVariants` | Variant chains to apply to the imported card (slash-separated paths). |
+| `import` | Item ID to import. If absent, block is freeform. |
+| `importVariants` | Variant chains to apply to the imported item (slash-separated paths). |
 | `body` | For freeform blocks: content mapping with a `text` key. For import blocks: additional body field overrides. |
 | `pronouns` | For freeform blocks: pronoun set for token resolution within `body.text`. |
-| `branches` | Branch dispatch spec — uses the same `resolveBranchSpec` mechanism as card-level `branches:`. |
+| `branches` | Branch dispatch spec — uses the same `resolveBranchSpec` mechanism as item-level `branches:`. |
 | `render.style` | `full` (default), `hint`, or `skip`. `hint` tries a `TemplateName.hint` template first. `skip` excludes the block. |
 | `render.wrapper` | `square` → `[ ... ]`, `curly` → `{ ... }`, `none` → raw. |
-| `render.stripFence` | Boolean. When `true`, strips everything up to and including the last `~~~` line from the rendered output (keeps only the card body, not the story card header). |
+| `render.stripFence` | Boolean. When `true`, strips everything up to and including the last `~~~` line from the rendered output (keeps only the item body, not the story card header). |
 | `render.position` | Numeric sort key for block ordering. Default `5`. Lower numbers appear first. |
-| `render.template` | Template override for the imported card. Falls back to the card's own `render.template` / `aid.type`. |
-| `variants` | Local card deltas applied after import resolution. |
+| `render.template` | Template override for the imported item. Falls back to the item's own `render.template` / `aid.type`. |
+| `variants` | Local item deltas applied after import resolution. |
 
 ### Section fields
 
@@ -266,7 +266,7 @@ branches:
 
 ### strip_fence example
 
-For a character block in PE, you typically want only the card body (not the `## Name` header and `~~~` fence). Set `render.stripFence: true`:
+For a character block in PE, you typically want only the item body (not the `## Name` header and `~~~` fence). Set `render.stripFence: true`:
 
 ```yaml
 - import: Aness
@@ -381,7 +381,7 @@ variants:
     apply: [SectionVariantName]   # apply named variant to all sections that define it
     sections:
       SectionId:                   # null → remove this section
-card:                              # optional; story card metadata for AIN card output
+item:                              # optional; story card metadata for AIN item output
   ...
 
 branches:                          # branch dispatch
@@ -454,7 +454,7 @@ variants:
 `Components/Author's Note.md` works identically to AI Instructions except:
 
 - The file structure is the same (sections, variants, branches)
-- No `card:` block is supported (ignored with a warning if present)
+- No `item:` block is supported (ignored with a warning if present)
 - No story card output is produced
 
 ```yaml

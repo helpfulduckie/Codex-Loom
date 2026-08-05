@@ -16,26 +16,26 @@ describe('getTemplate', () => {
   ]);
 
   test('returns template by render.template field', () => {
-    const card = { render: { template: 'npc' }, aid: { type: 'character' } };
-    expect(getTemplate(card, templates)).toBe('npc template');
+    const item = { render: { template: 'npc' }, aid: { type: 'character' } };
+    expect(getTemplate(item, templates)).toBe('npc template');
   });
 
   test('falls back to aid.type when render.template absent', () => {
-    const card = { render: {}, aid: { type: 'Character' } };
-    expect(getTemplate(card, templates)).toBe('char template');
+    const item = { render: {}, aid: { type: 'Character' } };
+    expect(getTemplate(item, templates)).toBe('char template');
   });
 
   test('type lookup is case-insensitive', () => {
-    const card = { aid: { type: 'CHARACTER' } };
-    expect(getTemplate(card, templates)).toBe('char template');
+    const item = { aid: { type: 'CHARACTER' } };
+    expect(getTemplate(item, templates)).toBe('char template');
   });
 
   test('returns null when neither render.template nor aid.type found', () => {
-    const card = { aid: { type: 'Unknown' } };
-    expect(getTemplate(card, templates)).toBeNull();
+    const item = { aid: { type: 'Unknown' } };
+    expect(getTemplate(item, templates)).toBeNull();
   });
 
-  test('returns null for card with no type or template', () => {
+  test('returns null for item with no type or template', () => {
     expect(getTemplate({}, templates)).toBeNull();
   });
 });
@@ -285,19 +285,19 @@ describe('writeOutput', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('writes cards joined by \\n\\n with trailing newline', () => {
-    writeOutput(tmpDir, 'Character', ['Card A', 'Card B']);
+  test('writes items joined by \\n\\n with trailing newline', () => {
+    writeOutput(tmpDir, 'Character', ['Item A', 'Item B']);
     const outPath = path.join(tmpDir, 'Story Cards', 'Character', 'Character.md');
-    expect(fs.readFileSync(outPath, 'utf8')).toBe('Card A\n\nCard B\n');
+    expect(fs.readFileSync(outPath, 'utf8')).toBe('Item A\n\nItem B\n');
   });
 
   test('creates Story Cards/{type}/ directory recursively', () => {
-    writeOutput(tmpDir, 'Location', ['Card']);
+    writeOutput(tmpDir, 'Location', ['Item']);
     expect(fs.existsSync(path.join(tmpDir, 'Story Cards', 'Location'))).toBe(true);
   });
 
   test('returns the output file path', () => {
-    const result = writeOutput(tmpDir, 'NPC', ['Card']);
+    const result = writeOutput(tmpDir, 'NPC', ['Item']);
     expect(result).toBe(path.join(tmpDir, 'Story Cards', 'NPC', 'NPC.md'));
   });
 });
@@ -406,42 +406,42 @@ describe('resolveIncludes — duplicate file detection', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('single include of a file succeeds and returns its cards', () => {
+  test('single include of a file succeeds and returns its items', () => {
     const shared = path.join(tmpDir, 'shared.yaml');
-    fs.writeFileSync(shared, '- id: CardA\n  name: CardA\n', 'utf8');
+    fs.writeFileSync(shared, '- id: ItemA\n  name: ItemA\n', 'utf8');
 
-    const cardDefs = [{ include: shared, _source: path.join(tmpDir, 'project.yaml') }];
-    const result = resolveIncludes(cardDefs, new Map(), makeConfig(tmpDir));
+    const itemDefs = [{ include: shared, _source: path.join(tmpDir, 'project.yaml') }];
+    const result = resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir));
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('CardA');
+    expect(result[0].id).toBe('ItemA');
   });
 
   test('duplicate include from two different source files throws an error', () => {
     const shared = path.join(tmpDir, 'shared.yaml');
-    fs.writeFileSync(shared, '- id: CardA\n  name: CardA\n', 'utf8');
+    fs.writeFileSync(shared, '- id: ItemA\n  name: ItemA\n', 'utf8');
 
     const source1 = path.join(tmpDir, 'first.yaml');
     const source2 = path.join(tmpDir, 'second.yaml');
-    const cardDefs = [
+    const itemDefs = [
       { include: shared, _source: source1 },
       { include: shared, _source: source2 },
     ];
 
-    expect(() => resolveIncludes(cardDefs, new Map(), makeConfig(tmpDir)))
+    expect(() => resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir)))
       .toThrow(/File included more than once/);
   });
 
   test('error message contains the duplicated file path', () => {
     const shared = path.join(tmpDir, 'shared.yaml');
-    fs.writeFileSync(shared, '- id: CardA\n  name: CardA\n', 'utf8');
+    fs.writeFileSync(shared, '- id: ItemA\n  name: ItemA\n', 'utf8');
 
-    const cardDefs = [
+    const itemDefs = [
       { include: shared, _source: path.join(tmpDir, 'a.yaml') },
       { include: shared, _source: path.join(tmpDir, 'b.yaml') },
     ];
 
     let err;
-    try { resolveIncludes(cardDefs, new Map(), makeConfig(tmpDir)); }
+    try { resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir)); }
     catch (e) { err = e; }
 
     expect(err.message).toContain(shared);
@@ -449,17 +449,17 @@ describe('resolveIncludes — duplicate file detection', () => {
 
   test('error message lists both source files that include the duplicate', () => {
     const shared = path.join(tmpDir, 'shared.yaml');
-    fs.writeFileSync(shared, '- id: CardA\n  name: CardA\n', 'utf8');
+    fs.writeFileSync(shared, '- id: ItemA\n  name: ItemA\n', 'utf8');
 
     const source1 = path.join(tmpDir, 'a.yaml');
     const source2 = path.join(tmpDir, 'b.yaml');
-    const cardDefs = [
+    const itemDefs = [
       { include: shared, _source: source1 },
       { include: shared, _source: source2 },
     ];
 
     let err;
-    try { resolveIncludes(cardDefs, new Map(), makeConfig(tmpDir)); }
+    try { resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir)); }
     catch (e) { err = e; }
 
     expect(err.message).toContain(source1);
@@ -468,35 +468,35 @@ describe('resolveIncludes — duplicate file detection', () => {
 
   test('duplicate include within the same source file throws and lists the source', () => {
     const shared = path.join(tmpDir, 'shared.yaml');
-    fs.writeFileSync(shared, '- id: CardA\n  name: CardA\n', 'utf8');
+    fs.writeFileSync(shared, '- id: ItemA\n  name: ItemA\n', 'utf8');
 
-    const source = path.join(tmpDir, 'cards.yaml');
-    const cardDefs = [
+    const source = path.join(tmpDir, 'items.yaml');
+    const itemDefs = [
       { include: shared, _source: source },
       { include: shared, _source: source },
     ];
 
     let err;
-    try { resolveIncludes(cardDefs, new Map(), makeConfig(tmpDir)); }
+    try { resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir)); }
     catch (e) { err = e; }
 
     expect(err.message).toContain(shared);
     expect(err.message).toContain(source);
   });
 
-  test('two includes of different files succeeds and returns all cards', () => {
+  test('two includes of different files succeeds and returns all items', () => {
     const fileA = path.join(tmpDir, 'a.yaml');
     const fileB = path.join(tmpDir, 'b.yaml');
-    fs.writeFileSync(fileA, '- id: CardA\n  name: CardA\n', 'utf8');
-    fs.writeFileSync(fileB, '- id: CardB\n  name: CardB\n', 'utf8');
+    fs.writeFileSync(fileA, '- id: ItemA\n  name: ItemA\n', 'utf8');
+    fs.writeFileSync(fileB, '- id: ItemB\n  name: ItemB\n', 'utf8');
 
-    const cardDefs = [
+    const itemDefs = [
       { include: fileA, _source: path.join(tmpDir, 'project.yaml') },
       { include: fileB, _source: path.join(tmpDir, 'project.yaml') },
     ];
-    const result = resolveIncludes(cardDefs, new Map(), makeConfig(tmpDir));
+    const result = resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir));
     expect(result).toHaveLength(2);
-    expect(result.map(c => c.id)).toEqual(expect.arrayContaining(['CardA', 'CardB']));
+    expect(result.map(c => c.id)).toEqual(expect.arrayContaining(['ItemA', 'ItemB']));
   });
 
   test('expands {%rootVar} and {@canon} in an include path', () => {
@@ -510,8 +510,8 @@ describe('resolveIncludes — duplicate file detection', () => {
       _resolvedCanon: new Map([['main', tmpDir]]),
       variables: { who: 'Aria' },
     };
-    const cardDefs = [{ include: '{@main}/Characters/{%who}.yaml', _source: path.join(tmpDir, 'p.yaml') }];
-    const result = resolveIncludes(cardDefs, new Map(), config);
+    const itemDefs = [{ include: '{@main}/Characters/{%who}.yaml', _source: path.join(tmpDir, 'p.yaml') }];
+    const result = resolveIncludes(itemDefs, new Map(), config);
     expect(result.map(c => c.id)).toContain('Aria');
   });
 });
@@ -600,14 +600,14 @@ describe('resolveBranchFolderPath — {%var} in title', () => {
 // ── validateCardType (aid.type must be a legal folder/file name) ──────────────
 
 describe('validateCardType', () => {
-  const card = (type) => ({ id: 'X', _source: 'cards.yaml', aid: { type } });
+  const item = (type) => ({ id: 'X', _source: 'items.yaml', aid: { type } });
 
   test('accepts a normal type', () => {
-    expect(() => validateCardType(card('Character'))).not.toThrow();
+    expect(() => validateCardType(item('Character'))).not.toThrow();
   });
 
   test('accepts a type containing spaces', () => {
-    expect(() => validateCardType(card('Story Card'))).not.toThrow();
+    expect(() => validateCardType(item('Story Card'))).not.toThrow();
   });
 
   test('no-op when aid.type is absent', () => {
@@ -617,21 +617,21 @@ describe('validateCardType', () => {
 
   test.each(['a/b', 'a\\b', 'con:', 'a*b', 'a?b', 'a|b', '<x>', '"q"'])(
     'throws on illegal path character: %s', (bad) => {
-      expect(() => validateCardType(card(bad))).toThrow(/Invalid aid\.type/);
+      expect(() => validateCardType(item(bad))).toThrow(/Invalid aid\.type/);
     }
   );
 
   test('throws on "." and ".."', () => {
-    expect(() => validateCardType(card('.'))).toThrow(/Invalid aid\.type/);
-    expect(() => validateCardType(card('..'))).toThrow(/Invalid aid\.type/);
+    expect(() => validateCardType(item('.'))).toThrow(/Invalid aid\.type/);
+    expect(() => validateCardType(item('..'))).toThrow(/Invalid aid\.type/);
   });
 
   test('throws on trailing space or period (Windows-hostile)', () => {
-    expect(() => validateCardType(card('Character '))).toThrow(/Invalid aid\.type/);
-    expect(() => validateCardType(card('Character.'))).toThrow(/Invalid aid\.type/);
+    expect(() => validateCardType(item('Character '))).toThrow(/Invalid aid\.type/);
+    expect(() => validateCardType(item('Character.'))).toThrow(/Invalid aid\.type/);
   });
 
-  test('error names the offending type and the card', () => {
-    expect(() => validateCardType(card('a/b'))).toThrow(/"a\/b".*"X"/);
+  test('error names the offending type and the item', () => {
+    expect(() => validateCardType(item('a/b'))).toThrow(/"a\/b".*"X"/);
   });
 });

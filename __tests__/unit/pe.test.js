@@ -64,7 +64,7 @@ describe('compilePE — inline body block', () => {
 // ── compilePE — inline blocks with template ───────────────────────────────────
 
 describe('compilePE — inline block with template', () => {
-  test('renders card data through named template', () => {
+  test('renders item data through named template', () => {
     const blocks = [{
       id:     'Stranger',
       aid:    { title: 'The Stranger', type: 'Character' },
@@ -123,13 +123,13 @@ describe('compilePE — import block', () => {
   };
   const importRegistry = new Map([['aness', aness]]);
 
-  test('imports card and renders via its template', () => {
+  test('imports item and renders via its template', () => {
     const blocks = [{ import: 'aness' }];
     const result = compilePE(blocks, importRegistry, templates, new Map(), ctx);
     expect(result).toBe('Aness Rozen: Healer');
   });
 
-  test('body overrides apply on top of imported card', () => {
+  test('body overrides apply on top of imported item', () => {
     const blocks = [{
       import: 'aness',
       body:   { Tagline: 'Overridden Tagline' },
@@ -156,60 +156,60 @@ describe('compilePE — import block', () => {
     expect(result).toBeNull();
   });
 
-  describe('card branch inheritance', () => {
-    const branchCard = {
+  describe('item branch inheritance', () => {
+    const branchItem = {
       id: 'target',
-      name: { display: 'Target', full: 'Target Card' },
+      name: { display: 'Target', full: 'Target Item' },
       pronouns: 'female',
-      aid:    { title: 'Target Card', type: 'Character' },
+      aid:    { title: 'Target Item', type: 'Character' },
       render: { template: 'Character', wrapper: 'none' },
       body:   { Tagline: 'Base Tagline' },
       branches: { subject: null },
     };
-    const branchRegistry = new Map([['target', branchCard]]);
+    const branchRegistry = new Map([['target', branchItem]]);
 
-    test('card excluded by its own branch spec is skipped when PE block has no branches', () => {
+    test('item excluded by its own branch spec is skipped when PE block has no branches', () => {
       const blocks = [{ import: 'target' }];
       const result = compilePE(blocks, branchRegistry, templates, new Map(), ctx);
       expect(result).toBeNull();
     });
 
-    test('card excluded by specific branch, included by wildcard: skipped on excluded branch', () => {
-      const card = { ...branchCard, branches: { subject: null, '*': '' } };
-      const reg = new Map([['target', card]]);
+    test('item excluded by specific branch, included by wildcard: skipped on excluded branch', () => {
+      const item = { ...branchItem, branches: { subject: null, '*': '' } };
+      const reg = new Map([['target', item]]);
       const blocks = [{ import: 'target' }];
       expect(compilePE(blocks, reg, templates, new Map(), ctx)).toBeNull();
     });
 
-    test('card excluded by specific branch, included by wildcard: renders on other branch', () => {
-      const card = { ...branchCard, branches: { subject: null, '*': '' } };
-      const reg = new Map([['target', card]]);
+    test('item excluded by specific branch, included by wildcard: renders on other branch', () => {
+      const item = { ...branchItem, branches: { subject: null, '*': '' } };
+      const reg = new Map([['target', item]]);
       const blocks = [{ import: 'target' }];
       const otherCtx = { branchPath: ['other'], branchProtagonist: null };
-      expect(compilePE(blocks, reg, templates, new Map(), otherCtx)).toBe('Target Card: Base Tagline');
+      expect(compilePE(blocks, reg, templates, new Map(), otherCtx)).toBe('Target Item: Base Tagline');
     });
 
-    test('explicit PE branches: null overrides card include', () => {
-      const card = { ...branchCard, branches: { '*': '' } };
-      const reg = new Map([['target', card]]);
+    test('explicit PE branches: null overrides item include', () => {
+      const item = { ...branchItem, branches: { '*': '' } };
+      const reg = new Map([['target', item]]);
       const blocks = [{ import: 'target', branches: { subject: null } }];
       expect(compilePE(blocks, reg, templates, new Map(), ctx)).toBeNull();
     });
 
-    test('explicit PE branches take precedence over card exclude', () => {
+    test('explicit PE branches take precedence over item exclude', () => {
       const blocks = [{ import: 'target', branches: { subject: '' } }];
-      expect(compilePE(blocks, branchRegistry, templates, new Map(), ctx)).toBe('Target Card: Base Tagline');
+      expect(compilePE(blocks, branchRegistry, templates, new Map(), ctx)).toBe('Target Item: Base Tagline');
     });
 
-    test('card branch-dispatched variant applies via inherited branches', () => {
-      const card = {
-        ...branchCard,
+    test('item branch-dispatched variant applies via inherited branches', () => {
+      const item = {
+        ...branchItem,
         branches: { subject: 'alt' },
         variants: { alt: { body: { Tagline: 'Alt Tagline' } } },
       };
-      const reg = new Map([['target', card]]);
+      const reg = new Map([['target', item]]);
       const blocks = [{ import: 'target' }];
-      expect(compilePE(blocks, reg, templates, new Map(), ctx)).toBe('Target Card: Alt Tagline');
+      expect(compilePE(blocks, reg, templates, new Map(), ctx)).toBe('Target Item: Alt Tagline');
     });
   });
 
@@ -217,7 +217,7 @@ describe('compilePE — import block', () => {
     const vTemplates = new Map([
       ['character', { content: '{$aid.title}: {$v.affiliation} {$v.role}', _source: 'x' }],
     ]);
-    const canonCard = {
+    const canonItem = {
       id: 'employee',
       name: { display: 'Eve', full: 'Eve Smith' },
       aid:    { title: 'Eve Smith', type: 'Character' },
@@ -225,7 +225,7 @@ describe('compilePE — import block', () => {
       v:      { affiliation: 'Academy', role: 'Researcher' },
       body:   {},
     };
-    const reg = new Map([['employee', canonCard]]);
+    const reg = new Map([['employee', canonItem]]);
 
     // Overlay from the project Codex (e.g. grayls.yaml) overrides v:
     const overlay = new Map([['employee', {

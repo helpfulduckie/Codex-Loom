@@ -4,7 +4,7 @@ const fs = require('fs');
 const {
   findFiles, loadYaml, deepClone, findKey,
   getCI, setCI, deleteCI, normalizeVarKey, resolveVariables, warnUnexpandedVariables,
-  walkCardTextFields, warnUnresolvedFieldTokens, warnMechanicalArtifacts, maskFencedRegions,
+  walkItemTextFields, warnUnresolvedFieldTokens, warnMechanicalArtifacts, maskFencedRegions,
 } = require('../../src/util');
 
 // ── deepClone ─────────────────────────────────────────────────────────────────
@@ -187,12 +187,12 @@ describe('resolveVariables', () => {
 describe('warnUnexpandedVariables', () => {
   test('warns once per distinct {%token} and returns true', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const found = warnUnexpandedVariables('a {%role} b {%role} c {%era}', 'card "X" (Y)');
+    const found = warnUnexpandedVariables('a {%role} b {%role} c {%era}', 'item "X" (Y)');
     expect(found).toBe(true);
     expect(warn).toHaveBeenCalledTimes(2); // {%role} deduped, {%era}
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('{%role}'));
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('{%era}'));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('card "X" (Y)'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('item "X" (Y)'));
     warn.mockRestore();
   });
 
@@ -217,36 +217,36 @@ describe('warnUnexpandedVariables', () => {
   });
 });
 
-// ── walkCardTextFields ────────────────────────────────────────────────────────
+// ── walkItemTextFields ────────────────────────────────────────────────────────
 
-describe('walkCardTextFields', () => {
+describe('walkItemTextFields', () => {
   test('visits strings in body, aid, render, and name (incl. arrays + nesting)', () => {
-    const card = {
+    const item = {
       body: { Tagline: 'a', Traits: { hair: 'b' }, Keywords: ['c', 'd'] },
       aid: { title: 'e', triggers: ['f'] },
       render: { wrapper: 'g' },
       name: { display: 'h', full: 'i' },
     };
-    walkCardTextFields(card, s => s.toUpperCase());
-    expect(card.body.Tagline).toBe('A');
-    expect(card.body.Traits.hair).toBe('B');
-    expect(card.body.Keywords).toEqual(['C', 'D']);
-    expect(card.aid.title).toBe('E');
-    expect(card.aid.triggers).toEqual(['F']);
-    expect(card.render.wrapper).toBe('G');
-    expect(card.name.full).toBe('I');
+    walkItemTextFields(item, s => s.toUpperCase());
+    expect(item.body.Tagline).toBe('A');
+    expect(item.body.Traits.hair).toBe('B');
+    expect(item.body.Keywords).toEqual(['C', 'D']);
+    expect(item.aid.title).toBe('E');
+    expect(item.aid.triggers).toEqual(['F']);
+    expect(item.render.wrapper).toBe('G');
+    expect(item.name.full).toBe('I');
   });
 
   test('leaves non-string values (numbers, booleans) untouched', () => {
-    const card = { aid: { encapsulate: true }, render: { position: 5 }, body: {} };
-    walkCardTextFields(card, () => 'X');
-    expect(card.aid.encapsulate).toBe(true);
-    expect(card.render.position).toBe(5);
+    const item = { aid: { encapsulate: true }, render: { position: 5 }, body: {} };
+    walkItemTextFields(item, () => 'X');
+    expect(item.aid.encapsulate).toBe(true);
+    expect(item.render.position).toBe(5);
   });
 
-  test('no-op on missing card / sections', () => {
-    expect(() => walkCardTextFields(undefined, s => s)).not.toThrow();
-    expect(() => walkCardTextFields({ id: 'x' }, s => s)).not.toThrow();
+  test('no-op on missing item / sections', () => {
+    expect(() => walkItemTextFields(undefined, s => s)).not.toThrow();
+    expect(() => walkItemTextFields({ id: 'x' }, s => s)).not.toThrow();
   });
 });
 
@@ -255,7 +255,7 @@ describe('walkCardTextFields', () => {
 describe('warnUnresolvedFieldTokens', () => {
   test('warns once per distinct {$token} and returns true', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const found = warnUnresolvedFieldTokens('{$she} and {$she} and {$Aria}', 'card "X" (Y)');
+    const found = warnUnresolvedFieldTokens('{$she} and {$she} and {$Aria}', 'item "X" (Y)');
     expect(found).toBe(true);
     expect(warn).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('{$she}'));
@@ -279,7 +279,7 @@ describe('warnUnresolvedFieldTokens', () => {
 describe('warnMechanicalArtifacts', () => {
   test('flags a guessed verb marker like [does] instead of silently passing it through', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const found = warnMechanicalArtifacts('Aness love[does] magic research', 'card "X" (Y)');
+    const found = warnMechanicalArtifacts('Aness love[does] magic research', 'item "X" (Y)');
     expect(found).toBe(true);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('[does]'));
     warn.mockRestore();
@@ -287,7 +287,7 @@ describe('warnMechanicalArtifacts', () => {
 
   test('does not flag real verb markers or [e] as suspect', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const found = warnMechanicalArtifacts('[e] Aness love[s] magic', 'card "X" (Y)');
+    const found = warnMechanicalArtifacts('[e] Aness love[s] magic', 'item "X" (Y)');
     // [s] itself is still flagged as an unresolved *real* marker, but not as "suspect"
     expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("isn't a recognized"));
     warn.mockRestore();
@@ -296,14 +296,14 @@ describe('warnMechanicalArtifacts', () => {
   test('does not flag a single-word trigger in the fence as a suspect marker', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation();
     const rendered = '## Door\n\n~~~\ntriggers: [door]\nencapsulate: true\n~~~\n\n[e] A plain wooden door.';
-    warnMechanicalArtifacts(rendered, 'card "Door" (Location)');
+    warnMechanicalArtifacts(rendered, 'item "Door" (Location)');
     expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("isn't a recognized"));
     warn.mockRestore();
   });
 
   test('flags leaked template functions, tags, and JS artifacts', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation();
-    warnMechanicalArtifacts('{join("; ", $body.Tagline)} {if $x}{/if} [object Object] undefined', 'card "X" (Y)');
+    warnMechanicalArtifacts('{join("; ", $body.Tagline)} {if $x}{/if} [object Object] undefined', 'item "X" (Y)');
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('leaked render function'));
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('leaked template tag'));
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('JS interpolation artifact'));
@@ -352,12 +352,12 @@ describe('findFiles', () => {
   test('returns files matching extension', () => {
     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
     jest.spyOn(fs, 'readdirSync').mockReturnValue([
-      file('cards.yaml'),
+      file('items.yaml'),
       file('readme.txt'),
     ]);
     const result = findFiles('/dir', '.yaml');
     expect(result).toHaveLength(1);
-    expect(result[0]).toContain('cards.yaml');
+    expect(result[0]).toContain('items.yaml');
   });
 
   test('filters by extension case-insensitively', () => {

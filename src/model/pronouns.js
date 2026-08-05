@@ -1,6 +1,6 @@
 'use strict';
 
-const { walkCardTextFields } = require('../util');
+const { walkItemTextFields } = require('../util');
 
 // Pure by contract (§3.3): warnings go to a caller-supplied onWarn(code, message).
 const CODES = Object.freeze({
@@ -11,7 +11,7 @@ const CODES = Object.freeze({
  * Pronoun resolution for Codex Loom v3.
  *
  * Braced token forms in templates and field text:
- *   {$she} {$her~} etc.        - unscoped; resolves against card's own pronouns field
+ *   {$she} {$her~} etc.        - unscoped; resolves against item's own pronouns field
  *   {$Id}                      - character reference; "you" if Id is protagonist, else name.display
  *   {$Id's}                    - possessive name; "your" if Id is protagonist, else "Name's"
  *   {$Id.she} {$Id.her~} etc.  - scoped pronoun; resolves vs Id's pronouns, protagonist-aware
@@ -114,35 +114,35 @@ function matchCase(str, original) {
 }
 
 /**
- * Get the display name from a card (first word if scalar, name.display if mapping).
+ * Get the display name from a item (first word if scalar, name.display if mapping).
  */
-function getDisplayName(card) {
-  const name = card.name;
-  if (!name) return card.id || '';
+function getDisplayName(item) {
+  const name = item.name;
+  if (!name) return item.id || '';
   if (typeof name === 'string') return name.split(/\s+/)[0];
-  if (typeof name === 'object') return name.display || Object.values(name)[0] || card.id || '';
+  if (typeof name === 'object') return name.display || Object.values(name)[0] || item.id || '';
   return String(name);
 }
 
 /**
- * Get the full name from a card.
+ * Get the full name from a item.
  */
-function getFullName(card) {
-  const name = card.name;
-  if (!name) return card.id || '';
+function getFullName(item) {
+  const name = item.name;
+  if (!name) return item.id || '';
   if (typeof name === 'string') return name;
-  if (typeof name === 'object') return name.full || name.display || Object.values(name)[0] || card.id || '';
+  if (typeof name === 'object') return name.full || name.display || Object.values(name)[0] || item.id || '';
   return String(name);
 }
 
 /**
- * Get the pronoun set name for a card, accounting for protagonist status.
+ * Get the pronoun set name for a item, accounting for protagonist status.
  */
-function getEffectivePronounSet(cardOrPronouns, cardId, branchProtagonist) {
-  const isProtagonist = branchProtagonist && cardId &&
-    branchProtagonist.toLowerCase() === cardId.toLowerCase();
+function getEffectivePronounSet(itemOrPronouns, itemId, branchProtagonist) {
+  const isProtagonist = branchProtagonist && itemId &&
+    branchProtagonist.toLowerCase() === itemId.toLowerCase();
   if (isProtagonist) return 'you';
-  const raw = typeof cardOrPronouns === 'string' ? cardOrPronouns : (cardOrPronouns && cardOrPronouns.pronouns);
+  const raw = typeof itemOrPronouns === 'string' ? itemOrPronouns : (itemOrPronouns && itemOrPronouns.pronouns);
   return raw || null;
 }
 
@@ -150,23 +150,23 @@ function getEffectivePronounSet(cardOrPronouns, cardId, branchProtagonist) {
  * Combined pronoun and verb conjugation pass.
  *
  * Processes a string left-to-right, handling:
- *   {$PronounToken}      - unscoped pronoun; against card's own pronouns; does NOT set scope
+ *   {$PronounToken}      - unscoped pronoun; against item's own pronouns; does NOT set scope
  *   {$Id}                - character reference; sets scope to Id
  *   {$Id.pronoun}        - scoped pronoun; sets scope to Id
- *   {$Id.body.field}     - cross-card ref; leave as-is (handled in second pass)
+ *   {$Id.body.field}     - cross-item ref; leave as-is (handled in second pass)
  *   [s] [es] [is] [was] [has] - conjugate using current scope
  *
  * @param {string} str
  * @param {object} opts
- *   opts.card            - the card being processed
- *   opts.registry        - full card registry Map
+ *   opts.item            - the item being processed
+ *   opts.registry        - full item registry Map
  *   opts.branchProtagonist - lowercase protagonist ID or null
- *   opts.resolvedById    - optional Map of post-variant resolved cards by lowercase id
+ *   opts.resolvedById    - optional Map of post-variant resolved items by lowercase id
  */
 function applyTokenPass(str, opts) {
-  const { card, registry, branchProtagonist, resolvedById } = opts;
-  const cardId = (card.id || '').toLowerCase();
-  const cardPronounSet = getEffectivePronounSet(card, cardId, branchProtagonist);
+  const { item, registry, branchProtagonist, resolvedById } = opts;
+  const itemId = (item.id || '').toLowerCase();
+  const itemPronounSet = getEffectivePronounSet(item, itemId, branchProtagonist);
 
   // Current conjugation scope: pronoun set name of the most-recently-referenced {$Id}
   let currentScope = null;
@@ -177,7 +177,7 @@ function applyTokenPass(str, opts) {
   return str.replace(TOKEN_RE, (match, braceContent, verbMarker) => {
     if (verbMarker) {
       // Verb conjugation marker
-      const scope = currentScope || cardPronounSet;
+      const scope = currentScope || itemPronounSet;
       const plural = scope ? PLURAL_SETS.has(scope.toLowerCase()) : false;
       switch (verbMarker) {
         case 's':   return plural ? '' : 's';
@@ -201,8 +201,8 @@ function applyTokenPass(str, opts) {
 
       // Is prefix a registry ID?
       if (registry.has(prefixLower)) {
-        const refCard = (resolvedById && resolvedById.get(prefixLower)) || registry.get(prefixLower);
-        const refPronounSet = getEffectivePronounSet(refCard, prefixLower, branchProtagonist);
+        const refItem = (resolvedById && resolvedById.get(prefixLower)) || registry.get(prefixLower);
+        const refPronounSet = getEffectivePronounSet(refItem, prefixLower, branchProtagonist);
 
         // Is rest a pronoun token?
         const restLower = rest.toLowerCase();
@@ -213,10 +213,10 @@ function applyTokenPass(str, opts) {
         }
 
         // Check for {$Id.full} or {$Id.display}
-        if (restLower === 'full') return matchCase(getFullName(refCard), inner);
-        if (restLower === 'display') return matchCase(getDisplayName(refCard), inner);
+        if (restLower === 'full') return matchCase(getFullName(refItem), inner);
+        if (restLower === 'display') return matchCase(getDisplayName(refItem), inner);
 
-        // Otherwise it's a cross-card field ref like {$Id.body.field} — leave for second pass
+        // Otherwise it's a cross-item field ref like {$Id.body.field} — leave for second pass
         return match;
       }
 
@@ -231,29 +231,29 @@ function applyTokenPass(str, opts) {
     if (innerLower.endsWith("'s")) {
       const baseId = innerLower.slice(0, -2);
       if (registry.has(baseId)) {
-        const refCard = (resolvedById && resolvedById.get(baseId)) || registry.get(baseId);
+        const refItem = (resolvedById && resolvedById.get(baseId)) || registry.get(baseId);
         const isProtagonist = branchProtagonist && branchProtagonist === baseId;
         if (isProtagonist) return matchCase('your', inner);
-        return getDisplayName(refCard) + "'s";
+        return getDisplayName(refItem) + "'s";
       }
     }
 
     // Is it a registry ID? → character reference
     if (registry.has(innerLower)) {
-      const refCard = (resolvedById && resolvedById.get(innerLower)) || registry.get(innerLower);
-      const refPronounSet = getEffectivePronounSet(refCard, innerLower, branchProtagonist);
+      const refItem = (resolvedById && resolvedById.get(innerLower)) || registry.get(innerLower);
+      const refPronounSet = getEffectivePronounSet(refItem, innerLower, branchProtagonist);
       // Sets conjugation scope
       currentScope = refPronounSet || 'nonbinary';
 
       const isProtagonist = branchProtagonist && branchProtagonist === innerLower;
       if (isProtagonist) return 'you';
-      return matchCase(getDisplayName(refCard), inner);
+      return matchCase(getDisplayName(refItem), inner);
     }
 
-    // Is it an unscoped pronoun token? → resolve against card's own pronouns
+    // Is it an unscoped pronoun token? → resolve against item's own pronouns
     if (PRONOUN_TOKEN_MAP[innerLower] !== undefined) {
       // Does NOT set scope
-      return resolveProunounToken(inner, cardPronounSet);
+      return resolveProunounToken(inner, itemPronounSet);
     }
 
     // Unknown — leave as-is
@@ -262,31 +262,31 @@ function applyTokenPass(str, opts) {
 }
 
 /**
- * Apply cross-card reference resolution: {$id.body.field} → resolved field value.
- * This is a second pass run after all cards for a branch have been resolved.
+ * Apply cross-item reference resolution: {$id.body.field} → resolved field value.
+ * This is a second pass run after all items for a branch have been resolved.
  *
- * @param {object[]} resolvedCards - all cards compiled for this branch
- * @param {Map} registry - full card registry (for fallback to canonical base)
+ * @param {object[]} resolvedItems - all items compiled for this branch
+ * @param {Map} registry - full item registry (for fallback to canonical base)
  */
-function applyCrossCardRefs(resolvedCards, registry, onWarn) {
-  // Build a quick lookup by id for the resolved cards
+function applyCrossItemRefs(resolvedItems, registry, onWarn) {
+  // Build a quick lookup by id for the resolved items
   const resolvedById = new Map();
-  for (const card of resolvedCards) {
-    const id = (card.id || '').toLowerCase();
-    if (id) resolvedById.set(id, card);
+  for (const item of resolvedItems) {
+    const id = (item.id || '').toLowerCase();
+    if (id) resolvedById.set(id, item);
   }
 
   const CROSS_RE = /\{\$([A-Za-z][A-Za-z0-9_-]*)\.body\.([^}]+)\}/g;
 
   function resolveRef(refId, fieldPath) {
     const lower = refId.toLowerCase();
-    const sourceCard = resolvedById.get(lower) || registry.get(lower);
-    if (!sourceCard) {
-      if (onWarn) onWarn(CODES.CROSS_ITEM_REF_MISSING, `cross-card ref {${refId}.body.${fieldPath}} — card not found`);
+    const sourceItem = resolvedById.get(lower) || registry.get(lower);
+    if (!sourceItem) {
+      if (onWarn) onWarn(CODES.CROSS_ITEM_REF_MISSING, `cross-item ref {${refId}.body.${fieldPath}} — item not found`);
       return null;
     }
     const parts = fieldPath.split('.');
-    let val = sourceCard.body || {};
+    let val = sourceItem.body || {};
     for (const part of parts) {
       if (val === null || typeof val !== 'object') return null;
       const actualKey = Object.keys(val).find(k => k.toLowerCase() === part.toLowerCase());
@@ -303,29 +303,29 @@ function applyCrossCardRefs(resolvedCards, registry, onWarn) {
     });
   }
 
-  for (const card of resolvedCards) {
-    walkCardTextFields(card, processValue);
+  for (const item of resolvedItems) {
+    walkItemTextFields(item, processValue);
   }
 }
 
 /**
- * Apply all pronoun processing passes to a resolved card's body fields.
- * Mutates card.body in place.
+ * Apply all pronoun processing passes to a resolved item's body fields.
+ * Mutates item.body in place.
  *
- * @param {object} card
+ * @param {object} item
  * @param {Map} registry
  * @param {string|null} branchProtagonist - lowercase protagonist ID
  */
-function applyPronounPasses(card, registry, branchProtagonist, resolvedById) {
-  const opts = { card, registry, branchProtagonist, resolvedById };
-  walkCardTextFields(card, s => applyTokenPass(s, opts));
+function applyPronounPasses(item, registry, branchProtagonist, resolvedById) {
+  const opts = { item, registry, branchProtagonist, resolvedById };
+  walkItemTextFields(item, s => applyTokenPass(s, opts));
 }
 
 module.exports = {
   CODES,
   applyPronounPasses,
   applyTokenPass,
-  applyCrossCardRefs,
+  applyCrossItemRefs,
   resolveProunounToken,
   getDisplayName,
   getFullName,

@@ -173,10 +173,12 @@ describe('resolution behavior carried forward', () => {
     expect(load('title: x\n').config._resolvedOutput).toBe(path.join(tmpDir, 'output'));
   });
 
-  test('items and cards are equivalent while both are accepted', () => {
+  // `cards:` is the v3 spelling and `items:` the v4 one. Both load until Step 8 makes
+  // the config break; this pins that they resolve identically in the meantime.
+  test('the v3 cards: and v4 items: keys are equivalent while both are accepted', () => {
     const viaItems = load('structure:\n  input:\n    items: [./Codex]\n', { dirs: ['Codex'] });
     const viaCards = load('structure:\n  input:\n    cards: [./Codex]\n', { dirs: ['Codex'] });
-    expect(viaItems.config._resolvedCards).toEqual(viaCards.config._resolvedCards);
+    expect(viaItems.config._resolvedItems).toEqual(viaCards.config._resolvedItems);
   });
 
   test('{%variables} expand inside structure paths', () => {
@@ -184,7 +186,7 @@ describe('resolution behavior carried forward', () => {
       'variables:\n  root: ./Codex\nstructure:\n  input:\n    items: ["{%root}"]\n',
       { dirs: ['Codex'] }
     );
-    expect(config._resolvedCards).toEqual([path.join(tmpDir, 'Codex')]);
+    expect(config._resolvedItems).toEqual([path.join(tmpDir, 'Codex')]);
   });
 
   test('canon entries resolve to absolute paths', () => {

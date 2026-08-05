@@ -205,12 +205,12 @@ function renderSection(section, opts) {
   const prefix = section.render?.bullet ? '- ' : '';
   if (typeof text === 'string') {
     const withVars = resolveVariables(text, variables);
-    const processed = applyTokenPass(withVars, { card: {}, registry, branchProtagonist });
+    const processed = applyTokenPass(withVars, { item: {}, registry, branchProtagonist });
     lines.push(prefix + processed.trim());
   } else if (text && typeof text === 'object') {
     for (const [, ruleText] of Object.entries(text)) {
       const withVars = resolveVariables(String(ruleText), variables);
-      const processed = applyTokenPass(withVars, { card: {}, registry, branchProtagonist });
+      const processed = applyTokenPass(withVars, { item: {}, registry, branchProtagonist });
       lines.push(prefix + processed.trim());
     }
   }

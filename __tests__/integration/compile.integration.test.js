@@ -18,7 +18,8 @@ beforeAll(() => {
   const patchedConfig = [
     'structure:',
     `  input:`,
-    `    cards:`,
+    `    items:`,
+    // The key is the v4 spelling; the directory on disk is still test/cards.
     `      - ${FIXTURE_DIR}/cards`,
     `    canon:`,
     `      main: ${FIXTURE_DIR}/canon`,
@@ -107,7 +108,8 @@ describe('protagonist inherited from parent branch node', () => {
     const patchedConfig = [
       'structure:',
       '  input:',
-      `    cards:`,
+      `    items:`,
+      // The key is the v4 spelling; the directory on disk is still test/cards.
       `      - ${FIXTURE_DIR}/cards`,
       `    canon:`,
       `      main: ${FIXTURE_DIR}/canon`,
@@ -163,12 +165,12 @@ describe('Opening.md generation', () => {
   beforeAll(() => {
     openingTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-opening-int-'));
 
-    // Minimal v3-format card + template so compile has something to do
-    fs.mkdirSync(path.join(openingTmpDir, 'cards'), { recursive: true });
+    // Minimal v3-format item + template so compile has something to do
+    fs.mkdirSync(path.join(openingTmpDir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(openingTmpDir, 'templates'), { recursive: true });
     fs.mkdirSync(path.join(openingTmpDir, 'openings'), { recursive: true });
 
-    fs.writeFileSync(path.join(openingTmpDir, 'cards', 'cards.yaml'), [
+    fs.writeFileSync(path.join(openingTmpDir, 'items', 'items.yaml'), [
       '- id: Widget',
       '  name: Widget',
       '  aid:',
@@ -194,7 +196,7 @@ describe('Opening.md generation', () => {
     fs.writeFileSync(path.join(openingTmpDir, 'compile.yaml'), [
       'structure:',
       '  input:',
-      `    cards: [${openingTmpDir}/cards]`,
+      `    items: [${openingTmpDir}/items]`,
       `    templates: [${openingTmpDir}/templates]`,
       `  output: ${openingTmpDir}/output`,
       'components:',
@@ -263,10 +265,10 @@ describe('openingChoice {@Key} resolution', () => {
   beforeAll(() => {
     atKeyTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-atkey-int-'));
 
-    fs.mkdirSync(path.join(atKeyTmpDir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(atKeyTmpDir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(atKeyTmpDir, 'templates'), { recursive: true });
 
-    fs.writeFileSync(path.join(atKeyTmpDir, 'cards', 'cards.yaml'), [
+    fs.writeFileSync(path.join(atKeyTmpDir, 'items', 'items.yaml'), [
       '- id: Widget',
       '  name: Widget',
       '  aid:',
@@ -287,7 +289,7 @@ describe('openingChoice {@Key} resolution', () => {
     fs.writeFileSync(path.join(atKeyTmpDir, 'compile.yaml'), [
       'structure:',
       '  input:',
-      `    cards: [${atKeyTmpDir}/cards]`,
+      `    items: [${atKeyTmpDir}/items]`,
       `    templates: [${atKeyTmpDir}/templates]`,
       '    components:',
       '      openingChoice:',
@@ -343,22 +345,22 @@ describe('openingChoice {@Key} resolution', () => {
   });
 });
 
-// ── cross-card render function refs in body fields ────────────────────────────
+// ── cross-item render function refs in body fields ────────────────────────────
 
-describe('cross-card refs inside body field render functions', () => {
+describe('cross-item refs inside body field render functions', () => {
   let xrefTmpDir;
 
   beforeAll(() => {
     xrefTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-xref-int-'));
-    fs.mkdirSync(path.join(xrefTmpDir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(xrefTmpDir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(xrefTmpDir, 'templates'), { recursive: true });
 
-    // Cards: Alice and Carol cross-ref Bishop's hair (plain token, resolved by applyCrossCardRefs).
-    // Bishop's familyMembers use join() on Alice/Carol's physicalTraits (new cross-card render fn).
+    // Items: Alice and Carol cross-ref Bishop's hair (plain token, resolved by applyCrossItemRefs).
+    // Bishop's familyMembers use join() on Alice/Carol's physicalTraits (new cross-item render fn).
     // Store's employees use join() on Bishop's familyMembers (chained, order-dependent without multi-pass).
-    // Cards are deliberately ordered Store → Bishop → Carol → Alice (deepest-dependent first)
+    // Items are deliberately ordered Store → Bishop → Carol → Alice (deepest-dependent first)
     // to exercise the multi-pass convergence loop.
-    fs.writeFileSync(path.join(xrefTmpDir, 'cards', 'cards.yaml'), [
+    fs.writeFileSync(path.join(xrefTmpDir, 'items', 'items.yaml'), [
       '- id: Store',
       '  name: Store',
       '  aid:',
@@ -418,7 +420,7 @@ describe('cross-card refs inside body field render functions', () => {
     fs.writeFileSync(path.join(xrefTmpDir, 'compile.yaml'), [
       'structure:',
       '  input:',
-      `    cards: [${xrefTmpDir}/cards]`,
+      `    items: [${xrefTmpDir}/items]`,
       `    templates: [${xrefTmpDir}/templates]`,
       `  output: ${xrefTmpDir}/output`,
       'branches:',
@@ -432,25 +434,25 @@ describe('cross-card refs inside body field render functions', () => {
     fs.rmSync(xrefTmpDir, { recursive: true, force: true });
   });
 
-  function xrefCard(name) {
+  function xrefItem(name) {
     return fs.readFileSync(
       path.join(xrefTmpDir, 'output', 'Branches', 'main', 'Story Cards', 'Item', 'Item.md'), 'utf8'
     );
   }
 
-  test('Bishop familyMembers: join() on cross-card mapping resolves hair+eyes', () => {
-    const content = xrefCard('Item');
+  test('Bishop familyMembers: join() on cross-item mapping resolves hair+eyes', () => {
+    const content = xrefItem('Item');
     expect(content).toContain('Alice (blond; blue)');
     expect(content).toContain('Carol (blond; green)');
   });
 
-  test('Store employees: chained cross-card join() resolves fully despite deepest-first ordering', () => {
-    const content = xrefCard('Item');
+  test('Store employees: chained cross-item join() resolves fully despite deepest-first ordering', () => {
+    const content = xrefItem('Item');
     expect(content).toContain('Alice (blond; blue); Carol (blond; green)');
   });
 
-  test('Alice physicalTraits.hair: plain cross-card token resolved to Bishop hair', () => {
-    const content = xrefCard('Item');
+  test('Alice physicalTraits.hair: plain cross-item token resolved to Bishop hair', () => {
+    const content = xrefItem('Item');
     // Carol's physicalTraits are referenced in Bishop's familyMembers and appear resolved
     expect(content).toContain('Carol (blond; green)');
   });
@@ -463,11 +465,11 @@ describe('opening {@Key} resolving to YAML block file', () => {
 
   beforeAll(() => {
     opKeyTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-opkey-int-'));
-    fs.mkdirSync(path.join(opKeyTmpDir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(opKeyTmpDir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(opKeyTmpDir, 'templates'), { recursive: true });
     fs.mkdirSync(path.join(opKeyTmpDir, 'components'), { recursive: true });
 
-    fs.writeFileSync(path.join(opKeyTmpDir, 'cards', 'c.yaml'), [
+    fs.writeFileSync(path.join(opKeyTmpDir, 'items', 'c.yaml'), [
       '- id: W',
       '  name: W',
       '  aid: { type: Item, title: W }',
@@ -488,7 +490,7 @@ describe('opening {@Key} resolving to YAML block file', () => {
     fs.writeFileSync(path.join(opKeyTmpDir, 'compile.yaml'), [
       'structure:',
       '  input:',
-      `    cards: [${opKeyTmpDir}/cards]`,
+      `    items: [${opKeyTmpDir}/items]`,
       `    templates: [${opKeyTmpDir}/templates]`,
       '    components:',
       '      opening:',
@@ -529,11 +531,11 @@ describe('YAML block opening (opening.yaml)', () => {
   beforeAll(() => {
     blkTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-blk-opening-'));
 
-    fs.mkdirSync(path.join(blkTmpDir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(blkTmpDir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(blkTmpDir, 'templates'), { recursive: true });
     fs.mkdirSync(path.join(blkTmpDir, 'paragraphs'), { recursive: true });
 
-    fs.writeFileSync(path.join(blkTmpDir, 'cards', 'cards.yaml'), [
+    fs.writeFileSync(path.join(blkTmpDir, 'items', 'items.yaml'), [
       '- id: Widget',
       '  name: Widget',
       '  aid: { type: Item, title: Widget }',
@@ -607,7 +609,7 @@ describe('YAML block opening (opening.yaml)', () => {
     fs.writeFileSync(path.join(blkTmpDir, 'compile.yaml'), [
       'structure:',
       '  input:',
-      `    cards: [${blkTmpDir}/cards]`,
+      `    items: [${blkTmpDir}/items]`,
       `    templates: [${blkTmpDir}/templates]`,
       `  output: ${blkTmpDir}/output`,
       'components:',
@@ -691,9 +693,9 @@ describe('YAML block opening (opening.yaml)', () => {
     // Use a separate minimal project that points opening: to a .md file
     const mdDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-blk-md-'));
     try {
-      fs.mkdirSync(path.join(mdDir, 'cards'), { recursive: true });
+      fs.mkdirSync(path.join(mdDir, 'items'), { recursive: true });
       fs.mkdirSync(path.join(mdDir, 'templates'), { recursive: true });
-      fs.writeFileSync(path.join(mdDir, 'cards', 'c.yaml'), [
+      fs.writeFileSync(path.join(mdDir, 'items', 'c.yaml'), [
         '- id: W',
         '  name: W',
         '  aid: { type: Item, title: W }',
@@ -704,7 +706,7 @@ describe('YAML block opening (opening.yaml)', () => {
       fs.writeFileSync(path.join(mdDir, 'opening.md'), 'Legacy inline opening.', 'utf8');
       fs.writeFileSync(path.join(mdDir, 'compile.yaml'), [
         'structure:',
-        `  input: { cards: [${mdDir}/cards], templates: [${mdDir}/templates] }`,
+        `  input: { items: [${mdDir}/items], templates: [${mdDir}/templates] }`,
         `  output: ${mdDir}/output`,
         'components:',
         `  opening: ${mdDir}/opening.md`,
@@ -720,43 +722,43 @@ describe('YAML block opening (opening.yaml)', () => {
   });
 });
 
-// ── deterministic card ordering (sorted by id within type) ────────────────────
+// ── deterministic item ordering (sorted by id within type) ────────────────────
 
-describe('deterministic card ordering', () => {
+describe('deterministic item ordering', () => {
   let orderTmpDir;
 
   beforeAll(() => {
     orderTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-order-'));
-    fs.mkdirSync(path.join(orderTmpDir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(orderTmpDir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(orderTmpDir, 'templates'), { recursive: true });
 
-    // Cards are authored out of alphabetical order, and titles sort opposite to
+    // Items are authored out of alphabetical order, and titles sort opposite to
     // ids, so a regression to authoring-order or title-order would be caught.
     // Two types ("Beta" before "Alpha") are also declared out of order.
-    fs.writeFileSync(path.join(orderTmpDir, 'cards', 'cards.yaml'), [
+    fs.writeFileSync(path.join(orderTmpDir, 'items', 'items.yaml'), [
       '- id: Zebra',
       '  name: Zebra',
       '  aid: { type: Alpha, title: AppleTitle }',
-      '  render: { template: Card }',
+      '  render: { template: Item }',
       '  body: { Desc: z }',
       '- id: mango',
       '  name: mango',
       '  aid: { type: Beta, title: MangoTitle }',
-      '  render: { template: Card }',
+      '  render: { template: Item }',
       '  body: { Desc: m }',
       '- id: Apple',
       '  name: Apple',
       '  aid: { type: Alpha, title: ZebraTitle }',
-      '  render: { template: Card }',
+      '  render: { template: Item }',
       '  body: { Desc: a }',
     ].join('\n'), 'utf8');
 
-    fs.writeFileSync(path.join(orderTmpDir, 'templates', 'Card.template'),
+    fs.writeFileSync(path.join(orderTmpDir, 'templates', 'Item.template'),
       '## {$aid.title} [{$id}]\n~~~\n{$body.Desc}', 'utf8');
 
     fs.writeFileSync(path.join(orderTmpDir, 'compile.yaml'), [
       'structure:',
-      `  input: { cards: [${orderTmpDir}/cards], templates: [${orderTmpDir}/templates] }`,
+      `  input: { items: [${orderTmpDir}/items], templates: [${orderTmpDir}/templates] }`,
       `  output: ${orderTmpDir}/output`,
       'branches:',
       '  main: {}',
@@ -771,7 +773,7 @@ describe('deterministic card ordering', () => {
     return path.join(orderTmpDir, 'output', 'Branches', 'main', 'Story Cards', type, `${type}.md`);
   }
 
-  test('cards within a type are ordered by id, not authoring or title order', () => {
+  test('items within a type are ordered by id, not authoring or title order', () => {
     const content = fs.readFileSync(typeFile('Alpha'), 'utf8');
     // id Apple (title ZebraTitle) must precede id Zebra (title AppleTitle)
     expect(content.indexOf('[Apple]')).toBeGreaterThanOrEqual(0);
@@ -795,9 +797,9 @@ describe('component gap detection', () => {
   // Build a minimal project; `extraComponents` lines are spliced into components:.
   function makeProject(extraComponents) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-gap-'));
-    fs.mkdirSync(path.join(dir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
-    fs.writeFileSync(path.join(dir, 'cards', 'c.yaml'), [
+    fs.writeFileSync(path.join(dir, 'items', 'c.yaml'), [
       '- id: W',
       '  name: W',
       '  aid: { type: Item, title: W }',
@@ -807,7 +809,7 @@ describe('component gap detection', () => {
     fs.writeFileSync(path.join(dir, 'templates', 'Item.template'), '## {$aid.title}\n~~~\n{$body.Desc}', 'utf8');
     fs.writeFileSync(path.join(dir, 'compile.yaml'), [
       'structure:',
-      `  input: { cards: [${dir}/cards], templates: [${dir}/templates] }`,
+      `  input: { items: [${dir}/items], templates: [${dir}/templates] }`,
       `  output: ${dir}/output`,
       'components:',
       ...extraComponents.map(l => `  ${l}`),
@@ -847,7 +849,7 @@ describe('component gap detection', () => {
     // makeProject always writes a `components:` header; an empty mapping is fine.
     fs.writeFileSync(path.join(dir, 'compile.yaml'), [
       'structure:',
-      `  input: { cards: [${dir}/cards], templates: [${dir}/templates] }`,
+      `  input: { items: [${dir}/items], templates: [${dir}/templates] }`,
       `  output: ${dir}/output`,
     ].join('\n'), 'utf8');
     try {
@@ -875,9 +877,9 @@ describe('component gap detection', () => {
 describe('root title -> Label.md', () => {
   function makeTitleProject(extraLines) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-title-'));
-    fs.mkdirSync(path.join(dir, 'cards'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
-    fs.writeFileSync(path.join(dir, 'cards', 'c.yaml'), [
+    fs.writeFileSync(path.join(dir, 'items', 'c.yaml'), [
       '- id: W',
       '  name: W',
       '  aid: { type: Item, title: W }',
@@ -887,7 +889,7 @@ describe('root title -> Label.md', () => {
     fs.writeFileSync(path.join(dir, 'templates', 'Item.template'), '## {$aid.title}\n~~~\n{$body.Desc}', 'utf8');
     fs.writeFileSync(path.join(dir, 'compile.yaml'), [
       'structure:',
-      `  input: { cards: [${dir}/cards], templates: [${dir}/templates] }`,
+      `  input: { items: [${dir}/items], templates: [${dir}/templates] }`,
       `  output: ${dir}/output`,
       ...extraLines,
     ].join('\n'), 'utf8');

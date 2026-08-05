@@ -3,23 +3,23 @@
 const {
   buildSharedAndDeltas,
   buildLeafAnnotation,
-  flattenCard,
+  flattenItem,
   diffFlattened,
   collectDeltaKeyPaths,
 } = require('../../src/diff');
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function card(id, type, rendered) {
+function item(id, type, rendered) {
   return [id, { type, rendered }];
 }
 
-function leaf(label, fileBase, cardPairs, components = {}) {
+function leaf(label, fileBase, itemPairs, components = {}) {
   return {
     label,
     fileBase,
     branchPath: label.split('/'),
-    cards: new Map(cardPairs),
+    items: new Map(itemPairs),
     components: {
       plotEssentials: components.plotEssentials || [],
       aiInstructions: components.aiInstructions || [],
@@ -28,40 +28,40 @@ function leaf(label, fileBase, cardPairs, components = {}) {
   };
 }
 
-// ── buildSharedAndDeltas: cards ────────────────────────────────────────────────
+// ── buildSharedAndDeltas: items ────────────────────────────────────────────────
 
-describe('buildSharedAndDeltas — cards', () => {
-  test('card identical in every leaf → shared, absent from deltas', () => {
+describe('buildSharedAndDeltas — items', () => {
+  test('item identical in every leaf → shared, absent from deltas', () => {
     const data = [
-      leaf('a', 'a', [card('felicia', 'Character', 'FELICIA')]),
-      leaf('b', 'b', [card('felicia', 'Character', 'FELICIA')]),
+      leaf('a', 'a', [item('felicia', 'Character', 'FELICIA')]),
+      leaf('b', 'b', [item('felicia', 'Character', 'FELICIA')]),
     ];
     const { shared, deltas } = buildSharedAndDeltas(data);
-    expect(shared.cards.map(c => c.id)).toEqual(['felicia']);
-    expect(deltas.get('a').cards).toEqual([]);
-    expect(deltas.get('b').cards).toEqual([]);
+    expect(shared.items.map(c => c.id)).toEqual(['felicia']);
+    expect(deltas.get('a').items).toEqual([]);
+    expect(deltas.get('b').items).toEqual([]);
   });
 
-  test('card differing between leaves → each leaf version in its delta, not shared', () => {
+  test('item differing between leaves → each leaf version in its delta, not shared', () => {
     const data = [
-      leaf('a', 'a', [card('aness', 'Character', 'ANESS-A')]),
-      leaf('b', 'b', [card('aness', 'Character', 'ANESS-B')]),
+      leaf('a', 'a', [item('aness', 'Character', 'ANESS-A')]),
+      leaf('b', 'b', [item('aness', 'Character', 'ANESS-B')]),
     ];
     const { shared, deltas } = buildSharedAndDeltas(data);
-    expect(shared.cards).toEqual([]);
-    expect(deltas.get('a').cards[0].rendered).toBe('ANESS-A');
-    expect(deltas.get('b').cards[0].rendered).toBe('ANESS-B');
+    expect(shared.items).toEqual([]);
+    expect(deltas.get('a').items[0].rendered).toBe('ANESS-A');
+    expect(deltas.get('b').items[0].rendered).toBe('ANESS-B');
   });
 
-  test('card present in only some leaves (~ excluded elsewhere) → varying, omitted where absent', () => {
+  test('item present in only some leaves (~ excluded elsewhere) → varying, omitted where absent', () => {
     const data = [
-      leaf('a', 'a', [card('extra', 'Character', 'EXTRA')]),
+      leaf('a', 'a', [item('extra', 'Character', 'EXTRA')]),
       leaf('b', 'b', []), // ~-excluded here
     ];
     const { shared, deltas } = buildSharedAndDeltas(data);
-    expect(shared.cards).toEqual([]);                  // not in every leaf → not shared
-    expect(deltas.get('a').cards.map(c => c.id)).toEqual(['extra']);
-    expect(deltas.get('b').cards).toEqual([]);         // silently omitted, not noted
+    expect(shared.items).toEqual([]);                  // not in every leaf → not shared
+    expect(deltas.get('a').items.map(c => c.id)).toEqual(['extra']);
+    expect(deltas.get('b').items).toEqual([]);         // silently omitted, not noted
   });
 });
 
@@ -81,11 +81,11 @@ describe('buildSharedAndDeltas — component blocks', () => {
   });
 });
 
-// ── flattenCard / diffFlattened ────────────────────────────────────────────────
+// ── flattenItem / diffFlattened ────────────────────────────────────────────────
 
-describe('flattenCard + diffFlattened', () => {
+describe('flattenItem + diffFlattened', () => {
   test('flattens diff-relevant roots to dot-paths, ignores render/v', () => {
-    const flat = flattenCard({
+    const flat = flattenItem({
       body: { Tagline: 'T', Physical: { hair: 'silver' } },
       aid: { triggers: ['A', 'B'] },
       render: { template: 'Character' }, // ignored
@@ -97,8 +97,8 @@ describe('flattenCard + diffFlattened', () => {
   });
 
   test('diffFlattened reports only changed paths', () => {
-    const base = flattenCard({ body: { hair: 'silver', age: '40s' } });
-    const leafC = flattenCard({ body: { hair: 'black',  age: '40s' } });
+    const base = flattenItem({ body: { hair: 'silver', age: '40s' } });
+    const leafC = flattenItem({ body: { hair: 'black',  age: '40s' } });
     const changes = diffFlattened(base, leafC);
     expect(changes).toHaveLength(1);
     expect(changes[0].path).toBe('body.hair');
@@ -129,16 +129,16 @@ describe('collectDeltaKeyPaths', () => {
   });
 });
 
-// ── buildLeafAnnotation: nulled-card reporting ──────────────────────────────────
+// ── buildLeafAnnotation: nulled-item reporting ──────────────────────────────────
 
-describe('buildLeafAnnotation — nulled cards', () => {
+describe('buildLeafAnnotation — nulled items', () => {
   const registry = new Map();
 
-  test('~-excluded card is explicitly reported as nulled', () => {
-    const cardDef = { id: 'gone', branches: { knight: null }, body: { x: 'y' } };
+  test('~-excluded item is explicitly reported as nulled', () => {
+    const itemDef = { id: 'gone', branches: { knight: null }, body: { x: 'y' } };
     const doc = buildLeafAnnotation(
       { label: 'knight', branchPath: ['knight'] },
-      [cardDef],
+      [itemDef],
       registry,
     );
     expect(doc).toMatch(/## gone/);

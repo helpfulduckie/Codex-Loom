@@ -146,18 +146,18 @@ function resolveVariables(text, variables, _resolving) {
 }
 
 /**
- * Walk the text-bearing sections of a card (body, aid, render, name) and apply
+ * Walk the text-bearing sections of a item (body, aid, render, name) and apply
  * `transform(str) → str` to every string value (array elements mapped, nested
- * objects recursed). Mutates the card in place.
+ * objects recursed). Mutates the item in place.
  *
  * This is the single place the set of `{$…}`/text sections lives, so the field
- * interpolation, cross-card, and pronoun passes all reach the same fields.
- * `name` is normalized to an object ({display, full, …}) by resolveCard before
+ * interpolation, cross-item, and pronoun passes all reach the same fields.
+ * `name` is normalized to an object ({display, full, …}) by resolveItem before
  * any of these passes run.
  */
-function walkCardTextFields(card, transform) {
-  if (!card) return;
-  for (const section of [card.body, card.aid, card.render, card.name]) {
+function walkItemTextFields(item, transform) {
+  if (!item) return;
+  for (const section of [item.body, item.aid, item.render, item.name]) {
     if (section && typeof section === 'object') walkTextRecursive(section, transform);
   }
 }
@@ -235,14 +235,14 @@ function warnPattern(text, label, re, describe) {
 
 /**
  * Final safety net: warn about any {$…} field/pronoun/character token left
- * unresolved in rendered output (a card or component). Emits one warning per
+ * unresolved in rendered output (a item or component). Emits one warning per
  * distinct leftover token.
  *
  * Targets {$…} only — {%…} is handled by warnUnexpandedVariables, and {@…} is
- * intentionally never expanded in card content.
+ * intentionally never expanded in item content.
  *
  * @param {string} text   - the fully-rendered output to scan
- * @param {string} label  - human-readable location, e.g. 'card "Aria" (Character)'
+ * @param {string} label  - human-readable location, e.g. 'item "Aria" (Character)'
  * @returns {boolean}     - true if any unresolved token was found
  */
 function warnUnresolvedFieldTokens(text, label) {
@@ -251,13 +251,13 @@ function warnUnresolvedFieldTokens(text, label) {
 
 /**
  * Final safety net: warn about any {%variable} token left unexpanded in rendered
- * output (a card or component). Emits one warning per distinct leftover token.
+ * output (a item or component). Emits one warning per distinct leftover token.
  *
- * Targets {%...} only — {@...} is intentionally not expanded in card content, so
+ * Targets {%...} only — {@...} is intentionally not expanded in item content, so
  * a literal {@...} here is expected and must not be flagged.
  *
  * @param {string} text   - the fully-rendered output to scan
- * @param {string} label  - human-readable location, e.g. 'card "Aria" (Character)'
+ * @param {string} label  - human-readable location, e.g. 'item "Aria" (Character)'
  * @returns {boolean}     - true if any unexpanded variable was found
  */
 function warnUnexpandedVariables(text, label) {
@@ -273,7 +273,7 @@ function warnUnexpandedVariables(text, label) {
  * warning per distinct leftover match.
  *
  * @param {string} text   - the fully-rendered output to scan
- * @param {string} label  - human-readable location, e.g. 'card "Aria" (Character)'
+ * @param {string} label  - human-readable location, e.g. 'item "Aria" (Character)'
  * @returns {boolean}     - true if any artifact was found
  */
 function warnMechanicalArtifacts(text, label) {
@@ -290,7 +290,7 @@ function warnMechanicalArtifacts(text, label) {
 module.exports = {
   findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
   YAML_SUFFIXES, CONFIG_BASENAMES, hasSuffix, consoleWarner,
-  resolveVariables, warnUnexpandedVariables, walkCardTextFields, warnUnresolvedFieldTokens,
+  resolveVariables, warnUnexpandedVariables, walkItemTextFields, warnUnresolvedFieldTokens,
   warnMechanicalArtifacts, maskFencedRegions,
   FIELD_TOKEN_RE, VAR_TOKEN_RE, TEMPLATE_FN_RE, TEMPLATE_TAG_RE, VERB_MARKER_RE, SUSPECT_VERB_MARKER_RE, JS_ARTIFACT_RE, JS_WORD_RE,
 };

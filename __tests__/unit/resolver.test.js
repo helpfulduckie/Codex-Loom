@@ -4,7 +4,7 @@ const {
   applyFieldOp,
   collectVariantDeltas,
   enumerateLeaves,
-  resolveCard,
+  resolveItem,
   resolveBranchSpec,
   deepClone,
 } = require('../../src/resolver');
@@ -122,7 +122,7 @@ describe('applyFieldOp', () => {
 });
 
 describe('collectVariantDeltas', () => {
-  const canonCard = {
+  const canonItem = {
     id: 'zephon',
     variants: {
       human: {
@@ -135,14 +135,14 @@ describe('collectVariantDeltas', () => {
   };
 
   test('returns deltas in order for nested path', () => {
-    const deltas = collectVariantDeltas(canonCard, 'human/noble');
+    const deltas = collectVariantDeltas(canonItem, 'human/noble');
     expect(deltas).toHaveLength(2);
     expect(deltas[0].body.race).toBe('human');
     expect(deltas[1].body.rank).toBe('noble');
   });
 
   test('returns single delta for single-segment path', () => {
-    const deltas = collectVariantDeltas(canonCard, 'human');
+    const deltas = collectVariantDeltas(canonItem, 'human');
     expect(deltas).toHaveLength(1);
     expect(deltas[0].body.race).toBe('human');
   });
@@ -150,36 +150,36 @@ describe('collectVariantDeltas', () => {
   test('unknown segment warns and returns partial deltas', () => {
     // model/ is pure (§3.3): it reports through the caller's onWarn rather than printing.
     const onWarn = jest.fn();
-    const deltas = collectVariantDeltas(canonCard, 'human/peasant', onWarn);
+    const deltas = collectVariantDeltas(canonItem, 'human/peasant', onWarn);
     expect(deltas).toHaveLength(1);
     expect(onWarn).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('not found in variant tree'));
   });
 
   test('an unknown segment is silent when no reporter is supplied', () => {
     const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(collectVariantDeltas(canonCard, 'human/peasant')).toHaveLength(1);
+    expect(collectVariantDeltas(canonItem, 'human/peasant')).toHaveLength(1);
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 
   test('empty path returns empty array', () => {
-    expect(collectVariantDeltas(canonCard, '')).toEqual([]);
+    expect(collectVariantDeltas(canonItem, '')).toEqual([]);
   });
 
   test('null path returns empty array', () => {
-    expect(collectVariantDeltas(canonCard, null)).toEqual([]);
+    expect(collectVariantDeltas(canonItem, null)).toEqual([]);
   });
 
-  test('null variant (~) returns null to signal card exclusion', () => {
-    const cardWithNullVariant = {
+  test('null variant (~) returns null to signal item exclusion', () => {
+    const itemWithNullVariant = {
       id: 'example',
       variants: { omit: null },
     };
-    expect(collectVariantDeltas(cardWithNullVariant, 'omit')).toBeNull();
+    expect(collectVariantDeltas(itemWithNullVariant, 'omit')).toBeNull();
   });
 
   test('null variant at nested path returns null', () => {
-    const cardWithNullVariant = {
+    const itemWithNullVariant = {
       id: 'example',
       variants: {
         human: {
@@ -188,7 +188,7 @@ describe('collectVariantDeltas', () => {
         },
       },
     };
-    expect(collectVariantDeltas(cardWithNullVariant, 'human/ghost')).toBeNull();
+    expect(collectVariantDeltas(itemWithNullVariant, 'human/ghost')).toBeNull();
   });
 });
 
@@ -355,10 +355,10 @@ describe('_ fallback wildcard (resolveBranchSpec)', () => {
   });
 });
 
-// ── resolveCard ───────────────────────────────────────────────────────────────
+// ── resolveItem ───────────────────────────────────────────────────────────────
 
-describe('resolveCard', () => {
-  const canonCard = {
+describe('resolveItem', () => {
+  const canonItem = {
     id: 'hero',
     name: 'Hero',
     aid:    { type: 'Character', title: 'Hero' },
@@ -369,23 +369,23 @@ describe('resolveCard', () => {
     },
   };
 
-  const registry = new Map([['hero', canonCard]]);
+  const registry = new Map([['hero', canonItem]]);
 
-  test('import without importVariants yields base card body', () => {
-    const cardDef = { import: 'hero' };
-    const card = resolveCard(cardDef, registry, []);
-    expect(card.name.full).toBe('Hero');
-    expect(card.body.role).toBe('warrior');
+  test('import without importVariants yields base item body', () => {
+    const itemDef = { import: 'hero' };
+    const item = resolveItem(itemDef, registry, []);
+    expect(item.name.full).toBe('Hero');
+    expect(item.body.role).toBe('warrior');
   });
 
   test('importVariants applies variant body fields', () => {
-    const cardDef = { import: 'hero', importVariants: ['mage'] };
-    const card = resolveCard(cardDef, registry, []);
-    expect(card.body.role).toBe('mage');
-    expect(card.body.magic).toBe('yes');
+    const itemDef = { import: 'hero', importVariants: ['mage'] };
+    const item = resolveItem(itemDef, registry, []);
+    expect(item.body.role).toBe('mage');
+    expect(item.body.magic).toBe('yes');
   });
 
-  test('importVariants with null variant (~) excludes the card', () => {
+  test('importVariants with null variant (~) excludes the item', () => {
     const canonWithNull = {
       id: 'ghost',
       name: 'Ghost',
@@ -395,11 +395,11 @@ describe('resolveCard', () => {
       variants: { omit: null },
     };
     const reg = new Map([['ghost', canonWithNull]]);
-    const cardDef = { import: 'ghost', importVariants: ['omit'] };
-    expect(resolveCard(cardDef, reg, [])).toBeNull();
+    const itemDef = { import: 'ghost', importVariants: ['omit'] };
+    expect(resolveItem(itemDef, reg, [])).toBeNull();
   });
 
-  test('branch dispatch to null variant (~) excludes the card', () => {
+  test('branch dispatch to null variant (~) excludes the item', () => {
     const canonWithNull = {
       id: 'ghost',
       name: 'Ghost',
@@ -409,43 +409,43 @@ describe('resolveCard', () => {
       variants: { hidden: null },
     };
     const reg = new Map([['ghost', canonWithNull]]);
-    const cardDef = { import: 'ghost', branches: { stealth: 'hidden', '*': [] } };
-    expect(resolveCard(cardDef, reg, ['stealth'])).toBeNull();
-    expect(resolveCard(cardDef, reg, ['other'])).not.toBeNull();
+    const itemDef = { import: 'ghost', branches: { stealth: 'hidden', '*': [] } };
+    expect(resolveItem(itemDef, reg, ['stealth'])).toBeNull();
+    expect(resolveItem(itemDef, reg, ['other'])).not.toBeNull();
   });
 
-  test('body override in cardDef overwrites base body fields', () => {
-    const cardDef = { import: 'hero', body: { role: 'rogue' } };
-    const card = resolveCard(cardDef, registry, []);
-    expect(card.body.role).toBe('rogue');
+  test('body override in itemDef overwrites base body fields', () => {
+    const itemDef = { import: 'hero', body: { role: 'rogue' } };
+    const item = resolveItem(itemDef, registry, []);
+    expect(item.body.role).toBe('rogue');
   });
 
-  test('local card definition (no import) is returned as-is', () => {
-    const cardDef = {
+  test('local item definition (no import) is returned as-is', () => {
+    const itemDef = {
       id: 'npc', name: 'Guard',
       aid: { type: 'Character', title: 'Guard' },
       render: { template: 'Character' },
       body: { role: 'guard' },
     };
-    const card = resolveCard(cardDef, new Map(), []);
-    expect(card.name.full).toBe('Guard');
-    expect(card.body.role).toBe('guard');
+    const item = resolveItem(itemDef, new Map(), []);
+    expect(item.name.full).toBe('Guard');
+    expect(item.body.role).toBe('guard');
   });
 
   test('import of unknown id throws', () => {
-    const cardDef = { import: 'unknown' };
-    expect(() => resolveCard(cardDef, new Map(), [])).toThrow(/unknown/i);
+    const itemDef = { import: 'unknown' };
+    expect(() => resolveItem(itemDef, new Map(), [])).toThrow(/unknown/i);
   });
 
-  test('compiler metadata (variants) is stripped from resolved card', () => {
-    const cardDef = { import: 'hero' };
-    const card = resolveCard(cardDef, registry, []);
-    expect(card).not.toHaveProperty('variants');
-    expect(card).not.toHaveProperty('_source');
+  test('compiler metadata (variants) is stripped from resolved item', () => {
+    const itemDef = { import: 'hero' };
+    const item = resolveItem(itemDef, registry, []);
+    expect(item).not.toHaveProperty('variants');
+    expect(item).not.toHaveProperty('_source');
   });
 
   describe('import-level field operations on aid and top-level fields', () => {
-    const baseCard = {
+    const baseItem = {
       id: 'outfit',
       name: 'Outfit',
       aid: { type: 'Item', title: 'Outfit', triggers: ['clothing', 'style'] },
@@ -453,67 +453,67 @@ describe('resolveCard', () => {
       body: { known: 'base knowledge' },
       pronouns: 'they/them',
     };
-    const reg = new Map([['outfit', baseCard]]);
+    const reg = new Map([['outfit', baseItem]]);
 
     test('aid.triggers: plain array replaces', () => {
-      const card = resolveCard({ import: 'outfit', aid: { triggers: ['uniform'] } }, reg, []);
-      expect(card.aid.triggers).toEqual(['uniform']);
+      const item = resolveItem({ import: 'outfit', aid: { triggers: ['uniform'] } }, reg, []);
+      expect(item.aid.triggers).toEqual(['uniform']);
     });
 
     test('aid.triggers: +{} appends to array', () => {
-      const card = resolveCard({ import: 'outfit', aid: { triggers: '+{uniform}' } }, reg, []);
-      expect(card.aid.triggers).toEqual(['clothing', 'style', 'uniform']);
+      const item = resolveItem({ import: 'outfit', aid: { triggers: '+{uniform}' } }, reg, []);
+      expect(item.aid.triggers).toEqual(['clothing', 'style', 'uniform']);
     });
 
     test('aid.triggers: -{} removes item from array', () => {
-      const card = resolveCard({ import: 'outfit', aid: { triggers: '-{style}' } }, reg, []);
-      expect(card.aid.triggers).toEqual(['clothing']);
+      const item = resolveItem({ import: 'outfit', aid: { triggers: '-{style}' } }, reg, []);
+      expect(item.aid.triggers).toEqual(['clothing']);
     });
 
     test('aid.triggers: null deletes the field', () => {
-      const card = resolveCard({ import: 'outfit', aid: { triggers: null } }, reg, []);
-      expect(card.aid).not.toHaveProperty('triggers');
+      const item = resolveItem({ import: 'outfit', aid: { triggers: null } }, reg, []);
+      expect(item.aid).not.toHaveProperty('triggers');
     });
 
     test('body.known: +{} converts scalar to two-element array', () => {
-      const card = resolveCard({ import: 'outfit', body: { known: '+{and more}' } }, reg, []);
-      expect(card.body.known).toEqual(['base knowledge', 'and more']);
+      const item = resolveItem({ import: 'outfit', body: { known: '+{and more}' } }, reg, []);
+      expect(item.body.known).toEqual(['base knowledge', 'and more']);
     });
 
     test('name: /{old}/{new} swaps substring', () => {
-      const card = resolveCard({ import: 'outfit', name: '/{Outfit}/{Uniform}' }, reg, []);
-      expect(card.name.full).toBe('Uniform');
+      const item = resolveItem({ import: 'outfit', name: '/{Outfit}/{Uniform}' }, reg, []);
+      expect(item.name.full).toBe('Uniform');
     });
 
     test('name: array of swaps applies all in sequence', () => {
       const base = { id: 'char', name: 'She said her name was Sarah', aid: { type: 'Character' }, body: {} };
       const r = new Map([['char', base]]);
-      const card = resolveCard(
+      const item = resolveItem(
         { import: 'char', name: ['/{She}/{He}', '/{her}/{his}', '/{Sarah}/{Sam}'] },
         r,
         []
       );
-      expect(card.name.full).toBe('He said his name was Sam');
+      expect(item.name.full).toBe('He said his name was Sam');
     });
 
     test('pronouns: plain string replaces', () => {
-      const card = resolveCard({ import: 'outfit', pronouns: 'she/her' }, reg, []);
-      expect(card.pronouns).toBe('she/her');
+      const item = resolveItem({ import: 'outfit', pronouns: 'she/her' }, reg, []);
+      expect(item.pronouns).toBe('she/her');
     });
   });
 
   describe('branch-based variant dispatch via branches:', () => {
-    const baseCard = {
+    const baseItem = {
       id: 'spirit',
       name: 'Spirit',
       aid: { type: 'Character', title: 'Spirit' },
       render: { template: 'Character' },
       body: { form: 'incorporeal', origin: 'unknown' },
     };
-    const reg = new Map([['spirit', baseCard]]);
+    const reg = new Map([['spirit', baseItem]]);
 
     test('wildcard * applies as baseline for all non-excluded branches', () => {
-      const cardDef = {
+      const itemDef = {
         import: 'spirit',
         variants: {
           generic: { body: { form: 'generic' } },
@@ -522,12 +522,12 @@ describe('resolveCard', () => {
           '*': 'generic',
         },
       };
-      expect(resolveCard(cardDef, reg, ['Free Form']).body.form).toBe('generic');
-      expect(resolveCard(cardDef, reg, ['Wyvern']).body.form).toBe('generic');
+      expect(resolveItem(itemDef, reg, ['Free Form']).body.form).toBe('generic');
+      expect(resolveItem(itemDef, reg, ['Wyvern']).body.form).toBe('generic');
     });
 
     test('explicit branch stacks on wildcard', () => {
-      const cardDef = {
+      const itemDef = {
         import: 'spirit',
         variants: {
           generic:  { body: { form: 'generic' } },
@@ -538,21 +538,21 @@ describe('resolveCard', () => {
           Wyvern:  'draconic',
         },
       };
-      expect(resolveCard(cardDef, reg, ['Wyvern']).body.form).toBe('draconic');
-      expect(resolveCard(cardDef, reg, ['Free Form']).body.form).toBe('generic');
+      expect(resolveItem(itemDef, reg, ['Wyvern']).body.form).toBe('draconic');
+      expect(resolveItem(itemDef, reg, ['Free Form']).body.form).toBe('generic');
     });
 
-    test('null branch key excludes card for that branch', () => {
-      const cardDef = {
+    test('null branch key excludes item for that branch', () => {
+      const itemDef = {
         import: 'spirit',
         branches: { Wyvern: null },
       };
-      expect(resolveCard(cardDef, reg, ['Wyvern'])).toBeNull();
-      expect(resolveCard(cardDef, reg, ['Other'])).not.toBeNull();
+      expect(resolveItem(itemDef, reg, ['Wyvern'])).toBeNull();
+      expect(resolveItem(itemDef, reg, ['Other'])).not.toBeNull();
     });
 
     test('multi-level branch applies variants from each level in order', () => {
-      const cardDef = {
+      const itemDef = {
         import: 'spirit',
         variants: {
           transformed: { name: 'Prime', body: { form: 'artificial' } },
@@ -564,19 +564,19 @@ describe('resolveCard', () => {
           'Branch B': { apply: ['transformed', 'branchB'] },
         },
       };
-      const cardA = resolveCard(cardDef, reg, ['Branch A']);
-      expect(cardA.name.full).toBe('Prime');
-      expect(cardA.body.form).toBe('artificial');
-      expect(cardA.body.origin).toBe('scientist A');
+      const itemA = resolveItem(itemDef, reg, ['Branch A']);
+      expect(itemA.name.full).toBe('Prime');
+      expect(itemA.body.form).toBe('artificial');
+      expect(itemA.body.origin).toBe('scientist A');
 
-      const cardB = resolveCard(cardDef, reg, ['Branch B']);
-      expect(cardB.name.full).toBe('Prime');
-      expect(cardB.body.form).toBe('artificial');
-      expect(cardB.body.origin).toBe('scientist B');
+      const itemB = resolveItem(itemDef, reg, ['Branch B']);
+      expect(itemB.name.full).toBe('Prime');
+      expect(itemB.body.form).toBe('artificial');
+      expect(itemB.body.origin).toBe('scientist B');
     });
 
-    test('branch not defined yields base card (no variants applied)', () => {
-      const cardDef = {
+    test('branch not defined yields base item (no variants applied)', () => {
+      const itemDef = {
         import: 'spirit',
         variants: {
           special: { body: { form: 'special' } },
@@ -585,8 +585,8 @@ describe('resolveCard', () => {
           Wyvern: 'special',
         },
       };
-      const card = resolveCard(cardDef, reg, ['Other']);
-      expect(card.body.form).toBe('incorporeal');
+      const item = resolveItem(itemDef, reg, ['Other']);
+      expect(item.body.form).toBe('incorporeal');
     });
   });
 });

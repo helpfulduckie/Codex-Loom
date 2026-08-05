@@ -1,6 +1,6 @@
 # compile.yaml Reference
 
-`compile.yaml` is the entry point for every Codex Loom project. It tells the compiler where to find cards and templates, where to write output, how the scenario branches, and what the protagonist is for each branch.
+`compile.yaml` is the entry point for every Codex Loom project. It tells the compiler where to find items and templates, where to write output, how the scenario branches, and what the protagonist is for each branch.
 
 ---
 
@@ -21,9 +21,9 @@ structure:
 ```yaml
 structure:
   input:
-    cards:                        # sequence of project card directories
+    cards:                        # sequence of project item directories
       - ./cards
-    canon:                        # named mapping of canonical card directories
+    canon:                        # named mapping of canonical item directories
       main: ../../_Canon
       lore: ../../_Lore
     templates:                    # sequence of template directories (later overrides earlier)
@@ -84,24 +84,24 @@ All path resolution happens under `structure:`.
 
 ### `structure.input.cards`
 
-A sequence of directories to load project card YAML files from. All `.yaml` files are loaded recursively. Entries support the same `{%variable}` and `{@canonName}` token expansion as `structure.input.templates` (resolved before the path is made absolute), so a shared path prefix variable can be reused here.
+A sequence of directories to load project item YAML files from. All `.yaml` files are loaded recursively. Entries support the same `{%variable}` and `{@canonName}` token expansion as `structure.input.templates` (resolved before the path is made absolute), so a shared path prefix variable can be reused here.
 
 ```yaml
 cards: [./cards]
 # or
 cards:
   - ./cards
-  - ./extra-cards
+  - ./extra-items
 ```
 
 ### `structure.input.canon`
 
-A **named mapping** of directories containing canonical (shared) card definitions. Each name is used in `{@name}` references and when reporting errors. All `.yaml` files are loaded recursively.
+A **named mapping** of directories containing canonical (shared) item definitions. Each name is used in `{@name}` references and when reporting errors. All `.yaml` files are loaded recursively.
 
 ```yaml
 canon:
   main: ../../_Canon
-  lore: ./lore-cards
+  lore: ./lore-items
 ```
 
 Canon names are matched case-insensitively in `{@key}` references. Use the name to refer to canon directories in `include:` paths:
@@ -187,7 +187,7 @@ These keys sit **outside** `structure:` at the top level of `compile.yaml`.
 
 ### `protagonist`
 
-Global default protagonist ID. Used when a branch doesn't declare its own. Matched case-insensitively against card `id` values.
+Global default protagonist ID. Used when a branch doesn't declare its own. Matched case-insensitively against item `id` values.
 
 ```yaml
 protagonist: Aness
@@ -213,7 +213,7 @@ variables:
 
 Used in a template as: `The year is {%year}.`
 
-`{%key}` is expanded consistently across card bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and the config path fields (`structure.input.cards`, `structure.input.canon`, and `structure.input.templates`), making variables useful both as content values and as shared path prefixes across the config (see the `structure.input.canon` section above for an example). The one exception is `include:`/`import:` paths, which resolve once before branches are enumerated and therefore see **root** variables only, not per-branch overrides.
+`{%key}` is expanded consistently across item bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and the config path fields (`structure.input.cards`, `structure.input.canon`, and `structure.input.templates`), making variables useful both as content values and as shared path prefixes across the config (see the `structure.input.canon` section above for an example). The one exception is `include:`/`import:` paths, which resolve once before branches are enumerated and therefore see **root** variables only, not per-branch overrides.
 
 ### `components`
 
@@ -264,7 +264,7 @@ branches:
 
 | Key | Description |
 |---|---|
-| `title` | Output folder name for this branch node. When set, the compiler uses this string as the filesystem folder name instead of the YAML key. The key is still used for card branch dispatch and all internal matching; `title` only affects the output path. |
+| `title` | Output folder name for this branch node. When set, the compiler uses this string as the filesystem folder name instead of the YAML key. The key is still used for item branch dispatch and all internal matching; `title` only affects the output path. |
 | `protagonist` | Protagonist ID for this branch leaf (overrides root `protagonist`) |
 | `components` | Component specs for this branch (same keys as root `components:`) |
 | `variables` | Variables for this branch subtree (merged on top of parent variables) |
@@ -276,4 +276,4 @@ branches:
 
 All paths in `compile.yaml` are resolved relative to the location of `compile.yaml` itself. Absolute paths are also valid.
 
-The compiler warns if a declared `cards`, `canon`, or `templates` path does not exist. Missing `components` file paths are handled at compile time per component.
+The compiler warns if a declared `items`, `canon`, or `templates` path does not exist. Missing `components` file paths are handled at compile time per component.

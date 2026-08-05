@@ -1,6 +1,6 @@
 # Field Operations
 
-Field operations are used in `variants:` deltas, `importVariants:` chains, and `body:` overrides on imports. They let you make targeted changes to a card's fields without replacing the entire value.
+Field operations are used in `variants:` deltas, `importVariants:` chains, and `body:` overrides on imports. They let you make targeted changes to an item's fields without replacing the entire value.
 
 All string matching within operations is **case-sensitive** for the content of the operation itself (the substring to find/replace), but field **key** matching is always case-insensitive.
 
@@ -19,7 +19,7 @@ body:
 
 ### Remove Field
 
-Set the field to `null` (empty value or explicit `~`). Removes the field entirely from the card.
+Set the field to `null` (empty value or explicit `~`). Removes the field entirely from the item.
 
 ```yaml
 body:

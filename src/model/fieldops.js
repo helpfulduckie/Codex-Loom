@@ -105,14 +105,14 @@ function applyFieldOp(current, op) {
 }
 
 /**
- * Apply a delta to a card's body fields and eligible top-level fields.
- * Mutates card in place.
+ * Apply a delta to a item's body fields and eligible top-level fields.
+ * Mutates item in place.
  *
- * v3 top-level card fields that variants can modify:
+ * v3 top-level item fields that variants can modify:
  *   name, pronouns, aid (object), render (object), body (object)
  * The `id` field cannot be altered by variants or branches.
  */
-function applyFieldsDelta(card, delta, onWarn) {
+function applyFieldsDelta(item, delta, onWarn) {
   if (!delta || typeof delta !== 'object') return;
 
   const topLevelFields = ['name', 'pronouns', 'aid', 'render', 'v'];
@@ -120,10 +120,10 @@ function applyFieldsDelta(card, delta, onWarn) {
   // Warn if the delta contains multiple variable-block aliases
   const deltaAliasKeys = Object.keys(delta).filter(k => VAR_ALIASES.has(k.toLowerCase()));
   if (deltaAliasKeys.length > 1) {
-    const cardId = card.id || (typeof card.name === 'string' ? card.name : '(unknown)');
+    const itemId = item.id || (typeof item.name === 'string' ? item.name : '(unknown)');
     if (onWarn) {
       onWarn(CODES.VARIANT_DELTA_VAR_ALIASES,
-        `card "${cardId}" variant delta contains multiple variable-block aliases (${deltaAliasKeys.map(k => `"${k}"`).join(', ')}). Merging — subfield conflicts resolve last-writer-wins.`);
+        `item "${itemId}" variant delta contains multiple variable-block aliases (${deltaAliasKeys.map(k => `"${k}"`).join(', ')}). Merging — subfield conflicts resolve last-writer-wins.`);
     }
   }
 
@@ -136,42 +136,42 @@ function applyFieldsDelta(card, delta, onWarn) {
     const isTopLevel = topLevelFields.some(f => f === normalizedLower);
 
     if (isTopLevel) {
-      const currentVal = getCI(card, normalizedKey);
+      const currentVal = getCI(item, normalizedKey);
       const newVal = applyFieldOp(currentVal, op);
       if (newVal === '__DELETE__') {
-        deleteCI(card, normalizedKey);
+        deleteCI(item, normalizedKey);
       } else {
-        setCI(card, normalizedKey, newVal);
+        setCI(item, normalizedKey, newVal);
       }
     } else if (keyLower === 'body') {
       // Explicit body: block — apply as subfield ops
-      if (!card.body) card.body = {};
-      const newVal = applyFieldOp(card.body, op);
-      if (newVal !== '__DELETE__') card.body = newVal;
+      if (!item.body) item.body = {};
+      const newVal = applyFieldOp(item.body, op);
+      if (newVal !== '__DELETE__') item.body = newVal;
     } else {
       // Unknown key: treat as body field op
-      if (!card.body) card.body = {};
-      const currentVal = getCI(card.body, key);
+      if (!item.body) item.body = {};
+      const currentVal = getCI(item.body, key);
       const newVal = applyFieldOp(currentVal, op);
       if (newVal === '__DELETE__') {
-        deleteCI(card.body, key);
+        deleteCI(item.body, key);
       } else {
-        setCI(card.body, key, newVal);
+        setCI(item.body, key, newVal);
       }
     }
   }
 }
 
 /**
- * Apply a variant delta to a card. Handles structural keys and field ops.
+ * Apply a variant delta to a item. Handles structural keys and field ops.
  */
-function applyDelta(card, delta, onWarn) {
+function applyDelta(item, delta, onWarn) {
   if (!delta) return;
   // Skip structural-only keys
   for (const [key, value] of Object.entries(delta)) {
     const keyLower = key.toLowerCase();
     if (['variants', 'importvariants', '_source'].includes(keyLower)) continue;
-    applyFieldsDelta(card, { [key]: value }, onWarn);
+    applyFieldsDelta(item, { [key]: value }, onWarn);
   }
 }
 

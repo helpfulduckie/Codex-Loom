@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, consoleWarner } = require('./util');
-const { resolveCard, resolveBranchSpec, mergeBranchSpecs, applyFieldsDelta, applyFieldOp } = require('./resolver');
+const { resolveItem, resolveBranchSpec, mergeBranchSpecs, applyFieldsDelta, applyFieldOp } = require('./resolver');
 const { applyPronounPasses } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions, applyWrapper, resolveTemplateName } = require('./template');
 
@@ -40,12 +40,12 @@ function stripAboveLastFence(rendered) {
 }
 
 /**
- * Get template content for a card, with optional hint fallback.
+ * Get template content for a item, with optional hint fallback.
  */
-function getCardTemplate(card, templates, style) {
-  const templateName = card.render && card.render.template
-    ? card.render.template
-    : (card.aid && card.aid.type ? card.aid.type : null);
+function getCardTemplate(item, templates, style) {
+  const templateName = item.render && item.render.template
+    ? item.render.template
+    : (item.aid && item.aid.type ? item.aid.type : null);
 
   if (!templateName) return null;
 
@@ -88,9 +88,9 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
   const style      = (renderOpts.style || 'full').toLowerCase();
   const stripFence = !!renderOpts.stripFence;
 
-  // ── Inline PE card (no import) ──────────────────────────────────────────
+  // ── Inline PE item (no import) ──────────────────────────────────────────
   if (!blockDef.import) {
-    const syntheticCard = {
+    const syntheticItem = {
       id:       blockDef.id || '(pe-inline)',
       name:     blockDef.id || '(pe-inline)',
       pronouns: blockDef.pronouns || null,
@@ -100,27 +100,27 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
     };
 
     if (blockDef.variants) {
-      applyFieldsDelta(syntheticCard, blockDef.variants);
+      applyFieldsDelta(syntheticItem, blockDef.variants);
     }
 
-    applyFieldInterpolation(syntheticCard);
-    applyVariableInterpolation(syntheticCard, variables);
-    applyFieldRenderFunctions(syntheticCard);
-    applyPronounPasses(syntheticCard, registry, branchProtagonist);
+    applyFieldInterpolation(syntheticItem);
+    applyVariableInterpolation(syntheticItem, variables);
+    applyFieldRenderFunctions(syntheticItem);
+    applyPronounPasses(syntheticItem, registry, branchProtagonist);
 
     const templateOverride = renderOpts.template;
-    const wrapper = renderOpts.wrapper || (syntheticCard.render && syntheticCard.render.wrapper) || 'none';
-    const bodyText = syntheticCard.body
-      ? (syntheticCard.body.text || syntheticCard.body.content || '')
+    const wrapper = renderOpts.wrapper || (syntheticItem.render && syntheticItem.render.wrapper) || 'none';
+    const bodyText = syntheticItem.body
+      ? (syntheticItem.body.text || syntheticItem.body.content || '')
       : '';
     // Template resolution mirrors getCardTemplate: explicit render.template wins,
     // then fall back to the block's aid.type (so PE block types like
     // genreSettingBlock select their matching template without an explicit override).
     const inlineTemplateName = templateOverride
-      || (syntheticCard.render && syntheticCard.render.template)
-      || (syntheticCard.aid && syntheticCard.aid.type)
+      || (syntheticItem.render && syntheticItem.render.template)
+      || (syntheticItem.aid && syntheticItem.aid.type)
       || null;
-    const cardForRender = { ...syntheticCard, render: { ...syntheticCard.render, wrapper: 'none' } };
+    const itemForRender = { ...syntheticItem, render: { ...syntheticItem.render, wrapper: 'none' } };
     let rendered;
     if (templateOverride) {
       const t = templates.get(templateOverride.toLowerCase());
@@ -128,12 +128,12 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
         console.warn(`  WARN [PE]: template "${templateOverride}" not found for inline block`);
         return null;
       }
-      rendered = render(t.content, cardForRender, partials, variables);
+      rendered = render(t.content, itemForRender, partials, variables);
     } else if (bodyText) {
       rendered = resolveVariables(String(bodyText).trim(), variables);
     } else if (inlineTemplateName && templates.get(inlineTemplateName.toLowerCase())) {
       const t = templates.get(inlineTemplateName.toLowerCase());
-      rendered = render(t.content, cardForRender, partials, variables);
+      rendered = render(t.content, itemForRender, partials, variables);
     } else {
       return null;
     }
@@ -142,23 +142,23 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
     return { body, wrapper };
   }
 
-  // ── Card import ───────────────────────────────────────────────────────────
+  // ── Item import ───────────────────────────────────────────────────────────
   const canonId = String(blockDef.import).toLowerCase();
-  const canonCard = registry.get(canonId);
-  if (!canonCard) {
-    console.error(`  ERR [PE]: no card with id "${blockDef.import}" found in registry`);
+  const canonItem = registry.get(canonId);
+  if (!canonItem) {
+    console.error(`  ERR [PE]: no item with id "${blockDef.import}" found in registry`);
     return null;
   }
 
   const overlayKey = String(blockDef.import).toLowerCase();
   const overlay = overlays.get(overlayKey) || null;
 
-  // Block-level and overlay-level branches compose with the canon card's own branches
+  // Block-level and overlay-level branches compose with the canon item's own branches
   // tree (canon → overlay → block) rather than replacing it — a PE block's `branches:`
-  // is usually just visibility gating and must not discard the card's own route-variant
+  // is usually just visibility gating and must not discard the item's own route-variant
   // dispatch tree. See mergeBranchSpecs in resolver.js.
   const resolvedBranches = mergeBranchSpecs(
-    mergeBranchSpecs(canonCard.branches, overlay?.branches),
+    mergeBranchSpecs(canonItem.branches, overlay?.branches),
     blockDef.branches
   );
 
@@ -171,7 +171,7 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
                       : (blockDef.body ?? overlay?.body),
     // Canon variants are always in scope so variant names dispatched from the merged
     // branches tree above resolve, regardless of whether the block/overlay add their own.
-    variants:       Object.assign({}, canonCard.variants, overlay?.variants, blockDef.variants),
+    variants:       Object.assign({}, canonItem.variants, overlay?.variants, blockDef.variants),
     name:           blockDef.name     ?? overlay?.name,
     pronouns:       blockDef.pronouns ?? overlay?.pronouns,
     aid:            (overlay?.aid !== undefined && blockDef.aid !== undefined)
@@ -185,41 +185,41 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
                       : (blockDef.v ?? overlay?.v),
   };
 
-  let card;
+  let item;
   try {
-    card = resolveCard(importDef, registry, branchPath, consoleWarner);
+    item = resolveItem(importDef, registry, branchPath, consoleWarner);
   } catch (err) {
     console.error(`  ERR [PE]: resolving import "${blockDef.import}": ${err.message}`);
     return null;
   }
 
-  if (!card) return null;
+  if (!item) return null;
 
-  applyFieldInterpolation(card);
-  applyVariableInterpolation(card, variables);
-  applyFieldRenderFunctions(card);
-  applyPronounPasses(card, registry, branchProtagonist);
+  applyFieldInterpolation(item);
+  applyVariableInterpolation(item, variables);
+  applyFieldRenderFunctions(item);
+  applyPronounPasses(item, registry, branchProtagonist);
 
-  const templateContent = getCardTemplate(card, templates, style);
+  const templateContent = getCardTemplate(item, templates, style);
   if (!templateContent) {
-    const name = card.id || blockDef.import;
-    const src = card._source ? ` (${card._source})` : '';
-    console.error(`  ERR [PE]: no template found for card "${name}"${src} (type: ${card.aid && card.aid.type}, style: ${style})`);
+    const name = item.id || blockDef.import;
+    const src = item._source ? ` (${item._source})` : '';
+    console.error(`  ERR [PE]: no template found for item "${name}"${src} (type: ${item.aid && item.aid.type}, style: ${style})`);
     return null;
   }
 
-  const wrapper = renderOpts.wrapper || (card.render && card.render.wrapper) || 'none';
-  const context = { ...card, body: card.body || {}, render: { ...card.render, wrapper: 'none' } };
-  let renderedCard;
+  const wrapper = renderOpts.wrapper || (item.render && item.render.wrapper) || 'none';
+  const context = { ...item, body: item.body || {}, render: { ...item.render, wrapper: 'none' } };
+  let renderedItem;
   try {
-    renderedCard = render(templateContent, context, partials, variables);
+    renderedItem = render(templateContent, context, partials, variables);
   } catch (err) {
-    const src = card._source ? ` (${card._source})` : '';
-    console.error(`  ERR [PE]: rendering card "${card.id || blockDef.import}"${src}: ${err.message}`);
+    const src = item._source ? ` (${item._source})` : '';
+    console.error(`  ERR [PE]: rendering item "${item.id || blockDef.import}"${src}: ${err.message}`);
     return null;
   }
 
-  const body = stripFence ? stripAboveLastFence(renderedCard) : renderedCard;
+  const body = stripFence ? stripAboveLastFence(renderedItem) : renderedItem;
   return { body, wrapper };
 }
 
@@ -307,14 +307,14 @@ function renderPESection(sectionDef, registry, templates, partials, compileConte
  * Returns the full Plot Essentials content string, or null if no blocks produce output.
  *
  * @param {object[]} peBlocks          - raw block definitions
- * @param {Map}      registry          - full merged card registry
+ * @param {Map}      registry          - full merged item registry
  * @param {Map}      templates         - loaded template map
  * @param {Map}      partials          - loaded partials map
  * @param {object}   compileContext    - { branchPath, branchProtagonist }
  * @param {Map}      overlays
  * @param {Set|null} emittedFullImportIds - optional out-param; receives the lowercase
  *                   ids of import blocks that actually rendered at full style. The
- *                   caller uses this to suppress exactly those story cards — so a card
+ *                   caller uses this to suppress exactly those story cards — so a item
  *                   PE excludes (or fails to render) is never dropped from Story Cards.
  */
 function compilePE(peBlocks, registry, templates, partials, compileContext, overlays = new Map(), emittedFullImportIds = null) {
