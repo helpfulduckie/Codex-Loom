@@ -1,6 +1,36 @@
 # Templates & Partials
 
-Templates are plain-text files that control how an item's fields are rendered to markdown. Any template syntax works inside a template: field references, render functions, conditionals, and partial includes.
+Templates are plain-text files that control how an item's **body** is rendered to markdown. Any template syntax works inside a template: field references, render functions, conditionals, and partial includes.
+
+---
+
+## Templates Render the Body, Not the Envelope
+
+A compiled story card has two parts, and a template is responsible for exactly one of them.
+
+```
+## Aness Rozen                      ← the envelope: Codex Loom writes this
+~~~
+triggers: [Aness, Rozen]
+encapsulate: false
+notes: '[e]'
+~~~
+Aness Rozen - Journeyman Healer     ← the body: your template writes this
+Personality: inquisitive, polite
+```
+
+The heading, the `~~~` fence and the three keys inside it come from the compiler, from one place (`src/emit/vl.js`). A template that writes any of them produces a **second** envelope inside the body, where the Velvet Lattice loader will never read its keys — so a `~~~` anywhere in a `.template` or `.partial` is a load-time ERROR (`CL0410`) naming the file, not a warning.
+
+What the compiler decides, and from what:
+
+| Envelope line | Comes from |
+|---|---|
+| `## Heading` | `aid.title`, then `name.full`, then `name.display`, then `id` — the first that is set |
+| `triggers: [...]` | `aid.triggers`, with `_` padding decoded and quoting added only where a value needs it. Omitted when the item has none |
+| `encapsulate: false` | Always. Not author-controlled |
+| `notes: ...` | `notes:` on the item, rendered through `render.notesTemplate` if one is declared. Omitted when the text is empty |
+
+Two keys that v3 templates read are gone with the envelope: `aid.encapsulate`, because the value is now unconditional, and `aid.known`, which existed only so a template could write `{if $aid.known}notes: '[e]'{/if}`. The marker is `notes:` text now — see [Item YAML](03-item-yaml.md). Declaring either is an unknown-key ERROR.
 
 ---
 
@@ -24,9 +54,10 @@ Templates receive an item context with these top-level keys:
 | `id` | `{$id}` |
 | `name` | `{$name}` (full name), `{$name.display}`, `{$name.full}` |
 | `pronouns` | `{$pronouns}` |
-| `aid` | `{$aid.type}`, `{$aid.title}`, `{$aid.triggers}`, `{$aid.encapsulate}`, `{$aid.known}` |
+| `aid` | `{$aid.type}`, `{$aid.title}`, `{$aid.triggers}` |
 | `render` | `{$render.template}`, `{$render.wrapper}` |
 | `body` | `{$body.FieldName}`, `{$body.Nested.sub}` |
+| `notes` | `{$notes}`, or `{$notes.key}` when it holds a mapping |
 | `v` | `{$v.key}` — also accessible as `{$var.key}`, `{$vars.key}`, `{$variable.key}`, `{$variables.key}` |
 
 Body fields are matched case-insensitively. A field ref that resolves to nothing renders as empty string. Dotted field refs (`{$body.X}`, `{$v.X}`, `{$aid.X}`, `{$render.X}`, `{$name.X}`) also resolve inside item `aid`/`render`/`name` fields, not just `body` — bare single-segment `{$X}` stays in the pronoun/character-ref namespace. A `{$…}` token that survives unresolved into final output triggers `WARN: unresolved token {$x} in …` (a literal field-ref miss in a *template* still renders empty and is not flagged).
@@ -197,7 +228,7 @@ Background:
 With optional else:
 
 ```
-{if $aid.known}notes: [e]{else}notes: \]{/if}
+{if $body.Secret}{$body.Secret}{else}Nothing hidden here.{/if}
 ```
 
 **Falsy values:** a field is falsy if it is missing, an empty string, the string `"false"`, the string `"0"`, an empty array, or an empty mapping. Everything else is truthy.
@@ -212,10 +243,12 @@ The `{wrapper}...{/wrapper}` block wraps its content according to the item's `re
 
 ```
 {wrapper}
-triggers: [{join(", ", $aid.triggers)}]
-encapsulate: {$aid.encapsulate}
+{$name.full} - {$body.Tagline}
+Personality: {join(", ", $body.Personality.keywords)}
 {/wrapper}
 ```
+
+The wrapper applies to the body only. The envelope is written outside it, so a wrapped card reads `~~~` and then `{`, never the other way around.
 
 | `render.wrapper` | Effect |
 |---|---|
@@ -232,19 +265,15 @@ If no `{wrapper}` block is used and the item has a non-`none` wrapper, the wrapp
 Partials are reusable fragments included into templates (or other partials) with `{include PartialName}`. The name is matched case-insensitively against the `.partial` filename (without extension).
 
 ```
-{include ItemHeader}
+{include Appearance}
 ```
 
 Partial content sees the same item data as the outer template. Partials can include other partials to any depth; circular includes are detected and raise an error.
 
 ```
-# ItemHeader.partial
-## {$aid.title}
-~~~
-triggers: [{join(", ", $aid.triggers)}]
-{if $aid.encapsulate}encapsulate: {$aid.encapsulate}
-{/if}{if $aid.known}notes: [e]
-{/if}~~~
+# Appearance.partial
+{if $body.Physical Traits}Physical Traits: {join("; ", $body.Physical Traits.gender, $body.Physical Traits.age, $body.Physical Traits.hair)}
+{/if}
 ```
 
 ---
@@ -292,7 +321,7 @@ Codex Loom has two compile-time token families. `{%}` is the *path/value* family
 
 **Scope caveat:** `{%}` in `include:`/`import:` paths uses **root** `variables:` only — includes resolve once, before branches are enumerated, so per-branch variable overrides are not in scope there. Everywhere else `{%}` uses the full root → branch merge.
 
-**`aid`/`render` expansion:** `{%}` expands in `aid` (e.g. `title`, `triggers`) and `render` (e.g. `template`, `wrapper`) string values, so template/type selection can be variable-driven. Only strings are touched — numeric/boolean fields like `render.position` and `aid.encapsulate` are left as-is.
+**`aid`/`render` expansion:** `{%}` expands in `aid` (e.g. `title`, `triggers`) and `render` (e.g. `template`, `wrapper`) string values, so template/type selection can be variable-driven. Only strings are touched — numeric and boolean fields such as `render.position` are left as-is.
 
 **`aid.type` validation:** because `aid.type` becomes both a folder and a filename (`Story Cards/{type}/{type}.md`), it is validated *after* expansion. An illegal path segment (`< > : " / \ | ? *`, control chars, `.`/`..`, or a trailing space/period) **aborts the compile** with an error naming the item and type. Spaces elsewhere are fine.
 
@@ -328,25 +357,29 @@ The `{preserve}` and `{/preserve}` tags are stripped from the output; only the i
 
 ## Example Template
 
+`Character.template`, in full — no heading, no fence, body only:
+
 ```
-{include ItemHeader}
-{$aid.title} - {join("; ", $body.Tagline)}
-Physical Traits: {join("; ", $body.Physical Traits.gender, $body.Physical Traits.age, $body.Physical Traits.hair, $body.Physical Traits.eyes, $body.Physical Traits.build, $body.Physical Traits.other)}
+{wrapper}
+{$name.full} - {join("; ", $body.Tagline)}
+{include Appearance}
 Personality: {join(", ", $body.Personality.keywords)}
 {if $body.Personality.expanded}{$body.Personality.expanded}
 {/if}{if $body.Magic}Magic: {join("; ", $body.Magic.affinity, $body.Magic.effect)}
 {/if}{if $body.Background}Background:
 {$body.Background}
 {/if}
+{/wrapper}
 ```
 
-With `ItemHeader.partial`:
+With `Appearance.partial`:
 
 ```
-## {$aid.title}
-~~~
-triggers: [{join(", ", $aid.triggers)}]
-{if $aid.encapsulate}encapsulate: {$aid.encapsulate}
-{/if}{if $aid.known}notes: [e]
-{/if}~~~
+Physical Traits: {join("; ", $body.Physical Traits.gender, $body.Physical Traits.age, $body.Physical Traits.hair, $body.Physical Traits.eyes, $body.Physical Traits.build, $body.Physical Traits.other)}
 ```
+
+### Migrating a v3 template
+
+A v3 template opened with the envelope, and everything below the last `~~~` was the body. Delete everything up to and including that line — that is the whole conversion, and `src/migrate/v3.js:stripTemplateHeader` does it mechanically. Keep any `{wrapper}` tag that lived in the header: it wraps the body, not the envelope.
+
+Then check the surviving body for `{$aid.encapsulate}`, `{$aid.known}`, and any `{$aid.title}` the migrator dropped as a duplicate of `name.full`. Those tokens now render empty rather than failing loudly.

@@ -99,7 +99,9 @@ Two files are written to the overview folder:
 
 Sort by **Body Size** ascending to spot items that variants may have gutted, or descending to find items that are likely too large for AID's context window. For single-branch scenarios the `Branch` column is omitted.
 
-**Lint** (`-L`/`--lint`) — Reads compiled output (`Story Cards/` and `Components/` `.md` files) and mechanically scans for compile-time artifacts that should never survive into rendered output: unresolved pronoun/character/field tokens (`{$she}`, `{$Aria}`, `{$body.Field}`), unexpanded compile variables (`{%key}`), leaked template render functions and control tags (`{join(...)}`, `{if}`/`{/if}`, `{wrapper}`, `{include}`, etc.), unresolved verb-conjugation markers (`[s]`, `[is]`, `[was]`, ...), a bracketed word that *looks like* an attempted verb marker but isn't one of the real five (e.g. `[does]`, `[have]` — an author-typo case a fixed pattern list alone can't catch, so this is flagged even without knowing what the "correct" token should have been), and JS interpolation artifacts (`[object Object]`, bare `undefined`/`NaN`). It also checks Story Cards for VL structural errors: an item carrying both `[e]` and `/]` (mutually exclusive), an item with neither, an empty trigger list, or a missing `encapsulate: true`.
+**Lint** (`-L`/`--lint`) — Reads compiled output (`Story Cards/` and `Components/` `.md` files) and mechanically scans for compile-time artifacts that should never survive into rendered output: unresolved pronoun/character/field tokens (`{$she}`, `{$Aria}`, `{$body.Field}`), unexpanded compile variables (`{%key}`), leaked template render functions and control tags (`{join(...)}`, `{if}`/`{/if}`, `{wrapper}`, `{include}`, etc.), unresolved verb-conjugation markers (`[s]`, `[is]`, `[was]`, ...), a bracketed word that *looks like* an attempted verb marker but isn't one of the real five (e.g. `[does]`, `[have]` — an author-typo case a fixed pattern list alone can't catch, so this is flagged even without knowing what the "correct" token should have been), and JS interpolation artifacts (`[object Object]`, bare `undefined`/`NaN`). It also checks Story Cards for one structural error: an empty or missing trigger list, which means a card that can never be pulled into context.
+
+Core lint carries only that one structural check on purpose. Rules about what a card's *content* should say — the `[e]` background-knowledge marker, the `/]` discovery marker, and their mutual exclusion — belong to a particular mod's convention and fire wrongly for every project that does not use it, so they move to convention packs rather than living here. `encapsulate` is no longer checked at all: the compiler writes it, not the author.
 
 This is pure pattern-matching — deterministic and exhaustive, with no false-negative risk from an LLM guessing at the token list. It catches the mechanical half of a QA pass; bleed, missing-information, and cross-branch consistency checks still require holding the whole branch structure in mind and are out of scope here.
 
@@ -111,7 +113,7 @@ One report is written to the overview folder:
 |---|---|
 | `{name}.lint.md` | Every finding, grouped by file, with severity (`ERROR`/`WARN`), category, and line number(s) |
 
-`ERROR` findings are near-certain bugs (a token that should always resolve). `WARN` findings need a human glance — e.g. a bare `undefined` could theoretically be intentional prose, and a missing `encapsulate: true` is sometimes a deliberate exception.
+`ERROR` findings are near-certain bugs (a token that should always resolve). `WARN` findings need a human glance — a bare `undefined` could theoretically be intentional prose, and an item with no triggers is legitimate when it is never meant to be pulled in by name.
 
 **Path resolution** — When given a project folder (or no argument), Codex Loom looks for `compile.yaml` inside it to derive the output path and overview path. If no `compile.yaml` is found, it treats the folder as an already-compiled scenario root and runs any requested review modes directly on it — with a warning if `-C` was also requested.
 
@@ -192,7 +194,7 @@ Each is covered in its own reference document.
 
 ## Core Concepts
 
-**Items** are the atomic units of content — a character, a location, a settings block. Each item has a type (which controls its output folder), a body of content fields, and AID-specific metadata like triggers and encapsulate.
+**Items** are the atomic units of content — a character, a location, a settings block. Each item has a type (which controls its output folder), a body of content fields, and AID-specific metadata such as its triggers and card name.
 
 **Canon vs project items** — Canon items live in a shared folder available to any project. Project items are local to one scenario and can import and extend canon items.
 

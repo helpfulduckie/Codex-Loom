@@ -13,10 +13,9 @@ Items are the atomic units of content in a Codex Loom project — a character, a
     full: Aness Rozen
   pronouns: female
   aid:
-    title: Aness Rozen
     type: Character
     triggers: [Aness, Rozen]
-    known: true
+  notes: '[e]'
   render:
     template: Character
     wrapper: none
@@ -108,20 +107,30 @@ AID-specific metadata. All fields are optional.
 
 ```yaml
 aid:
-  title: Aness Rozen        # display title in AID (can differ from name)
+  title: The Stranger       # card name in AID; defaults to name.full
   type: Character           # item type — determines output folder and default template
   triggers: [Aness, Rozen]  # trigger keywords (sequence or single string)
-  encapsulate: true         # boolean; passed through to output
-  known: true               # boolean; controls [e] in notes
 ```
 
 | Field | Description |
 |---|---|
-| `title` | The title shown in AID. If absent, the template typically uses `{$name}` instead. |
+| `title` | The card name AID shows. Declare it only when it should differ from `name.full` — the compiler falls back to `name.full`, then `name.display`, then `id`. A `title` that merely repeats `name.full` goes stale the moment a variant renames the character, since the title wins. |
 | `type` | Output folder name. Also used as the default template name if `render.template` is absent. |
-| `triggers` | Trigger keyword list. In the template, accessed as `{$aid.triggers}` or `{join(", ", $aid.triggers)}`. |
-| `encapsulate` | Boolean. Passed through to the rendered output. |
-| `known` | Boolean. Typically used to control `[e]` annotation in the AID notes field. |
+| `triggers` | Trigger keyword list. Leading and trailing spaces are written as `_` — `_Era_` is the trigger `" Era "` — because a plain padded string cannot survive the round trip into AID. An interior `_` is literal. |
+
+### `encapsulate` and `known` are gone
+
+Both were removed with the story-card envelope, and both are now unknown-key ERRORs rather than keys nothing reads.
+
+`encapsulate` was never a real choice: the compiler writes `encapsulate: false` on every card, because every site in the Velvet Lattice loader defaults it to true and false is what the output needs.
+
+`known: true` existed only so a template could write `{if $aid.known}notes: '[e]'{/if}`. Write the marker directly instead:
+
+```yaml
+notes: '[e]'
+```
+
+`src/migrate/v3.js` performs both conversions.
 
 `aid.type` and `render.template` default to each other — if one is set the other is filled in automatically. If neither is set, the item cannot be rendered and a warning is emitted.
 
@@ -135,16 +144,58 @@ Controls how this item is rendered.
 
 ```yaml
 render:
-  template: Character    # template filename (without .template extension)
-  wrapper: none          # none | square | curly
+  template: Character      # template filename (without .template extension)
+  wrapper: none            # none | square | curly
+  notesTemplate: Notes     # optional: renders notes: instead of the default rule
 ```
 
 | Field | Description |
 |---|---|
 | `template` | Filename of the `.template` file to use (case-insensitive match). Defaults to `aid.type` if absent. |
-| `wrapper` | Wraps the entire rendered output or a `{wrapper}...{/wrapper}` block. `square` → `[ ... ]`, `curly` → `{ ... }`, `none` → raw text. |
+| `wrapper` | Wraps the rendered body, or a `{wrapper}...{/wrapper}` block within it. `square` → `[ ... ]`, `curly` → `{ ... }`, `none` → raw text. The envelope is written outside the wrapper. |
+| `notesTemplate` | A template that renders the `notes:` fence line from this item's `notes:` field. See below. |
 
 String values in `render:` support `{%variable}` expansion too, so `template`/`wrapper` can be variable-driven. A variable that fails to resolve in `render.template` leaves the literal token as the template name, which surfaces as a "no template found" error (and an unexpanded-variable warning).
+
+---
+
+## `notes:` Field
+
+`notes:` becomes AID's card description — the `notes:` line inside the fence. It is a top-level item field, so it is variant- and branch-addressable and field operations apply to it, exactly like `body:` or `aid:`.
+
+```yaml
+- id: Aness
+  notes: '[e]'
+```
+
+`description:` is an accepted alias for the same field, for authors who think in AID's own vocabulary. The two are collapsed to `notes:` during resolution, so nothing downstream sees which spelling arrived, and a variant may write `description:` against an item that declared `notes:`. Declaring **both on one item** is ERROR `CL0323` rather than a merge: two names for one field means two values means the author believes they are two fields, and picking a winner silently would hide that.
+
+### What reaches the fence
+
+By default, a scalar passes through verbatim and a mapping becomes `key: value` lines. The line is omitted entirely when the rendered text is empty, so an item with no notes emits no `notes:` key.
+
+The value always reaches AID as a **string** — the Velvet Lattice loader declares that field as `str` and assigns it straight through, so a mapping is rendered to text before it is written, never as nested YAML keys.
+
+### `render.notesTemplate`
+
+For anything richer than a literal, name a template and let it render the text:
+
+```yaml
+- id: Aness
+  notes:
+    known: true
+  render:
+    notesTemplate: Notes
+```
+
+```
+# Notes.template
+{if $notes.known}[e]{/if}
+```
+
+The template sees the same item context as a body template, with the item's `notes:` under `{$notes}`. `render.wrapper` is forced off while it renders — the wrapper describes the body, and a notes template without an explicit `{wrapper}` block would otherwise emit `notes: '{...}'`.
+
+A mapping under `notes:` merges subfield-wise across variants and canon, the same way `aid:` and `render:` do — so canon can define a base marker config that a project appends to, and a variant setting one key leaves the others alone.
 
 ---
 

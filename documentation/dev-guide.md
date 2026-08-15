@@ -30,6 +30,7 @@ Phase 1 split the three files that had accreted several concerns each — `loade
 | `src/resolver.js` | Compatibility facade re-exporting `model/`; goes away when call sites move |
 | `src/template.js` | Template rendering engine; field interpolation; all render functions |
 | `src/tokens.js` | `{%variable}` expansion — the single expander (§5.1) |
+| `src/emit/vl.js` | The Velvet Lattice format — the only place that knows the envelope (§8) |
 | `src/emit/components.js` | Table-driven emission of the document components |
 | `src/pe.js` | Plot Essentials compilation and output (deleted in Phase 3, §7.5) |
 | `src/ain.js` | AI Instructions compilation, branch dispatch, document variants |
@@ -200,6 +201,24 @@ The `'__DELETE__'` sentinel is propagated up the call chain so callers can delet
 Post-render: if `data.render.wrapper` is non-`none` and no `{wrapper}` block was used, the entire output is wrapped automatically (unless it already starts with the corresponding bracket).
 
 `resolveField(ref, data)` is the core field lookup: splits the ref on `.`, walks the data object case-insensitively at each level. Returns arrays and objects as-is (for render functions), scalars as trimmed strings, missing/empty as `null`.
+
+---
+
+## The Emitter
+
+`render()` produces the card **body**. `renderBranchItems` then hands that string to `emit/vl.js:renderCard`, which writes the heading, the `~~~` fence and its keys around it. Everything the Velvet Lattice format requires — the fence delimiter, trigger quoting, the unconditional `encapsulate: false`, `notes:` as a string — lives in that one module and nowhere else, which is what makes a format change a one-function edit rather than an edit to every template of every project.
+
+The module is pure: no `fs`, no `console`. It collects trigger diagnostics into a `Diagnostics` bus the caller reports (`CL0701`, `CL0702`).
+
+Three rules there are justified by what `velvet_lattice/loader.py` actually does, not by inference, and none should be changed without re-reading it:
+
+- The fence is parsed with `yaml.safe_load`, and PyYAML is **YAML 1.1** — `no`, `yes`, `on` and `off` are booleans there. Quoting is decided against 1.1's resolver, not 1.2's.
+- `triggers` is flattened with `",".join(...)` into AID's single `keys` field, so a comma inside a trigger is unrepresentable. That is an ERROR at emit, the last stage that can still see the difference.
+- `notes` is typed `str` and assigned straight to AID's `description`, so it is always written as a scalar or a literal block scalar, never as nested keys.
+
+`parseCards(markdown)` is the same knowledge read backwards, and §8.6 names it the contract to preserve: reports and, later, convention packs consume the parsed model rather than the file format. It deliberately mirrors `loader.py` — same fence regex, same header split, same YAML version — so what a report sees is what AID will get.
+
+`__tests__/helpers/diffShape.js` and `EXPECTED_DIFF_CLASSES` in `golden.test.js` are the safety rail around all of this: they classify every changed line of compiled output as `fence`, `title` or `body`, so a phase can declare the shape of its intended diff and have anything outside it fail. `scripts/rebaseline.js` enforces the same classification before it will write a new baseline.
 
 ---
 

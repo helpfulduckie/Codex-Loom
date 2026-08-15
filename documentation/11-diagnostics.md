@@ -117,11 +117,43 @@ Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein 
 | `CL0320` | WARN | A variant delta declares more than one `v:` alias; they are merged. |
 | `CL0321` | WARN | A named variant does not exist in the item's variant tree. |
 | `CL0322` | WARN | An item has neither `aid.type` nor `render.template`. |
+| `CL0323` | ERROR | An item declares both `notes:` and `description:`. |
 | `CL0330` | WARN | A cross-item reference names an item that does not exist. |
 
 `model/` uses neither `fs` nor `console` (§3.3), so these are reported through a
 caller-supplied `onWarn(code, message)` rather than printed where they arise. Reserved:
 `CL0310`, unresolvable branch dispatch.
+
+`CL0323` is an error rather than a merge because the two keys are two spellings of one
+field. Two values under two names means the author believes they are two fields, and any
+silent winner hides that belief instead of correcting it. The declared `notes:` wins so
+output stays deterministic while it is fixed.
+
+### CL04xx — render
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `CL0410` | ERROR | A `.template` or `.partial` still contains a `~~~` fence. |
+
+Templates render the card body; the heading and fence are the compiler's (see
+[Templates](07-templates.md)). A template that writes its own fence produces a second
+envelope *inside* the body, where the Velvet Lattice loader never looks — output that
+reads as plausible and carries keys nothing will apply. It is refused at load time, with
+every offending file named, so a half-migrated project reports which templates remain
+rather than compiling into something subtly broken.
+
+### CL07xx — emit
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `CL0701` | ERROR | A trigger value contains a comma. |
+| `CL0702` | WARN | A trigger value is empty and will reach AID as an empty key. |
+
+Both are facts about what Velvet Lattice can carry to AID rather than opinions about
+content, which is why they live in the compiler and not in lint. `CL0701` is the sharper
+of the two: VL joins the trigger list into AID's single `keys` string with commas, so a
+comma *inside* a trigger silently becomes two triggers, and the emitter is the last stage
+that can still see the difference.
 
 ### CL05xx — tokens
 
@@ -150,4 +182,5 @@ pattern.
 
 Codes for the remaining bands are registered as the phases that mint them land. `CL0310`
 (unresolvable branch dispatch) is named by the spec, not yet implemented, and reserved at
-that number.
+that number. `CL04xx` currently holds only the template-fence refusal; the render rewrite
+(§13) is what fills the rest of the band.

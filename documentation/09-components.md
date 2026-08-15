@@ -181,7 +181,6 @@ Imports an item from the registry and renders it through a template. Useful for 
   importVariants: [networked]
   render:
     wrapper: curly
-    stripFence: true
     position: 3
   branches:
     subject: networked
@@ -210,12 +209,10 @@ With a heading and hint-style item imports:
     - import: Aness
       render:
         style: hint
-        stripFence: true
         position: 1
     - import: Kaiden
       render:
         style: hint
-        stripFence: true
         position: 2
   heading: Hints
   headingLevel: 0        # 0 = plain text (default); 1-6 = Markdown heading
@@ -240,7 +237,6 @@ Sections are **not nestable** — a child block may not itself have a `blocks:` 
 | `branches` | Branch dispatch spec — uses the same `resolveBranchSpec` mechanism as item-level `branches:`. |
 | `render.style` | `full` (default), `hint`, or `skip`. `hint` tries a `TemplateName.hint` template first. `skip` excludes the block. |
 | `render.wrapper` | `square` → `[ ... ]`, `curly` → `{ ... }`, `none` → raw. |
-| `render.stripFence` | Boolean. When `true`, strips everything up to and including the last `~~~` line from the rendered output (keeps only the item body, not the story card header). |
 | `render.position` | Numeric sort key for block ordering. Default `5`. Lower numbers appear first. |
 | `render.template` | Template override for the imported item. Falls back to the item's own `render.template` / `aid.type`. |
 | `variants` | Local item deltas applied after import resolution. |
@@ -264,22 +260,21 @@ branches:
   flashback: ~    # null → exclude this block from the flashback branch
 ```
 
-### strip_fence example
+### Imported item example
 
-For a character block in PE, you typically want only the item body (not the `## Name` header and `~~~` fence). Set `render.stripFence: true`:
+An imported item renders through its own template, which produces body text and nothing else — the `## Name` heading and `~~~` fence belong to story-card output, and Plot Essentials is not a story card. `render.stripFence` existed to cut that envelope back off and was retired with it; a PE config that still sets the key can simply delete it.
 
 ```yaml
 - import: Aness
   importVariants: [networked]
   render:
     wrapper: curly
-    stripFence: true
   branches:
     subject: networked
     researcher: ~       # exclude from researcher branch
 ```
 
-Rendered output (wrapper=curly, strip_fence=true):
+Rendered output (wrapper=curly):
 ```
 {
 Aness - Journeyman Healer; Magic Researcher; Fused-Squad Subject
@@ -311,7 +306,6 @@ Physical Traits: female; mid 20s; black hair, braided, waist-length; ...
 - import: Kaiden
   render:
     wrapper: curly
-    stripFence: true
     template: pe-character
     position: 4
 
@@ -320,7 +314,6 @@ Physical Traits: female; mid 20s; black hair, braided, waist-length; ...
   importVariants: [networked]
   render:
     wrapper: curly
-    stripFence: true
     position: 5
   branches:
     subject: networked
@@ -329,7 +322,6 @@ Physical Traits: female; mid 20s; black hair, braided, waist-length; ...
 - import: Veyrn
   render:
     wrapper: curly
-    stripFence: true
     position: 5
   branches:
     researcher: base
@@ -340,12 +332,10 @@ Physical Traits: female; mid 20s; black hair, braided, waist-length; ...
     - import: Aness
       render:
         style: hint
-        stripFence: true
         position: 1
     - import: Kaiden
       render:
         style: hint
-        stripFence: true
         position: 2
   heading: Hints
   headingLevel: 0
