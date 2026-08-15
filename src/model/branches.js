@@ -239,6 +239,7 @@ function walkBranchChain(branches, branchPath, options = {}) {
     folderPath: [],
     variables: {},
     components: {},
+    render: {},
     scripts: undefined,
     protagonist: rootProtagonist,
     node: null,
@@ -268,6 +269,10 @@ function walkBranchChain(branches, branchPath, options = {}) {
     if (node && typeof node === 'object') {
       if (node.variables) Object.assign(result.variables, node.variables);
       if (node.components) Object.assign(result.components, node.components);
+      // `render:` merges key-wise like `components:`, so a branch can replace one
+      // rendering default and inherit the rest — and `notesTemplate: ~` unbinds it,
+      // which is how a branch without the mod that reads the marker turns it off.
+      if (node.render) Object.assign(result.render, node.render);
       if (node.protagonist) result.protagonist = node.protagonist;
       // `scripts:` is top-level rather than a component (§6.3) but merges the same way,
       // so a branch can swap one hook bundle and inherit the rest.

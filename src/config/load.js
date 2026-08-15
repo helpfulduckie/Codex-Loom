@@ -365,6 +365,10 @@ function loadCompileConfig(configPath, options = {}) {
     // canon names folded in (§6.1). Everything that expands a token uses this one.
     variables: config.variables || null,
     _variables: variables,
+    // Rendering defaults (§4.5). Branch-addressable like `components:` and `scripts:`,
+    // because which mods a branch loads is what decides whether a notes marker means
+    // anything there — so it travels with the config rather than under `structure.input`.
+    render: config.render || null,
     branches: config.branches || null,
     _structure: structure,
   };

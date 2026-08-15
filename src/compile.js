@@ -52,23 +52,100 @@ function validateCardType(item) {
   }
 }
 
+/** The suffix that makes a template the notes companion of another (§4.5, rung 2). */
+const NOTES_SUFFIX = '.notes';
+
+/** Codes this module reports. CL04xx is the render/template band (§4.4). */
+const CODES = {
+  NOTES_TEMPLATE_NOT_FOUND: 'CL0411',
+};
+
 /**
- * Render `notes:` through `render.notesTemplate`, or return undefined (§4.5).
+ * Check every `render.notesTemplate` declared in compile.yaml against the loaded set.
+ *
+ * At load rather than at render, because this one is a closed set — the root node and
+ * every branch node, all known before a single card is compiled. Left to render time it
+ * would report once per item per leaf, which for a project like The Institute means the
+ * same typo printed thousands of times.
+ */
+function checkConfigNotesTemplates(config, templates, diagnostics, configPath) {
+  if (!diagnostics) return;
+
+  const check = (node, where) => {
+    const name = node && node.render && node.render.notesTemplate;
+    if (!name || templates.has(String(name).toLowerCase())) return;
+    diagnostics.error(
+      CODES.NOTES_TEMPLATE_NOT_FOUND,
+      `${where} declares render.notesTemplate "${name}", which is not a loaded template.`,
+      { file: configPath },
+      { hint: 'Add a matching .template file, or remove the key to fall back to rendering '
+        + 'the notes value itself. Use `notesTemplate: ~` to turn notes off for a branch.' },
+    );
+  };
+
+  check(config, 'The project');
+  const walk = (branches, prefix) => {
+    if (!branches || typeof branches !== 'object') return;
+    for (const [name, node] of Object.entries(branches)) {
+      const label = prefix ? `${prefix}/${name}` : name;
+      check(node, `Branch "${label}"`);
+      if (node && node.branches) walk(node.branches, label);
+    }
+  };
+  walk(config.branches, '');
+}
+
+/**
+ * Which template renders this item's `notes:`, as a name — or null for §4.5's default.
+ *
+ * Four rungs, most specific first:
+ *
+ *   1. `render.notesTemplate` on the item.
+ *   2. `<body template>.notes`, when such a template is loaded. The name is the one that
+ *      actually resolved the body rather than `aid.type` or `render.template` picked in
+ *      advance, so an item that overrides its body template cannot end up with its notes
+ *      rendered by a different family. This is the mechanism `Character.hint` already
+ *      uses — a suffixed sibling, resolved by filename.
+ *   3. The branch's merged `render.notesTemplate` from compile.yaml. It lives on the
+ *      branch node because which mods a branch loads is what decides whether a marker
+ *      means anything there; `notesTemplate: ~` on a branch turns the control off for
+ *      every card in it without touching an item.
+ *   4. Nothing — §4.5 renders the notes value itself (scalar verbatim, mapping as
+ *      `key: value` lines).
+ */
+function resolveNotesTemplateName(item, templates, projectNotesTemplate) {
+  const explicit = item.render && item.render.notesTemplate;
+  if (explicit) return String(explicit);
+
+  const bodyName = getTemplateName(item, templates);
+  if (bodyName && templates.has(`${bodyName.toLowerCase()}${NOTES_SUFFIX}`)) {
+    return `${bodyName}${NOTES_SUFFIX}`;
+  }
+
+  return projectNotesTemplate ? String(projectNotesTemplate) : null;
+}
+
+/**
+ * Render `notes:` through the resolved notes template, or return undefined (§4.5).
  *
  * Undefined rather than an empty string, because the two mean different things to the
  * emitter: undefined leaves §4.5's default rule in force (scalar verbatim, mapping as
  * `key: value` lines), while an empty string is a template that deliberately produced
- * nothing and suppresses the `notes:` line entirely.
+ * nothing and suppresses the `notes:` line entirely. That is what lets one shared
+ * template carry a whole convention: `{if $notes.known}[e]{/if}` writes nothing at all
+ * for an item that never set the flag, so opting out needs no syntax.
  *
  * The wrapper is forced off for this render. `render.wrapper` describes the card body;
  * a notes template that did not spell out a {wrapper} block would otherwise be wrapped
  * by the post-render fallback and emit `notes: '{...}'`.
  */
-function renderNotesText(item, context, templates, partials, variables) {
-  const name = item.render && item.render.notesTemplate;
+function renderNotesText(item, context, templates, partials, variables, projectNotesTemplate) {
+  const name = resolveNotesTemplateName(item, templates, projectNotesTemplate);
   if (!name) return undefined;
-  const template = templates.get(String(name).toLowerCase());
+  const template = templates.get(name.toLowerCase());
   if (!template) {
+    // Only rung 1 reaches here: rung 2 is existence-checked and rung 3 is validated at
+    // load, so the name came from the item and naming the item is what helps.
     const label = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
     const src = item._source ? ` (${item._source})` : '';
     console.error(`  ERR: no notesTemplate "${name}" found for item "${label}"${src}`);
@@ -79,18 +156,28 @@ function renderNotesText(item, context, templates, partials, variables) {
 }
 
 /**
- * Get the template for an item. Checks render.template first, then aid.type.
+ * The name of the template that renders this item's body: render.template, then aid.type.
+ *
+ * Returns the name rather than the content because the notes ladder appends a suffix to
+ * it, and it must be the same answer `getTemplate` reached rather than a second guess.
  */
-function getTemplate(item, templates) {
+function getTemplateName(item, templates) {
   const keys = [
     item.render && item.render.template,
     item.aid && item.aid.type,
   ].filter(Boolean);
   for (const key of keys) {
-    const t = templates.get(key.toLowerCase());
-    if (t) return t.content;
+    if (templates.has(key.toLowerCase())) return key;
   }
   return null;
+}
+
+/**
+ * Get the template for an item. Checks render.template first, then aid.type.
+ */
+function getTemplate(item, templates) {
+  const name = getTemplateName(item, templates);
+  return name ? templates.get(name.toLowerCase()).content : null;
 }
 
 /**
@@ -130,12 +217,13 @@ function resolveComponentSpec(spec, base, variables) {
 
 /**
  * Build the CompileContext for a given branch path.
- * Merges variables and components from root → branch chain.
+ * Merges variables, components and render defaults from root → branch chain.
  */
 function buildCompileContext(config, branchPath) {
   const chain = walkBranchChain(config.branches, branchPath);
   const variables = Object.assign({}, config._variables || config.variables || {}, chain.variables);
   const components = Object.assign({}, config.components || {}, chain.components);
+  const render = Object.assign({}, config.render || {}, chain.render);
 
   // `scripts:` is top-level as of §6.3: it is a file copy, not a rendered document, and
   // it was the one row in the component table that shared none of the row's behavior. It
@@ -152,7 +240,7 @@ function buildCompileContext(config, branchPath) {
     componentRefs[type] = resolveComponentSpec(spec, config._base, variables);
   }
 
-  return { variables, componentRefs };
+  return { variables, componentRefs, render };
 }
 
 /**
@@ -318,7 +406,7 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables) {
 /**
  * Phase B: apply cross-item refs, pronouns, render, and write output.
  */
-function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}, verbose = false, renderedById = null) {
+function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}, verbose = false, renderedById = null, projectNotesTemplate = null) {
   // Build early so render functions can resolve cross-item refs during field expansion.
   const resolvedById = new Map();
   for (const item of resolvedItems) {
@@ -388,7 +476,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
       rendered = renderCard({
         item,
         bodyText,
-        notesText: renderNotesText(item, context, templates, partials, variables),
+        notesText: renderNotesText(item, context, templates, partials, variables, projectNotesTemplate),
         diagnostics: emitDiagnostics,
         loc: { file: item._source },
       }).text;
@@ -621,7 +709,9 @@ function compile(configPath, options = {}) {
 
   const { templates, partials } = loadTemplates(config._resolvedTemplates, { diagnostics: loadDiagnostics });
   // Checked before anything renders: a template that still carries a fence would emit a
-  // double envelope on every card it owns (§8.3), and the report names the files.
+  // double envelope on every card it owns (§8.3), and the report names the files. The
+  // notes-template check needs both halves in hand, so it runs against the same bus.
+  checkConfigNotesTemplates(config, templates, loadDiagnostics, configPath);
   loadCursor = reportLoadDiagnostics(loadDiagnostics, loadCursor);
   console.log(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
@@ -747,7 +837,8 @@ function compile(configPath, options = {}) {
     // Phase B: cross-item refs + pronouns + render + write
     const renderedById = captureReports ? new Map() : null;
     const written = renderBranchItems(
-      resolvedItems, registry, templates, partials, outputDir, branchProtagonist, peSuppressedIds, ctx.variables, verbose, renderedById
+      resolvedItems, registry, templates, partials, outputDir, branchProtagonist, peSuppressedIds, ctx.variables, verbose, renderedById,
+      (compileContext.render && compileContext.render.notesTemplate) || null
     );
     totalFiles += written.length;
 
@@ -960,6 +1051,10 @@ module.exports = {
   resolveBranchItems,
   renderBranchItems,
   getTemplate,
+  getTemplateName,
+  resolveNotesTemplateName,
+  checkConfigNotesTemplates,
+  CODES,
   validateCardType,
   writeOutput,
   resolveIncludes,

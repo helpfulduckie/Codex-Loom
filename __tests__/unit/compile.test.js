@@ -7,7 +7,7 @@ const {
   compile,
   getTemplate, validateCardType, writeOpening, resolveOpeningContent, resolveBranchFolderPath,
   buildBranchOutputDir, buildCompileContext, writeOutput, writeOpeningsRecursive,
-  resolveIncludes,
+  resolveIncludes, resolveNotesTemplateName,
 } = require('../../src/compile');
 
 describe('getTemplate', () => {
@@ -715,8 +715,14 @@ describe('compile writes the VL envelope through emit/vl.js', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  /** Compile a one-item project and return its compiled Item.md. */
-  function compileItem(itemLines, templateContent, extraTemplates = {}) {
+  /**
+   * Compile a one-item project and return its compiled Item.md.
+   *
+   * `options.config` splices extra root-level config lines; `options.branches` replaces
+   * the branch block; `options.leaf` picks which leaf's output to read back.
+   */
+  function compileItem(itemLines, templateContent, extraTemplates = {}, options = {}) {
+    const { config = [], branches = ['  main: {}'], leaf = ['main'] } = options;
     fs.writeFileSync(path.join(tmpDir, 'items', 'items.yaml'), itemLines.join('\n'), 'utf8');
     fs.writeFileSync(path.join(tmpDir, 'templates', 'Item.template'), templateContent, 'utf8');
     for (const [name, content] of Object.entries(extraTemplates)) {
@@ -727,13 +733,14 @@ describe('compile writes the VL envelope through emit/vl.js', () => {
       'structure:',
       `  input: { items: [${tmpDir}/items], templates: [${tmpDir}/templates] }`,
       `  output: ${tmpDir}/output`,
+      ...config,
       'branches:',
-      '  main: {}',
+      ...branches,
     ].join('\n'), 'utf8');
     compile(path.join(tmpDir, 'compile.yaml'));
-    return fs.readFileSync(
-      path.join(tmpDir, 'output', 'Branches', 'main', 'Story Cards', 'Item', 'Item.md'), 'utf8',
-    );
+    const leafDir = leaf.reduce((acc, segment) => path.join(acc, 'Branches', segment),
+      path.join(tmpDir, 'output'));
+    return fs.readFileSync(path.join(leafDir, 'Story Cards', 'Item', 'Item.md'), 'utf8');
   }
 
   const ITEM = [
@@ -781,5 +788,176 @@ describe('compile writes the VL envelope through emit/vl.js', () => {
       '  body: { Desc: a widget }'];
     const output = compileItem(item, '{$body.Desc}');
     expect(output).toContain('~~~\n{\na widget\n}');
+  });
+});
+
+// ── the notes template ladder (§4.5) ─────────────────────────────────────────
+
+describe('resolveNotesTemplateName', () => {
+  const templates = new Map([
+    ['item', { content: 'body' }],
+    ['item.notes', { content: 'type notes' }],
+    ['character', { content: 'body' }],
+    ['explicit', { content: 'explicit notes' }],
+    ['projectnotes', { content: 'project notes' }],
+  ]);
+
+  const item = (render, type) => ({ render, aid: { type } });
+
+  test('rung 1 — the item names its own template', () => {
+    expect(resolveNotesTemplateName(item({ template: 'Item', notesTemplate: 'Explicit' }, 'Item'), templates, 'ProjectNotes'))
+      .toBe('Explicit');
+  });
+
+  test('rung 1 wins even when it names a template that does not exist', () => {
+    // Falling through on a typo would render the wrong notes silently. The render-time
+    // ERR that follows is the better failure.
+    expect(resolveNotesTemplateName(item({ template: 'Item', notesTemplate: 'Nope' }, 'Item'), templates, 'ProjectNotes'))
+      .toBe('Nope');
+  });
+
+  test('rung 2 — the body template gets its .notes sibling', () => {
+    expect(resolveNotesTemplateName(item({ template: 'Item' }, 'Item'), templates, 'ProjectNotes'))
+      .toBe('Item.notes');
+  });
+
+  test('rung 2 follows the template that actually resolved the body', () => {
+    // render.template overrides aid.type for the body, so the notes must follow it there
+    // rather than picking up Item.notes from the type.
+    expect(resolveNotesTemplateName(item({ template: 'Character' }, 'Item'), templates, null))
+      .toBeNull();
+  });
+
+  test('rung 2 resolves through aid.type when there is no render.template', () => {
+    expect(resolveNotesTemplateName(item({}, 'Item'), templates, null)).toBe('Item.notes');
+  });
+
+  test('rung 3 — the project default, when no .notes sibling exists', () => {
+    expect(resolveNotesTemplateName(item({ template: 'Character' }, 'Character'), templates, 'ProjectNotes'))
+      .toBe('ProjectNotes');
+  });
+
+  test('rung 4 — nothing at all, leaving §4.5\'s default rule', () => {
+    expect(resolveNotesTemplateName(item({ template: 'Character' }, 'Character'), templates, null))
+      .toBeNull();
+  });
+});
+
+describe('the notes ladder end to end', () => {
+  let tmpDir;
+  let quiet;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-notes-'));
+    fs.mkdirSync(path.join(tmpDir, 'items'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
+    quiet = ['log', 'warn', 'error'].map((level) => jest.spyOn(console, level).mockImplementation(() => {}));
+  });
+
+  afterEach(() => {
+    quiet.forEach((spy) => spy.mockRestore());
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const ITEM = [
+    '- id: Widget',
+    '  name: Widget',
+    '  aid: { type: Item, triggers: [widget] }',
+    '  body: { Desc: a widget }',
+    '  notes: { known: true }',
+  ];
+
+  function build({ templates = {}, config = [], branches = ['  main: {}'] }) {
+    fs.writeFileSync(path.join(tmpDir, 'items', 'items.yaml'), ITEM.join('\n'), 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'templates', 'Item.template'), '{$body.Desc}', 'utf8');
+    for (const [name, content] of Object.entries(templates)) {
+      fs.writeFileSync(path.join(tmpDir, 'templates', `${name}.template`), content, 'utf8');
+    }
+    fs.writeFileSync(path.join(tmpDir, 'compile.yaml'), [
+      'version: 4',
+      'structure:',
+      `  input: { items: [${tmpDir}/items], templates: [${tmpDir}/templates] }`,
+      `  output: ${tmpDir}/output`,
+      ...config,
+      'branches:',
+      ...branches,
+    ].join('\n'), 'utf8');
+    compile(path.join(tmpDir, 'compile.yaml'));
+    return (...segments) => fs.readFileSync(
+      path.join(tmpDir, 'output', ...segments.flatMap((s) => ['Branches', s]),
+        'Story Cards', 'Item', 'Item.md'), 'utf8',
+    );
+  }
+
+  test('a type template named Item.notes renders the notes without any declaration', () => {
+    const read = build({ templates: { 'Item.notes': '{if $notes.known}[e]{/if}' } });
+    expect(read('main')).toContain("notes: '[e]'");
+  });
+
+  test('the project default applies when no type template exists', () => {
+    const read = build({
+      templates: { ProjectNotes: '{if $notes.known}[e]{/if}' },
+      config: ['render:', '  notesTemplate: ProjectNotes'],
+    });
+    expect(read('main')).toContain("notes: '[e]'");
+  });
+
+  test('a branch turns the marker off by pointing at a blank template', () => {
+    // The mod-loading case: the marker means something on the branch that loads the mod
+    // and nothing on the branch that does not, and no item changes.
+    const read = build({
+      templates: { ProjectNotes: '{if $notes.known}[e]{/if}', NoNotes: '' },
+      config: ['render:', '  notesTemplate: ProjectNotes'],
+      branches: ['  wtg: {}', '  vanilla:', '    render:', '      notesTemplate: NoNotes'],
+    });
+    expect(read('wtg')).toContain("notes: '[e]'");
+    expect(read('vanilla')).not.toContain('notes:');
+  });
+
+  test('~ unbinds the project default, falling through to §4.5 rather than suppressing', () => {
+    // Worth pinning down, because the two readings differ in output rather than in
+    // tidiness: `~` removes the binding, and rung 4 then renders the notes value itself.
+    // For a mapping that means `known: true` reaching AID as text — which is why the
+    // idiom for "off" is a blank template, not `~`.
+    const read = build({
+      templates: { ProjectNotes: '{if $notes.known}[e]{/if}' },
+      config: ['render:', '  notesTemplate: ProjectNotes'],
+      branches: ['  wtg: {}', '  vanilla:', '    render:', '      notesTemplate: ~'],
+    });
+    expect(read('wtg')).toContain("notes: '[e]'");
+    expect(read('vanilla')).toContain("notes: 'known: true'");
+  });
+
+  test('a branch swaps the project default for its own template', () => {
+    const read = build({
+      templates: {
+        ProjectNotes: '{if $notes.known}[e]{/if}',
+        OtherNotes: '{if $notes.known}[x]{/if}',
+      },
+      config: ['render:', '  notesTemplate: ProjectNotes'],
+      branches: ['  a: {}', '  b:', '    render:', '      notesTemplate: OtherNotes'],
+    });
+    expect(read('a')).toContain("notes: '[e]'");
+    expect(read('b')).toContain("notes: '[x]'");
+  });
+
+  test('the branch default is inherited by nested leaves', () => {
+    const read = build({
+      templates: { OtherNotes: '{if $notes.known}[x]{/if}' },
+      branches: ['  outer:', '    render:', '      notesTemplate: OtherNotes',
+        '    branches:', '      inner: {}'],
+    });
+    expect(read('outer', 'inner')).toContain("notes: '[x]'");
+  });
+
+  test('a project notesTemplate naming no loaded template is a load-time ERROR', () => {
+    expect(() => build({ config: ['render:', '  notesTemplate: Missing'] }))
+      .toThrow(/error/i);
+  });
+
+  test('a branch notesTemplate naming no loaded template is a load-time ERROR', () => {
+    expect(() => build({
+      branches: ['  a:', '    render:', '      notesTemplate: AlsoMissing'],
+    })).toThrow(/error/i);
   });
 });

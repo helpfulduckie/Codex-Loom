@@ -134,6 +134,7 @@ output stays deterministic while it is fixed.
 | Code | Severity | Meaning |
 |---|---|---|
 | `CL0410` | ERROR | A `.template` or `.partial` still contains a `~~~` fence. |
+| `CL0411` | ERROR | A `render.notesTemplate` in compile.yaml names a template that is not loaded. |
 
 Templates render the card body; the heading and fence are the compiler's (see
 [Templates](07-templates.md)). A template that writes its own fence produces a second
@@ -141,6 +142,13 @@ envelope *inside* the body, where the Velvet Lattice loader never looks — outp
 reads as plausible and carries keys nothing will apply. It is refused at load time, with
 every offending file named, so a half-migrated project reports which templates remain
 rather than compiling into something subtly broken.
+
+`CL0411` is checked at load for a different reason: the set of config-declared notes
+templates is closed and known before a single card compiles — the root node and every
+branch node. Left to render time, one typo would print once per item per leaf, which for
+a project the size of The Institute means the same message thousands of times. The
+per-item `render.notesTemplate` is not checked here, because that one is open and can be
+variable-driven; it reports at render time and names the item.
 
 ### CL07xx — emit
 

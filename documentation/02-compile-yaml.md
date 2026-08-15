@@ -57,11 +57,16 @@ components:                       # root-level component specs (inline or file p
   opening: "Who are you?"
   plotEssential: "{%default}"     # reference to the "default" plotEssential dir/file
 
+render:                           # project-wide rendering defaults
+  notesTemplate: ProjectNotes     # template that renders every card's notes:
+
 branches:
   subject:
     protagonist: Aness
     components:
       opening: ./openings/subject.md
+    render:                       # merges over the root block, key by key
+      notesTemplate: NoNotes
     variables:
       role: research subject
   researcher:
@@ -234,6 +239,32 @@ components:
 **`branchFraming:`** — Written to branch-point nodes' `Components/Opening.md`. Does **not** inherit; ignored on leaf nodes with a warning.
 
 **`description:`** — Written once to `{output}/Description.md` after all branches compile. Accepts a `.md`/`.txt` file (body only), a `.js` file (script banner only), or a `.yaml` config combining both. Not per-branch; branch-level overrides are ignored. See [Components → Description](09-components.md#description) for full details.
+
+### `render`
+
+Rendering defaults for the whole project. One key so far:
+
+```yaml
+render:
+  notesTemplate: ProjectNotes
+```
+
+`notesTemplate` names the template that renders every card's `notes:` field when the item does not name one itself and no `<body template>.notes` file exists — rung 3 of the ladder in [Item YAML → Rendering notes through a template](03-item-yaml.md). Naming a template that is not loaded is ERROR `CL0411`, reported at load rather than once per card.
+
+**It merges down the branch chain, key by key, like `components:` and `scripts:`.** That is the point of putting it here rather than only at root: which mods a branch loads is what decides whether a marker in the notes field means anything on that branch, and swapping the template swaps the whole convention without touching a single item.
+
+```yaml
+render:
+  notesTemplate: WTGNotes         # [e] suppresses the mod's discovery timestamp
+
+branches:
+  modded: {}                      # inherits WTGNotes
+  vanilla:
+    render:
+      notesTemplate: NoNotes      # a blank template — no notes line is written at all
+```
+
+**Use a blank template rather than `~` to turn notes off.** `notesTemplate: ~` unbinds the inherited value, which drops the branch to rung 4 — the built-in rendering of the notes value itself. For a scalar like `'[e]'` that is the same marker again; for a mapping it is `known: true` reaching AID as text. A template that renders nothing emits no `notes:` line at all, which is what "off" should mean.
 
 ### `branches`
 

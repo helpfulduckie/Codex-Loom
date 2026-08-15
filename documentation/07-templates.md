@@ -28,7 +28,7 @@ What the compiler decides, and from what:
 | `## Heading` | `aid.title`, then `name.full`, then `name.display`, then `id` — the first that is set |
 | `triggers: [...]` | `aid.triggers`, with `_` padding decoded and quoting added only where a value needs it. Omitted when the item has none |
 | `encapsulate: false` | Always. Not author-controlled |
-| `notes: ...` | `notes:` on the item, rendered through `render.notesTemplate` if one is declared. Omitted when the text is empty |
+| `notes: ...` | `notes:` on the item, rendered through a notes template when one resolves. Omitted when the text is empty |
 
 Two keys that v3 templates read are gone with the envelope: `aid.encapsulate`, because the value is now unconditional, and `aid.known`, which existed only so a template could write `{if $aid.known}notes: '[e]'{/if}`. The marker is `notes:` text now — see [Item YAML](03-item-yaml.md). Declaring either is an unknown-key ERROR.
 
@@ -39,7 +39,11 @@ Two keys that v3 templates read are gone with the envelope: `aid.encapsulate`, b
 | Extension | Purpose |
 |---|---|
 | `TypeName.template` | Renders items whose `render.template` or `aid.type` matches `TypeName` (case-insensitive) |
+| `TypeName.notes.template` | Renders the `notes:` field of items whose body `TypeName.template` renders |
+| `TypeName.hint.template` | Renders the item in `style: hint` Plot Essentials blocks |
 | `PartialName.partial` | Reusable fragment, included with `{include PartialName}` |
+
+The two suffixed forms are siblings of a body template, found by name rather than declared: an item rendered by `Character.template` gets `Character.notes.template` for its notes with nothing to configure. See [Item YAML → Rendering notes through a template](03-item-yaml.md) for the full resolution order.
 
 Templates and partials are loaded recursively from directories listed in `structure.input.templates`. When multiple directories are configured, later directories override earlier ones on name collision. Duplicates within the same directory are an error.
 

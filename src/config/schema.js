@@ -53,6 +53,22 @@ const COMPONENTS = {
   },
 };
 
+/**
+ * `render:` — project- and branch-level rendering defaults (§4.5).
+ *
+ * One key so far, and it is here rather than only on the item because the thing it
+ * expresses is a property of the branch, not of the card: which mods a branch loads
+ * decides whether a marker like `[e]` means anything there. A branch that ships without
+ * the mod sets `notesTemplate: ~` and every card in it stops emitting the control,
+ * without touching a single item.
+ */
+const RENDER = {
+  type: TYPES.MAP,
+  keys: {
+    notesTemplate: STRING,
+  },
+};
+
 const LINT = {
   type: TYPES.MAP,
   note: 'Phase 5',
@@ -79,6 +95,7 @@ const BRANCH_NODE = {
     scripts: SCRIPTS,
     lint: LINT,
     components: COMPONENTS,
+    render: RENDER,
     // `protagonist:` becomes `roles.protagonist` in Phase 8, not here. §14.2 lists that
     // transformation, but roles are Phase 8 work — migrating the key before the feature
     // exists would leave every branch without a protagonist.
@@ -122,10 +139,11 @@ const CONFIG_SCHEMA = {
     scripts: SCRIPTS,
     lint: LINT,
     components: COMPONENTS,
+    render: RENDER,
     branches: BRANCHES,
     // See BRANCH_NODE: this moves to `roles.protagonist` in Phase 8, with the feature.
     protagonist: STRING,
   },
 };
 
-module.exports = { CONFIG_SCHEMA, BRANCH_NODE, COMPONENTS, SCRIPTS };
+module.exports = { CONFIG_SCHEMA, BRANCH_NODE, COMPONENTS, SCRIPTS, RENDER };

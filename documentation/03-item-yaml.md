@@ -176,24 +176,33 @@ By default, a scalar passes through verbatim and a mapping becomes `key: value` 
 
 The value always reaches AID as a **string** — the Velvet Lattice loader declares that field as `str` and assigns it straight through, so a mapping is rendered to text before it is written, never as nested YAML keys.
 
-### `render.notesTemplate`
+### Rendering notes through a template
 
-For anything richer than a literal, name a template and let it render the text:
+For anything richer than a literal, a template renders the text. Which template is found by a four-rung ladder, most specific first:
+
+| Rung | Source | Example |
+|---|---|---|
+| 1 | `render.notesTemplate` on the item | `notesTemplate: SpecialNotes` |
+| 2 | `<body template>.notes`, if that file exists | `Character.notes.template` |
+| 3 | `render.notesTemplate` in `compile.yaml`, merged down the branch chain | see [compile.yaml](02-compile-yaml.md) |
+| 4 | none — the default rendering above | |
+
+Rung 2 follows whichever template actually rendered the body, not `aid.type` or `render.template` chosen in advance, so an item that overrides its body template cannot have its notes rendered by a different family. It is the same suffixed-sibling mechanism `Character.hint` uses.
 
 ```yaml
 - id: Aness
   notes:
     known: true
-  render:
-    notesTemplate: Notes
 ```
 
 ```
-# Notes.template
+# Character.notes.template
 {if $notes.known}[e]{/if}
 ```
 
-The template sees the same item context as a body template, with the item's `notes:` under `{$notes}`. `render.wrapper` is forced off while it renders — the wrapper describes the body, and a notes template without an explicit `{wrapper}` block would otherwise emit `notes: '{...}'`.
+That item needs no `notesTemplate` declaration at all — rung 2 finds the template by name. The template sees the same item context as a body template, with the item's `notes:` under `{$notes}`. `render.wrapper` is forced off while it renders: the wrapper describes the body, and a notes template without an explicit `{wrapper}` block would otherwise emit `notes: '{...}'`.
+
+**Opting out needs no syntax.** A template that renders empty suppresses the `notes:` line entirely, so `{if $notes.known}[e]{/if}` writes nothing for an item that never set the flag.
 
 A mapping under `notes:` merges subfield-wise across variants and canon, the same way `aid:` and `render:` do — so canon can define a base marker config that a project appends to, and a variant setting one key leaves the others alone.
 

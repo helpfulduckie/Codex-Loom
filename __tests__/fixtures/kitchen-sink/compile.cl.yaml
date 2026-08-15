@@ -91,6 +91,10 @@ components:
   # A literal rather than a path — the one component spec that is normally prose.
   branchFraming: Which path did they set you on?
 
+# The project rung of the notes ladder (§4.5). Names a template, not a value.
+render:
+  notesTemplate: ProjectNotes
+
 branches:
   subject:
     title: The Subject's Path
@@ -115,6 +119,11 @@ branches:
       description:    '{%componentDir}/subject.description.cl.yaml'
       plotEssential:  '{%componentDir}/subject.plot-essentials.cl.yaml'
       opening:        '{%componentDir}/openings/subject.md'
+    # `~` unbinds the project's notes template for this branch, leaving §4.5's default
+    # rendering. The branch rung exists for the mod case: a branch that does not load the
+    # mod a marker belongs to points at a blank template instead, which emits no line.
+    render:
+      notesTemplate: ~
     scripts:
       input:   '{%scriptDir}/input.js'
       output:  '{%scriptDir}/output.js'
