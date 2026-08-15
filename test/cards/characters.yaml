@@ -26,7 +26,7 @@
   aid:
     type: Character
     triggers: [Mira, Ashfen]
-  notes: '[e]'
+  notes: {known: true}
   render:
     template: Character
     wrapper: none
@@ -52,7 +52,7 @@
   aid:
     type: Character
     triggers: [Kaiden, Ventus]
-  notes: '[e]'
+  notes: {known: true}
   render:
     template: Character
     wrapper: none

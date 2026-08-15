@@ -27,6 +27,10 @@ beforeAll(() => {
     `    templates:`,
     `      - ${FIXTURE_DIR}/templates`,
     `  output: ${tmpDir}/output`,
+    // The fixture items carry `notes: {known: true}`; this is the template that turns
+    // that flag into the `[e]` marker (§4.5.1, rung 3).
+    'render:',
+    '  notesTemplate: Notes',
     'protagonist: Aness',
     'branches:',
     '  subject:',
@@ -118,6 +122,8 @@ describe('protagonist inherited from parent branch node', () => {
       `    templates:`,
       `      - ${FIXTURE_DIR}/templates`,
       `  output: ${nestedTmpDir}/output`,
+      'render:',
+      '  notesTemplate: Notes',
       // protagonist declared on parent node only — leaf nodes have none
       'branches:',
       '  Aness:',

@@ -6,7 +6,8 @@ const path = require('path');
 const YAML = require('yaml');
 const {
   migrateConfigFile, migrateProject, collectComponentAliases, collectCanonNames,
-  rewriteAtTokens, migrateItemDocument, stripTemplateHeader, encodeTriggerPadding,
+  rewriteAtTokens, migrateItemDocument, migrateItemFiles, stripTemplateHeader,
+  encodeTriggerPadding,
 } = require('../../src/migrate/v3');
 
 let tmpDir;
@@ -273,10 +274,25 @@ describe('migrateItemDocument', () => {
     return { text: doc.toString({ lineWidth: 0, flowCollectionPadding: false }), ...result };
   };
 
-  test('aid.known: true becomes a top-level notes marker, and the key goes', () => {
+  test('aid.known: true becomes a structured top-level notes marker', () => {
+    // `notes: {known: true}` rather than the `notes: '[e]'` v3 literally emitted: a
+    // convention pack cannot read `[e]` back out of free text, and a branch that does not
+    // load the mod cannot switch a baked-in string off. The flag stays data; a template
+    // renders it (§4.5.1).
     const { text } = migrate('- id: A\n  aid:\n    type: Character\n    known: true\n');
-    expect(text).toContain("notes: '[e]'");
-    expect(text).not.toContain('known:');
+    expect(text).toContain('notes: {known: true}');
+    expect(text).not.toContain('aid:\n    known:');
+    expect(text).not.toContain('[e]');
+  });
+
+  test('converting any known: reports that a notes template is still needed', () => {
+    const dir = path.join(tmpDir, 'items');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'a.yaml'), '- id: A\n  aid:\n    known: true\n', 'utf8');
+    const { notes } = migrateItemFiles(dir);
+    // Without one the flag is carried and never written, and every [e] in the project
+    // disappears silently — the failure mode worth one loud line.
+    expect(notes.map((n) => n.note).join(' ')).toMatch(/notes template/);
   });
 
   test('aid.known: false leaves no notes at all', () => {
@@ -320,7 +336,9 @@ describe('migrateItemDocument', () => {
       '        known: true',
     ].join('\n'));
     expect(text).toContain('triggers: [_b_]');
-    expect(text).not.toContain('known:');
+    // The flag moved out of aid: and onto the variant as notes data.
+    expect(text).toContain('notes: {known: true}');
+    expect(text).not.toMatch(/^\s+known:/m);
   });
 
   test('render.stripFence goes with the envelope it stripped', () => {

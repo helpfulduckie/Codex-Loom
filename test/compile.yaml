@@ -11,6 +11,9 @@ structure:
 
 protagonist: Aness
 
+render:
+  notesTemplate: Notes
+
 branches:
   subject:
     protagonist: Aness

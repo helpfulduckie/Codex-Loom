@@ -6,7 +6,7 @@
   aid:
     type: Character
     triggers: [Aness, Rozen]
-  notes: '[e]'
+  notes: {known: true}
   render:
     template: Character
     wrapper: none

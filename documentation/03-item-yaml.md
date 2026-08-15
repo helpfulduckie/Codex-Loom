@@ -15,7 +15,7 @@ Items are the atomic units of content in a Codex Loom project — a character, a
   aid:
     type: Character
     triggers: [Aness, Rozen]
-  notes: '[e]'
+  notes: {known: true}
   render:
     template: Character
     wrapper: none
@@ -124,13 +124,17 @@ Both were removed with the story-card envelope, and both are now unknown-key ERR
 
 `encapsulate` was never a real choice: the compiler writes `encapsulate: false` on every card, because every site in the Velvet Lattice loader defaults it to true and false is what the output needs.
 
-`known: true` existed only so a template could write `{if $aid.known}notes: '[e]'{/if}`. Write the marker directly instead:
+`known: true` existed only so a template could write `{if $aid.known}notes: '[e]'{/if}`. The flag moves to `notes:`, where it stays a flag:
 
 ```yaml
-notes: '[e]'
+notes: {known: true}
 ```
 
-`src/migrate/v3.js` performs both conversions.
+**Structured rather than the flat `notes: '[e]'` v3 emitted, and the difference matters twice.** A convention pack cannot read `[e]` back out of free text, so a flattened marker is unreadable to the thing meant to read it. And a branch that does not load the mod the marker belongs to has no way to switch a baked-in string off — swapping the notes template is the mechanism, and a template can only decide per card if the card carries a flag rather than an answer.
+
+A scalar `notes: '[e]'` is still perfectly valid; it simply renders verbatim and cannot be varied per branch.
+
+`src/migrate/v3.js` performs both conversions, and reports that a notes template is still needed — without one the flag is carried and never written.
 
 `aid.type` and `render.template` default to each other — if one is set the other is filled in automatically. If neither is set, the item cannot be rendered and a warning is emitted.
 
@@ -165,7 +169,9 @@ String values in `render:` support `{%variable}` expansion too, so `template`/`w
 
 ```yaml
 - id: Aness
-  notes: '[e]'
+  notes: {known: true}      # a flag for a template to render
+- id: Kaiden
+  notes: '[e]'              # or the literal text, rendered verbatim
 ```
 
 `description:` is an accepted alias for the same field, for authors who think in AID's own vocabulary. The two are collapsed to `notes:` during resolution, so nothing downstream sees which spelling arrived, and a variant may write `description:` against an item that declared `notes:`. Declaring **both on one item** is ERROR `CL0323` rather than a merge: two names for one field means two values means the author believes they are two fields, and picking a winner silently would hide that.

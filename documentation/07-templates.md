@@ -30,7 +30,7 @@ What the compiler decides, and from what:
 | `encapsulate: false` | Always. Not author-controlled |
 | `notes: ...` | `notes:` on the item, rendered through a notes template when one resolves. Omitted when the text is empty |
 
-Two keys that v3 templates read are gone with the envelope: `aid.encapsulate`, because the value is now unconditional, and `aid.known`, which existed only so a template could write `{if $aid.known}notes: '[e]'{/if}`. The marker is `notes:` text now — see [Item YAML](03-item-yaml.md). Declaring either is an unknown-key ERROR.
+Two keys that v3 templates read are gone with the envelope: `aid.encapsulate`, because the value is now unconditional, and `aid.known`, which existed only so a template could write `{if $aid.known}notes: '[e]'{/if}`. The flag lives on the item as `notes: {known: true}` now, and a notes template renders it — see [Item YAML](03-item-yaml.md). Declaring either is an unknown-key ERROR.
 
 ---
 

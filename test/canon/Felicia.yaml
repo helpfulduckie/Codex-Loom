@@ -6,7 +6,7 @@
   aid:
     type: Character
     triggers: [Felicia, Grayls]
-  notes: '[e]'
+  notes: {known: true}
   render:
     template: Character
     wrapper: none

@@ -278,11 +278,23 @@ function insertAfter(map, afterKey, pair) {
   else map.items.splice(index + 1, 0, pair);
 }
 
-/** `notes: '[e]'`, single-quoted so it matches the bytes v3's templates emitted. */
+/**
+ * `notes: {known: true}` — the flag as data, for a template to render.
+ *
+ * Not `notes: '[e]'`, though that is the literal v3 emitted and it would need no template
+ * to reproduce. The marker has to stay structured for two reasons that only show up
+ * later. A convention pack (§8.2.2) cannot tell the string `[e]` from any other notes
+ * text, so a flattened marker is unreadable to the thing meant to read it. And a branch
+ * that does not load the mod the marker belongs to has no way to switch a baked-in string
+ * off — swapping the notes template is the mechanism (§4.5.1), and a template can only
+ * decide per card if the card carries a flag rather than a rendered answer.
+ */
 function notesMarkerPair() {
-  const value = new YAML.Scalar('[e]');
-  value.type = 'QUOTE_SINGLE';
-  return new YAML.Pair(new YAML.Scalar('notes'), value);
+  const known = new YAML.Pair(new YAML.Scalar('known'), new YAML.Scalar(true));
+  const map = new YAML.YAMLMap();
+  map.flow = true;
+  map.items.push(known);
+  return new YAML.Pair(new YAML.Scalar('notes'), map);
 }
 
 /**
@@ -324,7 +336,7 @@ function migrateItemDocument(doc) {
         changes.known++;
         if (known === true) {
           if (node.has('notes')) {
-            notes.push(`item already declares notes:, so known: true was dropped rather than merged`);
+            notes.push('item already declares notes:, so known: true was dropped rather than merged');
           } else {
             insertAfter(node, 'aid', notesMarkerPair());
           }
@@ -405,6 +417,20 @@ function migrateItemFiles(rootDir, options = {}) {
   };
 
   walk(rootDir);
+
+  // Said once, loudly, rather than per item: the conversion above is only half the
+  // change. `aid.known` used to be rendered by every template's `{if $aid.known}notes:
+  // '[e]'{/if}`, and those templates are gone. Without a notes template the flag is
+  // carried and never written, so every `[e]` in the project silently disappears.
+  if (totals.known > 0) {
+    notes.push({
+      file: rootDir,
+      note: `${totals.known} item(s) converted aid.known to notes: {known: true}. Add a notes `
+        + 'template rendering `{if $notes.known}[e]{/if}` and point render.notesTemplate at it '
+        + 'in compile.yaml, or the marker is carried but never emitted (§4.5.1).',
+    });
+  }
+
   return { touched, notes, totals };
 }
 
