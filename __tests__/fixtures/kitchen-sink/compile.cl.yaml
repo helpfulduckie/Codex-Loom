@@ -1,0 +1,149 @@
+# The kitchen-sink config: every key the v4 surface declares, exercised once.
+#
+# This is not a scenario. It is a shape fixture — `__tests__/unit/kitchen-sink.test.js`
+# walks CONFIG_SCHEMA and fails if any declared key is missing from this file, so adding a
+# schema key in a later phase forces an edit here rather than passing unnoticed.
+#
+# The gap it closes: the three golden fixture projects pin compiled output well, but they
+# only use the keys those projects happen to need. None of them declares roles:,
+# placeholders:, lint:, structure.input.vault, components.summary, a `~` unbind, or the
+# mapping form of scripts: — and none puts a {%token} in output: or reports:, which is
+# exactly where the Phase 1 audit found a bug that every test missed.
+#
+# Rules for editing:
+#   - Every path-bearing string carries a token, deliberately. The ones the loader expands
+#     (structure.*) are asserted to come back absolute and token-free; the rest resolve
+#     later against branch-merged variables (§5.1) and are asserted to pass through as
+#     written.
+#   - Every path the loader checks for existence must exist beside this file, because the
+#     test asserts the ONLY diagnostics are the not-yet-implemented WARNs.
+
+version: 4
+title: The Kitchen Sink
+
+variables:
+  here:         .
+  setting:      The Royal Academy
+  # A variable referencing a variable (§6.2) — order-independent, so this sits above the
+  # name it depends on.
+  house:        '{%setting} - Northern Wing'
+  canonRoot:    '{%here}/canon'
+  codex:        '{%here}/Codex'
+  tpl:          '{%here}/templates'
+  out:          out
+  vaultDir:     '{%here}/vault'
+  componentDir: '{%here}/components'
+  scriptDir:    '{%here}/scripts'
+
+structure:
+  input:
+    items:
+      - '{%codex}'
+    templates:
+      - '{%tpl}'
+    canon:
+      main:    '{%canonRoot}/main'
+      general: '{%canonRoot}/general'
+    vault: '{%vaultDir}'
+  output: './{%out}'
+  # Reached through a canon name rather than a declared variable: canon auto-exposes as a
+  # variable (§6.1), which is what replaced {@}. Resolves to ./Review.
+  reports: '{%main}/../../Review'
+
+# Phase 8. Declared here so the key is covered and its WARN is pinned.
+roles:
+  protagonist: Aness
+  LI:          Kaiden
+  rival:       Voss
+
+# Phase 4.
+placeholders:
+  heroName: What should we call you?
+  house:    'Which wing of {%setting} claims you?'
+
+# Phase 8 still reads protagonist: rather than roles.protagonist — see config/schema.js.
+protagonist: Aness
+
+# Phase 5. The mapping form at root; a branch below writes the empty-collection form.
+lint:
+  level: warn
+  packs:
+    discovery-markers: {}
+    stat-tracker:
+      source: '{%here}/lint/stat-tracker.cl.yaml'
+      level: error
+
+# The mapping form at root, so all four hook keys are covered here; a branch below writes
+# the directory form, so both arms of the union are exercised (§6.3).
+scripts:
+  input:   '{%scriptDir}/input.js'
+  output:  '{%scriptDir}/output.js'
+  context: '{%scriptDir}/context.js'
+  library: '{%scriptDir}/library.js'
+
+components:
+  aiInstructions: '{%componentDir}/ai-instructions.cl.yaml'
+  authorsNote:    '{%componentDir}/authors-note.cl.yaml'
+  description:    '{%componentDir}/description.cl.yaml'
+  plotEssential:  '{%componentDir}/plot-essentials.cl.yaml'
+  summary:        '{%componentDir}/summary.cl.yaml'
+  opening:        '{%componentDir}/openings/root.md'
+  # A literal rather than a path — the one component spec that is normally prose.
+  branchFraming: Which path did they set you on?
+
+branches:
+  subject:
+    title: The Subject's Path
+    variables:
+      role: research subject
+    roles:
+      LI: Felicia
+      # `~` unbinds an inherited binding (§6.4). Distinct from the empty collections
+      # below, which mean "I have no new things for you".
+      rival: ~
+    placeholders:
+      homeland: Which county raised you?
+    protagonist: Veryn
+    # Every component respecified at branch level. Depth matters to the coverage check:
+    # a key written only on a grandchild covers `branches.*.branches.*.components.…`, not
+    # `branches.*.components.…`, so the full set has to appear on a first-level branch.
+    components:
+      branchFraming:  Which year did they take you?
+      summary:        '{%componentDir}/subject.summary.cl.yaml'
+      aiInstructions: '{%componentDir}/subject.ai-instructions.cl.yaml'
+      authorsNote:    '{%componentDir}/subject.authors-note.cl.yaml'
+      description:    '{%componentDir}/subject.description.cl.yaml'
+      plotEssential:  '{%componentDir}/subject.plot-essentials.cl.yaml'
+      opening:        '{%componentDir}/openings/subject.md'
+    scripts:
+      input:   '{%scriptDir}/input.js'
+      output:  '{%scriptDir}/output.js'
+      context: '{%scriptDir}/context.js'
+      # The bundle case: one hook swapped, the other three inherited (§6.3).
+      library: '{%scriptDir}/bundles/modA.js'
+    lint:
+      level: error
+      packs:
+        stat-tracker: ~
+    branches:
+      year-one:
+        title: First Year
+        # An empty mapping: present, inherited, unmodified (§3.3).
+        variables: {}
+        # The realistic leaf override: one component, the rest inherited.
+        components:
+          opening: '{%componentDir}/openings/subject-y1.md'
+        branches:
+          # A whole branch node written as an empty sequence — The Institute does this at
+          # every leaf, and it must normalize to a mapping without complaint.
+          honors: []
+      year-three:
+        title: Third Year
+        # The directory arm of the scripts: union.
+        scripts: '{%scriptDir}/bundles/modB'
+        lint:
+          # The empty-sequence spelling of an empty collection, at a slot declared as a
+          # mapping. Two spellings of nothing (§3.3), not two shapes of content.
+          packs: []
+
+  researcher: []

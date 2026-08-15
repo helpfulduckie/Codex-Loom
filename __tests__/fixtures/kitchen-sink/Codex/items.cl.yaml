@@ -1,0 +1,118 @@
+# The kitchen-sink item corpus: every key the v4 item surface declares, exercised once.
+#
+# Companion to ../compile.cl.yaml, and the same contract —
+# `__tests__/unit/kitchen-sink.test.js` walks ITEM_SCHEMA and fails if a declared key is
+# missing here. Phase 2 adds to this surface (notes:, description:, render.notesTemplate,
+# and the encapsulate → wrapper conversion), which is why the item half exists now rather
+# than when those land.
+#
+# It is validated, not compiled. `import:` and `include:` name items and files that do not
+# exist, because the subject is the key surface rather than resolution — nothing in the
+# suite compiles this project.
+#
+# The items are split rather than merged into one maximal item because several keys are
+# mutually exclusive in practice: §4.5 makes declaring both `notes:` and `description:` on
+# one item an ERROR once Phase 2 implements it, and the four `v:` aliases are four
+# spellings of one block.
+
+# ── A full story card ────────────────────────────────────────────────────────
+- id: Aness
+  name:
+    display: Aness
+    full: Aness Vale
+  pronouns: female
+  aid:
+    type: Character
+    title: Aness Vale
+    known: true
+    encapsulate: false
+    # Underscore padding is Phase 2 (§4.2) and inert here; the trigger shapes are carried
+    # now so the Phase 2 emitter has something to render them from.
+    triggers: [Aness, Vale, _Aria, Voss_]
+  body:
+    # Unquoted leading token (§4.1). Valid only because the preparser quotes it — this is
+    # the shape that would otherwise parse as a flow mapping and be swallowed.
+    Tagline: {$name.display} is a healer
+    Role: Journeyman of the {%setting}
+  v:
+    rank: journeyman
+  render:
+    template: Character
+    wrapper: curly
+
+# ── The minimum an item can be ───────────────────────────────────────────────
+# `name:` in its scalar arm, `aid.triggers` in its scalar arm, and nothing else. The
+# optional keys above have to actually be optional.
+- id: Wyvern
+  name: Wyvern
+  aid:
+    type: Race
+    triggers: Wyvern
+  render:
+    wrapper: none
+
+# ── A reference item, and the Phase 2 notes: field ───────────────────────────
+- id: WTG Time Config
+  # Phase 5. Author intent no render target can infer: this IS a story card, with a
+  # deliberately empty trigger list (§4.8).
+  kind: reference
+  aid:
+    type: System
+    triggers: []
+  notes:
+    startDate: "06/28/1320"
+    startTime: "9:00 PM"
+  render:
+    notesTemplate: ModConfig
+    storyCard: true
+
+# ── Composition: import, variants, branch dispatch ───────────────────────────
+- id: Kaiden
+  import: Kaiden
+  importVariants: [warm, guarded]
+  variants:
+    warm:
+      body:
+        Tagline: '+{ He watches the door less than he used to. }'
+    guarded:
+      body:
+        Tagline: '-{ warm }'
+  branches:
+    subject: warm
+    researcher: guarded
+  render:
+    wrapper: square
+  variables:
+    posting: the east gate
+
+# ── Composition: include, and the scalar arm of importVariants ───────────────
+- id: Felicia
+  include: '{%general}/Felicia.cl.yaml'
+  importVariants: warm
+  var:
+    affiliation: the Northern Wing
+
+# ── The description: alias for notes: (§4.5) ─────────────────────────────────
+# Front-end spelling of the same AID field. Kept on its own item because declaring both on
+# one item becomes an ERROR when Phase 2 implements the pair.
+- id: Voss
+  description:
+    marker: '[e]'
+  vars:
+    disposition: hostile
+
+# ── Every per-component render target (§7.4, Phase 3) ────────────────────────
+# Declared together so the not-yet-implemented WARNs they produce read as one block rather
+# than scattered through the corpus.
+- id: Chorus
+  render:
+    plotEssential:
+      slot: cast
+      order: 1
+    summary: true
+    aiInstructions: false
+    authorsNote: false
+    description: false
+    opening: false
+  variable:
+    chorusSize: three

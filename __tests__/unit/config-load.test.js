@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const { Diagnostics } = require('../../src/diag');
 const { loadCompileConfig, CODES } = require('../../src/config/load');
+const { CODES: SCHEMA_CODES } = require('../../src/schema');
 
 let tmpDir;
 
@@ -18,12 +19,13 @@ afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
  * not about. They are **appended** rather than prepended so the line numbers of the
  * content under test are unaffected — several assertions below pin them.
  */
-function load(yaml, { dirs = [] } = {}) {
+function load(yaml, { dirs = [], raw = false } = {}) {
   for (const dir of dirs) fs.mkdirSync(path.join(tmpDir, dir), { recursive: true });
   let text = yaml;
   // Only a mapping document gets scaffolding; the malformed-input cases below must reach
-  // the loader exactly as written.
-  const isMapping = /^[A-Za-z_]\w*:/m.test(text);
+  // the loader exactly as written. `raw` opts out for the cases that are *about* the
+  // scaffolding — a config missing a required key cannot have it supplied first.
+  const isMapping = !raw && /^[A-Za-z_]\w*:/m.test(text);
   if (isMapping) {
     if (!/^version:/m.test(text)) text += '\nversion: 4\n';
     if (!/^structure:/m.test(text)) text += '\nstructure:\n  output: ./out\n';
@@ -188,12 +190,7 @@ describe('resolution behavior carried forward', () => {
     expect(load('structure:\n  output: ./out\n').config._resolvedOutput).toBe(path.join(tmpDir, 'out'));
   });
 
-  test('the v3 cards: key is gone — it is an unknown key now', () => {
-    const { diagnostics } = load('structure:\n  output: ./out\n  input:\n    cards: [./Codex]\n');
-    expect(diagnostics.errors.some((d) => d.message.includes('Unknown key "cards"'))).toBe(true);
-  });
-
-  test('and it names items: as the replacement, since edit distance cannot', () => {
+  test('the v3 cards: key names items: as its replacement, since edit distance cannot', () => {
     const { diagnostics } = load('structure:\n  output: ./out\n  input:\n    cards: [./Codex]\n');
     const diag = diagnostics.errors.find((d) => d.message.includes('cards'));
     expect(diag.hint).toContain('renamed to "items" in v4');
@@ -277,6 +274,49 @@ describe('bus ownership', () => {
     const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     expect(() => loadCompileConfig(cfgPath)).not.toThrow();
     spy.mockRestore();
+  });
+});
+
+/**
+ * The invalid half of the kitchen sink (`__tests__/unit/kitchen-sink.test.js` holds the
+ * valid half).
+ *
+ * The tests above pin the *message* of a handful of diagnostics; this table pins the
+ * *code* of every one the config surface can emit, in one place. The point is inventory
+ * rather than depth — a new code with no case here is a red test, which is the same
+ * property the coverage meta-test gives the valid half.
+ */
+describe('every diagnostic the config surface can emit', () => {
+  const CASES = [
+    ['unknown key', SCHEMA_CODES.UNKNOWN_KEY, 'bogus: 1\n', {}],
+    ['a v3 key that was renamed', SCHEMA_CODES.UNKNOWN_KEY, 'overview: ./Review\n', {}],
+    ['wrong type, non-empty', SCHEMA_CODES.WRONG_TYPE, 'variables:\n  - a\n  - b\n', {}],
+    ['missing required key', SCHEMA_CODES.MISSING_REQUIRED, 'version: 4\nstructure:\n  input:\n    items: []\n', { raw: true }],
+    ['not yet implemented', SCHEMA_CODES.NOT_YET_IMPLEMENTED, 'roles:\n  protagonist: Aness\n', {}],
+    // The §4.3 case: a correctly spelled key one level too high.
+    ['a valid key at the wrong level', SCHEMA_CODES.MISPLACED_KEY, 'items: [./Codex]\n', {}],
+    ['a document that is not a mapping', CODES.CONFIG_NOT_A_MAPPING, '- a\n- list\n', {}],
+    ['a path that does not exist', CODES.PATH_NOT_FOUND, 'structure:\n  input:\n    items: [./nope]\n', {}],
+    ['an undeclared variable', CODES.VARIABLE_UNDECLARED, 'variables:\n  a: "{%nope}"\n', {}],
+    ['a variable cycle', CODES.VARIABLE_CYCLE, 'variables:\n  a: "{%b}"\n  b: "{%a}"\n', {}],
+    ['a branch-scoped variable used pre-branch', CODES.VARIABLE_PRE_BRANCH,
+      'structure:\n  input:\n    items: ["./{%r}"]\nbranches:\n  s:\n    variables:\n      r: x\n', {}],
+    ['a canon name colliding with a variable', CODES.CANON_NAME_COLLIDES,
+      'variables:\n  main: x\nstructure:\n  input:\n    canon:\n      main: ./canon\n', {}],
+  ];
+
+  test.each(CASES)('%s → %s', (_name, code, yaml, options) => {
+    expect(load(yaml, options).codes).toContain(code);
+  });
+
+  test('the table covers every code the config surface declares', () => {
+    // CL0205 (SUPERSEDED_KEY) is the one omission, and it is not reachable: no key in
+    // CONFIG_SCHEMA declares an `alias`. The v3 spellings were removed outright at the
+    // config break rather than kept as warned aliases (§14.1).
+    const reachable = [...Object.values(CODES), ...Object.values(SCHEMA_CODES)]
+      .filter((c) => c !== SCHEMA_CODES.SUPERSEDED_KEY);
+    const exercised = new Set(CASES.map(([, code]) => code));
+    expect(reachable.filter((c) => !exercised.has(c))).toEqual([]);
   });
 });
 
