@@ -8,6 +8,7 @@ const {
   VERB_MARKER_RE, SUSPECT_VERB_MARKER_RE, JS_ARTIFACT_RE, JS_WORD_RE,
   maskFencedRegions,
 } = require('./util');
+const { parseCards } = require('./emit/vl');
 
 // ── mechanical syntax checks ────────────────────────────────────────────────
 //
@@ -144,31 +145,12 @@ function scanText(text) {
 // Mirrors the "Format correctness" checklist from the VL QA review process:
 // [e]/`/]` mutual exclusion, empty trigger lists, missing encapsulate.
 
-function parseStoryCards(content) {
-  const sections = content.split(/^(?=## )/m);
-  const cards = [];
-  for (const section of sections) {
-    const trimmed = section.trim();
-    if (!trimmed) continue;
-    const titleMatch = trimmed.match(/^## (.+)/);
-    if (!titleMatch) continue;
-    const title = titleMatch[1].trim();
-
-    const firstFence = trimmed.indexOf('~~~');
-    if (firstFence === -1) continue;
-    const secondFence = trimmed.indexOf('~~~', firstFence + 3);
-    if (secondFence === -1) continue;
-
-    const fenceContent = trimmed.slice(firstFence + 3, secondFence);
-    const body = trimmed.slice(secondFence + 3).trim();
-    cards.push({ title, fenceContent, body });
-  }
-  return cards;
-}
-
 function scanStoryCardStructure(content) {
   const findings = [];
-  for (const { title, fenceContent, body } of parseStoryCards(content)) {
+  // The shared parser (§8.6). Fenceless sections are still skipped: a heading with no
+  // fence beneath it is prose in a component file, not a malformed story card, and
+  // reporting it would fire these checks on every AI Instructions section.
+  for (const { title, triggers, meta, body } of parseCards(content).filter((c) => c.hasFence)) {
     const hasEPrefix = /^\[e\]/.test(body);
     const hasDiscoveryMarker = /\/\]/.test(body);
 
@@ -184,18 +166,14 @@ function scanStoryCardStructure(content) {
       });
     }
 
-    const triggerMatch = fenceContent.match(/^triggers:\s*\[(.*)\]/m);
-    const triggers = triggerMatch
-      ? triggerMatch[1].split(',').map(t => t.trim()).filter(Boolean)
-      : [];
-    if (!triggerMatch || triggers.length === 0) {
+    if (triggers.length === 0) {
       findings.push({
         category: 'empty-triggers', severity: 'WARN', card: title,
         hint: 'card has an empty or missing trigger list',
       });
     }
 
-    if (!/^encapsulate:\s*true/m.test(fenceContent)) {
+    if (meta.encapsulate !== true) {
       findings.push({
         category: 'missing-encapsulate', severity: 'WARN', card: title,
         hint: 'encapsulate: true is absent — verify this is a deliberate exception',
@@ -283,4 +261,4 @@ function runLintMode(scenarioRoot, outputDir, verbose = false) {
   return { reportPath, errorCount, warnCount };
 }
 
-module.exports = { runLintMode, findLintableFiles, scanText, scanStoryCardStructure, parseStoryCards, CHECKS };
+module.exports = { runLintMode, findLintableFiles, scanText, scanStoryCardStructure, CHECKS };

@@ -246,6 +246,30 @@ function renderCard({ item, bodyText = '', notesText, diagnostics, loc = {} }) {
 }
 
 /**
+ * A fence block, anchored at line start exactly as VL anchors it (`loader.py:7`).
+ *
+ * Built fresh on each call rather than shared: a `g` regex carries `lastIndex` between
+ * uses, and the three consumers of this module run over the same text in sequence.
+ */
+function fenceBlockRe({ global = false } = {}) {
+  return new RegExp('^~~~[ \\t]*$[\\s\\S]*?^~~~[ \\t]*$', global ? 'gm' : 'm');
+}
+
+/**
+ * Blank the contents of every fence, preserving newlines so line numbers stay aligned.
+ *
+ * `lint.js` needs this because a single-word trigger (`triggers: [door]`) has the same
+ * shape as a mistyped verb-conjugation marker, and the heuristic that hunts for those
+ * must never see the fence. It lives here rather than in `util.js` for the reason §8.6
+ * gives: what counts as a fence is the emitter's business, and a second definition of it
+ * elsewhere is exactly the drift this module exists to end.
+ */
+function maskFences(text) {
+  if (typeof text !== 'string') return text;
+  return text.replace(fenceBlockRe({ global: true }), (block) => block.replace(/[^\n]/g, ' '));
+}
+
+/**
  * Parse a compiled story-card file back into the structured model.
  *
  * §8.6 names this the contract to preserve: reports and convention packs consume the
@@ -282,14 +306,16 @@ function parseCards(markdown, { type = null, fallbackTitle = null } = {}) {
   }
 
   return sections.map((section) => {
-    const fence = /^~~~[ \t]*\r?\n([\s\S]*?)^~~~[ \t]*$/m.exec(section.body);
+    const fence = fenceBlockRe().exec(section.body);
     let meta = {};
     let body = section.body;
 
     if (fence) {
+      // Strip the delimiter lines to get the YAML the fence carries.
+      const inner = fence[0].replace(/^~~~[ \t]*\r?\n?/, '').replace(/\r?\n?~~~[ \t]*$/, '');
       try {
         // YAML 1.1 to match PyYAML: `no` is a boolean to VL, so it must be one here too.
-        meta = YAML.parse(fence[1], { version: '1.1' }) || {};
+        meta = YAML.parse(inner, { version: '1.1' }) || {};
       } catch (err) {
         meta = {};
       }
@@ -305,6 +331,10 @@ function parseCards(markdown, { type = null, fallbackTitle = null } = {}) {
     return {
       title: section.title,
       type,
+      // Whether a fence was present at all. `meta` cannot answer this — an absent fence
+      // and an empty one both parse to `{}` — and consumers do distinguish them: a
+      // headed section with no fence is prose, not a malformed card.
+      hasFence: Boolean(fence),
       triggers,
       notes: meta.notes === undefined || meta.notes === null ? '' : String(meta.notes),
       body: body.trim(),
@@ -316,6 +346,7 @@ function parseCards(markdown, { type = null, fallbackTitle = null } = {}) {
 module.exports = {
   renderCard,
   parseCards,
+  maskFences,
   cardTitle,
   decodeTriggerPadding,
   defaultNotesText,

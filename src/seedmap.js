@@ -4,6 +4,7 @@ const fs   = require('fs');
 const path = require('path');
 
 const { discoverLeaves, sanitizeFilename } = require('./overview');
+const { parseCards } = require('./emit/vl');
 
 // ── parsing ──────────────────────────────────────────────────────────────────
 
@@ -12,42 +13,20 @@ function escapeRegex(str) {
 }
 
 /**
- * Parse a compiled Story Cards .md file into an array of card objects.
- * Each section starts with `## Title`, followed by a ~~~ fence, then body text.
+ * Parse a compiled Story Cards .md file into the cards the seed map reasons about.
+ *
+ * The parsing is `emit/vl.js`'s (§8.6); what stays here is the seed map's own rule —
+ * **a card with no triggers is not seedable**, so it is excluded rather than listed as
+ * permanently unseeded. Under v4 that judgment moves to `kind: reference` (§4.8), which
+ * says the same thing deliberately instead of as a side effect of having no triggers.
+ *
+ * Retiring the local parser changes one thing on purpose: trigger values arrive
+ * YAML-parsed rather than split out of the raw line, so a padded trigger is ` tea `
+ * rather than `' tea '` with its quote characters still attached. Matching those
+ * against body text could never have succeeded.
  */
-function parseCardsFromMd(content) {
-  const cards = [];
-  const sections = content.split(/^(?=## )/m);
-
-  for (const section of sections) {
-    const trimmed = section.trim();
-    if (!trimmed) continue;
-
-    const titleMatch = trimmed.match(/^## (.+)/);
-    if (!titleMatch) continue;
-    const title = titleMatch[1].trim();
-
-    // Find the ~~~ fence pair
-    const firstFence = trimmed.indexOf('~~~');
-    if (firstFence === -1) continue;
-    const secondFence = trimmed.indexOf('~~~', firstFence + 3);
-    if (secondFence === -1) continue;
-
-    const fenceContent = trimmed.slice(firstFence + 3, secondFence);
-    const triggerMatch = fenceContent.match(/^triggers:\s*\[(.+)\]/m);
-    if (!triggerMatch) continue;
-
-    const triggers = triggerMatch[1]
-      .split(',')
-      .map(t => t.trim())
-      .filter(Boolean);
-
-    const body = trimmed.slice(secondFence + 3).trim();
-
-    cards.push({ title, triggers, body });
-  }
-
-  return cards;
+function parseCardsFromMd(content, type = null) {
+  return parseCards(content, { type }).filter((card) => card.triggers.length > 0);
 }
 
 /**
@@ -85,8 +64,7 @@ function collectLeafCards(leafDir) {
       visited.add(file);
       const content = fs.readFileSync(file, 'utf8');
       const cardType = path.basename(path.dirname(file));
-      const parsed = parseCardsFromMd(content).map(c => ({ ...c, type: cardType }));
-      cards.push(...parsed);
+      cards.push(...parseCardsFromMd(content, cardType));
     }
   }
 

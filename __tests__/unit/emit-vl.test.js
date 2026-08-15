@@ -313,6 +313,34 @@ describe('parseCards', () => {
   });
 });
 
+describe('maskFences', () => {
+  const { maskFences } = require('../../src/emit/vl');
+
+  test('blanks the fence and leaves the body alone', () => {
+    const text = '## A\n~~~\ntriggers: [door]\n~~~\n[e] a door\n';
+    expect(maskFences(text)).toBe('## A\n   \n                \n   \n[e] a door\n');
+  });
+
+  test('keeps line numbers aligned — the reason lint needs it', () => {
+    const text = '## A\n~~~\ntriggers: [door]\n~~~\nlove[does] it\n';
+    const masked = maskFences(text);
+    expect(masked.split('\n').length).toBe(text.split('\n').length);
+    expect(masked.indexOf('love[does]')).toBe(text.indexOf('love[does]'));
+  });
+
+  test('a mid-line ~~~ is not a delimiter', () => {
+    // The local regex this replaced was unanchored, so it treated prose containing
+    // ~~~ as a fence and blanked everything between two of them.
+    const text = 'a ~~~ b\nkeep me\nc ~~~ d';
+    expect(maskFences(text)).toBe(text);
+  });
+
+  test('non-string input passes through', () => {
+    expect(maskFences(null)).toBeNull();
+    expect(maskFences(undefined)).toBeUndefined();
+  });
+});
+
 describe('against real compiled fixture output', () => {
   const FIXTURE = path.resolve(
     __dirname,

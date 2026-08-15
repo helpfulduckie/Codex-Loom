@@ -7,7 +7,7 @@ const path = require('path');
 const {
   scanText,
   scanStoryCardStructure,
-  parseStoryCards,
+
   findLintableFiles,
   runLintMode,
 } = require('../../src/lint');
@@ -146,13 +146,18 @@ encapsulate: true
 Hidden Vault beneath the Academy /]
 `;
 
-describe('parseStoryCards', () => {
-  test('extracts title, fence content, and body', () => {
-    const cards = parseStoryCards(CARD_WITH_E);
-    expect(cards).toHaveLength(1);
-    expect(cards[0].title).toBe('Aness');
-    expect(cards[0].fenceContent).toContain('triggers: [Aness, Rozen]');
-    expect(cards[0].body).toContain('[e] Aness Rozen');
+describe('structural checks read through the shared parser', () => {
+  test('a heading with no fence beneath it is not a story card', () => {
+    // AI Instructions and Author's Note are headed sections without fences. Treating
+    // one as a card would fire every structural check on every section of them.
+    expect(scanStoryCardStructure('## Tone\n\nWrite in close third person.')).toEqual([]);
+  });
+
+  test('encapsulate is read as a parsed value, not matched as text', () => {
+    // `encapsulate: true` inside the body must not satisfy the fence check.
+    const card = '## A\n~~~\ntriggers: [A]\n~~~\nencapsulate: true\n';
+    expect(scanStoryCardStructure(card).map((f) => f.category))
+      .toContain('missing-encapsulate');
   });
 });
 

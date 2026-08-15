@@ -228,10 +228,13 @@ const JS_WORD_RE         = /\b(?:undefined|NaN)\b/g;
  * trigger array like `triggers: [door]` is a legitimate AID trigger, not an
  * attempted (and mistyped) verb-conjugation marker, so the suspect-verb-marker
  * heuristic should never see it. Other checks still scan the fence normally.
+ *
+ * What counts as a fence is `emit/vl.js`'s to define (§8.6). This delegates rather
+ * than keeping a second, slightly different regex — the local one was unanchored, so
+ * it also treated a mid-line `~~~` as a delimiter.
  */
 function maskFencedRegions(text) {
-  if (typeof text !== 'string') return text;
-  return text.replace(/~~~[\s\S]*?~~~/g, block => block.replace(/[^\n]/g, ' '));
+  return require('./emit/vl').maskFences(text);
 }
 
 /**
