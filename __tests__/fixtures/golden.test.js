@@ -11,6 +11,12 @@
  * this harness reports is a bug, not a re-baseline. Later phases change output deliberately
  * and re-baseline under review — see §14.3's expected-diff table before touching a fixture.
  *
+ * "Under review" is enforced rather than trusted. Every differing file is classified by
+ * `helpers/diffShape.js` into the line classes it touched, and the two assertions below
+ * separate the questions §14.3 keeps distinct: *is this diff the shape we intended* (a
+ * bug if not) and *has the baseline been regenerated yet* (a re-baseline if not). Setting
+ * `EXPECTED_DIFF_CLASSES` for a phase is the deliberate act that declares the shape.
+ *
  * The tree is copied because each project's `compile.yaml` writes to `../Velvet Lattice/`
  * and reaches up three levels for shared canon and templates (`{%loom}: ../../../_CodexLoom`),
  * so neither the output nor the inputs can be redirected without breaking the relative paths.
@@ -20,8 +26,26 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { compile } = require('../../src/compile');
+const { classifyDiff, OPAQUE } = require('../helpers/diffShape');
 
 const GOLDEN_DIR = path.resolve(__dirname, '../../goldenFixtures');
+
+/**
+ * The line classes the phase in progress is allowed to change (v4 spec §14.3).
+ *
+ * Empty means "byte-for-byte, any diff is a bug" — the obligation for Phases 1, 4, 5, 7
+ * and 9. An output-changing phase widens it to exactly the classes its expected diff
+ * covers, and never further:
+ *
+ *   Phase 2 (emitter)   ['fence', 'title']  the envelope moves into emit/vl.js
+ *   Phase 3 (placement) —                   restructures bodies; needs a different tool
+ *
+ * Phase 3's diff is not shape-classifiable this way, because moving an item out of story
+ * cards and into Plot Essentials is a body change by construction. That phase re-baselines
+ * against a per-file expectation instead; this constant stays empty for it rather than
+ * being widened until it means nothing.
+ */
+const EXPECTED_DIFF_CLASSES = [];
 
 const PROJECTS = [
   { name: 'Baseline', dir: path.join('Baseline', 'Baseline') },
@@ -131,8 +155,15 @@ describe.each(PROJECTS)('$name', (project) => {
     expect(listFiles(actualDir)).toEqual(listFiles(expectedDir));
   });
 
-  test('every emitted file is byte-identical to the baseline', () => {
-    const differing = [];
+  /**
+   * Every file that differs from the baseline, with the line classes its diff touched.
+   *
+   * Only `.md` output is classifiable — it is the format the emitter owns. Anything else
+   * that differs is reported as `opaque`, which no phase's expected shape may contain, so
+   * a changed script or manifest can never pass as an intended fence-only diff.
+   */
+  function collectDifferences() {
+    const differences = [];
     for (const rel of listFiles(expectedDir)) {
       const actualPath = path.join(actualDir, ...rel.split('/'));
       const expectedPath = path.join(expectedDir, ...rel.split('/'));
@@ -141,12 +172,50 @@ describe.each(PROJECTS)('$name', (project) => {
       if (path.basename(rel) === 'canon-dependencies.json') {
         const actual = normalizeManifest(fs.readFileSync(actualPath, 'utf8'), path.join(tmpDir));
         const expected = normalizeManifest(fs.readFileSync(expectedPath, 'utf8'), GOLDEN_DIR);
-        if (JSON.stringify(actual) !== JSON.stringify(expected)) differing.push(rel);
+        if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+          differences.push({ rel, classes: [OPAQUE], summary: `${rel} — manifest contents differ` });
+        }
         continue;
       }
 
-      if (!fs.readFileSync(actualPath).equals(fs.readFileSync(expectedPath))) differing.push(rel);
+      if (fs.readFileSync(actualPath).equals(fs.readFileSync(expectedPath))) continue;
+
+      if (!rel.endsWith('.md')) {
+        differences.push({ rel, classes: [OPAQUE], summary: `${rel} — non-markdown output differs` });
+        continue;
+      }
+
+      const diff = classifyDiff(
+        fs.readFileSync(expectedPath, 'utf8'),
+        fs.readFileSync(actualPath, 'utf8'),
+      );
+      differences.push({
+        rel,
+        classes: diff.classes,
+        summary: `${rel} — ${diff.classes.join('+')} (${diff.changedLines} lines) ${diff.samples.join(' | ')}`,
+      });
     }
+    return differences;
+  }
+
+  /**
+   * The bug assertion. A diff outside the phase's declared shape is a regression whatever
+   * the phase is doing — during Phase 2 this is what stays green while the re-baseline
+   * assertion below goes red.
+   */
+  test('no file differs outside the phase\'s expected diff shape', () => {
+    const outside = collectDifferences()
+      .filter((d) => d.classes.some((c) => !EXPECTED_DIFF_CLASSES.includes(c)))
+      .map((d) => d.summary);
+    expect(outside).toEqual([]);
+  });
+
+  /**
+   * The re-baseline assertion. Passes only against a regenerated baseline, so an intended
+   * output change cannot be left uncommitted — §14.3's "reviewed, committed artifact".
+   */
+  test('every emitted file is byte-identical to the baseline', () => {
+    const differing = collectDifferences().map((d) => d.summary);
     expect(differing).toEqual([]);
   });
 });
