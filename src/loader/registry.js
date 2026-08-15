@@ -21,6 +21,7 @@ const { validate } = require('../schema');
 const { ITEM_SCHEMA } = require('./schema');
 const { expandTokens } = require('../tokens');
 const { CODES: DIAG_CODES } = require('../diag');
+const { splitRef, normalizeRef } = require('../model/refs');
 
 const CODES = Object.freeze({
   EMPTY_FILE: 'CL0103',
@@ -31,7 +32,40 @@ const CODES = Object.freeze({
   DUPLICATE_ITEM_ID: 'CL0141',
   MULTIPLE_VAR_ALIASES: 'CL0142',
   DUPLICATE_OVERLAY: 'CL0143',
+  ID_CONTAINS_COLON: 'CL0144',
 });
+
+/**
+ * The merged item registry (§17.2).
+ *
+ * A `Map` first and foremost: plain lowercase id → item, exactly as before, so every
+ * consumer that does `registry.get(id)` is untouched. Two sidecars carry what multi-set
+ * canon added:
+ *
+ *   `qualified`  `set:id` → item, for every canon item, so `grimwood:magic` always resolves
+ *   `ambiguous`  plain id → the rival items, for ids more than one canon set defines
+ *   `sources`    the declared canon set names, so an unknown qualifier is distinguishable
+ *                from a known set that simply lacks the id
+ *
+ * An id claimed by two sets is deliberately absent from the plain keys. That is what makes
+ * §17.3 work: the unqualified lookup misses, and `resolveItemRef` reaches the sidecar to
+ * explain why rather than silently picking whichever set was declared last.
+ */
+class ItemRegistry extends Map {
+  constructor(entries) {
+    super(entries || []);
+    this.qualified = new Map();
+    this.ambiguous = new Map();
+    this.sources = new Set();
+  }
+
+  /** Items known, counting the ambiguous ones the plain keys omit. */
+  get itemCount() {
+    let extra = 0;
+    for (const rivals of this.ambiguous.values()) extra += rivals.length;
+    return this.size + extra;
+  }
+}
 
 /**
  * Collapse the `v`/`var`/`vars`/`variable`/`variables` aliases to canonical `v` (§4.7).
@@ -113,6 +147,15 @@ function loadItemsFromDir(dirs, options = {}) {
           });
         }
 
+        // `:` separates a canon set from an id in a reference (§17.2), so an id containing
+        // one would make every reference to it ambiguous. Rejected at load, where the
+        // position is still known, rather than at the confusing far end.
+        if (typeof entry.id === 'string' && entry.id.includes(':')) {
+          const message = `item id "${entry.id}" contains ":", which separates a canon set from an id`;
+          if (diagnostics) diagnostics.error(CODES.ID_CONTAINS_COLON, message, { file });
+          else throw new Error(`${message} (source: ${file})`);
+        }
+
         items.push({ ...normalizeItemVarField(entry, (code, message) => warn(code, message)), _source: file });
       });
     }
@@ -122,12 +165,17 @@ function loadItemsFromDir(dirs, options = {}) {
 }
 
 /**
- * Build an id-keyed registry. Ids are lowercased; `import`/`include` defs are skipped
- * because they carry no identity of their own.
+ * Build an id-keyed registry. Ids are lowercased; `include` defs are skipped because they
+ * carry no identity of their own, and so are bare `import:` defs — they *are* the item they
+ * name, with local deltas.
+ *
+ * An import def carrying its own `id:` is the exception, and registers under that local id
+ * (§17.4). That is rename-on-import: `id: dragon` over `import: wyvern` is a second copy of
+ * a canon item, not an override of the original.
  */
 function buildRegistry(items, context) {
   const registry = new Map();
-  for (const item of items.filter((c) => !c.import && !c.include)) {
+  for (const item of items.filter((c) => !c.include && (!c.import || c.id))) {
     const id = (item.id || (typeof item.name === 'string' ? item.name : null) || '').toLowerCase();
     if (!id) {
       throw new Error(`Item in ${context} is missing both id and name fields (source: ${item._source})`);
@@ -142,9 +190,22 @@ function buildRegistry(items, context) {
   return registry;
 }
 
-/** Merge canon and project registries, erroring on any id collision between them. */
+/**
+ * Merge canon and project registries, erroring on any id collision between them.
+ *
+ * This stays a load-time ERROR while the cross-canon case became a reference-time one
+ * (§17.3), and the asymmetry is deliberate: there is exactly one project and its author owns
+ * both sides of the clash, so renaming the local item is the available fix. A canon id that
+ * *is* ambiguous holds no plain key, so a project item of that name simply takes it — an
+ * explicit local definition is a clear enough answer to "which magic did you mean".
+ */
 function mergeRegistries(canonRegistry, projectRegistry) {
-  const merged = new Map(canonRegistry);
+  const merged = new ItemRegistry(canonRegistry);
+  if (canonRegistry instanceof ItemRegistry) {
+    merged.qualified = new Map(canonRegistry.qualified);
+    merged.ambiguous = new Map(canonRegistry.ambiguous);
+    merged.sources = new Set(canonRegistry.sources);
+  }
   for (const [id, item] of projectRegistry) {
     if (merged.has(id)) {
       throw new Error(
@@ -167,8 +228,11 @@ function buildOverlays(items, options = {}) {
   const { diagnostics } = options;
   const overlays = new Map();
   for (const item of items) {
-    if (!item.import) continue;
-    const key = String(item.import).toLowerCase();
+    // A renamed import (§17.4) is a local item, not an override of the one it copies, so it
+    // is not an overlay. Without this it would be both, and its deltas would leak onto the
+    // canon original wherever a PE block imported that.
+    if (!item.import || item.id) continue;
+    const key = normalizeRef(item.import);
     if (overlays.has(key)) {
       const message = `duplicate Codex overlay for "${item.import}" in ${item._source}; keeping first`;
       if (diagnostics) diagnostics.warn(CODES.DUPLICATE_OVERLAY, message, { file: item._source });
@@ -180,10 +244,20 @@ function buildOverlays(items, options = {}) {
   return overlays;
 }
 
-/** Load every named canon directory into one registry, erroring on cross-canon duplicates. */
+/**
+ * Load every named canon directory into one registry (§17.2).
+ *
+ * A duplicate id *within* one set is still an error, raised by `buildRegistry` — one set
+ * owning an id twice is a mistake in that set, and no reference could disambiguate it.
+ * A duplicate *across* sets is not an error here: both copies are kept, reachable by their
+ * qualified names, and only an unqualified reference that cannot choose between them fails
+ * (§17.3, `resolveItemRef`).
+ */
 function buildCanonRegistry(resolvedCanon, options = {}) {
-  const registry = new Map();
+  const registry = new ItemRegistry();
   if (!resolvedCanon) return registry;
+
+  const claims = new Map(); // plain id → every canon set's copy of it
 
   for (const [name, canonPath] of resolvedCanon) {
     if (!fs.existsSync(canonPath)) {
@@ -192,16 +266,22 @@ function buildCanonRegistry(resolvedCanon, options = {}) {
       else console.warn(`  WARN: ${message}`);
       continue;
     }
+    registry.sources.add(String(name).toLowerCase());
+
     const items = loadItemsFromDir([canonPath], options);
     for (const [id, item] of buildRegistry(items, `canon:${name}`)) {
-      if (registry.has(id)) {
-        throw new Error(
-          `Duplicate item ID "${id}" across canon sources:\n  ${registry.get(id)._source}\n  ${item._source}`
-        );
-      }
-      registry.set(id, item);
+      const stamped = { ...item, _canonSource: name };
+      registry.qualified.set(`${String(name).toLowerCase()}:${id}`, stamped);
+      if (!claims.has(id)) claims.set(id, []);
+      claims.get(id).push(stamped);
     }
   }
+
+  for (const [id, rivals] of claims) {
+    if (rivals.length === 1) registry.set(id, rivals[0]);
+    else registry.ambiguous.set(id, rivals);
+  }
+
   return registry;
 }
 
@@ -220,7 +300,9 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
     if (def.include) {
       includeDefs.push(def);
     } else if (def.import) {
-      explicitIds.add(String(def.import).toLowerCase());
+      // A rename claims its local id and leaves the imported one free — an include may
+      // still supply `wyvern` alongside a project `dragon` that copies it (§17.4).
+      explicitIds.add(def.id ? String(def.id).toLowerCase() : splitRef(def.import).id);
     } else if (def.id || def.name) {
       explicitIds.add(((def.id || (typeof def.name === 'string' ? def.name : '')) || '').toLowerCase());
     }
@@ -291,6 +373,7 @@ function findConfigEntry(dir, basenames) {
 }
 
 module.exports = {
+  ItemRegistry,
   loadItemsFromDir,
   normalizeItemVarField,
   buildRegistry,

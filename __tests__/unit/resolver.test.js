@@ -8,6 +8,7 @@ const {
   resolveBranchSpec,
   deepClone,
 } = require('../../src/resolver');
+const { ItemRegistry } = require('../../src/loader/registry');
 
 describe('applyFieldOp', () => {
   test('replace: returns new value', () => {
@@ -587,6 +588,59 @@ describe('resolveItem', () => {
       };
       const item = resolveItem(itemDef, reg, ['Other']);
       expect(item.body.form).toBe('incorporeal');
+    });
+  });
+
+  describe('rename-on-import (§17.4)', () => {
+    const wyvern = {
+      id: 'wyvern',
+      name: 'Wyvern',
+      aid: { type: 'Creature', title: 'Wyvern' },
+      render: { template: 'Creature' },
+      body: { size: 'medium' },
+    };
+    const reg = new Map([['wyvern', wyvern]]);
+
+    test('resolves under the local id, with the canon body and overrides applied', () => {
+      const itemDef = { id: 'dragon', import: 'wyvern', v: { size: 'huge' } };
+      const item = resolveItem(itemDef, reg, []);
+      expect(item.id).toBe('dragon');
+      expect(item.body.size).toBe('medium');
+      expect(item.v.size).toBe('huge');
+    });
+
+    test('the name is still the canon item\'s name — only the id moves', () => {
+      const itemDef = { id: 'dragon', import: 'wyvern' };
+      const item = resolveItem(itemDef, reg, []);
+      expect(item.name.full).toBe('Wyvern');
+    });
+
+    test('a qualified import resolves against an ItemRegistry', () => {
+      const registry = new ItemRegistry();
+      registry.sources.add('bestiary');
+      registry.qualified.set('bestiary:wyvern', wyvern);
+      const itemDef = { id: 'dragon', import: 'bestiary:wyvern' };
+      const item = resolveItem(itemDef, registry, []);
+      expect(item.id).toBe('dragon');
+      expect(item.body.size).toBe('medium');
+    });
+
+    test('an ambiguous import throws with the qualified alternatives named', () => {
+      const registry = new ItemRegistry();
+      registry.sources.add('a');
+      registry.sources.add('b');
+      const rivalA = { id: 'magic', _canonSource: 'a', _source: 'a/magic.yaml' };
+      const rivalB = { id: 'magic', _canonSource: 'b', _source: 'b/magic.yaml' };
+      registry.qualified.set('a:magic', rivalA);
+      registry.qualified.set('b:magic', rivalB);
+      registry.ambiguous.set('magic', [rivalA, rivalB]);
+
+      const itemDef = { id: 'localmagic', import: 'magic' };
+      expect(() => resolveItem(itemDef, registry, [])).toThrow(/^Import failed:/);
+      let err;
+      try { resolveItem(itemDef, registry, []); } catch (e) { err = e; }
+      expect(err.message).toContain('a:magic');
+      expect(err.message).toContain('b:magic');
     });
   });
 });

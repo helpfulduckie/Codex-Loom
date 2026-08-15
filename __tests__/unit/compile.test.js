@@ -516,6 +516,30 @@ describe('resolveIncludes — duplicate file detection', () => {
     const result = resolveIncludes(itemDefs, new Map(), config);
     expect(result.map(c => c.id)).toContain('Aria');
   });
+
+  test('a renamed import (id + import) does not suppress an included item with the imported id (§17.4)', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: Wyvern\n  name: Wyvern\n', 'utf8');
+
+    const itemDefs = [
+      { id: 'Dragon', import: 'wyvern', _source: path.join(tmpDir, 'project.yaml') },
+      { include: shared, _source: path.join(tmpDir, 'project.yaml') },
+    ];
+    const result = resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir));
+    expect(result.map(c => c.id)).toEqual(['Wyvern']);
+  });
+
+  test('a renamed import DOES suppress an included item with the local id', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: Dragon\n  name: Dragon\n', 'utf8');
+
+    const itemDefs = [
+      { id: 'Dragon', import: 'wyvern', _source: path.join(tmpDir, 'project.yaml') },
+      { include: shared, _source: path.join(tmpDir, 'project.yaml') },
+    ];
+    const result = resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir));
+    expect(result).toEqual([]);
+  });
 });
 
 // ── token coverage: % in component specs + @ canon in specs ───────────────────

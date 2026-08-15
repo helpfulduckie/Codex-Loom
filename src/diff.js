@@ -5,6 +5,7 @@ const { consoleWarner } = require('./util');
 const fs   = require('fs');
 const path = require('path');
 const { resolveItem, resolveBranchSpec, collectVariantDeltas } = require('./resolver');
+const { resolveItemRef } = require('./model/refs');
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 
@@ -260,7 +261,7 @@ function pathExplained(changedPath, deltaPaths) {
  * attributions maps changedPath → array of explaining variant names (empty = unexplained).
  */
 function attributeChanges(itemDef, registry, branchVariantNames, changes) {
-  const canonItem = itemDef.import ? registry.get(String(itemDef.import).toLowerCase()) : null;
+  const canonItem = itemDef.import ? (resolveItemRef(registry, itemDef.import).item || null) : null;
 
   const variantKeyPaths = new Map(); // variantName -> Set<dotpath>
   for (const name of branchVariantNames) {

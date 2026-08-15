@@ -5,6 +5,7 @@ const path = require('path');
 const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, consoleWarner } = require('./util');
 const { resolveItem, resolveBranchSpec, mergeBranchSpecs, applyFieldsDelta, applyFieldOp } = require('./resolver');
 const { applyPronounPasses } = require('./model/pronouns');
+const { resolveItemRef, describeRefFailure, normalizeRef, splitRef } = require('./model/refs');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions, applyWrapper, resolveTemplateName } = require('./template');
 
 /**
@@ -143,15 +144,14 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
   }
 
   // ── Item import ───────────────────────────────────────────────────────────
-  const canonId = String(blockDef.import).toLowerCase();
-  const canonItem = registry.get(canonId);
-  if (!canonItem) {
-    console.error(`  ERR [PE]: no item with id "${blockDef.import}" found in registry`);
+  const found = resolveItemRef(registry, blockDef.import);
+  if (!found.item) {
+    console.error(`  ERR [PE]: ${describeRefFailure(found)}`);
     return null;
   }
+  const canonItem = found.item;
 
-  const overlayKey = String(blockDef.import).toLowerCase();
-  const overlay = overlays.get(overlayKey) || null;
+  const overlay = overlays.get(normalizeRef(blockDef.import)) || null;
 
   // Block-level and overlay-level branches compose with the canon item's own branches
   // tree (canon → overlay → block) rather than replacing it — a PE block's `branches:`
@@ -278,7 +278,7 @@ function renderPESection(sectionDef, registry, templates, partials, compileConte
     // suppresses exactly the story cards PE emitted (never more).
     if (emittedFullImportIds && childDef.import &&
         (childRenderOpts.style || 'full').toLowerCase() === 'full') {
-      emittedFullImportIds.add(String(childDef.import).toLowerCase());
+      emittedFullImportIds.add(splitRef(childDef.import).id);
     }
 
     childSegments.push({ body: result.body, position: childPosition });
@@ -361,11 +361,11 @@ function collectPESegments(peBlocks, registry, templates, partials, compileConte
 
     // Record full-style imports that actually rendered (see emittedFullImportIds).
     if (emittedFullImportIds && blockDef.import && style === 'full') {
-      emittedFullImportIds.add(String(blockDef.import).toLowerCase());
+      emittedFullImportIds.add(splitRef(blockDef.import).id);
     }
 
     const key = blockDef.import
-      ? `import:${String(blockDef.import).toLowerCase()}`
+      ? `import:${normalizeRef(blockDef.import)}`
       : `inline:${blockDef.id || index}`;
     segments.push({ text: applyWrapper(result.body, result.wrapper), position, key });
   });

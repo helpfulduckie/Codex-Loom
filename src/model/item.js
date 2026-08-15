@@ -15,6 +15,7 @@
 const { deepClone, findKey } = require('../util');
 const { applyFieldOp, applyFieldsDelta, applyDelta } = require('./fieldops');
 const { resolveBranchSpec } = require('./branches');
+const { resolveItemRef, describeRefFailure } = require('./refs');
 
 const CODES = Object.freeze({
   VARIANT_NOT_FOUND: 'CL0321',
@@ -107,11 +108,11 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
 
   if (itemDef.import) {
     // ── Import ──────────────────────────────────────────────────────────────
-    const canonId = String(itemDef.import).toLowerCase();
-    const canonItem = registry.get(canonId);
-    if (!canonItem) {
-      throw new Error(`Import failed: no item with id "${itemDef.import}" found in registry`);
+    const found = resolveItemRef(registry, itemDef.import);
+    if (!found.item) {
+      throw new Error(`Import failed: ${describeRefFailure(found)}`);
     }
+    const canonItem = found.item;
 
     item = deepClone(stripMeta(canonItem));
     sourceCardForVariants = canonItem;
@@ -136,6 +137,11 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
         if (newVal === '__DELETE__') delete item[key]; else item[key] = newVal;
       }
     }
+
+    // Rename-on-import (§17.4). Only the id moves — `name:` is left alone deliberately, so
+    // a rename that should also change the display name says so rather than having one
+    // inferred from an id that may be a slug.
+    if (itemDef.id) item.id = itemDef.id;
 
     // Resolve branch spec → variant names to apply
     const branchVariantNames = resolveBranchSpec(itemDef.branches, branchPath);

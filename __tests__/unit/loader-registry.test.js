@@ -7,7 +7,7 @@ const { Diagnostics } = require('../../src/diag');
 const { CODES: SCHEMA_CODES } = require('../../src/schema');
 const {
   loadItemsFromDir, buildRegistry, mergeRegistries, buildOverlays,
-  buildCanonRegistry, findConfigEntry, CODES,
+  buildCanonRegistry, resolveIncludes, findConfigEntry, CODES,
 } = require('../../src/loader/registry');
 const { YAML_SUFFIXES, CONFIG_BASENAMES } = require('../../src/util');
 
@@ -95,6 +95,18 @@ describe('item loading', () => {
     const { items, codes } = loadWithDiagnostics();
     expect(items[0].v).toEqual({ k: 1, j: 2 });
     expect(codes).toContain(CODES.MULTIPLE_VAR_ALIASES);
+  });
+
+  test('an id containing ":" reports CL0144 on the diagnostics bus (§17.2)', () => {
+    write('a.cl.yaml', 'id: "grim:magic"\n');
+    const { diagnostics, codes } = loadWithDiagnostics();
+    expect(codes).toContain(CODES.ID_CONTAINS_COLON);
+    expect(diagnostics.errors.some((d) => d.code === CODES.ID_CONTAINS_COLON)).toBe(true);
+  });
+
+  test('an id containing ":" throws when no diagnostics bus is supplied', () => {
+    write('a.cl.yaml', 'id: "grim:magic"\n');
+    expect(() => loadItemsFromDir([tmpDir])).toThrow(/contains ":"/);
   });
 });
 
@@ -186,6 +198,26 @@ describe('registries', () => {
       .toThrow(/one\.yaml[\s\S]*two\.yaml/);
   });
 
+  test('rename-on-import (id + import) registers under the local id (§17.4)', () => {
+    const items = [{ id: 'Dragon', import: 'wyvern', _source: 'a.yaml' }];
+    const registry = buildRegistry(items, 'p');
+    expect([...registry.keys()]).toEqual(['dragon']);
+    expect(registry.get('dragon').import).toBe('wyvern');
+  });
+
+  test('a bare import (no id) is still skipped', () => {
+    const items = [{ import: 'wyvern', _source: 'a.yaml' }];
+    expect(buildRegistry(items, 'p').size).toBe(0);
+  });
+
+  test('two renamed imports claiming the same local id throw the existing duplicate error', () => {
+    const items = [
+      { id: 'Dragon', import: 'wyvern', _source: 'one.yaml' },
+      { id: 'Dragon', import: 'drake', _source: 'two.yaml' },
+    ];
+    expect(() => buildRegistry(items, 'proj')).toThrow(/Duplicate item ID "dragon"/);
+  });
+
   test('mergeRegistries unions canon and project', () => {
     const merged = mergeRegistries(buildRegistry([item('A')], 'c'), buildRegistry([item('B')], 'p'));
     expect([...merged.keys()].sort()).toEqual(['a', 'b']);
@@ -216,6 +248,19 @@ describe('overlays', () => {
     expect(overlays.get('a')._source).toBe('one');
     expect(diagnostics.warnings[0].code).toBe(CODES.DUPLICATE_OVERLAY);
   });
+
+  test('a renamed import (id + import) is not collected as an overlay (§17.4)', () => {
+    const overlays = buildOverlays([{ id: 'Dragon', import: 'wyvern', _source: 'a' }]);
+    expect(overlays.size).toBe(0);
+  });
+
+  test('a bare import alongside a renamed one still captures the bare one', () => {
+    const overlays = buildOverlays([
+      { id: 'Dragon', import: 'wyvern', _source: 'a' },
+      { import: 'wyvern', _source: 'b' },
+    ]);
+    expect(overlays.get('wyvern')._source).toBe('b');
+  });
 });
 
 describe('canon registry', () => {
@@ -226,11 +271,17 @@ describe('canon registry', () => {
     expect([...buildCanonRegistry(map).keys()].sort()).toEqual(['a', 'b']);
   });
 
-  test('a duplicate id across canon sources throws', () => {
+  test('a duplicate id across canon sources loads both, unqualified and unreachable (§17.3)', () => {
     write('canonA/a.cl.yaml', 'id: Dup\n');
     write('canonB/b.cl.yaml', 'id: Dup\n');
     const map = new Map([['a', path.join(tmpDir, 'canonA')], ['b', path.join(tmpDir, 'canonB')]]);
-    expect(() => buildCanonRegistry(map)).toThrow('across canon sources');
+    const registry = buildCanonRegistry(map);
+
+    expect(registry.has('dup')).toBe(false);
+    expect(registry.ambiguous.get('dup')).toHaveLength(2);
+    expect(registry.qualified.get('a:dup')).toBeTruthy();
+    expect(registry.qualified.get('b:dup')).toBeTruthy();
+    expect(registry.itemCount).toBe(2);
   });
 
   test('a missing canon directory warns and continues', () => {

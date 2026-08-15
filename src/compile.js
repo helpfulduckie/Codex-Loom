@@ -573,8 +573,10 @@ function compile(configPath, options = {}) {
 
   // Build canon registry
   const canonRegistry = buildCanonRegistry(config._resolvedCanon, { diagnostics: loadDiagnostics });
-  if (canonRegistry.size > 0) {
-    console.log(`Loaded ${canonRegistry.size} canonical item(s).`);
+  // itemCount, not size: an id two canon sets both define holds no plain key (§17.3), and
+  // "loaded 40 items" would otherwise quietly drop the very items worth mentioning.
+  if (canonRegistry.itemCount > 0) {
+    console.log(`Loaded ${canonRegistry.itemCount} canonical item(s).`);
   }
 
   // Load project items
