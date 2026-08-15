@@ -146,8 +146,26 @@ describe('module purity', () => {
 });
 
 describe('CODES', () => {
-  test('loading codes sit in the CL01xx band', () => {
-    for (const code of Object.values(CODES)) expect(code).toMatch(/^CL01\d\d$/);
+  /**
+   * The bands diag.js declares in its header, restated as data. Listing every code here
+   * means adding one to the wrong band fails, and adding one to no band fails too — the
+   * bands exist so documented codes never have to move, which only holds if they are
+   * checked rather than intended.
+   */
+  const BANDS = {
+    CL01: ['YAML_PARSE_FAILED', 'YAML_FILE_UNREADABLE', 'YAML_EMPTY_FILE',
+      'YAML_NULL_DOCUMENT', 'TOKEN_SWALLOWED_BY_YAML'],
+    CL07: ['TRIGGER_CONTAINS_COMMA', 'TRIGGER_EMPTY'],
+  };
+
+  test('every code sits in the band its area declares', () => {
+    for (const [band, names] of Object.entries(BANDS)) {
+      for (const name of names) expect(CODES[name]).toMatch(new RegExp(`^${band}\\d\\d$`));
+    }
+  });
+
+  test('every declared code is assigned to a band', () => {
+    expect(Object.keys(CODES).sort()).toEqual(Object.values(BANDS).flat().sort());
   });
 
   test('codes are unique', () => {

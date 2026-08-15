@@ -43,6 +43,11 @@ const CODES = Object.freeze({
   YAML_EMPTY_FILE: 'CL0103',
   YAML_NULL_DOCUMENT: 'CL0104',
   TOKEN_SWALLOWED_BY_YAML: 'CL0105',
+
+  // Emit (§8). Both are facts about what Velvet Lattice can carry to AID, not opinions
+  // about content — which is why they live in the compiler rather than in lint (§12.5).
+  TRIGGER_CONTAINS_COMMA: 'CL0701',
+  TRIGGER_EMPTY: 'CL0702',
 });
 
 /**
