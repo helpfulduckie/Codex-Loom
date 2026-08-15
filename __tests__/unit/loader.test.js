@@ -330,12 +330,12 @@ describe('loadCompileConfig', () => {
     // Renamed from `overview:` — the directory now holds diff, seed map, overview, item
     // sizes, leaf review and inventory, so the old name described one of its contents.
     const cfgPath = writeConfig('structure:\n  output: ./out\n  reports: ./reviews\n');
-    expect(loadCompileConfig(cfgPath)._resolvedOverview).toBe(path.resolve(tmpDir, 'reviews'));
+    expect(loadCompileConfig(cfgPath)._resolvedReports).toBe(path.resolve(tmpDir, 'reviews'));
   });
 
-  test('_resolvedOverview is null when structure.overview is not specified', () => {
+  test('_resolvedReports is null when structure.reports is not specified', () => {
     const cfgPath = writeConfig('structure:\n  output: ./out\n');
-    expect(loadCompileConfig(cfgPath)._resolvedOverview).toBeNull();
+    expect(loadCompileConfig(cfgPath)._resolvedReports).toBeNull();
   });
 
   test('resolves items sequence to absolute paths', () => {

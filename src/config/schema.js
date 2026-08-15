@@ -10,10 +10,15 @@
  * every phase, and an author who writes ahead of the tool gets told so plainly.
  *
  * The v3 spellings this file carried through Phase 1 — `cards`, `overview`,
- * `structure.input.components`, `protagonist`, `openingChoice`, `components.scripts` —
- * are gone as of the config break (§14.1). There is no compatibility mode: `version: 4`
- * is required, and its absence is what tells a v3 project to run `--migrate` rather than
- * producing a cascade of unknown-key errors.
+ * `structure.input.components`, `openingChoice`, `components.scripts` — are gone as of
+ * the config break (§14.1). There is no compatibility mode: `version: 4` is required, and
+ * its absence is what tells a v3 project to run `--migrate` rather than producing a
+ * cascade of unknown-key errors.
+ *
+ * `protagonist` is the one exception, and deliberately not gone yet — see the comments
+ * on the `protagonist:` keys below. It becomes `roles.protagonist` in Phase 8, once
+ * `roles:` is an implemented feature rather than a declared-but-inert key; migrating the
+ * spelling before then would leave every branch without a protagonist.
  */
 
 const { TYPES } = require('../schema');

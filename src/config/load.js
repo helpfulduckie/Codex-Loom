@@ -252,14 +252,6 @@ function loadCompileConfig(configPath, options = {}) {
 
   const at = (...parts) => (sourceMap ? sourceMap.nearest(parts) : {});
 
-  const resolvedOutput = structure.output
-    ? path.resolve(base, String(structure.output))
-    : path.resolve(base, 'output');
-
-  const resolvedReports = structure.reports
-    ? path.resolve(base, String(structure.reports))
-    : null;
-
   const canonRaw = (input.canon && typeof input.canon === 'object' && !Array.isArray(input.canon))
     ? input.canon
     : {};
@@ -287,6 +279,24 @@ function loadCompileConfig(configPath, options = {}) {
     }
     variables[name] = String(canonRaw[name]);
   }
+
+  // §5.1 / §6: every string value in compile.cl.yaml passes through the same expander.
+  // v3 sent `structure.output` and `structure.reports` straight to `path.resolve` with no
+  // expansion, which was an inconsistency rather than a scoping rule — nothing about the
+  // author's intent differs between a structure.* path that happens to contain a token
+  // and one that does not (§6.1 audit). Both resolve against root variables, like the
+  // rest of `structure:`, since they are read before branches are enumerated.
+  const resolvedOutput = path.resolve(base, expandPathTokens(
+    String(structure.output || 'output'), variables, diagnostics,
+    at('structure', 'output'), variableNames.branchOnly
+  ));
+
+  const resolvedReports = structure.reports
+    ? path.resolve(base, expandPathTokens(
+        String(structure.reports), variables, diagnostics,
+        at('structure', 'reports'), variableNames.branchOnly
+      ))
+    : null;
 
   // Canon entries may reference variables, including other canon names, so they resolve
   // through the same expander as everything else rather than a bespoke two-pass.
@@ -333,7 +343,7 @@ function loadCompileConfig(configPath, options = {}) {
   return {
     _base: base,
     _resolvedOutput: resolvedOutput,
-    _resolvedOverview: resolvedReports,
+    _resolvedReports: resolvedReports,
     _resolvedItems: resolvedItems,
     _resolvedCanon: resolvedCanon,
     _resolvedTemplates: resolvedTemplates,

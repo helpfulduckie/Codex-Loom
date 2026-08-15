@@ -530,15 +530,22 @@ function writeLabelsRecursive(branches, outputBase, variables, verbose = false) 
 }
 
 /**
- * Print what the loading phase collected, and abort if any of it is an error.
+ * Print what the loading phase has collected since `since`, and abort if any of it —
+ * checked across the whole bus, not just what's new — is an error.
  *
  * Errors stop the compile before anything is written. A schema violation means some part
  * of what the author wrote is not being read, so continuing would emit a tree that looks
  * complete and is quietly missing something — the exact failure mode §4.3 exists to end.
+ *
+ * Takes a cursor and returns the new one so a caller can check more than once — config
+ * loading and item/canon loading each add to the same bus, and a config-level error must
+ * stop the compile before item loading ever touches disk, not only once both have run.
+ * Without the cursor, calling this twice would reprint whatever the first call already
+ * printed.
  */
-function reportLoadDiagnostics(diagnostics) {
-  if (diagnostics.isEmpty()) return;
-  for (const diag of diagnostics.all) {
+function reportLoadDiagnostics(diagnostics, since = 0) {
+  const items = diagnostics.all;
+  for (const diag of items.slice(since)) {
     if (diag.severity === 'error') console.error(diag.format());
     else console.warn(diag.format());
   }
@@ -546,6 +553,7 @@ function reportLoadDiagnostics(diagnostics) {
     const count = diagnostics.errors.length;
     throw new Error(`${count} error${count === 1 ? '' : 's'} while loading; nothing was compiled.`);
   }
+  return items.length;
 }
 
 // ── Main compile function ─────────────────────────────────────────────────────
@@ -560,6 +568,13 @@ function compile(configPath, options = {}) {
   const loadDiagnostics = new Diagnostics();
 
   const config = loadCompileConfig(configPath, { diagnostics: loadDiagnostics });
+
+  // Checked immediately, before any filesystem work — an unknown key, a missing required
+  // field, or a bad path token in compile.yaml itself must stop the compile before
+  // mkdirSync ever runs, not merely before the compiled tree is written. Folding this into
+  // the single check below meant a config error still created the output directory and
+  // read canon/item files from disk before the throw was reached.
+  let loadCursor = reportLoadDiagnostics(loadDiagnostics);
 
   fs.mkdirSync(config._resolvedOutput, { recursive: true });
 
@@ -581,7 +596,7 @@ function compile(configPath, options = {}) {
     console.log(`Loaded ${includedItems.length} included canonical item(s).`);
   }
 
-  reportLoadDiagnostics(loadDiagnostics);
+  loadCursor = reportLoadDiagnostics(loadDiagnostics, loadCursor);
 
   const allCardDefs = [...rawProjectItems, ...includedItems];
 
@@ -847,7 +862,7 @@ function compile(configPath, options = {}) {
 
   // Cross-branch review reports — emitted from the per-leaf data captured above.
   if (captureReports && leafData.length > 0) {
-    const reportBase = config._resolvedOverview || path.join(config._resolvedOutput, 'Overview');
+    const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
     const { runDiffMode, runAnnotateMode } = require('./diff');
     const reportSummary = [];
     if (options.diff) {
@@ -933,7 +948,7 @@ function resolveArgs(positional) {
     return {
       configPath:   cfgPath,
       scenarioRoot: cfg._resolvedOutput,
-      outputDir:    cfg._resolvedOverview || path.join(cfg._resolvedOutput, 'Overview'),
+      outputDir:    cfg._resolvedReports || path.join(cfg._resolvedOutput, 'Overview'),
       hasConfig:    true,
     };
   }

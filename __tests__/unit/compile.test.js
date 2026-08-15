@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const {
+  compile,
   getTemplate, validateCardType, writeOpening, resolveOpeningContent, resolveBranchFolderPath,
   buildBranchOutputDir, buildCompileContext, writeOutput, writeOpeningsRecursive,
   resolveIncludes,
@@ -635,5 +636,39 @@ describe('validateCardType', () => {
 
   test('error names the offending type and the item', () => {
     expect(() => validateCardType(item('a/b'))).toThrow(/"a\/b".*"X"/);
+  });
+});
+
+// ── config-loading errors abort before any filesystem work ────────────────────
+//
+// A schema violation in compile.yaml itself — here, a missing required structure.output —
+// must stop the compile before mkdirSync, template loading, or item/canon loading ever
+// run. It used to be checked only after all of that had already happened, so the output
+// directory was created (into the wrong, defaulted location) before the throw arrived.
+
+describe('config errors abort before filesystem work', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-abort-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('a missing structure.output throws and never creates an output directory', () => {
+    const configPath = path.join(tmpDir, 'compile.yaml');
+    fs.writeFileSync(configPath, 'version: 4\nstructure:\n  input:\n    items: [./Codex]\n', 'utf8');
+
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => compile(configPath)).toThrow(/error/i);
+    } finally {
+      errorSpy.mockRestore();
+    }
+
+    // The fallback default the config loader computes when output: is absent.
+    expect(fs.existsSync(path.join(tmpDir, 'output'))).toBe(false);
   });
 });

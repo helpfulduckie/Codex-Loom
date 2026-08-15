@@ -212,6 +212,32 @@ describe('resolution behavior carried forward', () => {
     const { config } = load('structure:\n  input:\n    canon:\n      main: ./canon\n', { dirs: ['canon'] });
     expect(config._resolvedCanon.get('main')).toBe(path.join(tmpDir, 'canon'));
   });
+
+  // §5.1 / §6.1: every string value in compile.cl.yaml passes through the same expander.
+  // v3 sent structure.output and structure.reports straight to path.resolve with no
+  // expansion — an inconsistency the spec calls out by name, not a scoping rule.
+  test('{%variables} expand inside structure.output', () => {
+    const { config } = load('variables:\n  root: out\nstructure:\n  output: "./{%root}"\n');
+    expect(config._resolvedOutput).toBe(path.join(tmpDir, 'out'));
+  });
+
+  test('{%variables} expand inside structure.reports', () => {
+    const { config } = load('variables:\n  root: reviews\nstructure:\n  output: ./out\n  reports: "./{%root}"\n');
+    expect(config._resolvedReports).toBe(path.join(tmpDir, 'reviews'));
+  });
+
+  test('canon names are available to structure.output, since canon auto-exposes as variables', () => {
+    const { config } = load(
+      'structure:\n  input:\n    canon:\n      main: ./canon\n  output: "{%main}/out"\n',
+      { dirs: ['canon'] }
+    );
+    expect(config._resolvedOutput).toBe(path.join(tmpDir, 'canon', 'out'));
+  });
+
+  test('an undeclared {%variable} in structure.output is an ERROR, like every other structure.* path', () => {
+    const { codes } = load('structure:\n  output: "./{%typo}"\n');
+    expect(codes).toContain(CODES.VARIABLE_UNDECLARED);
+  });
 });
 
 describe('malformed configuration', () => {
