@@ -1,6 +1,6 @@
 'use strict';
 
-const { normalizeVarKey, resolveVariables, walkItemTextFields } = require('./util');
+const { normalizeVarKey, resolveVariables, walkItemTextFields, itemContext } = require('./util');
 
 /**
  * Template engine for Codex Loom v3.
@@ -370,15 +370,7 @@ function normalizeWhitespace(str) {
  * {$aid.X}, {$render.X}, {$name.X}) within field values.
  */
 function applyFieldInterpolation(card) {
-  const context = {
-    body: card.body,
-    name: card.name,
-    pronouns: card.pronouns,
-    aid: card.aid || {},
-    render: card.render || {},
-    id: card.id,
-    v: card.v || {},
-  };
+  const context = itemContext(card);
 
   walkItemTextFields(card, s => processFieldInterpolation(s, context));
 }
@@ -410,15 +402,7 @@ function processFieldInterpolation(value, context) {
 function applyFieldRenderFunctions(card, cardMap) {
   if (!card.body) return;
 
-  const context = {
-    id:       card.id,
-    name:     card.name,
-    pronouns: card.pronouns,
-    aid:      card.aid    || {},
-    render:   card.render || {},
-    body:     card.body,
-  };
-  if (cardMap) context.cardMap = cardMap;
+  const context = itemContext(card, cardMap ? { cardMap } : undefined);
 
   applyRenderFunctionsRecursive(card.body, context);
 }
@@ -517,12 +501,12 @@ function resolveTemplateName(templateName, style) {
  *
  * Pipeline:
  *   0. Resolve {%variable} tokens (compile-time variables)
- *   1. Escape {{ }} [[ ]] → sentinels
+ *   1. Escape {{ }} → sentinels
  *   2. Expand {include ...} partials
  *   3. processConditionals
  *   4. processWrapperBlocks
  *   5. processInline
- *   6. Restore sentinels → literal { } [ ]
+ *   6. Restore sentinels → literal { }
  *   7. normalizeWhitespace
  *
  * @param {string} template

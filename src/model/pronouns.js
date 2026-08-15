@@ -268,12 +268,15 @@ function applyTokenPass(str, opts) {
  * @param {object[]} resolvedItems - all items compiled for this branch
  * @param {Map} registry - full item registry (for fallback to canonical base)
  */
-function applyCrossItemRefs(resolvedItems, registry, onWarn) {
-  // Build a quick lookup by id for the resolved items
-  const resolvedById = new Map();
-  for (const item of resolvedItems) {
-    const id = (item.id || '').toLowerCase();
-    if (id) resolvedById.set(id, item);
+function applyCrossItemRefs(resolvedItems, registry, onWarn, resolvedById) {
+  // Callers that already have an id→item map (the compiler does) pass it in; standalone
+  // callers get one built here.
+  if (!resolvedById) {
+    resolvedById = new Map();
+    for (const item of resolvedItems) {
+      const id = (item.id || '').toLowerCase();
+      if (id) resolvedById.set(id, item);
+    }
   }
 
   const CROSS_RE = /\{\$([A-Za-z][A-Za-z0-9_-]*)\.body\.([^}]+)\}/g;

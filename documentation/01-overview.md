@@ -59,6 +59,8 @@ codex-loom -C -l -o path/to/project/
 
 **Mode flags** — `-C`/`--compile`, `-l`/`--leafReview`, `-o`/`--overview`, `-s`/`--seed-map`, `-b`/`--card-sizes`, `-L`/`--lint` — control what runs. Any combination is valid:
 
+**Compile options** — `-d`/`--with-diff`, `-a`/`--with-annotate`, `-c`/`--clean`, `-v`/`--verbose` — modify a compile rather than selecting one. `--with-diff` and `--with-annotate` emit cross-branch review reports from data that only exists in memory during compilation, so either one forces a compile. (`--diff` and `--annotate` are still accepted as aliases.)
+
 | Flags | What happens |
 |---|---|
 | *(none)* | Compile only (default) |

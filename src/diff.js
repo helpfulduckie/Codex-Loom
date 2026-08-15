@@ -29,7 +29,7 @@ const COMPONENT_FAMILIES = [
 ];
 
 // ════════════════════════════════════════════════════════════════════════════
-//  --diff : Shared.md + per-leaf *.delta.md  (rendered-block level, no annotation)
+//  --with-diff : Shared.md + per-leaf *.delta.md  (rendered-block level, no annotation)
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
@@ -173,7 +173,7 @@ function runDiffMode(leafData, outputDir) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  --annotate : per-leaf *.annotate.md  (field-level diff vs project base + provenance)
+//  --with-annotate : per-leaf *.annotate.md  (field-level diff vs project base + provenance)
 // ════════════════════════════════════════════════════════════════════════════
 
 const DIFF_ROOTS = ['name', 'pronouns', 'aid', 'body'];
@@ -294,14 +294,13 @@ function safeResolve(itemDef, registry, branchPath) {
  * are reported explicitly. Items identical to their project base with no variants applied
  * are omitted (they belong in Shared.md, not the drill-down).
  */
-function buildLeafAnnotation(leaf, allCardDefs, registry) {
+function buildLeafAnnotation(leaf, allItemDefs, registry) {
   const { label, branchPath } = leaf;
   const sections = [`# Annotations: ${label}`,
     '_Field-level differences from each item\'s project base (no branch dispatch). ' +
     'Each delta is tagged with the variant that produced it, or `unexplained`._'];
 
-  for (const itemDef of allCardDefs) {
-    if (itemDef.include) continue;
+  for (const itemDef of allItemDefs) {
     const itemId = itemDef.id || itemDef.import;
     if (!itemId) continue;
 
@@ -346,10 +345,10 @@ function buildLeafAnnotation(leaf, allCardDefs, registry) {
 }
 
 /** Emit one <leaf>.annotate.md per leaf. Returns written paths. */
-function runAnnotateMode(leafData, allCardDefs, registry, outputDir) {
+function runAnnotateMode(leafData, allItemDefs, registry, outputDir) {
   const written = [];
   for (const leaf of leafData) {
-    const doc = buildLeafAnnotation(leaf, allCardDefs, registry);
+    const doc = buildLeafAnnotation(leaf, allItemDefs, registry);
     const filename = sanitizeFilename(leaf.fileBase) + '.annotate.md';
     const outPath = path.join(outputDir, filename);
     fs.writeFileSync(outPath, doc + '\n', 'utf8');

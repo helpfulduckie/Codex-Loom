@@ -12,7 +12,7 @@ const {
 } = require('./resolver');
 const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
-const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, consoleWarner } = require('./util');
+const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, consoleWarner, itemContext } = require('./util');
 const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
 const { Diagnostics } = require('./diag');
@@ -264,12 +264,10 @@ function buildCanonManifest(config) {
  * Phase A: resolve + field interpolation
  * Phase B (caller): cross-item refs + pronouns + render
  */
-function compileBranchPhaseA(allCardDefs, registry, branchPath, variables) {
+function resolveBranchItems(allItemDefs, registry, branchPath, variables) {
   const resolvedItems = [];
 
-  for (const itemDef of allCardDefs) {
-    if (itemDef.include) continue; // include directives already expanded
-
+  for (const itemDef of allItemDefs) {
     let item;
     try {
       item = resolveItem(itemDef, registry, branchPath, consoleWarner);
@@ -293,7 +291,7 @@ function compileBranchPhaseA(allCardDefs, registry, branchPath, variables) {
 /**
  * Phase B: apply cross-item refs, pronouns, render, and write output.
  */
-function compileBranchPhaseB(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}, verbose = false, renderedById = null) {
+function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}, verbose = false, renderedById = null) {
   // Build early so render functions can resolve cross-item refs during field expansion.
   const resolvedById = new Map();
   for (const item of resolvedItems) {
@@ -301,7 +299,7 @@ function compileBranchPhaseB(resolvedItems, registry, templates, partials, outpu
     if (id) resolvedById.set(id, item);
   }
 
-  applyCrossItemRefs(resolvedItems, registry, consoleWarner);
+  applyCrossItemRefs(resolvedItems, registry, consoleWarner, resolvedById);
 
   // Expand render functions in body field values now that cross-item refs are resolved.
   // Multi-pass: repeat until no body fields change, to handle order-dependent chains
@@ -347,15 +345,7 @@ function compileBranchPhaseB(resolvedItems, registry, templates, partials, outpu
     }
 
     // Build render context: top-level item fields + body for {$body.X} access
-    const context = {
-      id:       item.id,
-      name:     item.name,
-      pronouns: item.pronouns,
-      aid:      item.aid || {},
-      render:   item.render || {},
-      body:     item.body || {},
-      v:        item.v || {},
-    };
+    const context = itemContext(item);
 
     let rendered;
     try {
@@ -598,12 +588,17 @@ function compile(configPath, options = {}) {
 
   loadCursor = reportLoadDiagnostics(loadDiagnostics, loadCursor);
 
-  const allCardDefs = [...rawProjectItems, ...includedItems];
+  // include: directives are spent once resolveIncludes has read them — drop them here so
+  // nothing downstream has to know they ever existed. `import:` defs are NOT dropped:
+  // they are real items awaiting resolution against the id they name.
+  const projectItems = rawProjectItems.filter((d) => !d.include);
 
-  const projectRegistry = buildRegistry(rawProjectItems, 'project');
+  const allItemDefs = [...projectItems, ...includedItems];
+
+  const projectRegistry = buildRegistry(projectItems, 'project');
   console.log(`Loaded ${projectRegistry.size} project item definition(s).`);
 
-  const overlays = buildOverlays(rawProjectItems, { diagnostics: loadDiagnostics });
+  const overlays = buildOverlays(projectItems, { diagnostics: loadDiagnostics });
   if (overlays.size > 0) {
     console.log(`Loaded ${overlays.size} Codex overlay(s).`);
   }
@@ -684,7 +679,7 @@ function compile(configPath, options = {}) {
     }
 
     // Phase A: resolve all story cards
-    const resolvedItems = compileBranchPhaseA(allCardDefs, registry, branchPath, ctx.variables);
+    const resolvedItems = resolveBranchItems(allItemDefs, registry, branchPath, ctx.variables);
 
     // Accumulate unique item IDs and per-leaf stats for summary
     for (const item of resolvedItems) {
@@ -695,7 +690,7 @@ function compile(configPath, options = {}) {
 
     // Phase B: cross-item refs + pronouns + render + write
     const renderedById = captureReports ? new Map() : null;
-    const written = compileBranchPhaseB(
+    const written = renderBranchItems(
       resolvedItems, registry, templates, partials, outputDir, branchProtagonist, peSuppressedIds, ctx.variables, verbose, renderedById
     );
     totalFiles += written.length;
@@ -874,7 +869,7 @@ function compile(configPath, options = {}) {
     if (options.annotate) {
       const annotateDir = path.join(reportBase, 'annotate');
       fs.mkdirSync(annotateDir, { recursive: true });
-      const w = runAnnotateMode(leafData, allCardDefs, registry, annotateDir);
+      const w = runAnnotateMode(leafData, allItemDefs, registry, annotateDir);
       reportSummary.push(`${w.length} annotation file(s)`);
     }
     if (reportSummary.length > 0) {
@@ -906,8 +901,8 @@ function writeOpening(outputDir, content) {
 
 module.exports = {
   compile,
-  compileBranchPhaseA,
-  compileBranchPhaseB,
+  resolveBranchItems,
+  renderBranchItems,
   getTemplate,
   validateCardType,
   writeOutput,
@@ -977,8 +972,8 @@ if (require.main === module) {
     ['seedMap',    ['--seed-map',   '-s']],
     ['cardSizes',  ['--card-sizes', '-b']],
     ['lint',       ['--lint',       '-L']],
-    ['diff',       ['--diff',       '-d']],
-    ['annotate',   ['--annotate',   '-a']],
+    ['diff',       ['--with-diff',     '--diff',     '-d']],
+    ['annotate',   ['--with-annotate', '--annotate', '-a']],
     ['clean',      ['--clean',      '-c']],
     ['verbose',    ['--verbose',    '-v']],
   ];
@@ -993,7 +988,7 @@ if (require.main === module) {
 
   const positional = rawArgs.filter((_, i) => !flagIdxs.has(i));
 
-  // --diff / --annotate need data captured during compilation (the on-disk markdown is
+  // --with-diff / --with-annotate need data captured during compilation (the on-disk markdown is
   // lossy), so they are compile *options* — they force a compile rather than reading the
   // output dir like the post-hoc report modes (--leafReview/--overview/--seed-map/--card-sizes).
   const doCompile    = flags.compile || flags.diff || flags.annotate ||
@@ -1007,7 +1002,10 @@ if (require.main === module) {
   if (positional.length === 0 && !flags.compile && !flags.diff && !flags.annotate &&
       !flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint) {
     console.error(
-      'Usage: codex-loom [--compile|-C] [--diff|-d] [--annotate|-a] [--clean|-c] [--verbose|-v] [--leafReview|-l] [--overview|-o] [--seed-map|-s] [--card-sizes|-b] [--lint|-L] [<folder | compile.yaml>]'
+      'Usage: codex-loom [mode flags] [compile options] [<folder | compile.yaml>]\n' +
+      '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --card-sizes|-b  --lint|-L\n' +
+      '  Compile options:       --with-diff|-d  --with-annotate|-a  --clean|-c  --verbose|-v\n' +
+      '  No mode flag compiles. Report modes read the existing output tree; compile options force a compile.'
     );
     process.exit(1);
   }

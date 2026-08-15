@@ -162,6 +162,27 @@ function walkItemTextFields(item, transform) {
   }
 }
 
+/**
+ * The render context for an item: its top-level fields, with the open namespaces
+ * defaulted to {} so field lookups never hit undefined. `extra` merges in per-caller
+ * additions (e.g. cardMap for cross-item render functions).
+ *
+ * `body`/`aid`/`render`/`v` keep object identity when present — callers that mutate
+ * item.body through the context depend on that.
+ */
+function itemContext(item, extra) {
+  return {
+    id:       item.id,
+    name:     item.name,
+    pronouns: item.pronouns,
+    aid:      item.aid    || {},
+    render:   item.render || {},
+    body:     item.body   || {},
+    v:        item.v      || {},
+    ...extra,
+  };
+}
+
 function walkTextRecursive(obj, transform) {
   if (!obj || typeof obj !== 'object') return;
   for (const key of Object.keys(obj)) {
@@ -290,7 +311,7 @@ function warnMechanicalArtifacts(text, label) {
 module.exports = {
   findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
   YAML_SUFFIXES, CONFIG_BASENAMES, hasSuffix, consoleWarner,
-  resolveVariables, warnUnexpandedVariables, walkItemTextFields, warnUnresolvedFieldTokens,
+  resolveVariables, warnUnexpandedVariables, walkItemTextFields, itemContext, warnUnresolvedFieldTokens,
   warnMechanicalArtifacts, maskFencedRegions,
   FIELD_TOKEN_RE, VAR_TOKEN_RE, TEMPLATE_FN_RE, TEMPLATE_TAG_RE, VERB_MARKER_RE, SUSPECT_VERB_MARKER_RE, JS_ARTIFACT_RE, JS_WORD_RE,
 };

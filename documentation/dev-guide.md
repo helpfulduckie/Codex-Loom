@@ -17,7 +17,7 @@ This document describes the internal architecture of Codex Loom v3 for maintaine
 | `src/ain.js` | AI Instructions compilation, branch dispatch, document variants |
 | `src/an.js` | Author's Note compilation (thin wrapper over `ain.js` logic) |
 | `src/overview.js` | Leaf-review and whole-tree overview file generation |
-| `src/diff.js` | Cross-branch `--diff` (Shared/delta) and `--annotate` report generation |
+| `src/diff.js` | Cross-branch `--with-diff` (Shared/delta) and `--with-annotate` report generation |
 | `src/util.js` | File enumeration, YAML loading, deep clone, case-insensitive object utilities |
 
 ---
@@ -38,11 +38,11 @@ enumerateLeaves(branches)        → [[path], [path], ...]
 FOR EACH LEAF:
   getBranchConfig()              → branchProtagonist, protagonist
   buildCompileContext()          → variables (merged), componentRefs (resolved paths)
-  compileBranchPhaseA()          → resolvedItems[]
+  resolveBranchItems()           → resolvedItems[]
     FOR EACH itemDef:
       resolveItem()              → resolved item object or null (excluded)
       applyFieldInterpolation()  → dotted {$body/v/aid/render/name.X} refs expanded
-  compileBranchPhaseB()
+  renderBranchItems()
     applyCrossItemRefs()         → {$Id.body.Field} refs resolved across all items
     FOR EACH resolvedItem:
       applyPronounPasses()       → pronoun + conjugation tokens resolved
@@ -53,8 +53,8 @@ FOR EACH LEAF:
   copyScripts()
 writeOpeningsRecursive()         → Components/Opening.md at leaf/node levels
 runLeafReviewMode()              → Overview/*.leaf.md
-(if --diff)     runDiffMode()     → Overview/Shared.md + Overview/*.delta.md
-(if --annotate) runAnnotateMode() → Overview/*.annotate.md
+(if --with-diff)     runDiffMode()     → Overview/Shared.md + Overview/*.delta.md
+(if --with-annotate) runAnnotateMode() → Overview/*.annotate.md
 ```
 
 ---
@@ -212,7 +212,7 @@ v3 switched from bare `$Aness`, `$her~` markers (v2) to fully braced `{$Aness}`,
 
 **Phase A / Phase B split**
 
-Phase A (`compileBranchPhaseA`) resolves all items for a branch and applies field interpolation before Phase B starts. Phase B (`compileBranchPhaseB`) runs `applyCrossItemRefs` first (which needs all resolved items available simultaneously), then processes pronouns and rendering per item. This two-phase design ensures cross-item `{$Id.body.Field}` references can always find the target item's resolved body, regardless of item ordering in the source files.
+Phase A (`resolveBranchItems`) resolves all items for a branch and applies field interpolation before Phase B starts. Phase B (`renderBranchItems`) runs `applyCrossItemRefs` first (which needs all resolved items available simultaneously), then processes pronouns and rendering per item. This two-phase design ensures cross-item `{$Id.body.Field}` references can always find the target item's resolved body, regardless of item ordering in the source files.
 
 **`__DELETE__` sentinel**
 
@@ -239,16 +239,16 @@ Canon resolution still uses a two-pass approach: plain-path entries (no `{@}` to
 
 ---
 
-## Cross-Branch Review Reports (`--diff` / `--annotate`)
+## Cross-Branch Review Reports (`--with-diff` / `--with-annotate`)
 
-These reports answer the authoring question "are my branches/variants wired up the way I intended?" — `--diff` for *discovery* (scan, or hand to an agent), `--annotate` for *drill-down* once discovery flags a suspect item.
+These reports answer the authoring question "are my branches/variants wired up the way I intended?" — `--with-diff` for *discovery* (scan, or hand to an agent), `--with-annotate` for *drill-down* once discovery flags a suspect item.
 
-**They are compile options, not post-hoc report modes.** Unlike `--leafReview`/`--overview`/`--seed-map`/`--card-sizes`/`--lint` (which read the already-written `output/` tree from disk), `--diff`/`--annotate` need the identity-keyed, fully-resolved item objects that only exist in memory *during* compilation — the on-disk markdown has discarded `item.id` and variant-application metadata. So setting either flag forces a compile (`doCompile`) and the reports are emitted at the end of `compile()` from data captured in the per-leaf loop (`leafData`), gated behind `options.diff`/`options.annotate`. Capture overhead is zero for a normal compile.
+**They are compile options, not post-hoc report modes.** Unlike `--leafReview`/`--overview`/`--seed-map`/`--card-sizes`/`--lint` (which read the already-written `output/` tree from disk), `--with-diff`/`--with-annotate` need the identity-keyed, fully-resolved item objects that only exist in memory *during* compilation — the on-disk markdown has discarded `item.id` and variant-application metadata. So setting either flag forces a compile (`doCompile`) and the reports are emitted at the end of `compile()` from data captured in the per-leaf loop (`leafData`), gated behind `options.diff`/`options.annotate`. Capture overhead is zero for a normal compile.
 
-**`--diff` → `Overview/Shared.md` + `Overview/<leaf>.delta.md`** (`runDiffMode` in `diff.js`).
+**`--with-diff` → `Overview/Shared.md` + `Overview/<leaf>.delta.md`** (`runDiffMode` in `diff.js`).
 Partition rule (`buildSharedAndDeltas`): for each item id and each component block, collect its rendered text from every leaf. Identical in *all* leaves → `Shared.md`. Otherwise varying → each leaf's own version goes to that leaf's `.delta.md`; leaves where it is absent (`~`-excluded) silently omit it. Each `.delta.md` is therefore self-contained ("everything this branch has that isn't universal"), read against `Shared.md` once. Rendered-block granularity, no annotation.
 
-**`--annotate` → `Overview/<leaf>.annotate.md`** (`runAnnotateMode`).
+**`--with-annotate` → `Overview/<leaf>.annotate.md`** (`runAnnotateMode`).
 Per leaf, per item, field-level diff of `resolveItem(itemDef, registry, branchPath)` against the **project base** `resolveItem(itemDef, registry, [])` (empty branch path = project imports/overrides applied, no branch dispatch — *not* canon base). Because both sides share the same source tokens/variables, the only differences are branch-variant effects. Each changed field is attributed to the applied variant(s) whose delta touches that path (`collectDeltaKeyPaths` + prefix match), or flagged `unexplained` (the bleed signal). `~`-nulled items are reported explicitly; items identical to base with no variants are omitted (they live in `Shared.md`).
 
 **Scope / current limitations.** Items and Plot Essentials diff at block level (PE via `compilePEBlocks`, which exposes the un-joined segments with stable keys). AI Instructions and Author's Note are captured as a single whole-component block each. Opening is resolved post-loop (`writeOpeningsRecursive`) and is not yet captured. The annotate `base`/`leaf` values are the pre-render resolved field structures, so `+{}` appends show as two-element arrays.
