@@ -16,6 +16,7 @@ const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, wa
 const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
 const { Diagnostics } = require('./diag');
+const { renderCard } = require('./emit/vl');
 const { loadPEConfig, compilePE, compilePEBlocks, writePE } = require('./pe');
 const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
 const { loadANConfig, compileAN, writeAN } = require('./an');
@@ -49,6 +50,32 @@ function validateCardType(item) {
   if (reason) {
     throw new Error(`Invalid aid.type "${type}" for item "${name}"${src}: ${reason}. aid.type becomes a folder/file name and must be a legal path segment.`);
   }
+}
+
+/**
+ * Render `notes:` through `render.notesTemplate`, or return undefined (§4.5).
+ *
+ * Undefined rather than an empty string, because the two mean different things to the
+ * emitter: undefined leaves §4.5's default rule in force (scalar verbatim, mapping as
+ * `key: value` lines), while an empty string is a template that deliberately produced
+ * nothing and suppresses the `notes:` line entirely.
+ *
+ * The wrapper is forced off for this render. `render.wrapper` describes the card body;
+ * a notes template that did not spell out a {wrapper} block would otherwise be wrapped
+ * by the post-render fallback and emit `notes: '{...}'`.
+ */
+function renderNotesText(item, context, templates, partials, variables) {
+  const name = item.render && item.render.notesTemplate;
+  if (!name) return undefined;
+  const template = templates.get(String(name).toLowerCase());
+  if (!template) {
+    const label = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
+    const src = item._source ? ` (${item._source})` : '';
+    console.error(`  ERR: no notesTemplate "${name}" found for item "${label}"${src}`);
+    return undefined;
+  }
+  const notesContext = { ...context, render: { ...context.render, wrapper: 'none' } };
+  return render(template.content, notesContext, partials, variables);
 }
 
 /**
@@ -326,6 +353,12 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
 
   const grouped = new Map();
 
+  // §8.2: the envelope is the emitter's, not the template's. Templates render the body;
+  // `emit/vl.js` writes the heading and the fence around it. Trigger diagnostics are
+  // collected across the whole branch and reported once, rather than interleaved with
+  // the per-item progress lines.
+  const emitDiagnostics = new Diagnostics();
+
   for (const item of resolvedItems) {
     applyPronounPasses(item, registry, branchProtagonist, resolvedById);
 
@@ -349,7 +382,16 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
 
     let rendered;
     try {
-      rendered = render(template, context, partials, variables);
+      const bodyText = render(template, context, partials, variables);
+      // The body arrives already wrapped — `render` applies render.wrapper — which is
+      // what §8.5 needs when Phase 5 measures the final string.
+      rendered = renderCard({
+        item,
+        bodyText,
+        notesText: renderNotesText(item, context, templates, partials, variables),
+        diagnostics: emitDiagnostics,
+        loc: { file: item._source },
+      }).text;
     } catch (err) {
       const name = item.id || String(item.name);
       const src = item._source ? ` (${item._source})` : '';
@@ -368,6 +410,15 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     grouped.get(type).push({ sortKey: String(itemLabel).toLowerCase(), rendered });
     // Capture the rendered block per item id for cross-branch diff/annotate reports.
     if (renderedById && item.id) renderedById.set(item.id.toLowerCase(), { type, rendered });
+  }
+
+  // Emit diagnostics are printed, not thrown: a comma in a trigger reaches AID as two
+  // triggers, which is wrong output rather than unwritable output, and stopping the
+  // compile here would leave the branch tree half-written. Same policy as the missing
+  // template and render-failure paths above.
+  for (const diag of emitDiagnostics.all) {
+    if (diag.severity === 'error') console.error(diag.format());
+    else console.warn(diag.format());
   }
 
   // Emit types alphabetically, and items within each type sorted by id, so the
@@ -568,7 +619,10 @@ function compile(configPath, options = {}) {
 
   fs.mkdirSync(config._resolvedOutput, { recursive: true });
 
-  const { templates, partials } = loadTemplates(config._resolvedTemplates);
+  const { templates, partials } = loadTemplates(config._resolvedTemplates, { diagnostics: loadDiagnostics });
+  // Checked before anything renders: a template that still carries a fence would emit a
+  // double envelope on every card it owns (§8.3), and the report names the files.
+  loadCursor = reportLoadDiagnostics(loadDiagnostics, loadCursor);
   console.log(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
   // Build canon registry

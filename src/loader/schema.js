@@ -36,14 +36,16 @@ const AID = {
     type: STRING,
     title: STRING,
     triggers: { type: [TYPES.SEQ, TYPES.STRING], of: STRING },
-    known: { type: TYPES.BOOLEAN },
 
-    // §8.4 removes `encapsulate` from the item schema entirely — the emitter writes
-    // `encapsulate: false` unconditionally, because all four sites in the VL source
-    // default it to true. It stays declared until Step 4, because until templates stop
-    // rendering the fence, `{if $aid.encapsulate}` still reads it and 30-odd items across
-    // the corpus still set it. It leaves alongside the migrator pass that strips it.
-    encapsulate: { type: TYPES.BOOLEAN },
+    // `known:` and `encapsulate:` are both gone, and both left with the envelope.
+    //
+    // §8.4 makes `encapsulate: false` unconditional — all four sites in the VL source
+    // default it to true — so there is nothing for an author to decide. `known:` existed
+    // only so `{if $aid.known}notes: '[e]'{/if}` could fire in a template, and §8.2.1
+    // forbids the compiler from knowing what `[e]` means; the marker is `notes:` text
+    // now, which the compiler carries without reading. Both are dropped by the migrator
+    // (§14.2), so a project that still declares one gets an unknown-key ERROR naming it
+    // rather than a key that is quietly read by nothing.
   },
 };
 

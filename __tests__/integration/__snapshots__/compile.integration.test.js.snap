@@ -4,8 +4,8 @@ exports[`snapshot regression subject Character.md matches snapshot 1`] = `
 "## Aness Rozen
 ~~~
 triggers: [Aness, Rozen]
-encapsulate: true
-notes: [e]
+encapsulate: false
+notes: '[e]'
 ~~~
 Aness Rozen -
 - Journeyman Healer; Magic Researcher
@@ -20,8 +20,8 @@ Magic: high ice-affinity; moderate growth-affinity; - your growth-affinity power
 ## Felicia Grayls
 ~~~
 triggers: [Felicia, Grayls]
-encapsulate: true
-notes: [e]
+encapsulate: false
+notes: '[e]'
 ~~~
 Felicia Grayls -
 - Academy researcher
@@ -38,8 +38,8 @@ that requires things most researchers won't do to their subjects
 ## Mira Ashfen
 ~~~
 triggers: [Mira, Ashfen]
-encapsulate: true
-notes: [e]
+encapsulate: false
+notes: '[e]'
 ~~~
 Mira Ashfen - Academy Scholar
 Physical Traits:
@@ -48,8 +48,8 @@ Personality:
 ## Kaiden Ventus
 ~~~
 triggers: [Kaiden, Ventus]
-encapsulate: true
-notes: [e]
+encapsulate: false
+notes: '[e]'
 ~~~
 Kaiden Ventus - knight; master swordsman
 Physical Traits: male; mid 20s; short brown hair; silver eyes; tall broad build

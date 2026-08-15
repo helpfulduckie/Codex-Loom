@@ -5,8 +5,9 @@ const os = require('os');
 const path = require('path');
 const {
   buildRegistry, mergeRegistries, loadTemplates,
-  loadItemsFromDir, buildOverlays, loadCompileConfig,
+  loadItemsFromDir, buildOverlays, loadCompileConfig, CODES,
 } = require('../../src/loader');
+const { Diagnostics } = require('../../src/diag');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -48,6 +49,33 @@ describe('loadTemplates', () => {
     writeTemplateIn(dir, 'A', 'character', 'version A');
     writeTemplateIn(dir, 'B', 'character', 'version B');
     expect(() => loadTemplates(dir)).toThrow(/Duplicate .template name "character"/);
+  });
+
+  test('a template that still writes a fence is an ERROR naming the file (§8.3)', () => {
+    const dir = makeTmpDir();
+    writeTemplate(dir, 'Character', '## {$name.full}\n~~~\ntriggers: []\n~~~\nbody');
+    const diagnostics = new Diagnostics();
+    loadTemplates(dir, { diagnostics });
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0].code).toBe(CODES.TEMPLATE_CONTAINS_FENCE);
+    expect(diagnostics.errors[0].file).toContain('Character.template');
+  });
+
+  test('partials are checked for fences too — the envelope lived in one', () => {
+    const dir = makeTmpDir();
+    writePartial(dir, 'cardHeader', '## {$name.full}\n~~~\n~~~\n{wrapper}');
+    const diagnostics = new Diagnostics();
+    loadTemplates(dir, { diagnostics });
+    expect(diagnostics.errors.map((d) => d.file.replace(/\\/g, '/')))
+      .toEqual([expect.stringContaining('cardHeader.partial')]);
+  });
+
+  test('a body-only template loads clean', () => {
+    const dir = makeTmpDir();
+    writeTemplate(dir, 'Character', '{wrapper}{$body.tagline}{/wrapper}');
+    const diagnostics = new Diagnostics();
+    loadTemplates(dir, { diagnostics });
+    expect(diagnostics.isEmpty()).toBe(true);
   });
 
   test('multiple directories — all templates loaded when no collision', () => {

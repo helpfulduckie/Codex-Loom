@@ -187,6 +187,227 @@ function migrateConfigDocument(doc) {
   return { changes, unresolved };
 }
 
+// ── Templates (§8.3) ─────────────────────────────────────────────────────────
+
+/**
+ * Strip a v3 template's story-card envelope: everything up to and including the last
+ * `~~~` line.
+ *
+ * The last fence rather than the second, because a v3 template was free to put the
+ * heading, the fence and its keys wherever it liked — `{if}` blocks around `notes:` mean
+ * the closing fence is not reliably the fourth line, and a template with no fence at all
+ * is already body-only and must be left untouched.
+ *
+ * A code fence inside body prose is spelled ``` in every template in the corpus, so it is
+ * not at risk here; a body that genuinely opened with `~~~` would be, which is why this
+ * runs once under review rather than on every compile.
+ */
+function stripTemplateHeader(text) {
+  const lines = String(text).split('\n');
+  let last = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() === '~~~') last = i;
+  }
+  if (last === -1) return text;
+  return lines.slice(last + 1).join('\n');
+}
+
+/** Strip the envelope from every `.template`/`.partial` under `rootDir`. */
+function migrateTemplateFiles(rootDir, options = {}) {
+  const touched = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!/\.(template|partial)$/i.test(entry.name)) continue;
+      const source = fs.readFileSync(full, 'utf8');
+      const output = stripTemplateHeader(source);
+      if (output !== source) {
+        if (!options.dryRun) fs.writeFileSync(full, output, 'utf8');
+        touched.push(full);
+      }
+    }
+  };
+  walk(rootDir);
+  return { touched };
+}
+
+// ── Item YAML (§4.2, §4.5, §8.4) ─────────────────────────────────────────────
+
+/**
+ * Encode a v3 trigger's padding in §4.2's `_` form.
+ *
+ * v3 emitted `triggers: [{join(", ", $aid.triggers)}]` — the values went into the fence
+ * unquoted — so authors reached the padding two different ways and only one of them
+ * worked. `'" tea "'` carried literal quote characters into the fence, which VL's YAML
+ * parse then stripped, leaving the spaces; `" Era "` was a plain padded string, whose
+ * spaces the same parse discarded, so the trigger never matched anything. Both spellings
+ * collapse to the same `_Era_` here, and the emitter is what decides how to write them.
+ *
+ * Returns `{ value, note }` — `note` names the case a human should look at.
+ */
+function encodeTriggerPadding(raw) {
+  let value = String(raw);
+
+  // The quoting hack: a value that is itself wrapped in quote characters.
+  const quoted = /^(["'])([\s\S]*)\1$/.exec(value);
+  if (quoted && quoted[2].length > 0) value = quoted[2];
+
+  const core = value.replace(/^ +/, '').replace(/ +$/, '');
+  const lead = value.length - value.replace(/^ +/, '').length;
+  const trail = value.length - value.replace(/ +$/, '').length;
+
+  if (lead === 0 && trail === 0) {
+    // Nothing to encode — but an edge `_` already means a space to the emitter, so a v3
+    // value that happened to start or end with one changes meaning if left alone.
+    if (/^_|_$/.test(value)) {
+      // Confirm rather than fix: a v3 trigger with a literal edge underscore and one this
+      // pass already encoded are the same six characters, so the migrator cannot tell them
+      // apart and a second run reports its own output. Reported, never rewritten.
+      return { value, note: `trigger "${value}" has an edge underscore, which §4.2 reads as a space — confirm that is meant` };
+    }
+    return { value, note: null };
+  }
+  return { value: '_'.repeat(lead) + core + '_'.repeat(trail), note: null };
+}
+
+/** Insert `pair` directly after `afterKey` in a YAML map, or append if that key is absent. */
+function insertAfter(map, afterKey, pair) {
+  const index = map.items.findIndex((p) => String(p.key.value) === afterKey);
+  if (index === -1) map.items.push(pair);
+  else map.items.splice(index + 1, 0, pair);
+}
+
+/** `notes: '[e]'`, single-quoted so it matches the bytes v3's templates emitted. */
+function notesMarkerPair() {
+  const value = new YAML.Scalar('[e]');
+  value.type = 'QUOTE_SINGLE';
+  return new YAML.Pair(new YAML.Scalar('notes'), value);
+}
+
+/**
+ * Migrate one item-YAML Document in place.
+ *
+ * Works on every map that carries an `aid:` mapping rather than on the top-level sequence,
+ * because variants and branch overrides carry their own `aid:` blocks and a migration that
+ * only saw declarations would leave `known:` alive in exactly the places hardest to spot.
+ *
+ * Returns `{ changes, notes }` — counts per rule, and the values needing a human look.
+ */
+function migrateItemDocument(doc) {
+  const changes = { encapsulate: 0, known: 0, triggers: 0, stripFence: 0, title: 0 };
+  const notes = [];
+
+  YAML.visit(doc, {
+    Map(_key, node) {
+      // `render.stripFence` went with the envelope it stripped (§8.3).
+      if (node.has('stripFence')) {
+        node.delete('stripFence');
+        changes.stripFence++;
+      }
+
+      const aid = node.get('aid', true);
+      if (!YAML.isMap(aid)) return;
+
+      // §8.4: `encapsulate: false` is unconditional now, so the key has no author-facing
+      // meaning left to carry.
+      if (aid.has('encapsulate')) {
+        aid.delete('encapsulate');
+        changes.encapsulate++;
+      }
+
+      // §8.2.1: the compiler must not know what `[e]` means. `aid.known` existed only so
+      // `{if $aid.known}notes: '[e]'{/if}` could fire, so it becomes the notes text itself.
+      if (aid.has('known')) {
+        const known = aid.get('known');
+        aid.delete('known');
+        changes.known++;
+        if (known === true) {
+          if (node.has('notes')) {
+            notes.push(`item already declares notes:, so known: true was dropped rather than merged`);
+          } else {
+            insertAfter(node, 'aid', notesMarkerPair());
+          }
+        }
+      }
+
+      // A card had one heading in v3 too, but which field it came from was the template's
+      // choice per type — the shared cardHeader read `{$name.full}`, other templates read
+      // `{$aid.title}` — so authors wrote both and kept them in step by hand. §8.2 gives
+      // the heading to the emitter and one ladder, which makes a duplicate `aid.title`
+      // not merely redundant but a trap: a variant that renames the character updates
+      // `name:` and leaves the stale title behind, and the ladder prefers the title. Where
+      // the two genuinely differ the title is a deliberate override and is kept.
+      const title = aid.get('title');
+      const name = node.get('name', true);
+      const full = YAML.isMap(name) ? name.get('full') : (YAML.isScalar(name) ? name.value : undefined);
+      if (typeof title === 'string' && title === full) {
+        aid.delete('title');
+        changes.title++;
+        // Reported because the heading is not the only reader: a body template is free to
+        // interpolate `{$aid.title}`, and that token renders empty once the key is gone.
+        notes.push(`dropped aid.title "${title}", identical to name.full — check templates for {$aid.title}`);
+      }
+
+      const triggers = aid.get('triggers', true);
+      const scalars = YAML.isSeq(triggers)
+        ? triggers.items.filter((t) => YAML.isScalar(t))
+        : (YAML.isScalar(triggers) ? [triggers] : []);
+      for (const scalar of scalars) {
+        if (typeof scalar.value !== 'string') continue;
+        const { value, note } = encodeTriggerPadding(scalar.value);
+        if (note) notes.push(note);
+        if (value === scalar.value) continue;
+        scalar.value = value;
+        // Let the emitter re-choose quoting: `_Era_` needs none of what `" Era "` did.
+        delete scalar.type;
+        changes.triggers++;
+      }
+    },
+  });
+
+  return { changes, notes };
+}
+
+/** Migrate every item YAML file under `rootDir`. Returns per-file reports. */
+function migrateItemFiles(rootDir, options = {}) {
+  const touched = [];
+  const notes = [];
+  const totals = { encapsulate: 0, known: 0, triggers: 0, stripFence: 0 };
+
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!entry.isFile() || !hasSuffix(entry.name, YAML_SUFFIXES)) continue;
+
+      const source = fs.readFileSync(full, 'utf8');
+      const doc = YAML.parseDocument(source);
+      if (doc.errors.length > 0) throw new Error(`${full}: ${doc.errors[0].message}`);
+
+      const result = migrateItemDocument(doc);
+      for (const key of Object.keys(totals)) totals[key] += result.changes[key];
+      for (const note of result.notes) notes.push({ file: full, note });
+
+      // Emitter options chosen to round-trip the corpus rather than to taste: no line
+      // wrapping, because the sources keep long prose values on one line and re-folding
+      // them at 80 columns rewrites most of the file; and no flow padding, because
+      // `triggers: [a, b]` must not become `[ a, b ]`. A migration whose diff is mostly
+      // reformatting is one nobody can review for the changes that matter — and the BOM
+      // is restored for the same reason, since `yaml` drops it on parse.
+      const bom = source.charCodeAt(0) === 0xFEFF ? '﻿' : '';
+      const output = bom + doc.toString({ lineWidth: 0, flowCollectionPadding: false });
+      if (output !== source) {
+        if (!options.dryRun) fs.writeFileSync(full, output, 'utf8');
+        touched.push(full);
+      }
+    }
+  };
+
+  walk(rootDir);
+  return { touched, notes, totals };
+}
+
 /** Migrate a config file on disk. Returns the report; writes only when something changed. */
 function migrateConfigFile(configPath, options = {}) {
   const source = fs.readFileSync(configPath, 'utf8');
@@ -258,6 +479,11 @@ module.exports = {
   migrateConfigFile,
   migrateConfigDocument,
   migrateProjectFiles,
+  migrateItemDocument,
+  migrateItemFiles,
+  migrateTemplateFiles,
+  stripTemplateHeader,
+  encodeTriggerPadding,
   collectComponentAliases,
   collectCanonNames,
   rewriteAtTokens,

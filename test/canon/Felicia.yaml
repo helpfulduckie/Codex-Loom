@@ -4,11 +4,9 @@
     full: Felicia Grayls
   pronouns: female
   aid:
-    title: Felicia Grayls
     type: Character
     triggers: [Felicia, Grayls]
-    encapsulate: true
-    known: true
+  notes: '[e]'
   render:
     template: Character
     wrapper: none
@@ -47,7 +45,6 @@
         full: Felix Grayls
       pronouns: male
       aid:
-        title: Felix Grayls
         triggers: [Felix, Grayls]
       body:
         Physical Traits:

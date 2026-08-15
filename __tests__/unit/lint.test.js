@@ -153,11 +153,12 @@ describe('structural checks read through the shared parser', () => {
     expect(scanStoryCardStructure('## Tone\n\nWrite in close third person.')).toEqual([]);
   });
 
-  test('encapsulate is read as a parsed value, not matched as text', () => {
-    // `encapsulate: true` inside the body must not satisfy the fence check.
-    const card = '## A\n~~~\ntriggers: [A]\n~~~\nencapsulate: true\n';
+  test('a trigger list inside the body does not satisfy the fence check', () => {
+    // The check reads the parsed fence, not the text: prose that happens to contain
+    // `triggers: [A]` below the fence must not make an empty card look populated.
+    const card = '## A\n~~~\n~~~\ntriggers: [A]\n';
     expect(scanStoryCardStructure(card).map((f) => f.category))
-      .toContain('missing-encapsulate');
+      .toContain('empty-triggers');
   });
 });
 
@@ -170,32 +171,36 @@ describe('scanStoryCardStructure', () => {
     expect(scanStoryCardStructure(CARD_DISCOVERED)).toEqual([]);
   });
 
-  test('flags a card with both [e] and /] as ERROR', () => {
-    const bad = `## Conflicted
-
-~~~
-triggers: [Conflicted]
-encapsulate: true
-~~~
-
-[e] Conflicted thing /]
-`;
-    const findings = scanStoryCardStructure(bad);
-    expect(findings).toContainEqual(expect.objectContaining({ category: 'e-marker-conflict', severity: 'ERROR', card: 'Conflicted' }));
-  });
-
-  test('flags a card with neither marker as WARN', () => {
-    const bad = `## Neither
+  test('a card with no [e] and no /] is not a finding', () => {
+    // `missing-discovery-marker` and `e-marker-conflict` were one mod's convention, and
+    // fired on every card of every project that does not use it. Convention packs (§8.2.2)
+    // are where rules of that shape belong.
+    const card = `## Neither
 
 ~~~
 triggers: [Neither]
-encapsulate: true
 ~~~
 
 Just a plain body with no marker.
 `;
-    const findings = scanStoryCardStructure(bad);
-    expect(findings).toContainEqual(expect.objectContaining({ category: 'missing-discovery-marker', severity: 'WARN', card: 'Neither' }));
+    expect(scanStoryCardStructure(card)).toEqual([]);
+  });
+
+  test('a card with both [e] and /] is not a finding', () => {
+    const card = `## Conflicted
+
+~~~
+triggers: [Conflicted]
+~~~
+
+[e] Conflicted thing /]
+`;
+    expect(scanStoryCardStructure(card)).toEqual([]);
+  });
+
+  test('encapsulate is no longer checked — the emitter writes it, not the author', () => {
+    const card = '## NoEncap\n~~~\ntriggers: [NoEncap]\n~~~\n[e] body\n';
+    expect(scanStoryCardStructure(card)).toEqual([]);
   });
 
   test('flags empty trigger list', () => {
@@ -212,18 +217,6 @@ encapsulate: true
     expect(findings).toContainEqual(expect.objectContaining({ category: 'empty-triggers', card: 'NoTriggers' }));
   });
 
-  test('flags missing encapsulate', () => {
-    const bad = `## NoEncap
-
-~~~
-triggers: [NoEncap]
-~~~
-
-[e] NoEncap is missing encapsulate
-`;
-    const findings = scanStoryCardStructure(bad);
-    expect(findings).toContainEqual(expect.objectContaining({ category: 'missing-encapsulate', card: 'NoEncap' }));
-  });
 });
 
 // ── findLintableFiles ─────────────────────────────────────────────────────────

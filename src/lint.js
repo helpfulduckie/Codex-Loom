@@ -142,41 +142,30 @@ function scanText(text) {
 
 // ── story-card structural checks ─────────────────────────────────────────────
 //
-// Mirrors the "Format correctness" checklist from the VL QA review process:
-// [e]/`/]` mutual exclusion, empty trigger lists, missing encapsulate.
+// One check, and the reason there is only one is worth stating.
+//
+// v3 lint also carried `missing-encapsulate`, `e-marker-conflict` and
+// `missing-discovery-marker`. The first is gone because `encapsulate` is no longer
+// author-controlled (§8.2.1): the emitter writes `encapsulate: false` on every card, so
+// the check fired on all 2,442 of them and told the author about a decision they no
+// longer make. The other two encode one mod's convention — `[e]` for background
+// knowledge, `/]` for a discovery marker — and fire wrongly for every project that does
+// not use it. Rules of that shape belong in a convention pack (§8.2.2), which needs
+// `notes:` parsed into structured form first.
+//
+// What is left is a fact about the platform rather than an opinion about content: a card
+// with no triggers can never be pulled into context.
 
 function scanStoryCardStructure(content) {
   const findings = [];
   // The shared parser (§8.6). Fenceless sections are still skipped: a heading with no
   // fence beneath it is prose in a component file, not a malformed story card, and
-  // reporting it would fire these checks on every AI Instructions section.
-  for (const { title, triggers, meta, body } of parseCards(content).filter((c) => c.hasFence)) {
-    const hasEPrefix = /^\[e\]/.test(body);
-    const hasDiscoveryMarker = /\/\]/.test(body);
-
-    if (hasEPrefix && hasDiscoveryMarker) {
-      findings.push({
-        category: 'e-marker-conflict', severity: 'ERROR', card: title,
-        hint: '[e] and /] are mutually exclusive but both appear on this card',
-      });
-    } else if (!hasEPrefix && !hasDiscoveryMarker) {
-      findings.push({
-        category: 'missing-discovery-marker', severity: 'WARN', card: title,
-        hint: 'card has neither [e] (background knowledge) nor /] (discovery marker) — verify this is intentional',
-      });
-    }
-
+  // reporting it would fire this check on every AI Instructions section.
+  for (const { title, triggers } of parseCards(content).filter((c) => c.hasFence)) {
     if (triggers.length === 0) {
       findings.push({
         category: 'empty-triggers', severity: 'WARN', card: title,
         hint: 'card has an empty or missing trigger list',
-      });
-    }
-
-    if (meta.encapsulate !== true) {
-      findings.push({
-        category: 'missing-encapsulate', severity: 'WARN', card: title,
-        hint: 'encapsulate: true is absent — verify this is a deliberate exception',
       });
     }
   }

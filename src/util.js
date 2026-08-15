@@ -206,6 +206,10 @@ function itemContext(item, extra) {
     render:   item.render || {},
     body:     item.body   || {},
     v:        item.v      || {},
+    // §4.5: `notes:` is a top-level field like any other, so a template can read it.
+    // `render.notesTemplate` is the reason it has to be here — a marker config such as
+    // `notes: {known: true}` is rendered by a template that reads `{$notes.known}`.
+    notes:    item.notes,
     ...extra,
   };
 }

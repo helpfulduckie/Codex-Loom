@@ -24,11 +24,9 @@
   name: Mira Ashfen
   pronouns: female
   aid:
-    title: Mira Ashfen
     type: Character
     triggers: [Mira, Ashfen]
-    encapsulate: true
-    known: true
+  notes: '[e]'
   render:
     template: Character
     wrapper: none
@@ -52,11 +50,9 @@
   name: Kaiden Ventus
   pronouns: male
   aid:
-    title: Kaiden Ventus
     type: Character
     triggers: [Kaiden, Ventus]
-    encapsulate: true
-    known: true
+  notes: '[e]'
   render:
     template: Character
     wrapper: none

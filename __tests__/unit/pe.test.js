@@ -10,7 +10,6 @@ const ctx = { branchPath: ['subject'], branchProtagonist: null };
 
 const templates = new Map([
   ['character', { content: '{$aid.title}: {$body.Tagline}', _source: 'x' }],
-  ['fenced',    { content: '## Header\n~~~\nBody: {$aid.title}', _source: 'y' }],
 ]);
 
 // ── compilePE — inline blocks (no import) ────────────────────────────────────
@@ -72,18 +71,6 @@ describe('compilePE — inline block with template', () => {
       body:   { Tagline: 'A wanderer' },
     }];
     expect(compilePE(blocks, registry, templates, new Map(), ctx)).toBe('The Stranger: A wanderer');
-  });
-
-  test('render.stripFence strips content above last ~~~', () => {
-    const blocks = [{
-      id:     'Hero',
-      aid:    { title: 'Hero' },
-      render: { template: 'fenced', stripFence: true },
-      body:   {},
-    }];
-    const result = compilePE(blocks, registry, templates, new Map(), ctx);
-    expect(result).not.toContain('## Header');
-    expect(result).toContain('Body: Hero');
   });
 
   test('render.wrapper square wraps template output', () => {

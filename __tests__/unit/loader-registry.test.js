@@ -144,11 +144,12 @@ describe('item schema validation (§4.3)', () => {
     expect(loadWithDiagnostics().diagnostics.hasErrors()).toBe(false);
   });
 
-  test('the full v3 item surface validates clean', () => {
+  test('the full v4 item surface validates clean', () => {
     write('a.cl.yaml', [
       'id: A',
       'name: {display: A, full: A Vale}',
-      'aid: {type: Character, title: T, triggers: [a, b], known: true, encapsulate: false}',
+      'aid: {type: Character, title: T, triggers: [a, b]}',
+      "notes: '[e]'",
       'render: {template: Character, wrapper: none}',
       'body: {Tagline: x}',
       'variants: {alt: {body: {Tagline: y}}}',
@@ -158,6 +159,17 @@ describe('item schema validation (§4.3)', () => {
       '',
     ].join('\n'));
     expect(loadWithDiagnostics().diagnostics.hasErrors()).toBe(false);
+  });
+
+  test('aid.known and aid.encapsulate are gone, not silently accepted', () => {
+    // Both left with the envelope (§8.2.1, §8.4). A project that still declares one is
+    // half-migrated, and an unknown-key ERROR naming the key is the useful answer.
+    write('a.cl.yaml', 'id: A\naid: {type: Character, known: true, encapsulate: false}\n');
+    const { diagnostics } = loadWithDiagnostics();
+    expect(diagnostics.hasErrors()).toBe(true);
+    const messages = diagnostics.errors.map((d) => d.message).join(' ');
+    expect(messages).toContain('known');
+    expect(messages).toContain('encapsulate');
   });
 
   test('later-phase item keys are recognized rather than rejected', () => {

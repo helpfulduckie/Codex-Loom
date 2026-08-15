@@ -4,11 +4,9 @@
     full: Aness Rozen
   pronouns: female
   aid:
-    title: Aness Rozen
     type: Character
     triggers: [Aness, Rozen]
-    encapsulate: true
-    known: true
+  notes: '[e]'
   render:
     template: Character
     wrapper: none

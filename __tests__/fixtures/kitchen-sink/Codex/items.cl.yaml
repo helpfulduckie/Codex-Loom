@@ -3,7 +3,7 @@
 # Companion to ../compile.cl.yaml, and the same contract —
 # `__tests__/unit/kitchen-sink.test.js` walks ITEM_SCHEMA and fails if a declared key is
 # missing here. Phase 2 added notes:, description: and render.notesTemplate to this
-# surface, and will remove aid.encapsulate when the emitter takes the fence over (§8.4).
+# surface, and removed aid.known and aid.encapsulate with the envelope (§8.2.1, §8.4).
 #
 # It is validated, not compiled. `import:` and `include:` name items and files that do not
 # exist, because the subject is the key surface rather than resolution — nothing in the
@@ -22,11 +22,9 @@
   aid:
     type: Character
     title: Aness Vale
-    known: true
-    encapsulate: false
-    # Underscore padding is Phase 2 (§4.2) and inert here; the trigger shapes are carried
-    # now so the Phase 2 emitter has something to render them from.
+    # Underscore padding (§4.2): an edge `_` is a space to the emitter.
     triggers: [Aness, Vale, _Aria, Voss_]
+  notes: '[e]'
   body:
     # Unquoted leading token (§4.1). Valid only because the preparser quotes it — this is
     # the shape that would otherwise parse as a flow mapping and be swallowed.

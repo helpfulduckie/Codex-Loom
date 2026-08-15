@@ -185,8 +185,6 @@ describe('Opening.md generation', () => {
     ].join('\n'), 'utf8');
 
     fs.writeFileSync(path.join(openingTmpDir, 'templates', 'Item.template'), [
-      '## {$aid.title}',
-      '~~~',
       '{$body.Desc}',
     ].join('\n'), 'utf8');
 
@@ -287,8 +285,6 @@ describe('branchFraming {%Key} resolution', () => {
     ].join('\n'), 'utf8');
 
     fs.writeFileSync(path.join(atKeyTmpDir, 'templates', 'Item.template'), [
-      '## {$aid.title}',
-      '~~~',
       '{$body.Desc}',
     ].join('\n'), 'utf8');
 
@@ -417,8 +413,6 @@ describe('cross-item refs inside body field render functions', () => {
     ].join('\n'), 'utf8');
 
     fs.writeFileSync(path.join(xrefTmpDir, 'templates', 'Item.template'), [
-      '## {$aid.title}',
-      '~~~',
       '{$body.employees}',
       '{join("; ", $body.familyMembers)}',
     ].join('\n'), 'utf8');
@@ -484,7 +478,7 @@ describe('opening {%Key} resolving to YAML block file', () => {
       '  body: { Desc: w }',
     ].join('\n'), 'utf8');
     fs.writeFileSync(path.join(opKeyTmpDir, 'templates', 'Item.template'),
-      '## {$aid.title}\n~~~\n{$body.Desc}', 'utf8');
+      '{$body.Desc}', 'utf8');
 
     fs.writeFileSync(path.join(opKeyTmpDir, 'components', 'opening.yaml'), [
       '- text: "Universal paragraph."',
@@ -551,8 +545,6 @@ describe('YAML block opening (opening.yaml)', () => {
     ].join('\n'), 'utf8');
 
     fs.writeFileSync(path.join(blkTmpDir, 'templates', 'Item.template'), [
-      '## {$aid.title}',
-      '~~~',
       '{$body.Desc}',
     ].join('\n'), 'utf8');
 
@@ -710,7 +702,7 @@ describe('YAML block opening (opening.yaml)', () => {
         '  render: { template: Item }',
         '  body: { Desc: w }',
       ].join('\n'), 'utf8');
-      fs.writeFileSync(path.join(mdDir, 'templates', 'Item.template'), '## {$aid.title}\n~~~\n{$body.Desc}', 'utf8');
+      fs.writeFileSync(path.join(mdDir, 'templates', 'Item.template'), '{$body.Desc}', 'utf8');
       fs.writeFileSync(path.join(mdDir, 'opening.md'), 'Legacy inline opening.', 'utf8');
       fs.writeFileSync(path.join(mdDir, 'compile.yaml'), [
         'version: 4',
@@ -763,7 +755,7 @@ describe('deterministic item ordering', () => {
     ].join('\n'), 'utf8');
 
     fs.writeFileSync(path.join(orderTmpDir, 'templates', 'Item.template'),
-      '## {$aid.title} [{$id}]\n~~~\n{$body.Desc}', 'utf8');
+      '{$aid.title} [{$id}]\n{$body.Desc}', 'utf8');
 
     fs.writeFileSync(path.join(orderTmpDir, 'compile.yaml'), [
       'version: 4',
@@ -816,7 +808,7 @@ describe('component gap detection', () => {
       '  render: { template: Item }',
       '  body: { Desc: w }',
     ].join('\n'), 'utf8');
-    fs.writeFileSync(path.join(dir, 'templates', 'Item.template'), '## {$aid.title}\n~~~\n{$body.Desc}', 'utf8');
+    fs.writeFileSync(path.join(dir, 'templates', 'Item.template'), '{$body.Desc}', 'utf8');
     fs.writeFileSync(path.join(dir, 'compile.yaml'), [
       'version: 4',
       'structure:',
@@ -898,7 +890,7 @@ describe('root title -> Label.md', () => {
       '  render: { template: Item }',
       '  body: { Desc: w }',
     ].join('\n'), 'utf8');
-    fs.writeFileSync(path.join(dir, 'templates', 'Item.template'), '## {$aid.title}\n~~~\n{$body.Desc}', 'utf8');
+    fs.writeFileSync(path.join(dir, 'templates', 'Item.template'), '{$body.Desc}', 'utf8');
     fs.writeFileSync(path.join(dir, 'compile.yaml'), [
       'version: 4',
       'structure:',

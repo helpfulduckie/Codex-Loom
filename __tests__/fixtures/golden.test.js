@@ -37,7 +37,14 @@ const GOLDEN_DIR = path.resolve(__dirname, '../../goldenFixtures');
  * and 9. An output-changing phase widens it to exactly the classes its expected diff
  * covers, and never further:
  *
- *   Phase 2 (emitter)   ['fence', 'title']  the envelope moves into emit/vl.js
+ *   Phase 2 (emitter)   ['fence']  the envelope moves into emit/vl.js
+ *
+ * Phase 2 is set to `fence` alone rather than `fence, title`, even though the heading is
+ * half of what moved. The emitter's title ladder was checked against the corpus before it
+ * was written: of 294 items carrying a title or a name, `aid.title` and `name.full` never
+ * disagree, so no heading should change. Allowing `title` would buy nothing and would wave
+ * through the one regression this move could plausibly cause — a card quietly renamed,
+ * which in AID means a card the player sees under a different name.
  *
  * The classes name parts of an envelope, so they only discriminate on files that have
  * one. Component output — `Plot Essentials.md`, `AI Instructions.md` — carries no `##`
@@ -47,52 +54,31 @@ const GOLDEN_DIR = path.resolve(__dirname, '../../goldenFixtures');
  * any particular phase: a phase that turns out output-preserving is already correctly
  * served by the empty setting.
  */
-const EXPECTED_DIFF_CLASSES = [];
+const EXPECTED_DIFF_CLASSES = ['fence'];
 
-const PROJECTS = [
-  { name: 'Baseline', dir: path.join('Baseline', 'Baseline'), reports: ['seed-map', 'card-sizes', 'lint'] },
-  { name: 'Coinflip Company', dir: path.join('Eldemyr', 'Coinflip Company'), reports: ['seed-map', 'card-sizes', 'lint'] },
-  { name: 'The Institute', dir: path.join('Esudia', 'The Institute'), reports: ['card-sizes', 'lint'] },
-];
-
-/** Where a project's compile.yaml sends its output, relative to the project directory. */
-const OUTPUT_SUBDIR = 'Velvet Lattice';
-/** The committed baseline, relative to the project directory. */
-const BASELINE_SUBDIR = 'v3';
+// The fixture set itself lives beside the fixtures, because `scripts/rebaseline.js`
+// regenerates what this file checks and the two must not drift apart.
+const {
+  PROJECTS, OUTPUT_SUBDIR, BASELINE_SUBDIR, SOURCE_SUBDIR, REPORTS_SUBDIR, REPORT_MODES,
+} = require('../../goldenFixtures/projects');
 
 /**
- * The migrated v4 sources, committed beside the frozen v3 output.
+ * Two things about that list are worth knowing here.
  *
- * The migrator runs at re-baseline time only, never here: if the test migrated on every
- * run, a migrator bug and a compiler bug would produce the same red and there would be no
- * way to tell them apart. `Loom/` keeps the original v3 sources for comparison.
+ * The migrator runs at re-baseline time only, never in this harness: if the test migrated
+ * on every run, a migrator bug and a compiler bug would produce the same red and there
+ * would be no way to tell them apart. `SOURCE_SUBDIR` is the committed migrated source;
+ * `Loom/` keeps the original v3 sources for comparison.
+ *
+ * Reports are frozen separately (§8.6) because `compile()` writes none — seed map, card
+ * sizes and lint are post-hoc CLI modes that read the compiled tree back. So the whole
+ * class of consumers that re-parses the VL format sat outside this harness, which is
+ * exactly the code Phase 2 Step 2 retargeted onto `emit/vl.js:parseCards`. Retargeting a
+ * parser with no output under test would be a refactor with nothing to refactor against:
+ * the subtle behaviors — cards with no trigger list being skipped, quote characters
+ * surviving into trigger values — are precisely what a rewrite normalizes away while
+ * every unit test stays green.
  */
-const SOURCE_SUBDIR = 'v4';
-
-/**
- * Frozen report output, and why it needs freezing separately (§8.6).
- *
- * `compile()` writes no reports — seed map, card sizes and lint are post-hoc CLI modes
- * that read the compiled tree back. So the whole class of consumers that re-parses the
- * VL format sat outside the golden harness, which is exactly the code Phase 2 Step 2
- * retargets onto `emit/vl.js:parseCards`. Retargeting a parser with no output under test
- * would be a refactor with nothing to refactor against: the subtle behaviors — cards with
- * no trigger list being skipped, quote characters surviving into trigger values — are
- * precisely what a rewrite normalizes away while every unit test stays green.
- *
- * The three modes here are the three that parse cards. `overview` and `leaf-review` read
- * files wholesale without parsing a fence, so they are not frozen.
- *
- * The Institute omits `seed-map` deliberately: it writes 66 files and 1.9 MB exercising
- * the same parser path that its single `card-sizes` CSV already covers across all 2,192
- * card renderings. Coinflip Company's 6-file seed map covers the per-leaf output shape.
- */
-const REPORTS_SUBDIR = 'v3-reports';
-const REPORT_MODES = {
-  'seed-map': () => require('../../src/seedmap').runSeedMapMode,
-  'card-sizes': () => require('../../src/bodysize').runBodySizeMode,
-  lint: () => require('../../src/lint').runLintMode,
-};
 
 let tmpDir;
 

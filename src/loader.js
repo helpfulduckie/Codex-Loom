@@ -35,14 +35,47 @@ function loadNamedFiles(dirs, ext) {
   return result;
 }
 
+/** Codes this module reports. CL04xx is the render/template band (§4.4). */
+const CODES = {
+  TEMPLATE_CONTAINS_FENCE: 'CL0410',
+};
+
+/**
+ * Reject any template or partial that still writes a VL fence (§8.3).
+ *
+ * After the Phase 2 flip the envelope is `emit/vl.js`'s alone, so a `~~~` left in a
+ * template produces a card with two of them — the emitter's, then the template's, with
+ * the second one's keys landing in the body where VL will never read them. That output
+ * is not obviously wrong on inspection, which is why this is a load-time refusal rather
+ * than a lint finding: a half-migrated project should name the files that remain rather
+ * than compile into something subtly broken.
+ */
+function checkNoFences(files, ext, diagnostics) {
+  if (!diagnostics) return;
+  for (const [name, entry] of files) {
+    if (!entry.content.includes('~~~')) continue;
+    diagnostics.error(
+      CODES.TEMPLATE_CONTAINS_FENCE,
+      `Template "${name}" still contains a ~~~ fence.`,
+      { file: entry._source },
+      {
+        hint: 'The story-card envelope (## heading, ~~~ fence, triggers/encapsulate/notes '
+          + 'keys) is emitted by Codex Loom now; a template renders the body alone. Delete '
+          + `everything above and including the last ~~~ line in this ${ext} file.`,
+      },
+    );
+  }
+}
+
 /**
  * Load all templates and partials from one or more directories.
  */
-function loadTemplates(dirs) {
-  return {
-    templates: loadNamedFiles(dirs, '.template'),
-    partials:  loadNamedFiles(dirs, '.partial'),
-  };
+function loadTemplates(dirs, options = {}) {
+  const templates = loadNamedFiles(dirs, '.template');
+  const partials = loadNamedFiles(dirs, '.partial');
+  checkNoFences(templates, '.template', options.diagnostics);
+  checkNoFences(partials, '.partial', options.diagnostics);
+  return { templates, partials };
 }
 
 // What remains here is template loading. Config loading moved to config/load.js, and
@@ -51,6 +84,7 @@ function loadTemplates(dirs) {
 // middle of a step that is already changing how items are validated.
 
 module.exports = {
+  CODES,
   findFiles,
   loadYaml,
   loadItemsFromDir,

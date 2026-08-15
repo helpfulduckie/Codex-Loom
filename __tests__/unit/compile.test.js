@@ -696,3 +696,90 @@ describe('config errors abort before filesystem work', () => {
     expect(fs.existsSync(path.join(tmpDir, 'output'))).toBe(false);
   });
 });
+
+// ── the emitter owns the envelope (§8.2) ─────────────────────────────────────
+
+describe('compile writes the VL envelope through emit/vl.js', () => {
+  let tmpDir;
+  let quiet;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-emit-'));
+    fs.mkdirSync(path.join(tmpDir, 'items'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
+    quiet = ['log', 'warn', 'error'].map((level) => jest.spyOn(console, level).mockImplementation(() => {}));
+  });
+
+  afterEach(() => {
+    quiet.forEach((spy) => spy.mockRestore());
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  /** Compile a one-item project and return its compiled Item.md. */
+  function compileItem(itemLines, templateContent, extraTemplates = {}) {
+    fs.writeFileSync(path.join(tmpDir, 'items', 'items.yaml'), itemLines.join('\n'), 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'templates', 'Item.template'), templateContent, 'utf8');
+    for (const [name, content] of Object.entries(extraTemplates)) {
+      fs.writeFileSync(path.join(tmpDir, 'templates', `${name}.template`), content, 'utf8');
+    }
+    fs.writeFileSync(path.join(tmpDir, 'compile.yaml'), [
+      'version: 4',
+      'structure:',
+      `  input: { items: [${tmpDir}/items], templates: [${tmpDir}/templates] }`,
+      `  output: ${tmpDir}/output`,
+      'branches:',
+      '  main: {}',
+    ].join('\n'), 'utf8');
+    compile(path.join(tmpDir, 'compile.yaml'));
+    return fs.readFileSync(
+      path.join(tmpDir, 'output', 'Branches', 'main', 'Story Cards', 'Item', 'Item.md'), 'utf8',
+    );
+  }
+
+  const ITEM = [
+    '- id: Widget',
+    '  name: { display: Widget, full: Widget of Power }',
+    '  aid: { type: Item, triggers: [widget, _gizmo_] }',
+    '  render: { template: Item }',
+    '  body: { Desc: a widget }',
+  ];
+
+  test('the heading, fence and encapsulate come from the emitter, not the template', () => {
+    const output = compileItem(ITEM, '{$body.Desc}');
+    expect(output).toBe([
+      '## Widget of Power',
+      '~~~',
+      "triggers: [widget, ' gizmo ']",
+      'encapsulate: false',
+      '~~~',
+      'a widget',
+      '',
+    ].join('\n'));
+  });
+
+  test('notes: reaches the fence through §4.5\'s default rendering', () => {
+    const output = compileItem([...ITEM, "  notes: '[e]'"], '{$body.Desc}');
+    expect(output).toContain("notes: '[e]'");
+  });
+
+  test('render.notesTemplate renders the notes text', () => {
+    const item = [...ITEM.slice(0, 3), '  render: { template: Item, notesTemplate: Marker }',
+      '  body: { Desc: a widget }', '  notes: { known: true }'];
+    const output = compileItem(item, '{$body.Desc}', { Marker: '{if $notes.known}[e]{/if}' });
+    expect(output).toContain("notes: '[e]'");
+  });
+
+  test('an empty notes template emits no notes line at all', () => {
+    const item = [...ITEM.slice(0, 3), '  render: { template: Item, notesTemplate: Marker }',
+      '  body: { Desc: a widget }', '  notes: { known: false }'];
+    const output = compileItem(item, '{$body.Desc}', { Marker: '{if $notes.known}[e]{/if}' });
+    expect(output).not.toContain('notes:');
+  });
+
+  test('the wrapper is applied to the body and stays out of the fence', () => {
+    const item = [...ITEM.slice(0, 3), '  render: { template: Item, wrapper: curly }',
+      '  body: { Desc: a widget }'];
+    const output = compileItem(item, '{$body.Desc}');
+    expect(output).toContain('~~~\n{\na widget\n}');
+  });
+});

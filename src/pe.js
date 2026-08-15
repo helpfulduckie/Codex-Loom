@@ -28,19 +28,6 @@ function loadPEConfig(peSpec) {
 }
 
 /**
- * Strip everything above the last ~~~ fence line from rendered text.
- */
-function stripAboveLastFence(rendered) {
-  const lines = rendered.split('\n');
-  let lastFence = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].trim() === '~~~') lastFence = i;
-  }
-  if (lastFence === -1) return rendered.trim();
-  return lines.slice(lastFence + 1).join('\n').trim();
-}
-
-/**
  * Get template content for an item, with optional hint fallback.
  */
 function getItemTemplate(item, templates, style) {
@@ -86,8 +73,7 @@ function sortByPosition(segments) {
 function renderPEBlock(blockDef, renderOpts, registry, templates, partials, compileContext, overlays) {
   const { branchPath, branchProtagonist, variables } = compileContext;
 
-  const style      = (renderOpts.style || 'full').toLowerCase();
-  const stripFence = !!renderOpts.stripFence;
+  const style = (renderOpts.style || 'full').toLowerCase();
 
   // ── Inline PE item (no import) ──────────────────────────────────────────
   if (!blockDef.import) {
@@ -139,8 +125,9 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
       return null;
     }
 
-    const body = stripFence ? stripAboveLastFence(rendered) : rendered;
-    return { body, wrapper };
+    // No envelope to strip: templates render the body alone since the Phase 2 flip, and
+    // `render` already trims. `render.stripFence` is retired with it (§8.3).
+    return { body: rendered, wrapper };
   }
 
   // ── Item import ───────────────────────────────────────────────────────────
@@ -219,8 +206,7 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
     return null;
   }
 
-  const body = stripFence ? stripAboveLastFence(renderedItem) : renderedItem;
-  return { body, wrapper };
+  return { body: renderedItem, wrapper };
 }
 
 /**
