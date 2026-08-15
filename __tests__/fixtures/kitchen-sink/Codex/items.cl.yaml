@@ -2,9 +2,8 @@
 #
 # Companion to ../compile.cl.yaml, and the same contract —
 # `__tests__/unit/kitchen-sink.test.js` walks ITEM_SCHEMA and fails if a declared key is
-# missing here. Phase 2 adds to this surface (notes:, description:, render.notesTemplate,
-# and the encapsulate → wrapper conversion), which is why the item half exists now rather
-# than when those land.
+# missing here. Phase 2 added notes:, description: and render.notesTemplate to this
+# surface, and will remove aid.encapsulate when the emitter takes the fence over (§8.4).
 #
 # It is validated, not compiled. `import:` and `include:` name items and files that do not
 # exist, because the subject is the key surface rather than resolution — nothing in the
@@ -12,8 +11,7 @@
 #
 # The items are split rather than merged into one maximal item because several keys are
 # mutually exclusive in practice: §4.5 makes declaring both `notes:` and `description:` on
-# one item an ERROR once Phase 2 implements it, and the four `v:` aliases are four
-# spellings of one block.
+# one item an ERROR (CL0323), and the four `v:` aliases are four spellings of one block.
 
 # ── A full story card ────────────────────────────────────────────────────────
 - id: Aness
@@ -51,7 +49,7 @@
   render:
     wrapper: none
 
-# ── A reference item, and the Phase 2 notes: field ───────────────────────────
+# ── A reference item, and the notes: field (§4.5) ────────────────────────────
 - id: WTG Time Config
   # Phase 5. Author intent no render target can infer: this IS a story card, with a
   # deliberately empty trigger list (§4.8).
@@ -93,8 +91,8 @@
     affiliation: the Northern Wing
 
 # ── The description: alias for notes: (§4.5) ─────────────────────────────────
-# Front-end spelling of the same AID field. Kept on its own item because declaring both on
-# one item becomes an ERROR when Phase 2 implements the pair.
+# Front-end spelling of the same AID field, collapsed to `notes:` at resolution. Kept on
+# its own item because declaring both on one item is an ERROR (CL0323).
 - id: Voss
   description:
     marker: '[e]'

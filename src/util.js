@@ -115,6 +115,33 @@ function deleteCI(obj, key) {
 
 const VAR_ALIASES = new Set(['v', 'var', 'vars', 'variable', 'variables']);
 
+/**
+ * The top-level item fields a variant, branch or field op may modify (§4.5, §7.2).
+ *
+ * One list, because there were two: `model/item.js` applied import-level overrides from
+ * its own copy and `model/fieldops.js` applied variant deltas from another. They agreed
+ * by luck rather than by construction, and adding `notes:` to one and not the other
+ * would have made a field variant-addressable in a variant and not on an import.
+ *
+ * `id` is absent deliberately — it is immutable to variants and branches, and moves only
+ * through rename-on-import (§17.4). `body:` is absent because it is not a whole-value
+ * field: deltas apply to it subfield by subfield.
+ */
+const ITEM_TOP_LEVEL_FIELDS = Object.freeze(['name', 'pronouns', 'aid', 'render', 'v', 'notes']);
+
+/**
+ * `description:` is an accepted alias for `notes:` (§4.5), normalized at the boundary so
+ * nothing downstream sees which spelling arrived — the same treatment `v:`'s four aliases
+ * get. The two names are a permanent split across the AID ecosystem: back-end and modding
+ * contexts say `notes`, front-end and UI contexts say `description`. Requiring the right
+ * one is a tax with no benefit.
+ */
+const NOTES_ALIASES = new Set(['notes', 'description']);
+
+function normalizeNotesKey(key) {
+  return NOTES_ALIASES.has(String(key).toLowerCase()) ? 'notes' : key;
+}
+
 function normalizeVarKey(key) {
   return VAR_ALIASES.has(key.toLowerCase()) ? 'v' : key;
 }
@@ -313,6 +340,7 @@ function warnMechanicalArtifacts(text, label) {
 
 module.exports = {
   findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
+  ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
   YAML_SUFFIXES, CONFIG_BASENAMES, hasSuffix, consoleWarner,
   resolveVariables, warnUnexpandedVariables, walkItemTextFields, itemContext, warnUnresolvedFieldTokens,
   warnMechanicalArtifacts, maskFencedRegions,

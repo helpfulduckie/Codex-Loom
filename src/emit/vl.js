@@ -233,10 +233,10 @@ function renderCard({ item, bodyText = '', notesText, diagnostics, loc = {} }) {
   // §8.4: unconditional, because all four sites in the VL source default it to true.
   lines.push('encapsulate: false');
 
+  // `description:` never reaches here — `model/item.js` collapses it into `notes:` at
+  // resolution (§4.5), so the emitter knows exactly one spelling.
   const notes = notesLines(
-    notesText !== undefined
-      ? notesText
-      : defaultNotesText(item && (item.notes !== undefined ? item.notes : item.description)),
+    notesText !== undefined ? notesText : defaultNotesText(item && item.notes),
   );
   if (notes) lines.push(...notes);
 

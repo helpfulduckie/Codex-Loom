@@ -37,6 +37,12 @@ const AID = {
     title: STRING,
     triggers: { type: [TYPES.SEQ, TYPES.STRING], of: STRING },
     known: { type: TYPES.BOOLEAN },
+
+    // §8.4 removes `encapsulate` from the item schema entirely — the emitter writes
+    // `encapsulate: false` unconditionally, because all four sites in the VL source
+    // default it to true. It stays declared until Step 4, because until templates stop
+    // rendering the fence, `{if $aid.encapsulate}` still reads it and 30-odd items across
+    // the corpus still set it. It leaves alongside the migrator pass that strips it.
     encapsulate: { type: TYPES.BOOLEAN },
   },
 };
@@ -55,7 +61,7 @@ const RENDER = {
   keys: {
     template: STRING,
     wrapper: STRING,
-    notesTemplate: { type: TYPES.STRING, note: 'Phase 2' },
+    notesTemplate: STRING,
     storyCard: { type: TYPES.BOOLEAN, note: 'Phase 3' },
 
     // Per-component render targets (§7.4). Declared now so writing one is a clear
@@ -79,9 +85,15 @@ const ITEM_SCHEMA = {
 
     // Open namespaces (§4.3). Never validated, and never proposed as a relocation
     // destination — a block that accepts every key would match every typo.
+    //
+    // `notes:` is one of them, and `description:` is its accepted alias — collapsed to
+    // `notes` by `model/item.js` so nothing downstream sees which arrived. Declaring both
+    // on one item is an ERROR (CL0323), not a merge.
     body: ANY,
     v: ANY,
     pronouns: ANY,
+    notes: ANY,
+    description: ANY,
 
     // Composition.
     variants: ANY,
@@ -92,8 +104,6 @@ const ITEM_SCHEMA = {
 
     // v4 additions, declared so authors can write ahead of the implementation.
     kind: { type: TYPES.STRING, note: 'Phase 5' },
-    notes: { type: TYPES.ANY, note: 'Phase 2' },
-    description: { type: TYPES.ANY, note: 'Phase 2' },
   },
 };
 

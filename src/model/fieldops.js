@@ -11,7 +11,10 @@
  * `onWarn(code, message)` so reporting a problem does not mean printing one.
  */
 
-const { deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey } = require('../util');
+const {
+  deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
+  ITEM_TOP_LEVEL_FIELDS, normalizeNotesKey,
+} = require('../util');
 
 const CODES = Object.freeze({
   VARIANT_DELTA_VAR_ALIASES: 'CL0320',
@@ -108,14 +111,14 @@ function applyFieldOp(current, op) {
  * Apply a delta to an item's body fields and eligible top-level fields.
  * Mutates item in place.
  *
- * v3 top-level item fields that variants can modify:
- *   name, pronouns, aid (object), render (object), body (object)
- * The `id` field cannot be altered by variants or branches.
+ * The top-level fields variants can modify are `util.ITEM_TOP_LEVEL_FIELDS`; `body:` is
+ * handled separately below because deltas apply to it subfield by subfield rather than
+ * as a whole value. The `id` field cannot be altered by variants or branches.
  */
 function applyFieldsDelta(item, delta, onWarn) {
   if (!delta || typeof delta !== 'object') return;
 
-  const topLevelFields = ['name', 'pronouns', 'aid', 'render', 'v'];
+  const topLevelFields = ITEM_TOP_LEVEL_FIELDS;
 
   // Warn if the delta contains multiple variable-block aliases
   const deltaAliasKeys = Object.keys(delta).filter(k => VAR_ALIASES.has(k.toLowerCase()));
@@ -131,7 +134,9 @@ function applyFieldsDelta(item, delta, onWarn) {
     const keyLower = key.toLowerCase();
     if (keyLower === 'id') continue; // id is immutable
 
-    const normalizedKey = normalizeVarKey(key);
+    // Both alias families collapse here, so a variant may write `description:` and hit
+    // the same field an item declared as `notes:` (§4.5).
+    const normalizedKey = normalizeNotesKey(normalizeVarKey(key));
     const normalizedLower = normalizedKey.toLowerCase();
     const isTopLevel = topLevelFields.some(f => f === normalizedLower);
 

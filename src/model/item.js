@@ -12,7 +12,7 @@
  * `onWarn(code, message)`.
  */
 
-const { deepClone, findKey } = require('../util');
+const { deepClone, findKey, ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES } = require('../util');
 const { applyFieldOp, applyFieldsDelta, applyDelta } = require('./fieldops');
 const { resolveBranchSpec } = require('./branches');
 const { resolveItemRef, describeRefFailure } = require('./refs');
@@ -20,6 +20,7 @@ const { resolveItemRef, describeRefFailure } = require('./refs');
 const CODES = Object.freeze({
   VARIANT_NOT_FOUND: 'CL0321',
   NO_TYPE_OR_TEMPLATE: 'CL0322',
+  NOTES_AND_DESCRIPTION: 'CL0323',
 });
 
 /**
@@ -131,7 +132,7 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     if (itemDef.body) {
       applyFieldsDelta(item, { body: itemDef.body }, onWarn);
     }
-    for (const key of ['name', 'pronouns', 'aid', 'render', 'v']) {
+    for (const key of ITEM_TOP_LEVEL_FIELDS) {
       if (itemDef[key] !== undefined) {
         const newVal = applyFieldOp(item[key], itemDef[key]);
         if (newVal === '__DELETE__') delete item[key]; else item[key] = newVal;
@@ -213,6 +214,28 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
   if (!item.aid.type && !item.render.template) {
     const name = item.id || (typeof item.name === 'string' ? item.name : '');
     if (onWarn) onWarn(CODES.NO_TYPE_OR_TEMPLATE, `item "${name}" has neither aid.type nor render.template`);
+  }
+
+  // Collapse `description:` into `notes:` (§4.5). Downstream — the emitter, field ops,
+  // reports — only ever sees `notes:`, so no consumer has to know both spellings.
+  // Declaring both is an ERROR rather than a merge: they are two names for one field, so
+  // two values means the author believes they are two fields, and picking a winner would
+  // hide that.
+  const notesKeys = Object.keys(item).filter((k) => NOTES_ALIASES.has(k.toLowerCase()));
+  if (notesKeys.length > 1) {
+    const label = item.id || (item.name && item.name.full) || '(unknown)';
+    if (onWarn) {
+      onWarn(CODES.NOTES_AND_DESCRIPTION,
+        `item "${label}" declares both ${notesKeys.map((k) => `"${k}"`).join(' and ')}. `
+        + '"description" is an accepted alias for "notes" (§4.5), so these are one field — '
+        + 'keep whichever value is correct and delete the other.');
+    }
+  }
+  for (const key of notesKeys) {
+    if (key !== 'notes') {
+      if (item.notes === undefined) item.notes = item[key];
+      delete item[key];
+    }
   }
 
   // Normalize name to structured form so {$name.full} / {$name.display} always resolve

@@ -183,9 +183,11 @@ describe('renderCard', () => {
     expect(parseCards(text)[0].notes).toBe('marker: [e]\nmood: clinical');
   });
 
-  test('description is accepted as the alias for notes (§4.5)', () => {
+  test('the emitter knows one spelling — description is normalized upstream', () => {
+    // model/item.js collapses `description:` into `notes:` at resolution (§4.5), so an
+    // un-normalized item reaching here is a bug in the caller, not something to absorb.
     const item = { id: 'A', description: '[e]' };
-    expect(renderCard({ item, bodyText: 'x' }).text).toMatch(/notes: '\[e\]'/);
+    expect(renderCard({ item, bodyText: 'x' }).text).not.toMatch(/notes/);
   });
 
   test('decodes padded triggers and quotes them so the padding survives VL', () => {
