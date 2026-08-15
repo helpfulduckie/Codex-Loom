@@ -38,12 +38,14 @@ const GOLDEN_DIR = path.resolve(__dirname, '../../goldenFixtures');
  * covers, and never further:
  *
  *   Phase 2 (emitter)   ['fence', 'title']  the envelope moves into emit/vl.js
- *   Phase 3 (placement) —                   restructures bodies; needs a different tool
  *
- * Phase 3's diff is not shape-classifiable this way, because moving an item out of story
- * cards and into Plot Essentials is a body change by construction. That phase re-baselines
- * against a per-file expectation instead; this constant stays empty for it rather than
- * being widened until it means nothing.
+ * The classes name parts of an envelope, so they only discriminate on files that have
+ * one. Component output — `Plot Essentials.md`, `AI Instructions.md` — carries no `##`
+ * heading and no `~~~` fence, so every line in it is `body`. A phase whose expected diff
+ * lands in a component file therefore cannot state its shape here, and needs a per-file
+ * expectation instead. That is a limit of this constant rather than a prediction about
+ * any particular phase: a phase that turns out output-preserving is already correctly
+ * served by the empty setting.
  */
 const EXPECTED_DIFF_CLASSES = [];
 
