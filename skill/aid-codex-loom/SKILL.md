@@ -16,6 +16,22 @@ description: >
 
 # Codex Loom — Authoring Skill
 
+> **Status: describes v3.3.2 — the released compiler. Do not re-upload without rewriting.**
+>
+> A v4 redesign is in progress on the `v4-phase1` branch and is a clean break, not an
+> upgrade. This document is accurate for what people can currently run, and deliberately
+> has not been carried forward: the v4 config surface alone would break the Quick Start
+> below in three places (`version: 4` is required, `cards:` is now `items:`, and canon is
+> referenced with `{%name}` rather than `{@name}`), and v4 renames the atomic unit from
+> *card* to *item* throughout.
+>
+> **The rewrite waits for Phase 3**, which inverts the item/component model — items will
+> declare their own placement and Plot Essentials will stop being a separately configured
+> block. Those are this document's spine, so revising it earlier means revising it twice.
+> Phases 4–8 are additive and will land as edits rather than a rewrite.
+>
+> This unpacked tree is the only editable copy; `.skill` is a zip built from it.
+
 Codex Loom is a command-line compiler that turns YAML card definitions into Velvet Lattice story card files for AI Dungeon scenarios. You write cards (characters, locations, settings) in structured YAML; the compiler resolves pronoun tokens, applies branch-specific variant chains, and produces one complete output folder per playable branch.
 
 This skill covers authoring the five file types you write: `compile.yaml`, card YAML files, `.template`/`.partial` files, and component YAML files (Plot Essentials, AI Instructions, Author's Note).

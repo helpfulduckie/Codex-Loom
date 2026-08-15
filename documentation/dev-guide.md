@@ -1,24 +1,47 @@
 # Codex Loom — Developer Guide
 
-This document describes the internal architecture of Codex Loom v3 for maintainers. It is meant to augment the inline JSDoc in source files, not duplicate it — focus here is on data flow, non-obvious design decisions, and algorithm structure.
+This document describes the internal architecture of Codex Loom for maintainers, as it stands on the `v4-phase1` branch. It is meant to augment the inline JSDoc in source files, not duplicate it — focus here is on data flow, non-obvious design decisions, and algorithm structure.
+
+Section references of the form §N point at the v4 design spec, which lives in the vault rather than in this repo.
 
 ---
 
 ## Module Map
 
+Phase 1 split the three files that had accreted several concerns each — `loader.js`, `resolver.js`, and `compile.js`'s config handling — along seams that already existed (§3.2).
+
 | File | Role |
 |---|---|
 | `src/compile.js` | CLI entry point; orchestrates the full compilation pipeline |
-| `src/loader.js` | Loads YAML files, templates, partials, and `compile.yaml`; builds item registries |
-| `src/resolver.js` | Resolves items through import/variant/branch chains; `applyFieldOp`; `enumerateLeaves` |
+| `src/config/load.js` | Loads and resolves `compile.cl.yaml`: variables, paths, canon names |
+| `src/config/schema.js` | The `compile.cl.yaml` key surface, validated by `src/schema.js` |
+| `src/loader/preparse.js` | Rescues leading `{$…}`/`{%…}` tokens YAML would swallow (§4.1) |
+| `src/loader/yaml.js` | YAML parsing with a source map, so diagnostics carry positions |
+| `src/loader/registry.js` | Item loading, `ItemRegistry`, canon merge, overlays, includes |
+| `src/loader/schema.js` | The item key surface (§4.3) |
+| `src/loader.js` | Template and partial loading; re-exports the registry functions |
+| `src/schema.js` | The shared validation engine both key surfaces run through |
+| `src/diag.js` | The diagnostic bus: codes, severities, source spans (§4.4) |
+| `src/model/item.js` | Item resolution through import/variant/branch chains |
+| `src/model/branches.js` | Branch-spec dispatch; `enumerateLeaves`; branch-chain walks |
+| `src/model/fieldops.js` | Value-level field operations (`applyFieldOp` and friends) |
+| `src/model/refs.js` | Item reference resolution, plain and canon-qualified (§17.2) |
+| `src/model/pronouns.js` | Pronoun and verb conjugation passes; cross-item reference resolution |
+| `src/resolver.js` | Compatibility facade re-exporting `model/`; goes away when call sites move |
 | `src/template.js` | Template rendering engine; field interpolation; all render functions |
-| `src/pronouns.js` | Pronoun and verb conjugation passes; cross-item reference resolution |
-| `src/pe.js` | Plot Essentials compilation and output |
+| `src/tokens.js` | `{%variable}` expansion — the single expander (§5.1) |
+| `src/emit/components.js` | Table-driven emission of the document components |
+| `src/pe.js` | Plot Essentials compilation and output (deleted in Phase 3, §7.5) |
 | `src/ain.js` | AI Instructions compilation, branch dispatch, document variants |
 | `src/an.js` | Author's Note compilation (thin wrapper over `ain.js` logic) |
+| `src/description.js`, `src/opening.js` | Description and Opening component compilation |
 | `src/overview.js` | Leaf-review and whole-tree overview file generation |
 | `src/diff.js` | Cross-branch `--with-diff` (Shared/delta) and `--with-annotate` report generation |
+| `src/seedmap.js`, `src/bodysize.js`, `src/lint.js` | Post-compile report modes, read from the written tree |
+| `src/migrate/v3.js` | One-time v3 → v4 conversion (§14.2) |
 | `src/util.js` | File enumeration, YAML loading, deep clone, case-insensitive object utilities |
+
+`model/` is pure by contract (§3.3): no `fs`, no `console`. Warnings go to a caller-supplied `onWarn`, and failed lookups come back described rather than thrown, so the caller decides what reaches a terminal. A test enforces both the purity and the roster.
 
 ---
 
@@ -28,8 +51,8 @@ This document describes the internal architecture of Codex Loom v3 for maintaine
 loadCompileConfig()
     ↓
 loadTemplates()                  → templates Map, partials Map
-buildCanonRegistry()             → merged canon registry (Map<id, item>)
-loadCardsFromDir()               → raw project item defs (array)
+buildCanonRegistry()             → canon ItemRegistry (plain keys + qualified/ambiguous sidecars)
+loadItemsFromDir()               → raw project item defs (array)
 resolveIncludes()                → included canon items stamped with _include_* metadata
 buildRegistry(projectItems)      → project registry
 mergeRegistries(canon, project)  → full registry
@@ -61,11 +84,21 @@ runLeafReviewMode()              → Overview/*.leaf.md
 
 ## Item Registry
 
-`buildRegistry(items, context)` indexes items by lowercase `id` (falling back to `name` if `id` is absent). Collision within a context is fatal.
+`buildRegistry(items, context)` indexes items by lowercase `id` (falling back to `name` if `id` is absent). Collision within a context is fatal. `include:` defs are skipped, and so are bare `import:` defs — they *are* the item they name, with local deltas. An import def carrying its own `id:` is the exception and registers under that local id, which is rename-on-import (§17.4).
 
 `mergeRegistries(canon, project)` combines two registries. Any ID present in both is also fatal.
 
-Canon items are loaded from all named directories in `structure.input.canon`. Multiple canon directories are merged into one registry; cross-canon ID collision is fatal.
+`ItemRegistry` is a `Map` first — plain lowercase id → item, so every `registry.get(id)` consumer reads it the way it always did. Three sidecars carry what multi-set canon needed (§17.2):
+
+| | |
+|---|---|
+| `qualified` | `set:id` → item, for every canon item, so `grimwood:magic` always resolves |
+| `ambiguous` | plain id → the rival items, for ids more than one canon set defines |
+| `sources` | the declared canon set names, so an unknown qualifier is distinguishable from a known set that lacks the id |
+
+**A duplicate id across two canon sets is not fatal, and is not resolved by declaration order.** Both copies are kept and the plain key is left empty; only a reference that cannot choose between them fails, and it fails at the reference (§17.3, `resolveItemRef` in `model/refs.js`). The absence of the plain key *is* the mechanism — the unqualified lookup has to miss before the resolver can reach the sidecar and name the alternatives.
+
+The asymmetry with the two fatal cases above is deliberate. One set owning an id twice is a mistake inside that set, and a project id colliding with a canon id is a clash whose both sides the author owns; a cross-set clash is neither. `.itemCount` counts items rather than plain keys, since an ambiguous id holds none.
 
 The final merged registry is passed to every downstream function. It is **read-only** during compilation — no function mutates it.
 
@@ -73,20 +106,21 @@ The final merged registry is passed to every downstream function. It is **read-o
 
 ## Item Resolution Order
 
-`resolveItem(itemDef, registry, branchPath)` in `resolver.js` applies deltas in this fixed order:
+`resolveItem(itemDef, registry, branchPath)` in `model/item.js` applies deltas in this fixed order:
 
-1. Deep-clone the canonical base item (or local item def if no `import:`)
+1. Resolve `import:` through `resolveItemRef` (plain or `set:id`), then deep-clone the canonical base item — or the local item def if there is no `import:`
 2. Apply the **primary import path** variant chain (slash-separated suffix on the import ID)
 3. Apply each entry in `importVariants:` (slash-separated paths on the canonical item's variant tree)
 4. Apply top-level `body:`, `name:`, `pronouns:`, `aid:`, `render:` overrides from the import def
-5. Call `resolveBranchSpec(itemDef.branches, branchPath)` → list of local variant names
-6. For each dispatched local variant name:
+5. If the import def carries its own `id:`, overwrite the imported id with it (§17.4). Only the id moves — `name:` is deliberately left as the imported item set it, so a rename that should also change the display name says so rather than having one guessed from a slug
+6. Call `resolveBranchSpec(itemDef.branches, branchPath)` → list of local variant names
+7. For each dispatched local variant name:
    a. Walk `itemDef.variants` tree to collect the variant delta
    b. If the delta has `importVariants:`, apply those from the **canonical item's** variant tree first
    c. Apply the delta fields
-7. Return `null` if `resolveBranchSpec` returns `null` (item excluded from this branch)
+8. Return `null` if `resolveBranchSpec` returns `null` (item excluded from this branch)
 
-For local (non-import) items, steps 2–4 are skipped. `_include_variants` and `_include_branch_spec` are attached by `resolveIncludes()` to carry include-directive settings.
+For local (non-import) items, steps 2–5 are skipped. `_include_variants` and `_include_branch_spec` are attached by `resolveIncludes()` to carry include-directive settings.
 
 After resolution, `aid.type` and `render.template` are cross-defaulted: each is filled in from the other if absent.
 
@@ -94,7 +128,7 @@ After resolution, `aid.type` and `render.template` are cross-defaulted: each is 
 
 ## Branch Dispatch Algorithm
 
-`resolveBranchSpec(spec, branchPath)` in `resolver.js` walks the branch path depth-first, accumulating variant names:
+`resolveBranchSpec(spec, branchPath)` in `model/branches.js` walks the branch path depth-first, accumulating variant names:
 
 ```
 For each level of the branch path:
@@ -118,7 +152,7 @@ This allows wildcards and explicit keys to compose at each depth level, and arbi
 
 ## Field Operation Engine
 
-`applyFieldOp(current, op)` in `resolver.js` dispatches based on the type and content of `op`:
+`applyFieldOp(current, op)` in `model/fieldops.js` dispatches based on the type and content of `op`:
 
 ```
 op is array?
@@ -171,7 +205,7 @@ Post-render: if `data.render.wrapper` is non-`none` and no `{wrapper}` block was
 
 ## Pronoun Resolution Passes
 
-`applyPronounPasses(item, registry, branchProtagonist)` in `pronouns.js` applies two passes per item:
+`applyPronounPasses(item, registry, branchProtagonist)` in `model/pronouns.js` applies two passes per item:
 
 **Pass 1 — `applyTokenPass`** processes the combined regex `/{(\$[^{}]+)\}|\[(s|es|is|was|has)\]/g` left-to-right:
 
@@ -220,7 +254,7 @@ Phase A (`resolveBranchItems`) resolves all items for a branch and applies field
 
 **Canon naming (mapping not string)**
 
-`structure.input.canon` is a named mapping (`{main: ./path}`) rather than a plain string or array. Names serve two purposes: they appear in error messages (`Duplicate item ID "x" across canon dirs: canon:main`) and they are exposed as variables, so `{%main}` resolves in `include:` paths. A plain path string would require path-based display, which is brittle.
+`structure.input.canon` is a named mapping (`{main: ./path}`) rather than a plain string or array. Names serve two purposes: they appear in error messages (`canon:main` labels each side of a collision) and they are exposed as variables, so `{%main}` resolves in `include:` paths. A plain path string would require path-based display, which is brittle.
 
 **Token expansion — one family, one expander**
 
@@ -232,10 +266,9 @@ Call sites are thin wrappers: `config.expandPathTokens` (config paths), `compile
 
 Coverage notes:
 - `{%}` is expanded in item bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and config paths. In `include:`/`import:` paths it uses **root** `config.variables` only, because `resolveIncludes` runs once before branch enumeration — branch-merged variables do not exist yet.
-- `{@}` is deliberately **not** expanded in item bodies or `.template` files; it is a path/prose construct only.
 - The `{$…}` field-reference family (`{$v.field}`, `{$Id.body.field}`) is a separate system (field interpolation + pronoun passes) and is **not** part of `expandTokens`. It has been standardized for coverage (`body`/`aid`/`render`/`name` via `walkItemTextFields`), surface (dotted field refs in item data), and failure visibility (`warnUnresolvedFieldTokens`); only collapsing its four resolvers into one dispatcher remains deferred. See `07-templates.md` "Token Systems at a Glance".
 
-Canon resolution still uses a two-pass approach: plain-path entries (no `{@}` tokens after variable expansion) are resolved in pass 1, forming the lookup table for pass 2 which handles entries that reference sibling canon names. Template paths are expanded after both passes, so they can reference any named canon entry. Unresolved tokens pass through unchanged, causing the standard missing-path warning to fire with the unexpanded token visible in the path string.
+Canon path resolution no longer needs a bespoke two-pass. v3 resolved plain-path canon entries first to build a lookup table, then resolved entries referencing sibling canon names against it. Now that canon names are ordinary variables (§6.1) and variables resolve against each other by topological sort (§6.2), a canon entry naming a sibling is just a variable naming a variable, and `expandPathTokens` handles it like any other. Unresolved tokens pass through unchanged, so the standard missing-path warning fires with the unexpanded token visible in the path string.
 
 ---
 
