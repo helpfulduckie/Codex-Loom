@@ -33,7 +33,7 @@ function hasVariant(itemDef, variantPath) {
 }
 
 /**
- * Walk a variant path (slash-separated) on a item definition and collect deltas.
+ * Walk a variant path (slash-separated) on an item definition and collect deltas.
  * e.g. "human/noble" → apply 'human' variant delta, then 'noble' child of 'human'.
  *
  * Returns null if any segment of the path resolves to a null variant (~), which
@@ -83,7 +83,7 @@ function parseVariantsList(variants) {
 }
 
 /**
- * Strip compiler-internal metadata from a item before cloning.
+ * Strip compiler-internal metadata from an item before cloning.
  */
 function stripMeta(item) {
   const out = {};
@@ -95,7 +95,7 @@ function stripMeta(item) {
 }
 
 /**
- * Resolve a item fully for a given branch leaf path.
+ * Resolve an item fully for a given branch leaf path.
  *
  * @param {object} itemDef - the item or import definition
  * @param {Map} registry   - full merged item registry
@@ -104,7 +104,7 @@ function stripMeta(item) {
  */
 function resolveItem(itemDef, registry, branchPath, onWarn) {
   let item;
-  let sourceCardForVariants; // the item definition that holds the variants library
+  let sourceItemForVariants; // the item definition that holds the variants library
 
   if (itemDef.import) {
     // ── Import ──────────────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     const canonItem = found.item;
 
     item = deepClone(stripMeta(canonItem));
-    sourceCardForVariants = canonItem;
+    sourceItemForVariants = canonItem;
 
     // Apply importVariants from the import def (top-level, before branch dispatch)
     for (const vPath of parseVariantsList(itemDef.importVariants)) {
@@ -172,7 +172,7 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
   } else {
     // ── Local item definition ────────────────────────────────────────────────
     item = deepClone(stripMeta(itemDef));
-    sourceCardForVariants = itemDef;
+    sourceItemForVariants = itemDef;
 
     // Handle included items that carry importVariants from the include directive
     if (itemDef._include_variants) {
@@ -194,7 +194,7 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     item._hasVariant = branchVariantNames.length > 0;
 
     for (const vName of branchVariantNames) {
-      const localDeltas = collectVariantDeltas(sourceCardForVariants, vName, onWarn);
+      const localDeltas = collectVariantDeltas(sourceItemForVariants, vName, onWarn);
       if (localDeltas === null) return null; // null variant = exclude
       for (const delta of localDeltas) {
         applyDelta(item, delta, onWarn);

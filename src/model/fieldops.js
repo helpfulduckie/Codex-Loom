@@ -105,7 +105,7 @@ function applyFieldOp(current, op) {
 }
 
 /**
- * Apply a delta to a item's body fields and eligible top-level fields.
+ * Apply a delta to an item's body fields and eligible top-level fields.
  * Mutates item in place.
  *
  * v3 top-level item fields that variants can modify:
@@ -163,7 +163,7 @@ function applyFieldsDelta(item, delta, onWarn) {
 }
 
 /**
- * Apply a variant delta to a item. Handles structural keys and field ops.
+ * Apply a variant delta to an item. Handles structural keys and field ops.
  */
 function applyDelta(item, delta, onWarn) {
   if (!delta) return;

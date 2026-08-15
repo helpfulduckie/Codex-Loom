@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const {
   buildRegistry, mergeRegistries, loadTemplates,
-  loadCardsFromDir, buildOverlays, loadCompileConfig,
+  loadItemsFromDir, buildOverlays, loadCompileConfig,
 } = require('../../src/loader');
 
 // ---------------------------------------------------------------------------
@@ -173,19 +173,19 @@ describe('mergeRegistries', () => {
 });
 
 // ---------------------------------------------------------------------------
-// loadCardsFromDir
+// loadItemsFromDir
 // ---------------------------------------------------------------------------
 
-describe('loadCardsFromDir', () => {
+describe('loadItemsFromDir', () => {
   test('returns empty array when directory is empty', () => {
     const dir = makeTmpDir();
-    expect(loadCardsFromDir([dir])).toEqual([]);
+    expect(loadItemsFromDir([dir])).toEqual([]);
   });
 
   test('loads a single-item YAML (non-array) and wraps it', () => {
     const dir = makeTmpDir();
     fs.writeFileSync(path.join(dir, 'item.yaml'), 'id: Aria\nname: Aria Voss\n', 'utf8');
-    const items = loadCardsFromDir([dir]);
+    const items = loadItemsFromDir([dir]);
     expect(items).toHaveLength(1);
     expect(items[0].id).toBe('Aria');
     expect(items[0]._source).toContain('item.yaml');
@@ -194,7 +194,7 @@ describe('loadCardsFromDir', () => {
   test('loads a multi-item YAML (array sequence)', () => {
     const dir = makeTmpDir();
     fs.writeFileSync(path.join(dir, 'items.yaml'), '- id: Alpha\n- id: Beta\n', 'utf8');
-    const items = loadCardsFromDir([dir]);
+    const items = loadItemsFromDir([dir]);
     expect(items).toHaveLength(2);
     expect(items[0].id).toBe('Alpha');
     expect(items[1].id).toBe('Beta');
@@ -203,7 +203,7 @@ describe('loadCardsFromDir', () => {
   test('normalizes vars: field to v: on each item', () => {
     const dir = makeTmpDir();
     fs.writeFileSync(path.join(dir, 'item.yaml'), 'id: Hero\nvars:\n  role: knight\n', 'utf8');
-    const [item] = loadCardsFromDir([dir]);
+    const [item] = loadItemsFromDir([dir]);
     expect(item).toHaveProperty('v');
     expect(item).not.toHaveProperty('vars');
     expect(item.v.role).toBe('knight');
@@ -214,13 +214,13 @@ describe('loadCardsFromDir', () => {
     const dir2 = makeTmpDir();
     fs.writeFileSync(path.join(dir1, 'a.yaml'), 'id: Alpha\n', 'utf8');
     fs.writeFileSync(path.join(dir2, 'b.yaml'), 'id: Beta\n', 'utf8');
-    expect(loadCardsFromDir([dir1, dir2])).toHaveLength(2);
+    expect(loadItemsFromDir([dir1, dir2])).toHaveLength(2);
   });
 
   test('accepts a scalar string path (not wrapped in array)', () => {
     const dir = makeTmpDir();
     fs.writeFileSync(path.join(dir, 'item.yaml'), 'id: Solo\n', 'utf8');
-    const items = loadCardsFromDir(dir);
+    const items = loadItemsFromDir(dir);
     expect(items).toHaveLength(1);
     expect(items[0].id).toBe('Solo');
   });

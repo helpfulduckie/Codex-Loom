@@ -53,8 +53,8 @@ function buildSharedAndDeltas(leafData) {
   for (const leaf of leafData) for (const id of leaf.items.keys()) itemIds.add(id);
 
   const sharedItems = [];                       // [{ id, type, rendered }]
-  const deltaCardsByLeaf = new Map();           // fileBase -> [{ id, type, rendered }]
-  for (const leaf of leafData) deltaCardsByLeaf.set(leaf.fileBase, []);
+  const deltaItemsByLeaf = new Map();           // fileBase -> [{ id, type, rendered }]
+  for (const leaf of leafData) deltaItemsByLeaf.set(leaf.fileBase, []);
 
   for (const id of [...itemIds].sort()) {
     const entries = leafData.map(l => l.items.get(id));
@@ -67,7 +67,7 @@ function buildSharedAndDeltas(leafData) {
     } else {
       for (const leaf of leafData) {
         const e = leaf.items.get(id);
-        if (e) deltaCardsByLeaf.get(leaf.fileBase).push({ id, type: e.type, rendered: e.rendered });
+        if (e) deltaItemsByLeaf.get(leaf.fileBase).push({ id, type: e.type, rendered: e.rendered });
       }
     }
   }
@@ -108,14 +108,14 @@ function buildSharedAndDeltas(leafData) {
   for (const leaf of leafData) {
     deltas.set(leaf.fileBase, {
       label:      leaf.label,
-      items:      deltaCardsByLeaf.get(leaf.fileBase),
+      items:      deltaItemsByLeaf.get(leaf.fileBase),
       components: deltaComponentsByLeaf.get(leaf.fileBase),
     });
   }
   return { shared, deltas };
 }
 
-function renderCardSection(items) {
+function renderItemSection(items) {
   if (items.length === 0) return null;
   const byType = new Map();
   for (const c of items) {
@@ -144,7 +144,7 @@ function renderComponentSections(components) {
 
 function writeSharedDoc(shared, outputDir) {
   const parts = ['# Shared (identical across all leaves)'];
-  const itemSection = renderCardSection(shared.items);
+  const itemSection = renderItemSection(shared.items);
   if (itemSection) parts.push(itemSection);
   parts.push(...renderComponentSections(shared.components));
   if (parts.length === 1) parts.push('_Nothing is identical across every leaf._');
@@ -155,7 +155,7 @@ function writeSharedDoc(shared, outputDir) {
 
 function writeDeltaDoc(fileBase, delta, outputDir) {
   const parts = [`# Delta: ${delta.label}`, '_Everything this branch has that is not in Shared.md._'];
-  const itemSection = renderCardSection(delta.items);
+  const itemSection = renderItemSection(delta.items);
   if (itemSection) parts.push(itemSection);
   parts.push(...renderComponentSections(delta.components));
   if (parts.length === 2) parts.push('_This branch matches the shared baseline exactly._');
@@ -186,7 +186,7 @@ function hasKeyCI(obj, name) {
 }
 
 /**
- * Flatten a item's diff-relevant fields to a map of lowercase dot-path → JSON value.
+ * Flatten an item's diff-relevant fields to a map of lowercase dot-path → JSON value.
  * Only roots in DIFF_ROOTS are walked; leaves are scalars and arrays (arrays compared whole).
  */
 function flattenItem(item) {

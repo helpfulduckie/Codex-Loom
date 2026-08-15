@@ -114,7 +114,7 @@ function matchCase(str, original) {
 }
 
 /**
- * Get the display name from a item (first word if scalar, name.display if mapping).
+ * Get the display name from an item (first word if scalar, name.display if mapping).
  */
 function getDisplayName(item) {
   const name = item.name;
@@ -125,7 +125,7 @@ function getDisplayName(item) {
 }
 
 /**
- * Get the full name from a item.
+ * Get the full name from an item.
  */
 function getFullName(item) {
   const name = item.name;
@@ -136,7 +136,7 @@ function getFullName(item) {
 }
 
 /**
- * Get the pronoun set name for a item, accounting for protagonist status.
+ * Get the pronoun set name for an item, accounting for protagonist status.
  */
 function getEffectivePronounSet(itemOrPronouns, itemId, branchProtagonist) {
   const isProtagonist = branchProtagonist && itemId &&

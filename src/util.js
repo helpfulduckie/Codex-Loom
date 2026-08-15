@@ -146,7 +146,7 @@ function resolveVariables(text, variables, _resolving) {
 }
 
 /**
- * Walk the text-bearing sections of a item (body, aid, render, name) and apply
+ * Walk the text-bearing sections of an item (body, aid, render, name) and apply
  * `transform(str) → str` to every string value (array elements mapped, nested
  * objects recursed). Mutates the item in place.
  *
@@ -165,7 +165,7 @@ function walkItemTextFields(item, transform) {
 /**
  * The render context for an item: its top-level fields, with the open namespaces
  * defaulted to {} so field lookups never hit undefined. `extra` merges in per-caller
- * additions (e.g. cardMap for cross-item render functions).
+ * additions (e.g. itemMap for cross-item render functions).
  *
  * `body`/`aid`/`render`/`v` keep object identity when present — callers that mutate
  * item.body through the context depend on that.
@@ -256,7 +256,7 @@ function warnPattern(text, label, re, describe) {
 
 /**
  * Final safety net: warn about any {$…} field/pronoun/character token left
- * unresolved in rendered output (a item or component). Emits one warning per
+ * unresolved in rendered output (an item or component). Emits one warning per
  * distinct leftover token.
  *
  * Targets {$…} only — {%…} is handled by warnUnexpandedVariables, and {@…} is
@@ -272,7 +272,7 @@ function warnUnresolvedFieldTokens(text, label) {
 
 /**
  * Final safety net: warn about any {%variable} token left unexpanded in rendered
- * output (a item or component). Emits one warning per distinct leftover token.
+ * output (an item or component). Emits one warning per distinct leftover token.
  *
  * Targets {%...} only — {@...} is intentionally not expanded in item content, so
  * a literal {@...} here is expected and must not be flagged.

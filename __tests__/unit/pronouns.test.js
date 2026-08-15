@@ -405,7 +405,7 @@ describe('getFullName', () => {
 // ── applyCrossItemRefs ────────────────────────────────────────────────────────
 
 describe('applyCrossItemRefs', () => {
-  test('resolves {$id.body.field} token in a item body string', () => {
+  test('resolves {$id.body.field} token in an item body string', () => {
     const items = [
       { id: 'aria',   body: { Tagline: '{$mentor.body.Tagline}' } },
       { id: 'mentor', body: { Tagline: 'Archivist' } },

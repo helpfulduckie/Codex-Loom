@@ -41,9 +41,9 @@ function stripAboveLastFence(rendered) {
 }
 
 /**
- * Get template content for a item, with optional hint fallback.
+ * Get template content for an item, with optional hint fallback.
  */
-function getCardTemplate(item, templates, style) {
+function getItemTemplate(item, templates, style) {
   const templateName = item.render && item.render.template
     ? item.render.template
     : (item.aid && item.aid.type ? item.aid.type : null);
@@ -114,7 +114,7 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
     const bodyText = syntheticItem.body
       ? (syntheticItem.body.text || syntheticItem.body.content || '')
       : '';
-    // Template resolution mirrors getCardTemplate: explicit render.template wins,
+    // Template resolution mirrors getItemTemplate: explicit render.template wins,
     // then fall back to the block's aid.type (so PE block types like
     // genreSettingBlock select their matching template without an explicit override).
     const inlineTemplateName = templateOverride
@@ -200,7 +200,7 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
   applyFieldRenderFunctions(item);
   applyPronounPasses(item, registry, branchProtagonist);
 
-  const templateContent = getCardTemplate(item, templates, style);
+  const templateContent = getItemTemplate(item, templates, style);
   if (!templateContent) {
     const name = item.id || blockDef.import;
     const src = item._source ? ` (${item._source})` : '';
@@ -314,7 +314,7 @@ function renderPESection(sectionDef, registry, templates, partials, compileConte
  * @param {Map}      overlays
  * @param {Set|null} emittedFullImportIds - optional out-param; receives the lowercase
  *                   ids of import blocks that actually rendered at full style. The
- *                   caller uses this to suppress exactly those story cards — so a item
+ *                   caller uses this to suppress exactly those story cards — so an item
  *                   PE excludes (or fails to render) is never dropped from Story Cards.
  */
 function compilePE(peBlocks, registry, templates, partials, compileContext, overlays = new Map(), emittedFullImportIds = null) {

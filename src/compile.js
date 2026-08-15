@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  loadCardsFromDir, loadTemplates, loadCompileConfig,
+  loadItemsFromDir, loadTemplates, loadCompileConfig,
   buildRegistry, mergeRegistries, buildOverlays, loadYaml,
 } = require('./loader');
 const {
@@ -30,7 +30,7 @@ const { DOCUMENT_COMPONENTS, emitDocumentComponent } = require('./emit/component
 const INVALID_TYPE_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
 
 /**
- * Validate a item's aid.type after variable expansion. aid.type is written to disk
+ * Validate an item's aid.type after variable expansion. aid.type is written to disk
  * as Story Cards/{type}/{type}.md, so it must be a legal path segment. Throws (aborts
  * the compile) on an invalid type. No-op when the item has no aid.type (that case is
  * already warned about during item resolution).
@@ -52,7 +52,7 @@ function validateCardType(item) {
 }
 
 /**
- * Get the template for a item. Checks render.template first, then aid.type.
+ * Get the template for an item. Checks render.template first, then aid.type.
  */
 function getTemplate(item, templates) {
   const keys = [
@@ -580,7 +580,7 @@ function compile(configPath, options = {}) {
   }
 
   // Load project items
-  const rawProjectItems = loadCardsFromDir(config._resolvedItems, { diagnostics: loadDiagnostics });
+  const rawProjectItems = loadItemsFromDir(config._resolvedItems, { diagnostics: loadDiagnostics });
 
   // Resolve includes
   const includedItems = resolveIncludes(rawProjectItems, canonRegistry, config, { diagnostics: loadDiagnostics });
@@ -617,7 +617,7 @@ function compile(configPath, options = {}) {
   console.log(`\nCompiling ${leaves.length} branch leaf/leaves...`);
 
   let totalFiles = 0;
-  const allCardIds = new Set();
+  const allItemIds = new Set();
   const leafSummaries = [];
 
   // Cross-branch review reports (--diff / --annotate) are built from data captured
@@ -657,7 +657,7 @@ function compile(configPath, options = {}) {
     // Compile Plot Essentials BEFORE story cards so suppression follows exactly what
     // PE actually emitted. A full-style import that renders into PE suppresses its
     // story card; one that PE excludes (or fails to render) is left as a story card —
-    // PE can never cause a item to vanish from both outputs.
+    // PE can never cause an item to vanish from both outputs.
     const peSpec = compileContext.componentRefs.plotEssential;
     const peSuppressedIds = new Set();
     let peContent = null;
@@ -685,7 +685,7 @@ function compile(configPath, options = {}) {
 
     // Accumulate unique item IDs and per-leaf stats for summary
     for (const item of resolvedItems) {
-      if (item.id) allCardIds.add(item.id.toLowerCase());
+      if (item.id) allItemIds.add(item.id.toLowerCase());
     }
     const leafItems    = resolvedItems.length;
     const leafVariants = resolvedItems.filter(c => c._hasVariant).length;
@@ -841,7 +841,7 @@ function compile(configPath, options = {}) {
       ` ${c(s.hasOpening)}  ${c(s.hasPE)} ${c(s.hasAIN)} ${c(s.hasAN)}`
     );
   }
-  console.log(`\n${allCardIds.size} unique items across project. Wrote ${totalFiles} file(s).`);
+  console.log(`\n${allItemIds.size} unique items across project. Wrote ${totalFiles} file(s).`);
 
   // Canon dependency manifest
   const canonManifest = buildCanonManifest(config);
@@ -1091,7 +1091,7 @@ if (require.main === module) {
         const dir = path.join(outputDir, 'card-sizes');
         fs.mkdirSync(dir, { recursive: true });
         const result = runBodySizeMode(scenarioRoot, dir, flags.verbose);
-        if (result) summaryParts.push('a item sizes file');
+        if (result) summaryParts.push('a card sizes file');
       }
 
       if (doLint) {

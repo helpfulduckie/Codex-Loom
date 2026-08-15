@@ -68,7 +68,7 @@ function mergeBranchSpecs(base, override) {
 }
 
 /**
- * Resolve the branch spec for a item/block, walking the branch path.
+ * Resolve the branch spec for an item/block, walking the branch path.
  *
  * Returns:
  *   null             → item is excluded from this branch (explicit ~ on the key)
@@ -82,7 +82,7 @@ function mergeBranchSpecs(base, override) {
  *
  * Both '*' and an explicit key can match at the same level; explicit adds to wildcard.
  *
- * @param {object|null} spec - the branches: mapping on a item def
+ * @param {object|null} spec - the branches: mapping on an item def
  * @param {string[]} branchPath - leaf branch path e.g. ['A', 'X']
  * @returns {null | string[]}
  */

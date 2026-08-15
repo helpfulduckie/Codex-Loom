@@ -53,7 +53,7 @@ function loadTemplates(dirs) {
 module.exports = {
   findFiles,
   loadYaml,
-  loadCardsFromDir: loadItemsFromDir,
+  loadItemsFromDir,
   loadNamedFiles,
   loadTemplates,
   loadCompileConfig,

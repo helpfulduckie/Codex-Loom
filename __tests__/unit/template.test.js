@@ -384,16 +384,16 @@ describe('applyFieldRenderFunctions', () => {
     warnSpy.mockRestore();
   });
 
-  describe('cross-card refs via cardMap', () => {
+  describe('cross-card refs via itemMap', () => {
     test('join() spreads mapping values from another card', () => {
       const card = {
         id: 'nyra',
         body: { affinity: '{join("; ", $Aness.body.magic.affinity)}' },
       };
-      const cardMap = new Map([
+      const itemMap = new Map([
         ['aness', { id: 'Aness', body: { magic: { affinity: { ice: 'high ice-affinity', growth: 'moderate growth-affinity' } } } }],
       ]);
-      applyFieldRenderFunctions(card, cardMap);
+      applyFieldRenderFunctions(card, itemMap);
       expect(card.body.affinity).toBe('high ice-affinity; moderate growth-affinity');
     });
 
@@ -402,10 +402,10 @@ describe('applyFieldRenderFunctions', () => {
         id: 'nyra',
         body: { keywords: '{join(", ", $Aness.body.personality.keywords)}' },
       };
-      const cardMap = new Map([
+      const itemMap = new Map([
         ['aness', { id: 'Aness', body: { personality: { keywords: ['inquisitive', 'polite', 'sarcastic'] } } }],
       ]);
-      applyFieldRenderFunctions(card, cardMap);
+      applyFieldRenderFunctions(card, itemMap);
       expect(card.body.keywords).toBe('inquisitive, polite, sarcastic');
     });
 
@@ -414,14 +414,14 @@ describe('applyFieldRenderFunctions', () => {
         id: 'nyra',
         body: { tagline: '{join("; ", $Aness.body.tagline)}' },
       };
-      const cardMap = new Map([
+      const itemMap = new Map([
         ['aness', { id: 'Aness', body: { tagline: 'Journeyman Healer' } }],
       ]);
-      applyFieldRenderFunctions(card, cardMap);
+      applyFieldRenderFunctions(card, itemMap);
       expect(card.body.tagline).toBe('Journeyman Healer');
     });
 
-    test('join() returns empty when no cardMap is passed (backward compat)', () => {
+    test('join() returns empty when no itemMap is passed (backward compat)', () => {
       const card = {
         id: 'nyra',
         body: { affinity: '{join("; ", $Aness.body.magic.affinity)}' },
@@ -430,15 +430,15 @@ describe('applyFieldRenderFunctions', () => {
       expect(card.body.affinity).toBe('');
     });
 
-    test('join() returns empty when card ID not in cardMap', () => {
+    test('join() returns empty when card ID not in itemMap', () => {
       const card = {
         id: 'nyra',
         body: { affinity: '{join("; ", $Unknown.body.field)}' },
       };
-      const cardMap = new Map([
+      const itemMap = new Map([
         ['aness', { id: 'Aness', body: { magic: { affinity: 'ice' } } }],
       ]);
-      applyFieldRenderFunctions(card, cardMap);
+      applyFieldRenderFunctions(card, itemMap);
       expect(card.body.affinity).toBe('');
     });
 
@@ -447,10 +447,10 @@ describe('applyFieldRenderFunctions', () => {
         id: 'bishop',
         body: { member: 'Alice ({join("; ", $Alice.body.traits)})' },
       };
-      const cardMap = new Map([
+      const itemMap = new Map([
         ['alice', { id: 'Alice', body: { traits: { hair: 'blond', eyes: 'blue' } } }],
       ]);
-      applyFieldRenderFunctions(card, cardMap);
+      applyFieldRenderFunctions(card, itemMap);
       expect(card.body.member).toBe('Alice (blond; blue)');
     });
   });
