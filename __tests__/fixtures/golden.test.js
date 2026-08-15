@@ -50,9 +50,9 @@ const GOLDEN_DIR = path.resolve(__dirname, '../../goldenFixtures');
 const EXPECTED_DIFF_CLASSES = [];
 
 const PROJECTS = [
-  { name: 'Baseline', dir: path.join('Baseline', 'Baseline') },
-  { name: 'Coinflip Company', dir: path.join('Eldemyr', 'Coinflip Company') },
-  { name: 'The Institute', dir: path.join('Esudia', 'The Institute') },
+  { name: 'Baseline', dir: path.join('Baseline', 'Baseline'), reports: ['seed-map', 'card-sizes', 'lint'] },
+  { name: 'Coinflip Company', dir: path.join('Eldemyr', 'Coinflip Company'), reports: ['seed-map', 'card-sizes', 'lint'] },
+  { name: 'The Institute', dir: path.join('Esudia', 'The Institute'), reports: ['card-sizes', 'lint'] },
 ];
 
 /** Where a project's compile.yaml sends its output, relative to the project directory. */
@@ -68,6 +68,31 @@ const BASELINE_SUBDIR = 'v3';
  * way to tell them apart. `Loom/` keeps the original v3 sources for comparison.
  */
 const SOURCE_SUBDIR = 'v4';
+
+/**
+ * Frozen report output, and why it needs freezing separately (§8.6).
+ *
+ * `compile()` writes no reports — seed map, card sizes and lint are post-hoc CLI modes
+ * that read the compiled tree back. So the whole class of consumers that re-parses the
+ * VL format sat outside the golden harness, which is exactly the code Phase 2 Step 2
+ * retargets onto `emit/vl.js:parseCards`. Retargeting a parser with no output under test
+ * would be a refactor with nothing to refactor against: the subtle behaviors — cards with
+ * no trigger list being skipped, quote characters surviving into trigger values — are
+ * precisely what a rewrite normalizes away while every unit test stays green.
+ *
+ * The three modes here are the three that parse cards. `overview` and `leaf-review` read
+ * files wholesale without parsing a fence, so they are not frozen.
+ *
+ * The Institute omits `seed-map` deliberately: it writes 66 files and 1.9 MB exercising
+ * the same parser path that its single `card-sizes` CSV already covers across all 2,192
+ * card renderings. Coinflip Company's 6-file seed map covers the per-leaf output shape.
+ */
+const REPORTS_SUBDIR = 'v3-reports';
+const REPORT_MODES = {
+  'seed-map': () => require('../../src/seedmap').runSeedMapMode,
+  'card-sizes': () => require('../../src/bodysize').runBodySizeMode,
+  lint: () => require('../../src/lint').runLintMode,
+};
 
 let tmpDir;
 
@@ -119,13 +144,16 @@ function normalizeManifest(raw, rootDir) {
 beforeAll(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-golden-'));
 
-  // Copy the fixture tree, skipping the committed baselines — they are the comparison
-  // target, not an input, and The Institute's alone is ~890 files.
+  // Copy the fixture tree, skipping both committed baselines — they are the comparison
+  // target, not an input, and The Institute's output baseline alone is ~890 files. The
+  // report baseline must be excluded for a second reason: the harness writes fresh
+  // reports to that same relative path inside the temp tree, and a copied baseline would
+  // survive there as a stale file the file-set assertion could not tell from a real one.
   fs.cpSync(GOLDEN_DIR, tmpDir, {
     recursive: true,
     filter: (src) => {
-      const rel = path.relative(GOLDEN_DIR, src);
-      return !rel.split(path.sep).includes(BASELINE_SUBDIR);
+      const segments = path.relative(GOLDEN_DIR, src).split(path.sep);
+      return !segments.includes(BASELINE_SUBDIR) && !segments.includes(REPORTS_SUBDIR);
     },
   });
 
@@ -134,6 +162,15 @@ beforeAll(() => {
   try {
     for (const project of PROJECTS) {
       compile(path.join(tmpDir, project.dir, SOURCE_SUBDIR, 'compile.yaml'));
+
+      // Reports run post-hoc against the tree that compile just wrote, which is how the
+      // CLI invokes them — so what is frozen is what a user would get.
+      const scenarioRoot = path.join(tmpDir, project.dir, OUTPUT_SUBDIR);
+      for (const mode of project.reports) {
+        const dir = path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
+        fs.mkdirSync(dir, { recursive: true });
+        REPORT_MODES[mode]()(scenarioRoot, dir, false);
+      }
     }
   } finally {
     quiet.forEach((spy) => spy.mockRestore());
@@ -220,4 +257,31 @@ describe.each(PROJECTS)('$name', (project) => {
     const differing = collectDifferences().map((d) => d.summary);
     expect(differing).toEqual([]);
   });
+
+  /**
+   * Reports are byte-for-byte in every phase. They are derived views of output that is
+   * already under test, so a report diff means the derivation changed — which is a bug
+   * whether or not the phase is output-changing. Phase 5 reworks `--card-sizes` (§8.5)
+   * and re-baselines this deliberately; nothing before it should touch a byte.
+   */
+  describe.each(project.reports)(
+    'report: %s',
+    (mode) => {
+      const actual = () => path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
+      const expected = () => path.join(GOLDEN_DIR, project.dir, REPORTS_SUBDIR, mode);
+
+      test('emits exactly the baseline file set', () => {
+        expect(listFiles(actual())).toEqual(listFiles(expected()));
+      });
+
+      test('every file is byte-identical to the baseline', () => {
+        const differing = listFiles(expected()).filter((rel) => {
+          const a = path.join(actual(), ...rel.split('/'));
+          const b = path.join(expected(), ...rel.split('/'));
+          return !fs.existsSync(a) || !fs.readFileSync(a).equals(fs.readFileSync(b));
+        });
+        expect(differing).toEqual([]);
+      });
+    },
+  );
 });
