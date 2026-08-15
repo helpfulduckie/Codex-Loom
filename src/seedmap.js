@@ -119,7 +119,11 @@ function buildSeedRelations(cards, peText = '') {
 
   for (const seeded of cards) {
     for (const trigger of seeded.triggers) {
-      const re = new RegExp(escapeRegex(trigger), 'gi');
+      // No `g` flag. One regex is reused across every candidate seeder below, and a
+      // `g` regex carries `lastIndex` between `.test()` calls — so after a match in one
+      // body the next body was searched from that offset rather than from zero, and
+      // real edges went missing. Nothing here iterates matches; `test` alone is wanted.
+      const re = new RegExp(escapeRegex(trigger), 'i');
 
       // Card-to-card seeds
       for (const seeder of cards) {
@@ -149,7 +153,9 @@ function buildOpeningFlags(cards, openingText = '') {
 
   for (const card of cards) {
     for (const trigger of card.triggers) {
-      const re = new RegExp(escapeRegex(trigger), 'gi');
+      // Same reason as buildSeedRelations. Harmless here — the loop breaks on the first
+      // match — but a stateful regex in a `test`-only path is a trap either way.
+      const re = new RegExp(escapeRegex(trigger), 'i');
       if (re.test(openingText)) {
         seededInOpening.add(card.title);
         break;
@@ -308,4 +314,7 @@ function runSeedMapMode(scenarioRoot, outputDir, verbose = false) {
   return { mdPath, csvPath };
 }
 
-module.exports = { runSeedMapMode, parseCardsFromMd, collectLeafCards, collectMdFiles };
+module.exports = {
+  runSeedMapMode, parseCardsFromMd, collectLeafCards, collectMdFiles,
+  buildSeedRelations, buildOpeningFlags,
+};
