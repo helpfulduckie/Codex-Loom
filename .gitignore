@@ -7,3 +7,6 @@ CLAUDE.md
 # v3/ trees are the baseline.
 /goldenFixtures/*/*/Velvet Lattice/
 /goldenFixtures/*/*/Loom/Review/
+# The .skill bundle is a zip of skill/aid-codex-loom/ — a build output, not source.
+# Regenerate it before uploading; the unpacked tree is the thing to edit.
+/skill/*.skill
