@@ -23,6 +23,12 @@ const { resolveVariables } = require('./util');
  *
  * This module now exists only so the call sites keep one shared entry point for token
  * expansion; it delegates straight to `util.resolveVariables`.
+ *
+ * Keeping the thin module was decided deliberately rather than left over: three call
+ * sites import it (`compile.js`, `description.js`, `loader/registry.js`), the `{@}`
+ * removal has a regression test that only makes sense against this entry point, and
+ * this comment is the only written record of why `{@}` went away. Inlining the one
+ * line would scatter all three. Not a candidate for removal.
  */
 function expandTokens(text, opts = {}) {
   if (typeof text !== 'string') return text;

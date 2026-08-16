@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts } = require('./util');
+const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, findKey } = require('./util');
 const { applyFieldOp } = require('./resolver');
 const { applyTokenPass } = require('./model/pronouns');
 const { normalizeWhitespace } = require('./template');
@@ -46,11 +46,10 @@ function resolveAINBranches(branchesSpec, branchPath) {
   let current = branchesSpec;
   for (const branch of branchPath) {
     if (!current || typeof current !== 'object') break;
-    const branchLower = branch.toLowerCase();
-    const exactKey = Object.keys(current).find(k => k !== '*' && k.toLowerCase() === branchLower);
+    const exactKey = branch === '*' ? null : findKey(current, branch);
     const wildcardVal = current['*'];
 
-    if (exactKey !== undefined) {
+    if (exactKey !== null) {
       current = current[exactKey];
     } else if (wildcardVal !== undefined) {
       current = wildcardVal;
@@ -109,7 +108,7 @@ function applyDocumentVariants(doc, variantNames) {
   let card = doc.card;
 
   for (const vName of variantNames) {
-    const actualKey = Object.keys(doc.variants).find(k => k.toLowerCase() === vName.toLowerCase());
+    const actualKey = findKey(doc.variants, vName);
     if (!actualKey) {
       console.warn(`  WARN [AIN]: document variant "${vName}" not found`);
       continue;
@@ -122,7 +121,7 @@ function applyDocumentVariants(doc, variantNames) {
     for (const sectionVarName of applyList) {
       for (const [sId, section] of Object.entries(sections)) {
         if (!section || !section.variants) continue;
-        const sVarKey = Object.keys(section.variants).find(k => k.toLowerCase() === sectionVarName.toLowerCase());
+        const sVarKey = findKey(section.variants, sectionVarName);
         if (sVarKey) {
           sections[sId] = applySection(section, section.variants[sVarKey]);
         }
@@ -133,7 +132,7 @@ function applyDocumentVariants(doc, variantNames) {
     if (variant.sections) {
       for (const [sId, sVal] of Object.entries(variant.sections)) {
         if (sVal === null) {
-          const actualSKey = Object.keys(sections).find(k => k.toLowerCase() === sId.toLowerCase());
+          const actualSKey = findKey(sections, sId);
           if (actualSKey) delete sections[actualSKey];
         }
       }

@@ -1,0 +1,74 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`emit/vl.js fence — kitchen-sink corpus renders the envelope for every corpus item 1`] = `
+"## Aness Vale
+~~~
+triggers: [Aness, Vale, ' Aria', 'Voss ']
+encapsulate: false
+notes: '[e]'
+~~~
+<body of Aness>
+
+———
+
+## Wyvern
+~~~
+triggers: [Wyvern]
+encapsulate: false
+~~~
+<body of Wyvern>
+
+———
+
+## WTG Time Config
+~~~
+encapsulate: false
+notes: |-
+  startDate: 06/28/1320
+  startTime: 9:00 PM
+~~~
+<body of WTG Time Config>
+
+———
+
+## Kaiden
+~~~
+encapsulate: false
+~~~
+<body of Kaiden>
+
+———
+
+## Felicia
+~~~
+encapsulate: false
+~~~
+<body of Felicia>
+
+———
+
+## Voss
+~~~
+encapsulate: false
+notes: 'marker: [e]'
+~~~
+<body of Voss>
+
+———
+
+## Chorus
+~~~
+encapsulate: false
+~~~
+<body of Chorus>"
+`;
+
+exports[`emit/vl.js fence — kitchen-sink corpus renders the post-flip known flag as literal notes text 1`] = `
+"## Kaiden
+~~~
+triggers: [Kaiden]
+encapsulate: false
+notes: 'known: true'
+~~~
+<body>"
+`;

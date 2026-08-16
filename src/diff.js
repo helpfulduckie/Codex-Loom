@@ -3,6 +3,17 @@
 // `safeResolve` re-resolves items the compile has already resolved and reported on, purely
 // to build the annotation report. It reports nothing: every diagnostic it could raise was
 // raised — and printed — during the compile that produced the tree being annotated.
+//
+// The silence is deliberate and safe for a structural reason, not a hopeful one: unlike the
+// post-hoc report modes, `--with-diff` and `--with-annotate` force a compile in the same
+// invocation (see `doCompile` in `compile.js`), so this pass cannot run against a tree whose
+// diagnostics were never emitted. Routing a real warner here instead double-reports every
+// finding, which is the bug this replaced.
+//
+// It follows that this path can never surface anything new, including diagnostics added
+// later — Phase 3's item-level ERRORs raise during the compile's own resolve and are
+// printed there. That stops being true only if annotation ever gains a standalone mode that
+// reads an existing output tree without compiling; such a mode needs a real warner, not this.
 const silentWarner = () => {};
 
 const fs   = require('fs');

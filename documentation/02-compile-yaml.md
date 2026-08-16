@@ -22,28 +22,13 @@ structure:
 structure:
   input:
     items:                        # sequence of project item directories
-      - ./cards
+      - ./Codex
     canon:                        # named mapping of canonical item directories
       main: ../../_Canon
       lore: ../../_Lore
     templates:                    # sequence of template directories (later overrides earlier)
       - ../../_SharedTemplates
       - ./templates
-    components:                   # named directory mappings per component type
-      aiInstructions:
-        default: ./ai-instructions.yaml
-      plotEssential:
-        default: ./plot-essentials.yaml
-      authorsNote:
-        default: ./authors-note.yaml
-      opening:
-        default: ./openings
-      branchFraming:
-        default: ./openings
-      scripts:
-        default: ./scripts
-      description:
-        default: ./description.yaml
   output: ./output
 
 protagonist: Aness                # global default protagonist ID
@@ -55,7 +40,7 @@ variables:                        # key-value pairs; used in templates as {%key}
 
 components:                       # root-level component specs (inline or file path)
   opening: "Who are you?"
-  plotEssential: "{%default}"     # reference to the "default" plotEssential dir/file
+  plotEssential: ./plot-essentials.yaml   # inline text or a path to a component file
 
 render:                           # project-wide rendering defaults
   notesTemplate: ProjectNotes     # template that renders every card's notes:
