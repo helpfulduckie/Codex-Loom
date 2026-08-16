@@ -2,7 +2,7 @@
 - include: "{%main}/Felicia.yaml"
 
 # Explicit import with overrides — takes precedence over the include above
-- import: Grayls
+- import: Felicia
   variants:
     felix:
       importVariants: [Felix]

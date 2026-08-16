@@ -199,7 +199,7 @@ This applies identically to local item definitions, `import:` entries, `include:
 
 **Project import:**
 ```yaml
-- import: Grayls
+- import: Felicia
   variants:
     felix:
       importVariants: [Felix]    # apply Felicia's canon Felix variant

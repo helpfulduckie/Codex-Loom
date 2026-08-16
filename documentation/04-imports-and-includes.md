@@ -44,7 +44,7 @@ To exclude all items in an included file from specific branches, attach a `branc
 You can attach `importVariants:` to an include directive to apply a variant to every item in the file. Items that **do not define** a variant by that name are **silently skipped** (no warning). This differs from a single `import:`, where a missing variant always emits a warning.
 
 ```yaml
-- include: "{%main}/Characters/Grayls.yaml"
+- include: "{%main}/Characters/Felicia.yaml"
   importVariants: [human]    # applied to every item that defines a "human" variant;
                               # items without it are silently unaffected
 ```
@@ -58,7 +58,7 @@ If an item from an `include:` file is also listed in an explicit `import:` entry
 - include: "{%main}/Characters/Felicia.yaml"
 
 # Explicit import with overrides — takes precedence over the include
-- import: Grayls
+- import: Felicia
   variants:
     felix:
       importVariants: [Felix]
@@ -113,7 +113,7 @@ This applies the `human` variant, then `human/noble`, then `sci-fi`, then `sci-f
 `importVariants:` can also appear **inside a branch variant** on the import, where it sources from the same canonical item's variant tree:
 
 ```yaml
-- import: Grayls
+- import: Felicia
   variants:
     felix:
       importVariants: [Felix]    # applies Felix variant from Felicia's canon variants
