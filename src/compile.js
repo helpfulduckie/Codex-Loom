@@ -10,6 +10,8 @@ const {
 const {
   resolveItem, enumerateLeaves, walkBranchChain, walkBranchTree,
 } = require('./resolver');
+const { resolvePlacements } = require('./model/item');
+const { loadComponentDocument } = require('./loader/component');
 const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
 const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, itemContext } = require('./util');
@@ -17,12 +19,14 @@ const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
 const { Diagnostics, busWarner, CODES: DIAG_CODES } = require('./diag');
 const { renderCard } = require('./emit/vl');
-const { loadPEConfig, compilePE, compilePEBlocks, writePE } = require('./pe');
 const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
 const { loadANConfig, compileAN, writeAN } = require('./an');
 const { loadDescConfig, extractScriptBanner, writeDescription } = require('./description');
 const { loadOpeningConfig, compileOpening } = require('./opening');
-const { DOCUMENT_COMPONENTS, emitDocumentComponent } = require('./emit/components');
+const {
+  DOCUMENT_COMPONENTS, SLOTTED_COMPONENTS, emitDocumentComponent,
+  renderSectionedComponent, writeSectionedComponent,
+} = require('./emit/components');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -413,9 +417,61 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagno
 }
 
 /**
- * Phase B: apply cross-item refs, pronouns, render, and write output.
+ * Render one item body for one component target (§7.4).
+ *
+ * The wrapper is forced off: the slot owns the wrapping of everything placed in it, and
+ * `emit/components.js` applies it once the occupants are in hand. Leaving the item's own
+ * `render.wrapper` in the context is what would ship an item double-braced inside a slot
+ * of the same wrapper — the bug §8.4 exists to eliminate, and the reason `render.wrapper`
+ * governs story-card output alone.
+ *
+ * Returns null and reports when the target's template ladder runs out with nothing to
+ * render, which is the one case the ladder's verbatim rung cannot cover: no template and
+ * no text is not a pass-through, it is an item that has nothing to say.
  */
-function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}, verbose = false, renderedById = null, projectNotesTemplate = null, diagnostics = new Diagnostics()) {
+function renderPlacementBody(item, target, templates, partials, variables, diagnostics) {
+  const template = target.template ? templates.get(String(target.template).toLowerCase()) : null;
+  const context = itemContext(item, { render: { ...(item.render || {}), wrapper: 'none' } });
+  const label = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
+
+  if (template) {
+    try {
+      return render(template.content, context, partials, variables);
+    } catch (err) {
+      diagnostics.error(
+        DIAG_CODES.RENDER_FAILED,
+        `item "${label}" failed to render into ${target.component}: ${err.message}`,
+        { file: item._source },
+      );
+      return null;
+    }
+  }
+
+  // Verbatim pass-through — the last rung of §7.4's ladder.
+  const raw = item.body && (item.body.text !== undefined ? item.body.text : item.body.content);
+  if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+    return resolveVariables(String(raw).trim(), variables);
+  }
+
+  diagnostics.error(
+    DIAG_CODES.TEMPLATE_NOT_FOUND,
+    `no template found for item "${label}" rendering into ${target.component}`
+    + `${target.slot ? ` slot "${target.slot}"` : ''} (template: ${target.template || 'none'})`,
+    { file: item._source },
+  );
+  return null;
+}
+
+/**
+ * Phase B: apply cross-item refs, pronouns, render, and write output.
+ *
+ * Returns `{ written, occupants }` — the story-card files, and the component slots those
+ * same items routed into. One traversal produces both, which is the §7.2 inversion in its
+ * smallest form: v3 ran this loop for story cards and a second resolver in `pe.js` for
+ * component content, then reconciled them through a suppression side channel. There is
+ * nothing to reconcile when one pass over one resolved item decides both.
+ */
+function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, variables = {}, verbose = false, renderedById = null, projectNotesTemplate = null, diagnostics = new Diagnostics()) {
   // Build early so render functions can resolve cross-item refs during field expansion.
   const resolvedById = new Map();
   for (const item of resolvedItems) {
@@ -455,10 +511,30 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
   // caller decides when to print and whether the run fails.
   const grouped = new Map();
 
+  // component key → slot name (lowercased) → occupants, unsorted. `emit/components.js`
+  // owns the sort, so `order:` then item id is stated in exactly one place (§7.4).
+  const occupants = new Map();
+
   for (const item of resolvedItems) {
     applyPronounPasses(item, registry, branchProtagonist, resolvedById);
 
-    if (suppressIds.has((item.id || '').toLowerCase())) continue; // fully rendered in PE; skip story card
+    // §7.2: the item says where it goes. Read once, here, and used for both outputs.
+    const placement = resolvePlacements(item);
+    const itemId = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
+
+    for (const target of placement.targets) {
+      const text = renderPlacementBody(item, target, templates, partials, variables, diagnostics);
+      if (text === null) continue;
+      if (!occupants.has(target.component)) occupants.set(target.component, new Map());
+      const slots = occupants.get(target.component);
+      const slotKey = String(target.slot || '').toLowerCase();
+      if (!slots.has(slotKey)) slots.set(slotKey, []);
+      slots.get(slotKey).push({ id: itemId, order: target.order, text, slot: target.slot });
+    }
+
+    // `storyCard: false` is now the only thing that suppresses a card (§7.4). An item that
+    // renders only into a component never produces one, so there is nothing to suppress.
+    if (!placement.storyCard) continue;
 
     // Validate the fully-resolved aid.type (it becomes a folder/file name). Runs here,
     // after all {%}/{$} passes, so it sees the final on-disk type. Aborts on invalid.
@@ -466,11 +542,10 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
 
     const template = getTemplate(item, templates);
     if (!template) {
-      const name = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
       const type = (item.aid && item.aid.type) || (item.render && item.render.template) || '?';
       diagnostics.error(
         DIAG_CODES.TEMPLATE_NOT_FOUND,
-        `no template found for item "${name}" (type: ${type})`,
+        `no template found for item "${itemId}" (type: ${type})`,
         { file: item._source },
       );
       continue;
@@ -492,24 +567,22 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
         loc: { file: item._source },
       }).text;
     } catch (err) {
-      const name = item.id || String(item.name);
       diagnostics.error(
         DIAG_CODES.RENDER_FAILED,
-        `item "${name}" failed to render: ${err.message}`,
+        `item "${itemId}" failed to render: ${err.message}`,
         { file: item._source },
       );
       continue;
     }
 
     const type = (item.aid && item.aid.type) || 'Uncategorized';
-    const itemLabel = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
-    warnUnexpandedVariables(rendered, `item "${itemLabel}" (${type})`);
-    warnUnresolvedFieldTokens(rendered, `item "${itemLabel}" (${type})`);
-    warnMechanicalArtifacts(rendered, `item "${itemLabel}" (${type})`);
+    warnUnexpandedVariables(rendered, `item "${itemId}" (${type})`);
+    warnUnresolvedFieldTokens(rendered, `item "${itemId}" (${type})`);
+    warnMechanicalArtifacts(rendered, `item "${itemId}" (${type})`);
     if (!grouped.has(type)) grouped.set(type, []);
     // Carry a sort key (the item's real id, lowercased) so output order is
     // deterministic regardless of authoring order in the source YAML.
-    grouped.get(type).push({ sortKey: String(itemLabel).toLowerCase(), rendered });
+    grouped.get(type).push({ sortKey: String(itemId).toLowerCase(), rendered });
     // Capture the rendered block per item id for cross-branch diff/annotate reports.
     if (renderedById && item.id) renderedById.set(item.id.toLowerCase(), { type, rendered });
   }
@@ -527,7 +600,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     written.push(outPath);
     if (verbose) console.log(`    OK: ${type} (${items.length} item(s)) → ${outPath}`);
   }
-  return written;
+  return { written, occupants };
 }
 
 /**
@@ -798,6 +871,21 @@ function compile(configPath, options = {}) {
   const recordGap = (leaf, component, spec, reason) =>
     componentGaps.push({ leaf, component, spec: spec == null ? '(none)' : String(spec), reason });
 
+  // A sectioned component document is read, validated and normalized once per file rather
+  // than once per leaf. Which sections apply is a per-branch question that
+  // `sectionsForBranch` answers from the normalized document, so nothing is lost — and a
+  // schema violation in a component reaches the author once instead of once per leaf,
+  // which for The Institute's 32 leaves is the difference between a diagnostic and a wall.
+  const sectionedDocs = new Map();
+  const loadSectioned = (spec, descriptor) => {
+    if (!sectionedDocs.has(spec)) {
+      sectionedDocs.set(spec, loadComponentDocument(spec, {
+        diagnostics: compileDiagnostics, label: descriptor.label,
+      }));
+    }
+    return sectionedDocs.get(spec);
+  };
+
   for (const branchPath of leaves) {
     const label = branchPath.length > 0 ? branchPath.join('/') : '(root)';
     if (verbose) console.log(`\n  Branch: ${label}`);
@@ -817,32 +905,6 @@ function compile(configPath, options = {}) {
     const branchProtagonist = resolveVariables(inheritedProtagonist, ctx.variables).toLowerCase() || null;
     const compileContext = { branchPath, branchProtagonist, ...ctx, diagnostics: compileDiagnostics };
 
-    // Compile Plot Essentials BEFORE story cards so suppression follows exactly what
-    // PE actually emitted. A full-style import that renders into PE suppresses its
-    // story card; one that PE excludes (or fails to render) is left as a story card —
-    // PE can never cause an item to vanish from both outputs.
-    const peSpec = compileContext.componentRefs.plotEssential;
-    const peSuppressedIds = new Set();
-    let peContent = null;
-    let peUnresolved = false;
-    let peNoBlocks = false;
-    let peDiffBlocks = []; // per-block PE segments for cross-branch diff (capture only)
-    if (peSpec) {
-      if (typeof peSpec === 'string' && peSpec.includes('{')) {
-        peUnresolved = true;
-      } else {
-        const peBlocks = loadPEConfig(typeof peSpec === 'string' ? peSpec : null);
-        if (peBlocks.length === 0) {
-          peNoBlocks = true;
-        } else {
-          peContent = compilePE(peBlocks, registry, templates, partials, compileContext, overlays, peSuppressedIds);
-          if (captureReports) {
-            peDiffBlocks = compilePEBlocks(peBlocks, registry, templates, partials, { ...compileContext, diagnostics: null }, overlays);
-          }
-        }
-      }
-    }
-
     // Phase A: resolve all story cards
     const resolvedItems = resolveBranchItems(allItemDefs, registry, branchPath, ctx.variables, compileDiagnostics);
 
@@ -853,10 +915,11 @@ function compile(configPath, options = {}) {
     const leafItems    = resolvedItems.length;
     const leafVariants = resolvedItems.filter(c => c._hasVariant).length;
 
-    // Phase B: cross-item refs + pronouns + render + write
+    // Phase B: cross-item refs + pronouns + render + write. One pass produces the story
+    // cards and the component occupants together — see renderBranchItems.
     const renderedById = captureReports ? new Map() : null;
-    const written = renderBranchItems(
-      resolvedItems, registry, templates, partials, outputDir, branchProtagonist, peSuppressedIds, ctx.variables, verbose, renderedById,
+    const { written, occupants } = renderBranchItems(
+      resolvedItems, registry, templates, partials, outputDir, branchProtagonist, ctx.variables, verbose, renderedById,
       (compileContext.render && compileContext.render.notesTemplate) || null,
       compileDiagnostics
     );
@@ -867,19 +930,42 @@ function compile(configPath, options = {}) {
     let ainBlockText = null;
     let anBlockText  = null;
 
-    // Plot Essentials — write the content compiled above and record any gaps.
-    let hasPE = false;
-    if (peSpec) {
-      if (peUnresolved) {
-        recordGap(label, 'Plot Essentials', peSpec, 'unresolved reference — token did not expand to a path');
-      } else if (peNoBlocks) {
-        recordGap(label, 'Plot Essentials', peSpec, 'source loaded no blocks (missing or empty file)');
+    // Sectioned components (§7.2) — the shape comes from the component document, the
+    // content from the items that named its slots. This runs *after* story cards now
+    // rather than before: the ordering constraint existed only so suppression could
+    // follow what Plot Essentials had actually emitted, and there is no suppression left.
+    const sectionedWritten = {};
+    const sectionedSegments = {};
+    for (const descriptor of SLOTTED_COMPONENTS) {
+      const spec = compileContext.componentRefs[descriptor.key];
+      if (!spec) continue;
+      if (typeof spec === 'string' && spec.includes('{')) {
+        recordGap(label, descriptor.label, spec, 'unresolved reference — token did not expand to a path');
+        continue;
+      }
+      const component = loadSectioned(spec, descriptor);
+      if (!component) {
+        recordGap(label, descriptor.label, spec, 'source declared no sections (missing or empty file)');
+        continue;
+      }
+      const { text, segments } = renderSectionedComponent(
+        component, branchPath, occupants.get(descriptor.key) || new Map(),
+        {
+          defaultHeadingLevel: descriptor.defaultHeadingLevel,
+          variables: ctx.variables, registry, branchProtagonist,
+        },
+      );
+      const outPath = writeSectionedComponent(outputDir, descriptor, text);
+      if (outPath) {
+        sectionedWritten[descriptor.key] = true;
+        sectionedSegments[descriptor.key] = segments;
+        if (verbose) console.log(`    OK: ${descriptor.verboseLabel} → ${outPath}`);
+        totalFiles++;
       } else {
-        const pePath = writePE(outputDir, peContent);
-        if (pePath) { hasPE = true; if (verbose) console.log(`    OK: PlotEssentials → ${pePath}`); totalFiles++; }
-        else recordGap(label, 'Plot Essentials', peSpec, 'compiled to empty content (all blocks excluded or produced nothing)');
+        recordGap(label, descriptor.label, spec, 'compiled to empty content (every section excluded or empty)');
       }
     }
+    const hasPE = !!sectionedWritten.plotEssential;
 
     // Document components (AI Instructions, Author's Note) — one table, iterated once.
     // Both were near-identical twenty-line blocks differing only in loader, compiler,
@@ -914,7 +1000,7 @@ function compile(configPath, options = {}) {
         fileBase: branchPath.length ? branchPath.join(' - ') : rootDirName,
         items: renderedById,
         components: {
-          plotEssentials: peDiffBlocks,
+          plotEssentials: sectionedSegments.plotEssential || [],
           aiInstructions: ainBlockText != null ? [{ key: 'AI Instructions', text: ainBlockText }] : [],
           authorsNote:    anBlockText  != null ? [{ key: "Author's Note",   text: anBlockText  }] : [],
         },

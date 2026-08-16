@@ -95,16 +95,19 @@ const RENDER = {
     template: STRING,
     wrapper: STRING,
     notesTemplate: STRING,
-    storyCard: { type: TYPES.BOOLEAN, note: 'Phase 3' },
+    storyCard: { type: TYPES.BOOLEAN },
 
     // Per-component render targets (§7.4), one key per row of §7.3's component table.
-    // The `note` stays until the phase that reads the key: Phase 3 builds the item/slot
-    // model for the four components that get sections, and §7.7's description-as-a-
-    // component and the opening pair keep their own pipelines until Phase 6.
-    plotEssential: target('Phase 3'),
-    summary: target('Phase 3'),
-    aiInstructions: target('Phase 3'),
-    authorsNote: target('Phase 3'),
+    // The `note` stays until the phase that reads the key. Plot Essentials is read now;
+    // the other three components do not have sections yet, so a target naming one is
+    // still parsed into a placement by `model/item.js` and then has nowhere to land —
+    // the note is what keeps that from being silent, and it goes when the component that
+    // consumes the target arrives. §7.7's description-as-a-component and the opening pair
+    // keep their own pipelines until Phase 6.
+    plotEssential: target(),
+    summary: target('Phase 3, step 8'),
+    aiInstructions: target('Phase 3, step 8'),
+    authorsNote: target('Phase 3, step 8'),
     description: target('Phase 6'),
     opening: target('Phase 6'),
     branchFraming: target('Phase 6'),

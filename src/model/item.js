@@ -24,6 +24,20 @@ const CODES = Object.freeze({
 });
 
 /**
+ * The components an item may route into (§7.3), in the order targets are reported.
+ *
+ * `description`, `opening` and `branchFraming` are absent because they keep their own
+ * pipelines until Phase 6 — the schema declares them so an author can write ahead of the
+ * implementation, and this list is what the implementation actually reads.
+ */
+const PLACEABLE_COMPONENTS = Object.freeze([
+  'plotEssential', 'summary', 'aiInstructions', 'authorsNote',
+]);
+
+/** §7.4: items within a slot sort by `order:`, and 5 is the middle of the road. */
+const DEFAULT_ORDER = 5;
+
+/**
  * Return true if the first segment of variantPath exists on itemDef.variants.
  * Used to decide local-vs-canon dispatch without emitting a spurious warning.
  */
@@ -252,4 +266,59 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
   return item;
 }
 
-module.exports = { resolveItem, collectVariantDeltas, parseVariantsList, CODES };
+/**
+ * Where a resolved item renders — the §7.2 inversion, in one function.
+ *
+ * The item states its targets and this reads them; nothing pulls an item in. That is the
+ * whole of the change Phase 3 makes, and the reason this lives in `model/item.js` rather
+ * than in the emitter: an item resolved through two pipelines that can disagree is the
+ * largest single bug category in the project's history (§7.1), so there is exactly one
+ * place that decides what an item is and exactly one place that decides where it goes,
+ * and they are the same module.
+ *
+ * Returns `{ storyCard, targets }`. A target carries the slot it names, the order it
+ * sorts by, and the template that renders it *for that target* — resolved here rather
+ * than at render time because §7.4's ladder starts at the target and only then falls back
+ * to the item, which is knowledge the emitter would otherwise have to reconstruct.
+ *
+ * ── The template ladder, and what `null` means ──────────────────────────────
+ *
+ * Target `template:` → `render.template` → `aid.type` → verbatim. The last rung is why
+ * the field can come back `null`: an item with no type and no template still renders, by
+ * passing its own text through untouched, which is what a genre block written as prose
+ * needs. `resolveItem` has already collapsed rungs two and three into each other, so by
+ * the time this runs the ladder has at most two live rungs — it is spelled out in full
+ * anyway, because the collapse is a normalization and not a guarantee.
+ *
+ * ── Why `true` produces a target ────────────────────────────────────────────
+ *
+ * `plotEssential: true` names no slot and cannot resolve, and the schema cannot express
+ * "boolean, but only false". It is carried through here as a target with a null slot so
+ * that step 7 reports it alongside the undeclared-slot ERROR — one place that reports on
+ * targets, rather than two that can disagree about which targets exist.
+ */
+function resolvePlacements(item) {
+  const render = (item && item.render) || {};
+  const aid = (item && item.aid) || {};
+
+  const targets = [];
+  for (const component of PLACEABLE_COMPONENTS) {
+    const spec = render[component];
+    if (spec === undefined || spec === null || spec === false) continue;
+
+    const target = (spec && typeof spec === 'object' && !Array.isArray(spec)) ? spec : {};
+    targets.push({
+      component,
+      slot: typeof target.slot === 'string' && target.slot ? target.slot : null,
+      order: typeof target.order === 'number' ? target.order : DEFAULT_ORDER,
+      template: target.template || render.template || aid.type || null,
+    });
+  }
+
+  return { storyCard: render.storyCard !== false, targets };
+}
+
+module.exports = {
+  resolveItem, collectVariantDeltas, parseVariantsList, resolvePlacements,
+  PLACEABLE_COMPONENTS, DEFAULT_ORDER, CODES,
+};

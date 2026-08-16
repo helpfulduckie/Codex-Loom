@@ -13,12 +13,18 @@
  *   node scripts/rebaseline.js                 report only, writes nothing
  *   node scripts/rebaseline.js --write         write the baseline, if the shape allows
  *   node scripts/rebaseline.js --allow body    widen the allowed shape for this run
+ *   node scripts/rebaseline.js --only "Plot Essentials.md"  restrict which files may move
  *   node scripts/rebaseline.js "The Institute" one project rather than all three
  *
  * The default allowed shape is `fence`, matching `EXPECTED_DIFF_CLASSES` in
  * `golden.test.js`. `--allow` exists because a later phase legitimately changes body text;
  * it takes an explicit argument every time rather than reading the constant, so widening
  * the shape is a decision someone typed rather than one they inherited.
+ *
+ * `--only` is the path-side half of the same guard, and exists for the same reason
+ * `EXPECTED_DIFF_FILES` does in the harness: component output carries no envelope, so
+ * every line in it classifies as `body` and `--allow body` alone would wave through a
+ * rewritten story card. A phase whose diff lands in a component states both halves.
  *
  * Three things this deliberately does not do:
  *
@@ -49,6 +55,7 @@ const GOLDEN_DIR = path.resolve(__dirname, '..', 'goldenFixtures');
 
 function parseArgs(argv) {
   const allowed = new Set(['fence']);
+  const only = [];
   const names = [];
   let write = false;
 
@@ -56,6 +63,7 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--write') write = true;
     else if (arg === '--allow') allowed.add(argv[++i]);
+    else if (arg === '--only') only.push(argv[++i]);
     else if (arg.startsWith('--')) throw new Error(`Unknown flag ${arg}`);
     else names.push(arg);
   }
@@ -68,7 +76,7 @@ function parseArgs(argv) {
       return found;
     });
 
-  return { write, allowed, projects };
+  return { write, allowed, only, projects };
 }
 
 // ── file walking ─────────────────────────────────────────────────────────────
@@ -212,8 +220,9 @@ function printReport(label, report, { verbose }) {
 // ── main ─────────────────────────────────────────────────────────────────────
 
 function main() {
-  const { write, allowed, projects } = parseArgs(process.argv.slice(2));
+  const { write, allowed, only, projects } = parseArgs(process.argv.slice(2));
   console.log(`allowed diff shape: ${[...allowed].join(', ')}`);
+  if (only.length > 0) console.log(`allowed only in: ${only.join(', ')}`);
 
   const tmpDir = buildTempTree(projects);
   try {
@@ -232,6 +241,17 @@ function main() {
       if (outside.length > 0) {
         console.error(`    REFUSING: ${project.name} has ${outside.join(', ')}-class changes, outside the allowed shape.`);
         blocked = true;
+      }
+
+      if (only.length > 0) {
+        const strays = output.changed
+          .map((change) => change.rel)
+          .filter((rel) => !only.some((pattern) => rel.includes(pattern)));
+        if (strays.length > 0) {
+          console.error(`    REFUSING: ${project.name} changed ${strays.length} file(s) outside --only:`);
+          for (const rel of strays.slice(0, 5)) console.error(`      ${rel}`);
+          blocked = true;
+        }
       }
 
       const reports = {};

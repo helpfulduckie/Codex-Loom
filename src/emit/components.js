@@ -30,6 +30,12 @@ const path = require('path');
 
 const { loadAINConfig, compileAIN, writeAIN } = require('../ain');
 const { loadANConfig, compileAN, writeAN } = require('../an');
+const { sectionsForBranch, WRAP } = require('../model/component');
+const { applyWrapper } = require('../template');
+const { applyTokenPass } = require('../model/pronouns');
+const {
+  resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts,
+} = require('../util');
 
 /**
  * How a component's spec merges down the branch chain.
@@ -74,9 +80,29 @@ const DOCUMENT_COMPONENTS = Object.freeze([
   },
 ]);
 
+/**
+ * Components built from `sections:`, some of which are slots items route into (§7.2).
+ *
+ * Plot Essentials is the first row and, until step 8, the only one. `defaultHeadingLevel`
+ * is a column rather than a constant because v3's two formats disagree about what a bare
+ * `heading:` means — Plot Essentials reads it as level 0 and AI Instructions as level 2 —
+ * and both are right for their own output. `model/component.js` therefore carries
+ * `headingLevel` through unset, and the default is applied here, where the component is
+ * known.
+ */
+const SLOTTED_COMPONENTS = Object.freeze([
+  {
+    key: 'plotEssential',
+    label: 'Plot Essentials',
+    file: 'Plot Essentials.md',
+    declaration: DECLARATION.INHERITED,
+    verboseLabel: 'PlotEssentials',
+    defaultHeadingLevel: 0,
+  },
+]);
+
 /** Components handled by their own pipelines, listed so the table is the whole picture. */
 const OTHER_COMPONENTS = Object.freeze([
-  { key: 'plotEssential', label: 'Plot Essentials', declaration: DECLARATION.INHERITED, note: 'own pipeline — block list, suppression, diff capture' },
   { key: 'description', label: 'Description', declaration: DECLARATION.PROJECT, note: 'own pipeline — project-level, three source shapes' },
   { key: 'opening', label: 'Opening', declaration: DECLARATION.INHERITED, note: 'written at leaves; inherits down the tree' },
   { key: 'branchFraming', label: 'Branch framing', declaration: DECLARATION.NODE, note: 'written at non-leaf nodes; v3 spelling openingChoice' },
@@ -114,9 +140,149 @@ function emitDocumentComponent(descriptor, spec, options) {
   };
 }
 
+// ── Sectioned components (§7.2, §7.4) ────────────────────────────────────────
+
+/**
+ * Blocks that stand on their own are separated by a blank line; lines sharing one wrapper
+ * are not. That single rule produces both of v3's behaviors without a special case:
+ * `wrap: each` emits several wrapped blocks and joins them with `BLOCK_GAP`, `wrap: all`
+ * emits one wrapper around occupants joined with `LINE_GAP`, and sections join with
+ * `BLOCK_GAP` because a section is a block.
+ */
+const BLOCK_GAP = '\n\n';
+const LINE_GAP = '\n';
+
+/** `heading` as it is written into the output, or null when the section has none. */
+function headingText(section, defaultHeadingLevel) {
+  if (!section.heading) return null;
+  const level = section.headingLevel === undefined ? defaultHeadingLevel : section.headingLevel;
+  return level > 0 ? `${'#'.repeat(level)} ${section.heading}` : section.heading;
+}
+
+/** The lines of a text section's own content, variables and tokens resolved. */
+function textLines(section, options) {
+  const { variables = {}, registry, branchProtagonist } = options;
+  const prefix = section.bullet ? '- ' : '';
+  const resolve = (value) => {
+    const withVars = resolveVariables(String(value), variables);
+    return prefix + applyTokenPass(withVars, { item: {}, registry, branchProtagonist }).trim();
+  };
+
+  const text = section.text;
+  if (typeof text === 'string') return text.trim() ? [resolve(text)] : [];
+  if (text && typeof text === 'object') {
+    return Object.values(text).filter((v) => v !== null && v !== undefined).map(resolve);
+  }
+  return [];
+}
+
+/**
+ * One section's contribution to the output, or null when it contributes nothing.
+ *
+ * A slot with no occupants returns null rather than an empty wrapper — an empty cast on
+ * one branch is legitimate (§7.4 makes it a WARN, raised in step 7), and shipping `[\n\n]`
+ * for it would be worse than shipping nothing.
+ */
+function renderSection(section, occupants, options) {
+  const { defaultHeadingLevel = 0 } = options;
+  const heading = headingText(section, defaultHeadingLevel);
+
+  if (section.isSlot) {
+    const bodies = occupants.map((o) => o.text).filter((t) => t && t.trim());
+    if (bodies.length === 0) return null;
+
+    // The slot owns the wrapping and the item's own `render.wrapper` is ignored (§7.4);
+    // `wrap` decides only whether that wrapper encloses each occupant or the collection.
+    if (section.wrap === WRAP.ALL) {
+      const lines = [];
+      if (heading) {
+        lines.push(heading);
+        if (!section.compact) lines.push('');
+      }
+      lines.push(bodies.join(LINE_GAP));
+      return applyWrapper(lines.join(LINE_GAP), section.wrapper);
+    }
+
+    const blocks = bodies.map((body) => applyWrapper(body, section.wrapper));
+    if (!heading) return blocks.join(BLOCK_GAP);
+    // The heading sits outside the wrappers here, because there is no single wrapper for
+    // it to sit inside — that is the whole difference `wrap: all` expresses.
+    return [heading, blocks.join(BLOCK_GAP)].join(section.compact ? LINE_GAP : BLOCK_GAP);
+  }
+
+  const lines = textLines(section, options);
+  if (!heading && lines.length === 0) return null;
+
+  const parts = [];
+  if (heading) {
+    parts.push(heading);
+    if (lines.length > 0 && !section.compact) parts.push('');
+  }
+  parts.push(...lines);
+  return applyWrapper(parts.join(LINE_GAP), section.wrapper);
+}
+
+/**
+ * Render a whole sectioned component for one branch leaf.
+ *
+ * Returns `{ text, segments }`. `segments` is the same content un-joined and keyed by
+ * section name, which is what the cross-branch reports compare — §7.2's naming made
+ * load-bearing a second time: v3 could only diff Plot Essentials as one opaque blob for
+ * exactly the reason it could never make a component importable, namely that its blocks
+ * had no names.
+ *
+ * `occupants` is a Map keyed by lowercased slot name. Sorting happens here rather than at
+ * the call site so that `order:` then item id (§7.4) is stated once — filesystem traversal
+ * order must never reach the output, and the only way to be sure of that is for the sort
+ * to have no other input.
+ */
+function renderSectionedComponent(component, branchPath, occupants, options = {}) {
+  if (!component) return { text: null, segments: [] };
+
+  const segments = [];
+  for (const { section } of sectionsForBranch(component, branchPath)) {
+    const placed = section.isSlot
+      ? (occupants.get(section.name.toLowerCase()) || []).slice().sort(
+        (a, b) => (a.order - b.order) || String(a.id).localeCompare(String(b.id)),
+      )
+      : [];
+    const text = renderSection(section, placed, options);
+    if (text && text.trim()) segments.push({ key: `section:${section.name}`, text });
+  }
+
+  return {
+    text: segments.length > 0 ? segments.map((s) => s.text).join(BLOCK_GAP) : null,
+    segments,
+  };
+}
+
+/**
+ * Write a sectioned component's output file, or return null when there is nothing to say.
+ *
+ * The three unexpanded-token checks run here rather than at the section level because they
+ * report per file, and a `{%var}` that survived is equally wrong wherever in the document
+ * it sits.
+ */
+function writeSectionedComponent(outputDir, descriptor, content) {
+  if (!content) return null;
+  const dir = path.join(outputDir, 'Components');
+  fs.mkdirSync(dir, { recursive: true });
+  const outPath = path.join(dir, descriptor.file);
+  const label = `component ${descriptor.file}`;
+  warnUnexpandedVariables(content, label);
+  warnUnresolvedFieldTokens(content, label);
+  warnMechanicalArtifacts(content, label);
+  fs.writeFileSync(outPath, `${content}\n`, 'utf8');
+  return outPath;
+}
+
 module.exports = {
   DECLARATION,
   DOCUMENT_COMPONENTS,
+  SLOTTED_COMPONENTS,
   OTHER_COMPONENTS,
   emitDocumentComponent,
+  renderSection,
+  renderSectionedComponent,
+  writeSectionedComponent,
 };

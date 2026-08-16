@@ -37,7 +37,8 @@ const GOLDEN_DIR = path.resolve(__dirname, '../../goldenFixtures');
  * and 9. An output-changing phase widens it to exactly the classes its expected diff
  * covers, and never further:
  *
- *   Phase 2 (emitter)   ['fence']  the envelope moves into emit/vl.js
+ *   Phase 2 (emitter)     ['fence']  the envelope moves into emit/vl.js
+ *   Phase 3 (item/slot)   ['body']   scoped by EXPECTED_DIFF_FILES, below
  *
  * Phase 2 is set to `fence` alone rather than `fence, title`, even though the heading is
  * half of what moved. The emitter's title ladder was checked against the corpus before it
@@ -45,16 +46,25 @@ const GOLDEN_DIR = path.resolve(__dirname, '../../goldenFixtures');
  * disagree, so no heading should change. Allowing `title` would buy nothing and would wave
  * through the one regression this move could plausibly cause — a card quietly renamed,
  * which in AID means a card the player sees under a different name.
+ */
+const EXPECTED_DIFF_CLASSES = ['body'];
+
+/**
+ * The files the phase in progress is allowed to change, when the class alone cannot say.
  *
  * The classes name parts of an envelope, so they only discriminate on files that have
  * one. Component output — `Plot Essentials.md`, `AI Instructions.md` — carries no `##`
- * heading and no `~~~` fence, so every line in it is `body`. A phase whose expected diff
- * lands in a component file therefore cannot state its shape here, and needs a per-file
- * expectation instead. That is a limit of this constant rather than a prediction about
- * any particular phase: a phase that turns out output-preserving is already correctly
- * served by the empty setting.
+ * heading and no `~~~` fence, so every line in it is `body`, and `body` on its own would
+ * wave through a rewritten story card as readily as a restructured component. That was
+ * noted as a limit of the classes when Phase 2 set them, with the observation that a phase
+ * landing in a component file would need a per-file expectation instead. Phase 3 is that
+ * phase, and this is that expectation.
+ *
+ * `null` means "no file restriction" and is the setting for a phase whose classes already
+ * discriminate. Widening this is the same deliberate act as widening the classes: it says
+ * which files a reviewer looked at, and nothing outside them may move.
  */
-const EXPECTED_DIFF_CLASSES = ['fence'];
+const EXPECTED_DIFF_FILES = /(^|\/)Components\/Plot Essentials\.md$/;
 
 // The fixture set itself lives beside the fixtures, because `scripts/rebaseline.js`
 // regenerates what this file checks and the two must not drift apart.
@@ -230,7 +240,8 @@ describe.each(PROJECTS)('$name', (project) => {
    */
   test('no file differs outside the phase\'s expected diff shape', () => {
     const outside = collectDifferences()
-      .filter((d) => d.classes.some((c) => !EXPECTED_DIFF_CLASSES.includes(c)))
+      .filter((d) => d.classes.some((c) => !EXPECTED_DIFF_CLASSES.includes(c))
+        || (EXPECTED_DIFF_FILES && !EXPECTED_DIFF_FILES.test(d.rel)))
       .map((d) => d.summary);
     expect(outside).toEqual([]);
   });
