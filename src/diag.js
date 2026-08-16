@@ -51,6 +51,39 @@ const CODES = Object.freeze({
 });
 
 /**
+ * Severity by code, for diagnostics that arrive through a channel that cannot carry one.
+ *
+ * `model/` reports through `onWarn(code, message)` (§3.3) — two arguments, no severity —
+ * so severity has to be recoverable from the code alone. This table is the code-side copy
+ * of the severity column in `documentation/11-diagnostics.md`, and a test asserts the two
+ * agree. Codes raised by modules that call `diagnostics.error()`/`.warn()` directly carry
+ * their severity at the call site and do not belong here.
+ */
+const SEVERITY_BY_CODE = Object.freeze({
+  CL0320: SEVERITY.WARN,
+  CL0321: SEVERITY.WARN,
+  CL0322: SEVERITY.WARN,
+  CL0323: SEVERITY.ERROR,
+  CL0330: SEVERITY.WARN,
+});
+
+/** WARN is the default: an unregistered code is still reported, never silently dropped. */
+function severityOf(code) {
+  return SEVERITY_BY_CODE[code] || SEVERITY.WARN;
+}
+
+/**
+ * Adapt a `Diagnostics` bus to the `onWarn(code, message)` callback `model/` expects.
+ *
+ * The severity comes from the code, so an ERROR raised inside a pure module reaches the bus
+ * as an ERROR and gates the exit code like any other — which is the whole point: the old
+ * console adapter printed `WARN` for everything and gated nothing.
+ */
+function busWarner(diagnostics, loc) {
+  return (code, message) => diagnostics.add(severityOf(code), code, message, loc || {});
+}
+
+/**
  * One diagnostic. `file`/`line`/`col` are optional throughout: a diagnostic about a
  * whole project has no span, and template-level errors keep imprecise positions until
  * the render rewrite (§13). A missing span degrades the rendering, never the code.
@@ -178,4 +211,4 @@ class Diagnostics {
   }
 }
 
-module.exports = { Diagnostic, Diagnostics, SEVERITY, SEVERITY_LABEL, CODES };
+module.exports = { Diagnostic, Diagnostics, SEVERITY, SEVERITY_LABEL, CODES, SEVERITY_BY_CODE, severityOf, busWarner };

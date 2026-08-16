@@ -1,6 +1,9 @@
 'use strict';
 
-const { consoleWarner } = require('./util');
+// `safeResolve` re-resolves items the compile has already resolved and reported on, purely
+// to build the annotation report. It reports nothing: every diagnostic it could raise was
+// raised — and printed — during the compile that produced the tree being annotated.
+const silentWarner = () => {};
 
 const fs   = require('fs');
 const path = require('path');
@@ -286,7 +289,7 @@ function attributeChanges(itemDef, registry, branchVariantNames, changes) {
 }
 
 function safeResolve(itemDef, registry, branchPath) {
-  try { return resolveItem(itemDef, registry, branchPath, consoleWarner); }
+  try { return resolveItem(itemDef, registry, branchPath, silentWarner); }
   catch { return null; }
 }
 

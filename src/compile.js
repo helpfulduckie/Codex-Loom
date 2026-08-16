@@ -12,10 +12,10 @@ const {
 } = require('./resolver');
 const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
-const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, consoleWarner, itemContext } = require('./util');
+const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, itemContext } = require('./util');
 const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
-const { Diagnostics } = require('./diag');
+const { Diagnostics, busWarner } = require('./diag');
 const { renderCard } = require('./emit/vl');
 const { loadPEConfig, compilePE, compilePEBlocks, writePE } = require('./pe');
 const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
@@ -379,13 +379,13 @@ function buildCanonManifest(config) {
  * Phase A: resolve + field interpolation
  * Phase B (caller): cross-item refs + pronouns + render
  */
-function resolveBranchItems(allItemDefs, registry, branchPath, variables) {
+function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagnostics = new Diagnostics()) {
   const resolvedItems = [];
 
   for (const itemDef of allItemDefs) {
     let item;
     try {
-      item = resolveItem(itemDef, registry, branchPath, consoleWarner);
+      item = resolveItem(itemDef, registry, branchPath, busWarner(diagnostics, { file: itemDef._source }));
     } catch (err) {
       const label = itemDef.id || itemDef.import || itemDef.name || '?';
       const src = itemDef._source ? ` (${itemDef._source})` : '';
@@ -406,7 +406,7 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables) {
 /**
  * Phase B: apply cross-item refs, pronouns, render, and write output.
  */
-function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}, verbose = false, renderedById = null, projectNotesTemplate = null) {
+function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, suppressIds = new Set(), variables = {}, verbose = false, renderedById = null, projectNotesTemplate = null, diagnostics = new Diagnostics()) {
   // Build early so render functions can resolve cross-item refs during field expansion.
   const resolvedById = new Map();
   for (const item of resolvedItems) {
@@ -414,7 +414,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     if (id) resolvedById.set(id, item);
   }
 
-  applyCrossItemRefs(resolvedItems, registry, consoleWarner, resolvedById);
+  applyCrossItemRefs(resolvedItems, registry, busWarner(diagnostics), resolvedById);
 
   // Expand render functions in body field values now that cross-item refs are resolved.
   // Multi-pass: repeat until no body fields change, to handle order-dependent chains
@@ -439,13 +439,12 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     console.warn(`  WARN: cross-item render functions may have circular dependencies — stopped after ${maxPasses} passes`);
   }
 
-  const grouped = new Map();
-
   // §8.2: the envelope is the emitter's, not the template's. Templates render the body;
-  // `emit/vl.js` writes the heading and the fence around it. Trigger diagnostics are
-  // collected across the whole branch and reported once, rather than interleaved with
-  // the per-item progress lines.
-  const emitDiagnostics = new Diagnostics();
+  // `emit/vl.js` writes the heading and the fence around it, and reports what it cannot
+  // carry — a comma inside a trigger — onto the caller's bus. Nothing is printed or thrown
+  // here: wrong output is still output, so the branch tree is finished either way and the
+  // caller decides when to print and whether the run fails.
+  const grouped = new Map();
 
   for (const item of resolvedItems) {
     applyPronounPasses(item, registry, branchProtagonist, resolvedById);
@@ -477,7 +476,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
         item,
         bodyText,
         notesText: renderNotesText(item, context, templates, partials, variables, projectNotesTemplate),
-        diagnostics: emitDiagnostics,
+        diagnostics,
         loc: { file: item._source },
       }).text;
     } catch (err) {
@@ -498,15 +497,6 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     grouped.get(type).push({ sortKey: String(itemLabel).toLowerCase(), rendered });
     // Capture the rendered block per item id for cross-branch diff/annotate reports.
     if (renderedById && item.id) renderedById.set(item.id.toLowerCase(), { type, rendered });
-  }
-
-  // Emit diagnostics are printed, not thrown: a comma in a trigger reaches AID as two
-  // triggers, which is wrong output rather than unwritable output, and stopping the
-  // compile here would leave the branch tree half-written. Same policy as the missing
-  // template and render-failure paths above.
-  for (const diag of emitDiagnostics.all) {
-    if (diag.severity === 'error') console.error(diag.format());
-    else console.warn(diag.format());
   }
 
   // Emit types alphabetically, and items within each type sorted by id, so the
@@ -696,6 +686,20 @@ function compile(configPath, options = {}) {
   // directly; they move onto the bus as their modules are decomposed.
   const loadDiagnostics = new Diagnostics();
 
+  // A second bus for everything the compile phases report — item resolution, cross-item
+  // refs, emit. Unlike the load bus this one never aborts mid-run: its errors mean the tree
+  // that gets written is wrong, not that it cannot be written, so it is checked once at the
+  // end and the author gets both the artifact and a failed build.
+  const compileDiagnostics = new Diagnostics();
+  let compileCursor = 0;
+  const reportCompileDiagnostics = () => {
+    for (const diag of compileDiagnostics.all.slice(compileCursor)) {
+      if (diag.severity === 'error') console.error(diag.format());
+      else console.warn(diag.format());
+    }
+    compileCursor = compileDiagnostics.length;
+  };
+
   const config = loadCompileConfig(configPath, { diagnostics: loadDiagnostics });
 
   // Checked immediately, before any filesystem work — an unknown key, a missing required
@@ -796,7 +800,7 @@ function compile(configPath, options = {}) {
     // Expand {%var} in protagonist using branch-merged variables, before the
     // case-insensitive match against item ids.
     const branchProtagonist = resolveVariables(inheritedProtagonist, ctx.variables).toLowerCase() || null;
-    const compileContext = { branchPath, branchProtagonist, ...ctx };
+    const compileContext = { branchPath, branchProtagonist, ...ctx, diagnostics: compileDiagnostics };
 
     // Compile Plot Essentials BEFORE story cards so suppression follows exactly what
     // PE actually emitted. A full-style import that renders into PE suppresses its
@@ -818,14 +822,14 @@ function compile(configPath, options = {}) {
         } else {
           peContent = compilePE(peBlocks, registry, templates, partials, compileContext, overlays, peSuppressedIds);
           if (captureReports) {
-            peDiffBlocks = compilePEBlocks(peBlocks, registry, templates, partials, compileContext, overlays);
+            peDiffBlocks = compilePEBlocks(peBlocks, registry, templates, partials, { ...compileContext, diagnostics: null }, overlays);
           }
         }
       }
     }
 
     // Phase A: resolve all story cards
-    const resolvedItems = resolveBranchItems(allItemDefs, registry, branchPath, ctx.variables);
+    const resolvedItems = resolveBranchItems(allItemDefs, registry, branchPath, ctx.variables, compileDiagnostics);
 
     // Accumulate unique item IDs and per-leaf stats for summary
     for (const item of resolvedItems) {
@@ -838,9 +842,11 @@ function compile(configPath, options = {}) {
     const renderedById = captureReports ? new Map() : null;
     const written = renderBranchItems(
       resolvedItems, registry, templates, partials, outputDir, branchProtagonist, peSuppressedIds, ctx.variables, verbose, renderedById,
-      (compileContext.render && compileContext.render.notesTemplate) || null
+      (compileContext.render && compileContext.render.notesTemplate) || null,
+      compileDiagnostics
     );
     totalFiles += written.length;
+    reportCompileDiagnostics();
 
     // Capture component text for cross-branch reports (set as each component compiles below).
     let ainBlockText = null;
@@ -1034,6 +1040,18 @@ function compile(configPath, options = {}) {
     throw new Error(
       `${componentGaps.length} requested component(s) were not written — see errors above. ` +
       `Fix the source path/reference, or remove the component from compile.yaml if it is not wanted.`
+    );
+  }
+
+  // Item-resolution and emit ERRORs do not stop the compile: aborting mid-tree would leave
+  // a half-written branch behind, and wrong output the author can read beats no output at
+  // all. They do fail the run — the tree is written, then this throws and the CLI exits 1.
+  reportCompileDiagnostics();
+  if (compileDiagnostics.hasErrors()) {
+    const count = compileDiagnostics.errors.length;
+    throw new Error(
+      `${count} error${count === 1 ? '' : 's'} while compiling. The output tree was written, `
+      + 'but it does not say what the source says — see the errors above.'
     );
   }
 }

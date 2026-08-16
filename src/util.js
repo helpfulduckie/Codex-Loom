@@ -27,18 +27,6 @@ const CONFIG_BASENAMES = Object.freeze([
   'compile.cl.yaml', 'compile.cl.yml', 'compile.yaml', 'compile.yml',
 ]);
 
-/**
- * The reporter `model/` expects, wired to the console in the v3 format.
- *
- * `model/` takes no `console` (§3.3), so it reports through a caller-supplied
- * `onWarn(code, message)`. This is the adapter the compile phases pass until they are
- * carrying a diagnostics bus of their own; it prints exactly what v3 printed, so moving
- * the modules changed no output.
- */
-function consoleWarner(code, message) {
-  console.warn(`  WARN: ${message}`);
-}
-
 function hasSuffix(name, suffixes) {
   const lower = name.toLowerCase();
   return suffixes.some((s) => lower.endsWith(s));
@@ -345,7 +333,7 @@ function warnMechanicalArtifacts(text, label) {
 module.exports = {
   findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
   ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
-  YAML_SUFFIXES, CONFIG_BASENAMES, hasSuffix, consoleWarner,
+  YAML_SUFFIXES, CONFIG_BASENAMES, hasSuffix,
   resolveVariables, warnUnexpandedVariables, walkItemTextFields, itemContext, warnUnresolvedFieldTokens,
   warnMechanicalArtifacts, maskFencedRegions,
   FIELD_TOKEN_RE, VAR_TOKEN_RE, TEMPLATE_FN_RE, TEMPLATE_TAG_RE, VERB_MARKER_RE, SUSPECT_VERB_MARKER_RE, JS_ARTIFACT_RE, JS_WORD_RE,

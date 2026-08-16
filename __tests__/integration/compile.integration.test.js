@@ -882,6 +882,41 @@ describe('component gap detection', () => {
   });
 });
 
+// ── CL0323 (notes:/description: both declared) fails the build ────────────────
+
+describe('item-level ERROR diagnostics fail the build after writing the tree', () => {
+  test('an item declaring both notes: and description: throws, but the leaf is still written', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-notesdesc-'));
+    fs.mkdirSync(path.join(dir, 'items'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'items', 'c.yaml'), [
+      '- id: W',
+      '  name: W',
+      '  aid: { type: Item, title: W }',
+      '  render: { template: Item }',
+      '  notes: "notes value"',
+      '  description: "description value"',
+      '  body: { Desc: w }',
+    ].join('\n'), 'utf8');
+    fs.writeFileSync(path.join(dir, 'templates', 'Item.template'), '{$body.Desc}', 'utf8');
+    fs.writeFileSync(path.join(dir, 'compile.yaml'), [
+      'version: 4',
+      'structure:',
+      `  input: { items: [${dir}/items], templates: [${dir}/templates] }`,
+      `  output: ${dir}/output`,
+      'branches:',
+      '  main: {}',
+    ].join('\n'), 'utf8');
+    try {
+      expect(() => compile(path.join(dir, 'compile.yaml'))).toThrow(/output tree was written/);
+      const p = path.join(dir, 'output', 'Branches', 'main', 'Story Cards', 'Item', 'Item.md');
+      expect(fs.existsSync(p)).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 // ── Root `title` → top-level Label.md ──────────────────────────────────────────
 
 describe('root title -> Label.md', () => {

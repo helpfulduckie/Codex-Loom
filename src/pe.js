@@ -2,11 +2,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, consoleWarner } = require('./util');
+const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts } = require('./util');
 const { resolveItem, resolveBranchSpec, mergeBranchSpecs, applyFieldsDelta, applyFieldOp } = require('./resolver');
 const { applyPronounPasses } = require('./model/pronouns');
 const { resolveItemRef, describeRefFailure, normalizeRef, splitRef } = require('./model/refs');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions, applyWrapper, resolveTemplateName } = require('./template');
+const { busWarner } = require('./diag');
 
 /**
  * Load and parse a Plot Essentials YAML file.
@@ -172,9 +173,14 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
                       : (blockDef.v ?? overlay?.v),
   };
 
+  // `--diff`/`--annotate` re-render these same blocks for capture and pass a null bus, so
+  // the second pass stays silent instead of double-reporting what the first already did.
+  const onWarn = compileContext.diagnostics
+    ? busWarner(compileContext.diagnostics, { file: importDef._source })
+    : () => {};
   let item;
   try {
-    item = resolveItem(importDef, registry, branchPath, consoleWarner);
+    item = resolveItem(importDef, registry, branchPath, onWarn);
   } catch (err) {
     console.error(`  ERR [PE]: resolving import "${blockDef.import}": ${err.message}`);
     return null;

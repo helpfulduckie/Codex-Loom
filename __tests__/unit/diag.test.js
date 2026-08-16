@@ -1,6 +1,8 @@
 'use strict';
 
-const { Diagnostic, Diagnostics, SEVERITY, CODES } = require('../../src/diag');
+const path = require('path');
+const fs = require('fs');
+const { Diagnostic, Diagnostics, SEVERITY, CODES, SEVERITY_BY_CODE, severityOf, busWarner } = require('../../src/diag');
 
 describe('Diagnostic.location', () => {
   const base = { code: 'CL0101', severity: SEVERITY.ERROR, message: 'boom' };
@@ -133,6 +135,74 @@ describe('Diagnostics collection', () => {
     diags.error('CL0001', 'first');
     diags.warn('CL0002', 'second');
     expect(diags.format()).toBe('ERROR CL0001\n  first\n\nWARN CL0002\n  second');
+  });
+});
+
+describe('severityOf', () => {
+  test('returns ERROR for CL0323', () => {
+    expect(severityOf('CL0323')).toBe(SEVERITY.ERROR);
+  });
+
+  test('returns WARN for CL0321', () => {
+    expect(severityOf('CL0321')).toBe(SEVERITY.WARN);
+  });
+
+  test('defaults an unregistered code to WARN, never drops it', () => {
+    expect(severityOf('CL9999')).toBe(SEVERITY.WARN);
+  });
+});
+
+describe('busWarner', () => {
+  test('routes an ERROR-severity code onto the bus with its code/message intact', () => {
+    const bus = new Diagnostics();
+    const onWarn = busWarner(bus);
+    onWarn('CL0323', 'item declares both notes: and description:');
+    expect(bus.hasErrors()).toBe(true);
+    expect(bus.all[0].code).toBe('CL0323');
+    expect(bus.all[0].message).toBe('item declares both notes: and description:');
+  });
+
+  test('routes a WARN-severity code without setting hasErrors', () => {
+    const bus = new Diagnostics();
+    const onWarn = busWarner(bus);
+    onWarn('CL0321', 'variant not found');
+    expect(bus.hasErrors()).toBe(false);
+  });
+
+  test('carries a supplied location onto the diagnostic', () => {
+    const bus = new Diagnostics();
+    const onWarn = busWarner(bus, { file: 'x.cl.yaml', line: 4 });
+    onWarn('CL0321', 'variant not found');
+    expect(bus.all[0].location).toBe('x.cl.yaml:4');
+  });
+});
+
+describe('SEVERITY_BY_CODE roster', () => {
+  // A new model/ code that skips this table would silently default to WARN via
+  // severityOf's fallback — which is the exact failure this change exists to end.
+  test('every model/ code reachable through onWarn is registered', () => {
+    const itemCodes = Object.values(require('../../src/model/item').CODES);
+    const fieldopsCodes = Object.values(require('../../src/model/fieldops').CODES);
+    const pronounsCodes = Object.values(require('../../src/model/pronouns').CODES);
+    for (const code of [...itemCodes, ...fieldopsCodes, ...pronounsCodes]) {
+      expect(SEVERITY_BY_CODE).toHaveProperty(code);
+    }
+  });
+});
+
+describe('SEVERITY_BY_CODE agrees with documentation/11-diagnostics.md', () => {
+  test('every registered code matches the severity documented in the registry table', () => {
+    const docPath = path.join(__dirname, '../../documentation/11-diagnostics.md');
+    const doc = fs.readFileSync(docPath, 'utf8');
+    const documented = {};
+    const rowRe = /^\|\s*`(CL\d+)`\s*\|\s*(ERROR|WARN|INFO)\s*\|/gm;
+    let m;
+    while ((m = rowRe.exec(doc)) !== null) {
+      documented[m[1]] = m[2].toLowerCase();
+    }
+    for (const [code, severity] of Object.entries(SEVERITY_BY_CODE)) {
+      expect(documented[code]).toBe(severity);
+    }
   });
 });
 
