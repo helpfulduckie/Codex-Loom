@@ -1,0 +1,85 @@
+# The kitchen-sink component: every key the v4 component surface declares, exercised once.
+#
+# Third companion to ../compile.cl.yaml and ../Codex/items.cl.yaml, under the same
+# contract — `__tests__/unit/kitchen-sink.test.js` walks COMPONENT_SCHEMA and fails if a
+# declared key is missing here, so a key added in a later phase cannot quietly stop being
+# covered.
+#
+# Validated, not compiled. The variant and branch names name nothing real, because the
+# subject is the key surface rather than resolution.
+#
+# It is named `plot-essentials.cl.yaml` because ../compile.cl.yaml already points
+# `components.plotEssential` at this path — one component file serving as the corpus for
+# all seven, since §7.2 gives them one grammar.
+
+sections:
+  # ── A text section: the shape with no slot ─────────────────────────────────
+  genre:
+    text: |
+      Genre: Psychological Thriller | Dark Character Study
+      Setting: {%setting}
+    heading: Genre and Setting
+    headingLevel: 0
+    render:
+      position: 1
+      wrapper: square
+      compact: true
+
+  # ── Text as a mapping of named lines ───────────────────────────────────────
+  # AI Instructions' existing shape: naming each line is what lets a variant replace or
+  # delete one rule without restating the block.
+  rules:
+    text:
+      pacing: Scenes advance on player action, never on their own.
+      register: Narrate in close third person.
+    heading: Rules
+    headingLevel: 2
+    render:
+      position: 2
+      bullet: true
+    variants:
+      terse:
+        text:
+          register: ~
+
+  # ── A slot: per-occupant wrapping, the default ─────────────────────────────
+  cast:
+    slot: true
+    heading: Cast
+    render:
+      position: 6
+      wrapper: curly
+      wrap: each
+    branches:
+      flashback: ~
+
+  # ── A slot that wraps its occupants as one collection ──────────────────────
+  party:
+    slot: true
+    render:
+      position: 7
+      wrapper: curly
+      wrap: all
+
+# ── Document level ───────────────────────────────────────────────────────────
+branches:
+  subject: [terse]
+
+variants:
+  terse:
+    apply: [terse]
+
+# §7.6 and §7.8 — declared, noted, not yet read.
+imports:
+  - from: '{%components}/plot-essentials.cl.yaml'
+
+render:
+  component:
+    variant: terse
+  storyCards:
+    - title: Plot Essentials — Full
+      variant: verbose
+
+card:
+  title: Plot Essentials (reference copy)
+  triggers: []

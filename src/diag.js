@@ -50,6 +50,12 @@ const CODES = Object.freeze({
   TEMPLATE_NOT_FOUND: 'CL0420',
   RENDER_FAILED: 'CL0421',
 
+  // Components (§7.2). Raised by `model/component.js`, which reports through `onWarn`
+  // and therefore takes its severity from the table below.
+  SECTION_TEXT_AND_SLOT: 'CL0601',
+  SECTION_RENDERS_NOTHING: 'CL0602',
+  SECTION_WRAP_UNKNOWN: 'CL0603',
+
   // Emit (§8). Both are facts about what Velvet Lattice can carry to AID, not opinions
   // about content — which is why they live in the compiler rather than in lint (§12.5).
   TRIGGER_CONTAINS_COMMA: 'CL0701',
@@ -71,6 +77,9 @@ const SEVERITY_BY_CODE = Object.freeze({
   CL0322: SEVERITY.WARN,
   CL0323: SEVERITY.ERROR,
   CL0330: SEVERITY.WARN,
+  CL0601: SEVERITY.ERROR,
+  CL0602: SEVERITY.WARN,
+  CL0603: SEVERITY.WARN,
 });
 
 /** WARN is the default: an unregistered code is still reported, never silently dropped. */

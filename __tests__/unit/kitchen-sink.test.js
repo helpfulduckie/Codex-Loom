@@ -29,11 +29,14 @@ const { loadYamlDocument } = require('../../src/loader/yaml');
 const { loadCompileConfig } = require('../../src/config/load');
 const { CONFIG_SCHEMA } = require('../../src/config/schema');
 const { ITEM_SCHEMA } = require('../../src/loader/schema');
+const { COMPONENT_SCHEMA } = require('../../src/loader/component-schema');
+const { normalizeComponent } = require('../../src/model/component');
 const { missingPaths, notedPaths } = require('../helpers/schema-paths');
 
 const FIXTURE_DIR = path.resolve(__dirname, '../fixtures/kitchen-sink');
 const CONFIG_PATH = path.join(FIXTURE_DIR, 'compile.cl.yaml');
 const ITEMS_PATH = path.join(FIXTURE_DIR, 'Codex', 'items.cl.yaml');
+const COMPONENT_PATH = path.join(FIXTURE_DIR, 'components', 'plot-essentials.cl.yaml');
 
 /** The leaf key a not-yet-implemented WARN names, for comparison against `notedPaths`. */
 function warnedKey(diag) {
@@ -214,5 +217,62 @@ describe('kitchen-sink items (Codex/items.cl.yaml)', () => {
     const bus = new Diagnostics();
     validate({ id: 'Aness', render: { plotEssential: null } }, ITEM_SCHEMA, { diagnostics: bus });
     expect(bus.errors).toEqual([]);
+  });
+});
+
+describe('kitchen-sink component (components/plot-essentials.cl.yaml)', () => {
+  let doc;
+  let diagnostics;
+
+  beforeAll(() => {
+    const { value, sourceMap } = loadYamlDocument(COMPONENT_PATH);
+    doc = value;
+    diagnostics = new Diagnostics();
+    validate(doc, COMPONENT_SCHEMA, { diagnostics, sourceMap, context: 'the kitchen-sink component' });
+  });
+
+  test('covers every key COMPONENT_SCHEMA declares', () => {
+    expect(missingPaths(doc, COMPONENT_SCHEMA)).toEqual([]);
+  });
+
+  test('validates without a single ERROR', () => {
+    expect(diagnostics.errors.map((d) => `${d.code} ${d.message}`)).toEqual([]);
+  });
+
+  test('warns only about keys that are not yet implemented', () => {
+    const other = diagnostics.warnings.filter((d) => d.code !== SCHEMA_CODES.NOT_YET_IMPLEMENTED);
+    expect(other.map((d) => `${d.code} ${d.message}`)).toEqual([]);
+  });
+
+  test('and warns about all of them', () => {
+    const warned = new Set(diagnostics.warnings
+      .filter((d) => d.code === SCHEMA_CODES.NOT_YET_IMPLEMENTED)
+      .map(warnedKey));
+    expect([...warned].sort()).toEqual([...notedKeys(COMPONENT_SCHEMA)].sort());
+  });
+
+  /**
+   * The corpus is a schema fixture, but it is also the first real document the model sees,
+   * so it is worth asserting the two agree: a file that validates should also normalize
+   * without the model finding anything to complain about.
+   */
+  test('normalizes with no model diagnostics, in position order', () => {
+    const seen = [];
+    const component = normalizeComponent(doc, { onWarn: (code, message) => seen.push(`${code} ${message}`) });
+    expect(seen).toEqual([]);
+    expect(component.sections.map((s) => s.name)).toEqual(['genre', 'rules', 'cast', 'party']);
+    expect([...component.slots.keys()]).toEqual(['cast', 'party']);
+  });
+
+  /**
+   * v3's nested grouping has no key in the v4 surface, and that absence is the migration
+   * signal a hand-converting author gets: a `blocks:` group becomes a slot, and the items
+   * inside it move to their own definitions with a render target.
+   */
+  test('a v3 blocks: group is an unknown key rather than a silently ignored one', () => {
+    const bus = new Diagnostics();
+    validate({ sections: { cast: { blocks: [{ import: 'Aness' }] } } }, COMPONENT_SCHEMA, { diagnostics: bus });
+    expect(bus.errors.map((d) => d.code)).toEqual([SCHEMA_CODES.UNKNOWN_KEY]);
+    expect(bus.errors[0].message).toContain('blocks');
   });
 });

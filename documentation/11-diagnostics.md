@@ -169,6 +169,24 @@ are not the load-time check `CL0411` is. Each drops the one thing it names — t
 line, or the whole item — and leaves the rest of the leaf intact, and each fails the run
 once the tree is written.
 
+### CL06xx — components
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `CL0601` | ERROR | A section declares both `text:` and `slot: true`. |
+| `CL0602` | WARN | A section has no text, no heading and is not a slot, so it renders nothing. |
+| `CL0603` | WARN | A section's `render.wrap` is neither `each` nor `all`; `each` is used. |
+
+`CL0601` is an error rather than a resolved precedence because the two readings differ in
+output and neither is obviously right: text inside a slot could sit before or after the
+occupants, and could fall inside or outside the slot's wrapper. A preamble is already
+expressible as its own text section positioned ahead of the slot, so refusing the
+ambiguity costs an author nothing and keeps the option of allowing it later.
+
+`CL0602` stays a warning because an empty section is inert rather than wrong — a section
+gated off on every branch by its own dispatch is the ordinary way to park content. The
+error that matters is one level up: a *component* that renders to nothing (§7.4).
+
 ### CL07xx — emit
 
 | Code | Severity | Meaning |

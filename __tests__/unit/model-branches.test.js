@@ -191,6 +191,6 @@ describe('model/ purity (§3.3)', () => {
 
   test('every model module is covered by that check', () => {
     expect(fs.readdirSync(MODEL_DIR).filter((f) => f.endsWith('.js')).sort())
-      .toEqual(['branches.js', 'fieldops.js', 'item.js', 'pronouns.js', 'refs.js']);
+      .toEqual(['branches.js', 'component.js', 'fieldops.js', 'item.js', 'pronouns.js', 'refs.js']);
   });
 });
