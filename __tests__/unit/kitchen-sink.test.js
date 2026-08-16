@@ -191,4 +191,28 @@ describe('kitchen-sink items (Codex/items.cl.yaml)', () => {
     expect(diag.code).toBe(SCHEMA_CODES.MISPLACED_KEY);
     expect(diag.hint).toContain('"aid:"');
   });
+
+  /**
+   * §7.4's slot-owns-wrapping rule, enforced at the schema rather than left to a reader of
+   * the spec. A per-target `wrapper:` would be read by nothing — the slot's wrapper wins —
+   * so the key is absent from the target descriptor on purpose, and the relocation hint
+   * sends the author to `render.wrapper`, which does still govern story-card output. The
+   * test exists because "the key is missing deliberately" is invisible in the schema and
+   * exactly the kind of omission a later phase helpfully undoes.
+   */
+  test('wrapper: on a render target is a relocation ERROR naming render:', () => {
+    const bus = new Diagnostics();
+    validate({ id: 'Aness', render: { plotEssential: { slot: 'cast', wrapper: 'curly' } } },
+      ITEM_SCHEMA, { diagnostics: bus });
+    const diag = bus.errors[0];
+    expect(diag.code).toBe(SCHEMA_CODES.MISPLACED_KEY);
+    expect(diag.hint).toContain('"render:"');
+  });
+
+  /** §6.4 — `~` unbinds a target rather than failing its type check. */
+  test('a target set to ~ is an unbind, not a type error', () => {
+    const bus = new Diagnostics();
+    validate({ id: 'Aness', render: { plotEssential: null } }, ITEM_SCHEMA, { diagnostics: bus });
+    expect(bus.errors).toEqual([]);
+  });
 });

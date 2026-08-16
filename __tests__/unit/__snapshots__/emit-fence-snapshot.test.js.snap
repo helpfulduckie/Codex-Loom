@@ -60,7 +60,15 @@ notes: 'marker: [e]'
 ~~~
 encapsulate: false
 ~~~
-<body of Chorus>"
+<body of Chorus>
+
+———
+
+## Ensemble
+~~~
+encapsulate: false
+~~~
+<body of Ensemble>"
 `;
 
 exports[`emit/vl.js fence — kitchen-sink corpus renders the post-flip known flag as literal notes text 1`] = `

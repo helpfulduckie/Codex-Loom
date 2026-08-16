@@ -58,6 +58,37 @@ const NAME = {
   },
 };
 
+/**
+ * One per-component render target (§7.2, §7.4) — where an item lands in a component.
+ *
+ * ── Why there is no `wrapper:` here ─────────────────────────────────────────
+ *
+ * §7.4 gives the slot ownership of wrapping everything placed in it, precisely so an item
+ * with `wrapper: curly` in a curly slot cannot ship double-braced. A per-target wrapper
+ * would be read by nothing, and a declared key that nothing reads is the §4.3 defect this
+ * schema exists to catch — so the key is absent and writing one is an unknown-key ERROR
+ * pointing at `render.wrapper`, which does still govern story-card output.
+ *
+ * `slot:` is not `required:`. A variant may override a single target key while inheriting
+ * the slot from the item's base `render:`, and the schema validates one document node
+ * without that merged view. A target that names no slot after merging is step 7's ERROR,
+ * raised where the answer is actually known.
+ */
+const RENDER_TARGET_KEYS = {
+  slot: STRING,
+  order: { type: TYPES.NUMBER },
+  template: STRING,
+};
+
+/**
+ * A target accepts the mapping above or a boolean, and the boolean arm is narrower than it
+ * looks: `false` is a meaningful "not here", while `true` names no slot and cannot resolve.
+ * The engine cannot express "boolean, but only false", so `true` is accepted here and
+ * rejected in step 7 alongside the undeclared-slot ERROR — one place that reports on
+ * targets rather than two that disagree.
+ */
+const target = (note) => ({ type: [TYPES.MAP, TYPES.BOOLEAN], keys: RENDER_TARGET_KEYS, note });
+
 const RENDER = {
   type: TYPES.MAP,
   keys: {
@@ -66,14 +97,17 @@ const RENDER = {
     notesTemplate: STRING,
     storyCard: { type: TYPES.BOOLEAN, note: 'Phase 3' },
 
-    // Per-component render targets (§7.4). Declared now so writing one is a clear
-    // "not yet" rather than a confusing unknown-key ERROR; implemented in Phase 3.
-    plotEssential: { type: [TYPES.MAP, TYPES.BOOLEAN], note: 'Phase 3' },
-    summary: { type: [TYPES.MAP, TYPES.BOOLEAN], note: 'Phase 3' },
-    aiInstructions: { type: [TYPES.MAP, TYPES.BOOLEAN], note: 'Phase 3' },
-    authorsNote: { type: [TYPES.MAP, TYPES.BOOLEAN], note: 'Phase 3' },
-    description: { type: [TYPES.MAP, TYPES.BOOLEAN], note: 'Phase 3' },
-    opening: { type: [TYPES.MAP, TYPES.BOOLEAN], note: 'Phase 3' },
+    // Per-component render targets (§7.4), one key per row of §7.3's component table.
+    // The `note` stays until the phase that reads the key: Phase 3 builds the item/slot
+    // model for the four components that get sections, and §7.7's description-as-a-
+    // component and the opening pair keep their own pipelines until Phase 6.
+    plotEssential: target('Phase 3'),
+    summary: target('Phase 3'),
+    aiInstructions: target('Phase 3'),
+    authorsNote: target('Phase 3'),
+    description: target('Phase 6'),
+    opening: target('Phase 6'),
+    branchFraming: target('Phase 6'),
   },
 };
 

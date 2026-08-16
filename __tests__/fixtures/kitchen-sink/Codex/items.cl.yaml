@@ -100,6 +100,11 @@
 # ── Every per-component render target (§7.4, Phase 3) ────────────────────────
 # Declared together so the not-yet-implemented WARNs they produce read as one block rather
 # than scattered through the corpus.
+#
+# Two items rather than one, because a target has two arms and the corpus owes both a
+# writing. Chorus exercises the boolean arm, which carries no keys; Ensemble exercises the
+# mapping arm, which is where `slot:`, `order:` and `template:` live. Coverage is satisfied
+# by any one item, so splitting them costs nothing and keeps each shape readable.
 - id: Chorus
   render:
     plotEssential:
@@ -110,5 +115,16 @@
     authorsNote: false
     description: false
     opening: false
+    branchFraming: false
   variable:
     chorusSize: three
+
+- id: Ensemble
+  render:
+    plotEssential: {slot: cast, order: 2, template: CharacterBrief}
+    summary: {slot: history, order: 1, template: Unstructured}
+    aiInstructions: {slot: rules, order: 3, template: Notes}
+    authorsNote: {slot: tone, order: 4, template: Notes}
+    description: {slot: blurb, order: 5, template: Unstructured}
+    opening: {slot: scene, order: 6, template: Unstructured}
+    branchFraming: {slot: question, order: 7, template: Unstructured}
