@@ -118,6 +118,10 @@ Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein 
 | `CL0321` | WARN | A named variant does not exist in the item's variant tree. |
 | `CL0322` | WARN | An item has neither `aid.type` nor `render.template`. |
 | `CL0323` | ERROR | An item declares both `notes:` and `description:`. |
+| `CL0324` | ERROR | An item could not be resolved — most often a failed `import:`. |
+| `CL0340` | ERROR | A reference is defined in more than one canon set and is not qualified. |
+| `CL0341` | ERROR | A reference names a canon set not declared in `structure.input.canon`. |
+| `CL0342` | ERROR | A reference names an id that no canon set defines. |
 | `CL0330` | WARN | A cross-item reference names an item that does not exist. |
 
 `model/` uses neither `fs` nor `console` (§3.3), so these are reported through a
@@ -129,12 +133,22 @@ field. Two values under two names means the author believes they are two fields,
 silent winner hides that belief instead of correcting it. The declared `notes:` wins so
 output stays deterministic while it is fixed.
 
+`CL0324` is the reason a failed `import:` no longer compiles quietly. The item is dropped
+and everything around it still renders, so the tree that lands looks complete: correct
+card count, tidy summary table, every branch present. What is missing is whatever that
+import was carrying — which, when the import also drove a branch's variant dispatch, can
+be the entire difference between one leaf and the next. The output is written, then the
+run exits non-zero.
+
 ### CL04xx — render
 
 | Code | Severity | Meaning |
 |---|---|---|
 | `CL0410` | ERROR | A `.template` or `.partial` still contains a `~~~` fence. |
 | `CL0411` | ERROR | A `render.notesTemplate` in compile.yaml names a template that is not loaded. |
+| `CL0412` | ERROR | A `render.notesTemplate` on an item names a template that is not loaded. |
+| `CL0420` | ERROR | No loaded template matches an item's `aid.type` or `render.template`. |
+| `CL0421` | ERROR | A template threw while rendering an item. |
 
 Templates render the card body; the heading and fence are the compiler's (see
 [Templates](07-templates.md)). A template that writes its own fence produces a second
@@ -148,7 +162,12 @@ templates is closed and known before a single card compiles — the root node an
 branch node. Left to render time, one typo would print once per item per leaf, which for
 a project the size of The Institute means the same message thousands of times. The
 per-item `render.notesTemplate` is not checked here, because that one is open and can be
-variable-driven; it reports at render time and names the item.
+variable-driven; it reports at render time as `CL0412` and names the item.
+
+`CL0412`, `CL0420` and `CL0421` are per-item and report at render time, which is why they
+are not the load-time check `CL0411` is. Each drops the one thing it names — the notes
+line, or the whole item — and leaves the rest of the leaf intact, and each fails the run
+once the tree is written.
 
 ### CL07xx — emit
 

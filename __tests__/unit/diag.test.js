@@ -225,6 +225,8 @@ describe('CODES', () => {
   const BANDS = {
     CL01: ['YAML_PARSE_FAILED', 'YAML_FILE_UNREADABLE', 'YAML_EMPTY_FILE',
       'YAML_NULL_DOCUMENT', 'TOKEN_SWALLOWED_BY_YAML'],
+    CL03: ['ITEM_RESOLUTION_FAILED'],
+    CL04: ['TEMPLATE_NOT_FOUND', 'RENDER_FAILED'],
     CL07: ['TRIGGER_CONTAINS_COMMA', 'TRIGGER_EMPTY'],
   };
 
@@ -241,5 +243,22 @@ describe('CODES', () => {
   test('codes are unique', () => {
     const values = Object.values(CODES);
     expect(new Set(values).size).toBe(values.length);
+  });
+});
+
+describe('CL0324/CL0420/CL0421 (compile.js/pe.js item and render failures)', () => {
+  // These deliberately have no SEVERITY_BY_CODE entry: they are raised through
+  // `diagnostics.error()` at call sites in compile.js/pe.js that already hold a bus,
+  // not through model/'s severity-blind `onWarn(code, message)` callback.
+  test('ITEM_RESOLUTION_FAILED is CL0324', () => {
+    expect(CODES.ITEM_RESOLUTION_FAILED).toBe('CL0324');
+  });
+
+  test('TEMPLATE_NOT_FOUND is CL0420', () => {
+    expect(CODES.TEMPLATE_NOT_FOUND).toBe('CL0420');
+  });
+
+  test('RENDER_FAILED is CL0421', () => {
+    expect(CODES.RENDER_FAILED).toBe('CL0421');
   });
 });

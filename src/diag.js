@@ -44,6 +44,12 @@ const CODES = Object.freeze({
   YAML_NULL_DOCUMENT: 'CL0104',
   TOKEN_SWALLOWED_BY_YAML: 'CL0105',
 
+  // Items and render (§3.2, §7). These live here rather than in `compile.js` because
+  // `pe.js` raises the same three and cannot import from `compile.js` without a cycle.
+  ITEM_RESOLUTION_FAILED: 'CL0324',
+  TEMPLATE_NOT_FOUND: 'CL0420',
+  RENDER_FAILED: 'CL0421',
+
   // Emit (§8). Both are facts about what Velvet Lattice can carry to AID, not opinions
   // about content — which is why they live in the compiler rather than in lint (§12.5).
   TRIGGER_CONTAINS_COMMA: 'CL0701',

@@ -5,9 +5,9 @@ const path = require('path');
 const { loadYaml, resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts } = require('./util');
 const { resolveItem, resolveBranchSpec, mergeBranchSpecs, applyFieldsDelta, applyFieldOp } = require('./resolver');
 const { applyPronounPasses } = require('./model/pronouns');
-const { resolveItemRef, describeRefFailure, normalizeRef, splitRef } = require('./model/refs');
+const { resolveItemRef, normalizeRef, splitRef } = require('./model/refs');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions, applyWrapper, resolveTemplateName } = require('./template');
-const { busWarner } = require('./diag');
+const { busWarner, CODES: DIAG_CODES } = require('./diag');
 
 /**
  * Load and parse a Plot Essentials YAML file.
@@ -74,6 +74,10 @@ function sortByPosition(segments) {
 function renderPEBlock(blockDef, renderOpts, registry, templates, partials, compileContext, overlays) {
   const { branchPath, branchProtagonist, variables } = compileContext;
 
+  // Null on the `--diff`/`--annotate` replay path, which re-renders blocks the real
+  // compile already reported on; a live bus there would double-report every one.
+  const peDiagnostics = compileContext.diagnostics || null;
+
   const style = (renderOpts.style || 'full').toLowerCase();
 
   // ── Inline PE item (no import) ──────────────────────────────────────────
@@ -134,7 +138,9 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
   // ── Item import ───────────────────────────────────────────────────────────
   const found = resolveItemRef(registry, blockDef.import);
   if (!found.item) {
-    console.error(`  ERR [PE]: ${describeRefFailure(found)}`);
+    // `resolveItemRef` already chose the code (CL0340-CL0342) and wrote the hint; the
+    // bus takes them as they are rather than flattening both into one string.
+    if (peDiagnostics) peDiagnostics.error(found.code, found.message, {}, { hint: found.hint });
     return null;
   }
   const canonItem = found.item;
@@ -175,14 +181,20 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
 
   // `--diff`/`--annotate` re-render these same blocks for capture and pass a null bus, so
   // the second pass stays silent instead of double-reporting what the first already did.
-  const onWarn = compileContext.diagnostics
-    ? busWarner(compileContext.diagnostics, { file: importDef._source })
+  const onWarn = peDiagnostics
+    ? busWarner(peDiagnostics, { file: importDef._source })
     : () => {};
   let item;
   try {
     item = resolveItem(importDef, registry, branchPath, onWarn);
   } catch (err) {
-    console.error(`  ERR [PE]: resolving import "${blockDef.import}": ${err.message}`);
+    if (peDiagnostics) {
+      peDiagnostics.error(
+        DIAG_CODES.ITEM_RESOLUTION_FAILED,
+        `PE block import "${blockDef.import}" could not be resolved: ${err.message}`,
+        {},
+      );
+    }
     return null;
   }
 
@@ -196,8 +208,13 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
   const templateContent = getItemTemplate(item, templates, style);
   if (!templateContent) {
     const name = item.id || blockDef.import;
-    const src = item._source ? ` (${item._source})` : '';
-    console.error(`  ERR [PE]: no template found for item "${name}"${src} (type: ${item.aid && item.aid.type}, style: ${style})`);
+    if (peDiagnostics) {
+      peDiagnostics.error(
+        DIAG_CODES.TEMPLATE_NOT_FOUND,
+        `no template found for PE item "${name}" (type: ${item.aid && item.aid.type}, style: ${style})`,
+        { file: item._source },
+      );
+    }
     return null;
   }
 
@@ -207,8 +224,13 @@ function renderPEBlock(blockDef, renderOpts, registry, templates, partials, comp
   try {
     renderedItem = render(templateContent, context, partials, variables);
   } catch (err) {
-    const src = item._source ? ` (${item._source})` : '';
-    console.error(`  ERR [PE]: rendering item "${item.id || blockDef.import}"${src}: ${err.message}`);
+    if (peDiagnostics) {
+      peDiagnostics.error(
+        DIAG_CODES.RENDER_FAILED,
+        `PE item "${item.id || blockDef.import}" failed to render: ${err.message}`,
+        { file: item._source },
+      );
+    }
     return null;
   }
 

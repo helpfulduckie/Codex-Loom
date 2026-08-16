@@ -125,13 +125,14 @@ describe('compilePE — import block', () => {
     expect(result).toBe('Aness Rozen: Overridden Tagline');
   });
 
-  test('missing import id logs error and returns null', () => {
-    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  test('missing import id reports onto the bus and returns null', () => {
+    const { Diagnostics } = require('../../src/diag');
+    const diagnostics = new Diagnostics();
     const blocks = [{ import: 'unknown-id' }];
-    const result = compilePE(blocks, importRegistry, templates, new Map(), ctx);
+    const result = compilePE(blocks, importRegistry, templates, new Map(), { ...ctx, diagnostics });
     expect(result).toBeNull();
-    expect(spy).toHaveBeenCalledWith(expect.stringContaining('"unknown-id"'));
-    spy.mockRestore();
+    expect(diagnostics.hasErrors()).toBe(true);
+    expect(diagnostics.errors[0].message).toEqual(expect.stringContaining('"unknown-id"'));
   });
 
   test('block excluded by null branch spec is skipped', () => {

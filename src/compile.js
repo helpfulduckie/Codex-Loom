@@ -15,7 +15,7 @@ const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldR
 const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, itemContext } = require('./util');
 const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
-const { Diagnostics, busWarner } = require('./diag');
+const { Diagnostics, busWarner, CODES: DIAG_CODES } = require('./diag');
 const { renderCard } = require('./emit/vl');
 const { loadPEConfig, compilePE, compilePEBlocks, writePE } = require('./pe');
 const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
@@ -58,6 +58,7 @@ const NOTES_SUFFIX = '.notes';
 /** Codes this module reports. CL04xx is the render/template band (§4.4). */
 const CODES = {
   NOTES_TEMPLATE_NOT_FOUND: 'CL0411',
+  ITEM_NOTES_TEMPLATE_NOT_FOUND: 'CL0412',
 };
 
 /**
@@ -139,7 +140,7 @@ function resolveNotesTemplateName(item, templates, projectNotesTemplate) {
  * a notes template that did not spell out a {wrapper} block would otherwise be wrapped
  * by the post-render fallback and emit `notes: '{...}'`.
  */
-function renderNotesText(item, context, templates, partials, variables, projectNotesTemplate) {
+function renderNotesText(item, context, templates, partials, variables, projectNotesTemplate, diagnostics) {
   const name = resolveNotesTemplateName(item, templates, projectNotesTemplate);
   if (!name) return undefined;
   const template = templates.get(name.toLowerCase());
@@ -147,8 +148,13 @@ function renderNotesText(item, context, templates, partials, variables, projectN
     // Only rung 1 reaches here: rung 2 is existence-checked and rung 3 is validated at
     // load, so the name came from the item and naming the item is what helps.
     const label = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
-    const src = item._source ? ` (${item._source})` : '';
-    console.error(`  ERR: no notesTemplate "${name}" found for item "${label}"${src}`);
+    if (diagnostics) {
+      diagnostics.error(
+        CODES.ITEM_NOTES_TEMPLATE_NOT_FOUND,
+        `item "${label}" declares render.notesTemplate "${name}", which is not a loaded template.`,
+        { file: item._source },
+      );
+    }
     return undefined;
   }
   const notesContext = { ...context, render: { ...context.render, wrapper: 'none' } };
@@ -388,8 +394,11 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagno
       item = resolveItem(itemDef, registry, branchPath, busWarner(diagnostics, { file: itemDef._source }));
     } catch (err) {
       const label = itemDef.id || itemDef.import || itemDef.name || '?';
-      const src = itemDef._source ? ` (${itemDef._source})` : '';
-      console.error(`  ERR resolving item "${label}"${src}: ${err.message}`);
+      diagnostics.error(
+        DIAG_CODES.ITEM_RESOLUTION_FAILED,
+        `item "${label}" could not be resolved: ${err.message}`,
+        { file: itemDef._source },
+      );
       continue;
     }
 
@@ -459,8 +468,11 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     if (!template) {
       const name = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
       const type = (item.aid && item.aid.type) || (item.render && item.render.template) || '?';
-      const src = item._source ? ` (${item._source})` : '';
-      console.error(`  ERR: no template found for item "${name}"${src} (type: ${type})`);
+      diagnostics.error(
+        DIAG_CODES.TEMPLATE_NOT_FOUND,
+        `no template found for item "${name}" (type: ${type})`,
+        { file: item._source },
+      );
       continue;
     }
 
@@ -475,14 +487,17 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
       rendered = renderCard({
         item,
         bodyText,
-        notesText: renderNotesText(item, context, templates, partials, variables, projectNotesTemplate),
+        notesText: renderNotesText(item, context, templates, partials, variables, projectNotesTemplate, diagnostics),
         diagnostics,
         loc: { file: item._source },
       }).text;
     } catch (err) {
       const name = item.id || String(item.name);
-      const src = item._source ? ` (${item._source})` : '';
-      console.error(`  ERR rendering item "${name}"${src}: ${err.message}`);
+      diagnostics.error(
+        DIAG_CODES.RENDER_FAILED,
+        `item "${name}" failed to render: ${err.message}`,
+        { file: item._source },
+      );
       continue;
     }
 
