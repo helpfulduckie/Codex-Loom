@@ -56,6 +56,16 @@ const CODES = Object.freeze({
   SECTION_RENDERS_NOTHING: 'CL0602',
   SECTION_WRAP_UNKNOWN: 'CL0603',
 
+  // Placement (§7.4). Raised in `compile.js`, which is the only place that holds an item's
+  // targets and the branch's slot set at the same time, so these carry their severity at
+  // the call site and stay out of the table below.
+  ITEM_NO_OUTPUT: 'CL0610',
+  TARGET_UNDECLARED_SLOT: 'CL0611',
+  TARGET_NOT_A_SLOT: 'CL0612',
+  TARGET_NAMES_NO_SLOT: 'CL0613',
+  SLOT_EMPTY: 'CL0614',
+  COMPONENT_RENDERS_NOTHING: 'CL0615',
+
   // Emit (§8). Both are facts about what Velvet Lattice can carry to AID, not opinions
   // about content — which is why they live in the compiler rather than in lint (§12.5).
   TRIGGER_CONTAINS_COMMA: 'CL0701',

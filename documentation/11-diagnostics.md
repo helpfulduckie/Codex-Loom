@@ -176,6 +176,12 @@ once the tree is written.
 | `CL0601` | ERROR | A section declares both `text:` and `slot: true`. |
 | `CL0602` | WARN | A section has no text, no heading and is not a slot, so it renders nothing. |
 | `CL0603` | WARN | A section's `render.wrap` is neither `each` nor `all`; `each` is used. |
+| `CL0610` | ERROR | An item resolves onto a branch and produces no output there. |
+| `CL0611` | ERROR | A render target names a slot the component does not declare. |
+| `CL0612` | ERROR | A render target names a section that exists but is not a slot. |
+| `CL0613` | ERROR | A render target names no slot at all. |
+| `CL0614` | WARN | A declared slot has no items on a branch. |
+| `CL0615` | ERROR | A component renders to nothing on a branch. |
 
 `CL0601` is an error rather than a resolved precedence because the two readings differ in
 output and neither is obviously right: text inside a slot could sit before or after the
@@ -185,7 +191,30 @@ ambiguity costs an author nothing and keeps the option of allowing it later.
 
 `CL0602` stays a warning because an empty section is inert rather than wrong — a section
 gated off on every branch by its own dispatch is the ordinary way to park content. The
-error that matters is one level up: a *component* that renders to nothing (§7.4).
+error that matters is one level up: a *component* that renders to nothing, `CL0615`.
+
+`CL0610` is the no-output invariant (§7.4), and it replaces v3's suppression checks rather
+than reimplementing them. It fires on *consequence*, not on mechanism: an item that
+resolved onto a branch has to leave a mark on it, and how it failed to — no target
+declared, or a target into a slot the component gated off on that branch — does not
+change the answer. That scoping is what lets slot-level gating stay a legitimate way to
+drop a whole slot's contents from one branch. An item whose own `branches:` excludes it is
+never resolved there and is never asked.
+
+`CL0611`, `CL0612` and `CL0613` are three readings of one mistake — a `slot:` that cannot
+be placed — kept apart because the fix differs. `CL0611` is the typo class: the name
+matches nothing in the component. `CL0612` means the name is real but names a text
+section, so the fix is `slot: true` on that section, not a rename. `CL0613` is a target
+that named no slot at all, including the `plotEssential: true` shorthand, which has no
+meaning to give it: a component may declare any number of slots and there is no default to
+fall back on. A slot the component *does* declare and this branch gates off is none of
+these — the name is correct, and the consequence is `CL0610`'s to judge.
+
+`CL0614` is a warning because an empty cast is a legitimate branch. It exists because an
+empty slot and a slot whose occupants all mis-typed their `slot:` produce the same output
+file, and no corpus will fire it on its own — every slot in every shipped project is
+filled on every leaf, which is exactly why the silent version of this check would look
+correct.
 
 ### CL07xx — emit
 

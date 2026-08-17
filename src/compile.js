@@ -11,6 +11,7 @@ const {
   resolveItem, enumerateLeaves, walkBranchChain, walkBranchTree,
 } = require('./resolver');
 const { resolvePlacements } = require('./model/item');
+const { slotsForBranch } = require('./model/component');
 const { loadComponentDocument } = require('./loader/component');
 const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
@@ -463,6 +464,134 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
 }
 
 /**
+ * Resolve every sectioned component declared for this leaf, ahead of the items.
+ *
+ * Returns one entry per component that loaded, in `SLOTTED_COMPONENTS` order. A component
+ * that cannot be found is recorded as a gap and omitted — the gap report already says a
+ * requested component produced no file, and adding a placement ERROR for every item that
+ * named one of its slots would bury that one fact under a per-item pile.
+ */
+function resolveSectionedComponents(compileContext, label, { loadSectioned, recordGap }) {
+  const resolved = [];
+  for (const descriptor of SLOTTED_COMPONENTS) {
+    const spec = compileContext.componentRefs[descriptor.key];
+    if (!spec) continue;
+    if (typeof spec === 'string' && spec.includes('{')) {
+      recordGap(label, descriptor.label, spec, 'unresolved reference — token did not expand to a path');
+      continue;
+    }
+    const component = loadSectioned(spec, descriptor);
+    if (!component) {
+      recordGap(label, descriptor.label, spec, 'source declared no sections (missing or empty file)');
+      continue;
+    }
+    resolved.push({ descriptor, spec, component });
+  }
+  return resolved;
+}
+
+/**
+ * What a render target on this branch is allowed to name.
+ *
+ * Three sets, because §7.4 asks three different questions of a target's `slot:` and gives
+ * three different answers. `slots` is what this branch will actually place into.
+ * `documentSlots` is every slot the document declares, branch gating ignored — a slot
+ * gated off on this branch is correctly spelled and must not be reported as a typo, which
+ * is the whole content of §7.4's third and fifth rows. `sections` is every name in the
+ * document, so naming a text section can be told apart from naming nothing at all. All
+ * three are keyed lowercased, matching how `renderSectionedComponent` looks occupants up.
+ *
+ * A component key absent from this index is one that failed to load. Targets naming it are
+ * left alone: the gap report owns that failure.
+ */
+function buildSlotIndex(sectionedForLeaf, branchPath) {
+  const index = new Map();
+  for (const { descriptor, component } of sectionedForLeaf) {
+    const slots = new Map();
+    for (const [name, section] of slotsForBranch(component, branchPath)) {
+      slots.set(name.toLowerCase(), section);
+    }
+    const documentSlots = new Set(
+      component.sections.filter((s) => s.isSlot).map((s) => s.name.toLowerCase()),
+    );
+    const sections = new Set(component.sections.map((s) => s.name.toLowerCase()));
+    index.set(descriptor.key, { slots, documentSlots, sections, label: descriptor.label });
+  }
+  return index;
+}
+
+/**
+ * Check one render target against the branch's slot set (§7.4).
+ *
+ * Returns true when the target may be placed. The three refusals are all ERRORs and all
+ * name the item, because each is a typo class that otherwise ends as silence: v3 filed an
+ * occupant under a slot key no section matched and dropped it, which made a misspelled
+ * `slot:` and a deliberately excluded item indistinguishable in the output.
+ *
+ * A slot the component declares but this branch gates off is *not* one of them — §7.4's
+ * third and fifth rows keep component-level gating legitimate, and the consequence of
+ * gating it away is caught by the no-output invariant instead.
+ */
+function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, file) {
+  const known = slotIndex.get(target.component);
+  if (!known) return true;
+
+  if (!target.slot) {
+    diagnostics.error(
+      DIAG_CODES.TARGET_NAMES_NO_SLOT,
+      `item "${itemId}" renders into ${known.label} without naming a slot — `
+      + `add "slot:" naming one of: ${[...known.documentSlots].join(', ') || '(the component declares none)'}.`,
+      { file },
+    );
+    return false;
+  }
+
+  const key = target.slot.toLowerCase();
+  // Active on this branch, or declared and gated off on it. The second places nothing and
+  // says nothing — the name is right, and whether losing the placement matters is the
+  // no-output invariant's question rather than this one's.
+  if (known.documentSlots.has(key)) return true;
+
+  if (known.sections.has(key)) {
+    diagnostics.error(
+      DIAG_CODES.TARGET_NOT_A_SLOT,
+      `item "${itemId}" targets "${target.slot}" in ${known.label}, which is a section but `
+      + 'not a slot — only a section declaring "slot: true" can hold items.',
+      { file },
+    );
+    return false;
+  }
+
+  diagnostics.error(
+    DIAG_CODES.TARGET_UNDECLARED_SLOT,
+    `item "${itemId}" targets slot "${target.slot}" in ${known.label} on branch "${label}", `
+    + `which declares no such slot. Declared here: ${[...known.documentSlots].join(', ') || '(none)'}.`,
+    { file },
+  );
+  return false;
+}
+
+/**
+ * A declared slot that no item filled on this branch (§7.4) — a WARN, not an error.
+ *
+ * An empty cast is a legitimate branch. The warning exists because an empty slot and a
+ * slot whose occupants all mis-typed their `slot:` look identical in the output file, and
+ * the second is worth a line on the way past.
+ */
+function warnEmptySlots(descriptor, slotIndex, filled, label, diagnostics) {
+  const known = slotIndex.get(descriptor.key);
+  if (!known) return;
+  for (const name of known.slots.keys()) {
+    const placed = filled.get(name);
+    if (placed && placed.length > 0) continue;
+    diagnostics.warn(
+      DIAG_CODES.SLOT_EMPTY,
+      `slot "${name}" in ${known.label} has no items on branch "${label}".`,
+    );
+  }
+}
+
+/**
  * Phase B: apply cross-item refs, pronouns, render, and write output.
  *
  * Returns `{ written, occupants }` — the story-card files, and the component slots those
@@ -471,7 +600,7 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
  * component content, then reconciled them through a suppression side channel. There is
  * nothing to reconcile when one pass over one resolved item decides both.
  */
-function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, variables = {}, verbose = false, renderedById = null, projectNotesTemplate = null, diagnostics = new Diagnostics()) {
+function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, variables = {}, verbose = false, renderedById = null, projectNotesTemplate = null, diagnostics = new Diagnostics(), slotIndex = new Map(), branchLabel = '(root)') {
   // Build early so render functions can resolve cross-item refs during field expansion.
   const resolvedById = new Map();
   for (const item of resolvedItems) {
@@ -522,7 +651,17 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     const placement = resolvePlacements(item);
     const itemId = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
 
+    // Counts outputs, not targets: a target whose slot is gated off on this branch is
+    // legitimate (§7.4's third and fifth rows) and simply does not produce one.
+    let outputs = 0;
+
     for (const target of placement.targets) {
+      if (!checkTargetSlot(target, itemId, slotIndex, branchLabel, diagnostics, item._source)) continue;
+      const known = slotIndex.get(target.component);
+      // A slot the component declares but this branch excludes: nothing is placed, and
+      // nothing is said here. Whether that silence matters is the no-output invariant's
+      // question, below, and it is the only one with enough context to answer it.
+      if (known && !known.slots.has(String(target.slot).toLowerCase())) continue;
       const text = renderPlacementBody(item, target, templates, partials, variables, diagnostics);
       if (text === null) continue;
       if (!occupants.has(target.component)) occupants.set(target.component, new Map());
@@ -530,6 +669,22 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
       const slotKey = String(target.slot || '').toLowerCase();
       if (!slots.has(slotKey)) slots.set(slotKey, []);
       slots.get(slotKey).push({ id: itemId, order: target.order, text, slot: target.slot });
+      outputs++;
+    }
+
+    // The no-output invariant (§7.4) — the replacement for v3's suppression checks. An item
+    // that resolved into this branch must leave a mark on it. Scoped by consequence rather
+    // than by mechanism: gating a slot off at the component level stays a legitimate way to
+    // drop a whole slot's contents from one branch, and only becomes an error when it would
+    // make an item vanish from every output it declared.
+    if (!placement.storyCard && outputs === 0) {
+      diagnostics.error(
+        DIAG_CODES.ITEM_NO_OUTPUT,
+        `item "${itemId}" resolves on branch "${branchLabel}" but produces no output there: `
+        + 'storyCard is false and no declared target placed it. Exclude it from the branch '
+        + 'with "branches:" if that is what was meant.',
+        { file: item._source },
+      );
     }
 
     // `storyCard: false` is now the only thing that suppresses a card (§7.4). An item that
@@ -910,13 +1065,24 @@ function compile(configPath, options = {}) {
     const leafItems    = resolvedItems.length;
     const leafVariants = resolvedItems.filter(c => c._hasVariant).length;
 
+    // The sectioned components are resolved *before* the items that fill them, because two
+    // of §7.4's placement ERRORs — undeclared slot, and a section that is not a slot — are
+    // questions about the component that only the item's target can ask. Loading here lets
+    // them be raised where the placement is made rather than a hundred lines later, at a
+    // point that no longer knows which item was responsible. `loadSectioned` caches by
+    // resolved path, so a per-leaf hoist costs one Map lookup.
+    const sectionedForLeaf = resolveSectionedComponents(compileContext, label, {
+      loadSectioned, recordGap,
+    });
+    const slotIndex = buildSlotIndex(sectionedForLeaf, branchPath);
+
     // Phase B: cross-item refs + pronouns + render + write. One pass produces the story
     // cards and the component occupants together — see renderBranchItems.
     const renderedById = captureReports ? new Map() : null;
     const { written, occupants } = renderBranchItems(
       resolvedItems, registry, templates, partials, outputDir, branchProtagonist, ctx.variables, verbose, renderedById,
       (compileContext.render && compileContext.render.notesTemplate) || null,
-      compileDiagnostics
+      compileDiagnostics, slotIndex, label
     );
     totalFiles += written.length;
     reportCompileDiagnostics();
@@ -931,20 +1097,11 @@ function compile(configPath, options = {}) {
     // follow what Plot Essentials had actually emitted, and there is no suppression left.
     const sectionedWritten = {};
     const sectionedSegments = {};
-    for (const descriptor of SLOTTED_COMPONENTS) {
-      const spec = compileContext.componentRefs[descriptor.key];
-      if (!spec) continue;
-      if (typeof spec === 'string' && spec.includes('{')) {
-        recordGap(label, descriptor.label, spec, 'unresolved reference — token did not expand to a path');
-        continue;
-      }
-      const component = loadSectioned(spec, descriptor);
-      if (!component) {
-        recordGap(label, descriptor.label, spec, 'source declared no sections (missing or empty file)');
-        continue;
-      }
+    for (const { descriptor, spec, component } of sectionedForLeaf) {
+      const filled = occupants.get(descriptor.key) || new Map();
+      warnEmptySlots(descriptor, slotIndex, filled, label, compileDiagnostics);
       const { text, segments } = renderSectionedComponent(
-        component, branchPath, occupants.get(descriptor.key) || new Map(),
+        component, branchPath, filled,
         {
           defaultHeadingLevel: descriptor.defaultHeadingLevel,
           variables: ctx.variables, registry, branchProtagonist,
@@ -957,7 +1114,16 @@ function compile(configPath, options = {}) {
         if (verbose) console.log(`    OK: ${descriptor.verboseLabel} → ${outPath}`);
         totalFiles++;
       } else {
-        recordGap(label, descriptor.label, spec, 'compiled to empty content (every section excluded or empty)');
+        // §7.4: a component that renders to nothing is an ERROR, not a gap. The gap list
+        // is for a component that was asked for and could not be found; this one was
+        // found, read, and had every section resolve away, which is a statement about
+        // the source that no amount of re-reading the path will explain.
+        compileDiagnostics.error(
+          DIAG_CODES.COMPONENT_RENDERS_NOTHING,
+          `component "${descriptor.label}" renders to nothing on branch "${label}" — `
+          + 'every section is excluded by its own branches: dispatch, empty, or an unfilled slot.',
+          { file: String(spec) },
+        );
       }
     }
     const hasPE = !!sectionedWritten.plotEssential;
