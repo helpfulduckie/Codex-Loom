@@ -40,10 +40,11 @@ Two keys that v3 templates read are gone with the envelope: `aid.encapsulate`, b
 |---|---|
 | `TypeName.template` | Renders items whose `render.template` or `aid.type` matches `TypeName` (case-insensitive) |
 | `TypeName.notes.template` | Renders the `notes:` field of items whose body `TypeName.template` renders |
-| `TypeName.hint.template` | Renders the item in `style: hint` Plot Essentials blocks |
 | `PartialName.partial` | Reusable fragment, included with `{include PartialName}` |
 
-The two suffixed forms are siblings of a body template, found by name rather than declared: an item rendered by `Character.template` gets `Character.notes.template` for its notes with nothing to configure. See [Item YAML → Rendering notes through a template](03-item-yaml.md) for the full resolution order.
+`TypeName.notes.template` is a sibling of a body template, found by name rather than declared: an item rendered by `Character.template` gets `Character.notes.template` for its notes with nothing to configure. See [Item YAML → Rendering notes through a template](03-item-yaml.md) for the full resolution order.
+
+**`.hint` is no longer resolved by name.** It was the template `style: hint` reached for, and with `style:` gone a `.hint` file is an ordinary template like any other — name it in a render target's `template:` and it is used. Existing `Character.hint.template` files keep working; they are just selected explicitly now. See [09-components.md](09-components.md) for the target syntax.
 
 Templates and partials are loaded recursively from directories listed in `structure.input.templates`. When multiple directories are configured, later directories override earlier ones on name collision. Duplicates within the same directory are an error.
 

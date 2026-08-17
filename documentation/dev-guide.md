@@ -36,6 +36,7 @@ Phase 1 split the three files that had accreted several concerns each — `loade
 | `src/description.js`, `src/opening.js` | Description and Opening component compilation |
 | `src/overview.js` | Leaf-review and whole-tree overview file generation |
 | `src/diff.js` | Cross-branch `--with-diff` (Shared/delta) and `--with-annotate` report generation |
+| `src/inventory.js` | `--with-inventory`: slot × branch × occupants report (§7.9) |
 | `src/seedmap.js`, `src/bodysize.js`, `src/lint.js` | Post-compile report modes, read from the written tree |
 | `src/migrate/v3.js` | One-time v3 → v4 conversion (§14.2) |
 | `src/util.js` | File enumeration, YAML loading, deep clone, case-insensitive object utilities |
@@ -64,19 +65,23 @@ FOR EACH LEAF:
     FOR EACH itemDef:
       resolveItem()              → resolved item object or null (excluded)
       applyFieldInterpolation()  → dotted {$body/v/aid/render/name.X} refs expanded
-  renderBranchItems()
+  resolveSectionedComponents()   → the leaf's component documents
+  buildSlotIndex()               → what a render target may name on this branch
+  renderBranchItems()            → {written, occupants} — cards and slot contents in one pass
     applyCrossItemRefs()         → {$Id.body.Field} refs resolved across all items
     FOR EACH resolvedItem:
       applyPronounPasses()       → pronoun + conjugation tokens resolved
+      resolvePlacements()        → {storyCard, targets} — §7.2's inversion
       validateCardType()         → abort if resolved aid.type is not a legal path segment
       render()                   → markdown string
     writeOutput()                → Story Cards/{type}/{type}.md
-  compilePE() / writeAIN() / writeAN()
+  renderSectionedComponent()     → Components/{Plot Essentials,Summary,AI Instructions,Author Notes}.md
   copyScripts()
 writeOpeningsRecursive()         → Components/Opening.md at leaf/node levels
 runLeafReviewMode()              → Overview/*.leaf.md
-(if --with-diff)     runDiffMode()     → Overview/Shared.md + Overview/*.delta.md
-(if --with-annotate) runAnnotateMode() → Overview/*.annotate.md
+(if --with-inventory) runInventoryMode() → Overview/Inventory.md
+(if --with-diff)      runDiffMode()      → Overview/Shared.md + Overview/*.delta.md
+(if --with-annotate)  runAnnotateMode()  → Overview/*.annotate.md
 ```
 
 ---
@@ -289,11 +294,11 @@ Canon path resolution no longer needs a bespoke two-pass. v3 resolved plain-path
 
 ---
 
-## Cross-Branch Review Reports (`--with-diff` / `--with-annotate`)
+## Cross-Branch Review Reports (`--with-diff` / `--with-annotate` / `--with-inventory`)
 
-These reports answer the authoring question "are my branches/variants wired up the way I intended?" — `--with-diff` for *discovery* (scan, or hand to an agent), `--with-annotate` for *drill-down* once discovery flags a suspect item.
+These reports answer the authoring question "is this wired up the way I intended?" — `--with-diff` for *discovery* (scan, or hand to an agent), `--with-annotate` for *drill-down* once discovery flags a suspect item, `--with-inventory` for placement specifically.
 
-**They are compile options, not post-hoc report modes.** Unlike `--leafReview`/`--overview`/`--seed-map`/`--card-sizes`/`--lint` (which read the already-written `output/` tree from disk), `--with-diff`/`--with-annotate` need the identity-keyed, fully-resolved item objects that only exist in memory *during* compilation — the on-disk markdown has discarded `item.id` and variant-application metadata. So setting either flag forces a compile (`doCompile`) and the reports are emitted at the end of `compile()` from data captured in the per-leaf loop (`leafData`), gated behind `options.diff`/`options.annotate`. Capture overhead is zero for a normal compile.
+**They are compile options, not post-hoc report modes.** Unlike `--leafReview`/`--overview`/`--seed-map`/`--card-sizes`/`--lint` (which read the already-written `output/` tree from disk), these three need structures that only exist in memory *during* compilation. `--with-diff` and `--with-annotate` need identity-keyed, fully-resolved item objects — the on-disk markdown has discarded `item.id` and variant-application metadata. `--with-inventory` needs the slot index and the occupant map, because the output file records what a slot *rendered to* and never who filled it. So setting any of them forces a compile (`doCompile`) and the reports are emitted at the end of `compile()` from data captured in the per-leaf loop, gated behind `options.diff`/`options.annotate`/`options.inventory`. Capture overhead is zero for a normal compile.
 
 **`--with-diff` → `Overview/Shared.md` + `Overview/<leaf>.delta.md`** (`runDiffMode` in `diff.js`).
 Partition rule (`buildSharedAndDeltas`): for each item id and each component block, collect its rendered text from every leaf. Identical in *all* leaves → `Shared.md`. Otherwise varying → each leaf's own version goes to that leaf's `.delta.md`; leaves where it is absent (`~`-excluded) silently omit it. Each `.delta.md` is therefore self-contained ("everything this branch has that isn't universal"), read against `Shared.md` once. Rendered-block granularity, no annotation.
@@ -301,4 +306,7 @@ Partition rule (`buildSharedAndDeltas`): for each item id and each component blo
 **`--with-annotate` → `Overview/<leaf>.annotate.md`** (`runAnnotateMode`).
 Per leaf, per item, field-level diff of `resolveItem(itemDef, registry, branchPath)` against the **project base** `resolveItem(itemDef, registry, [])` (empty branch path = project imports/overrides applied, no branch dispatch — *not* canon base). Because both sides share the same source tokens/variables, the only differences are branch-variant effects. Each changed field is attributed to the applied variant(s) whose delta touches that path (`collectDeltaKeyPaths` + prefix match), or flagged `unexplained` (the bleed signal). `~`-nulled items are reported explicitly; items identical to base with no variants are omitted (they live in `Shared.md`).
 
-**Scope / current limitations.** Items and Plot Essentials diff at block level (PE via `compilePEBlocks`, which exposes the un-joined segments with stable keys). AI Instructions and Author's Note are captured as a single whole-component block each. Opening is resolved post-loop (`writeOpeningsRecursive`) and is not yet captured. The annotate `base`/`leaf` values are the pre-render resolved field structures, so `+{}` appends show as two-element arrays.
+**`--with-inventory` → `Overview/Inventory.md`** (`runInventoryMode` in `inventory.js`).
+Per leaf, `captureLeafInventory` walks the slot index and the occupant map into `{slot, gated, occupants}` records. Rendering compresses twice: branches are grouped by occupancy so a uniformly-filled slot is one row, and a row's branch set is written as a path pattern when one selects exactly that set. `branchPattern` verifies each candidate against the leaves it matches and returns null on an over-match, because a pattern claiming a placement that never happened would be indistinguishable from a correct one. Occupant order comes from `sortOccupants`, exported from `emit/components.js` so §7.4's `order:`-then-id rule stays stated in one place.
+
+**Scope / current limitations.** Every sectioned component — Plot Essentials, Summary, AI Instructions and Author's Note — diffs per section, keyed `section:<name>` by `renderSectionedComponent`. A `.md` passthrough has no sections and reports as one segment keyed by the component. Opening is resolved post-loop (`writeOpeningsRecursive`) and is not yet captured. The annotate `base`/`leaf` values are the pre-render resolved field structures, so `+{}` appends show as two-element arrays.

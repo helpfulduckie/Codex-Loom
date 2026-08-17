@@ -37,7 +37,9 @@ These abort compilation entirely.
 
 ## Per-Item Errors
 
-These skip the affected item (or PE block) but allow compilation to continue.
+These skip the affected item but allow compilation to continue.
+
+**Component and placement problems are coded diagnostics, not free-text messages.** The `[PE]`, `[AIN]` and `[AN]` messages that used to appear here belonged to the separate resolvers Plot Essentials, AI Instructions and Author's Note each ran, and those are gone — every component now takes one path. A slot named by no component, a section that is not a slot, an empty slot, and an item that produces no output on a branch are `CL0610`–`CL0615` in [11-diagnostics.md](11-diagnostics.md). A component whose file is missing or empty is reported at the end of the compile as a requested component that produced no output.
 
 | Message | Cause | Fix |
 |---|---|---|
@@ -45,10 +47,6 @@ These skip the affected item (or PE block) but allow compilation to continue.
 | `ERR: no template found for item "<id>" (type: <type>)` | Neither `render.template` nor `aid.type` matched any loaded template file. | Add a `.template` file named after the item's type, or set `render.template:` explicitly. |
 | `ERR rendering item "<id>": <reason>` | An error occurred during template rendering (malformed function call, etc.). | Check the template for syntax errors. |
 | `Import failed: no item with id "<id>" found in registry` | An `import:` entry references an ID not found in canon or project. | Check the ID spelling and that the canon directory is correctly configured. |
-| `ERR [PE]: no item with id "<id>" found in registry` | A PE block's `import:` references an item that doesn't exist. | Fix the import ID in the PE file. |
-| `ERR [PE]: resolving import "<id>": <reason>` | A PE item-body block failed to resolve its imported item. | Check the item ID and any variant path for typos. |
-| `ERR [PE]: no template found for item "<id>"` | A PE item-body block's item has no matching template. | Ensure a template exists for the item's type, or add `render.template:` to the block. |
-| `ERR [PE]: rendering item "<id>": <reason>` | An error occurred rendering a PE item block. | Check the template syntax. |
 
 ---
 
@@ -67,13 +65,6 @@ Warnings indicate likely authoring mistakes but do not stop compilation.
 | `WARN: component key "{%name}" not found` | A `{%name}` reference doesn't match any name in `variables`. | Check the component key spelling and configuration. |
 | `WARN: branchFraming on leaf branch "<name>" — ignoring` | `branchFraming:` was declared on a leaf branch (it only applies to non-leaf nodes). | Move it to a non-leaf branch node, or use `opening:` instead. |
 | `WARN: cross-item ref {$Id.body.FieldName} — item not found` | A cross-item body reference references an item ID not found in the compiled output. | Check that the referenced item is included in this branch and has the correct ID. |
-| `WARN [PE]: file not found: <path>` | The Plot Essentials YAML file path doesn't exist. | Check the `components.plotEssential` path. |
-| `WARN [PE]: no .hint template found for "<type>", falling back to full template` | A PE block with `style: hint` has no `.hint` template. | Create a `TypeName.hint.template` file or change the block's style. |
-| `WARN [PE]: template "<name>" not found for inline block` | The `render.template` override on a freeform PE block doesn't match any loaded template. | Check the template name spelling. |
-| `WARN [AIN]: file not found: <path>` | The AI Instructions YAML file path doesn't exist. | Check the `components.aiInstructions` path. |
-| `WARN [AIN]: document variant "<name>" not found` | A branch variant dispatch references an AIN document variant that doesn't exist. | Check the variant name in the AIN file's `variants:` block. |
-| `WARN [AN]: file not found: <path>` | The Author's Note YAML file path doesn't exist. | Check the `components.authorsNote` path. |
-| `WARN [AN]: Author's Note does not support "item:" block — ignoring` | An AN file has a `item:` block, which is only valid for AIN files. | Remove the `item:` block from the AN file. |
 | `WARN: No branch leaves found — nothing to compile.` | The output directory has no branch leaf folders for the overview generator to scan. | Run a full compile first before generating a leaf review. |
 
 ---

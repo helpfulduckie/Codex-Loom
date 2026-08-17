@@ -59,7 +59,7 @@ codex-loom -C -l -o path/to/project/
 
 **Mode flags** — `-C`/`--compile`, `-l`/`--leafReview`, `-o`/`--overview`, `-s`/`--seed-map`, `-b`/`--card-sizes`, `-L`/`--lint` — control what runs. Any combination is valid:
 
-**Compile options** — `-d`/`--with-diff`, `-a`/`--with-annotate`, `-c`/`--clean`, `-v`/`--verbose` — modify a compile rather than selecting one. `--with-diff` and `--with-annotate` emit cross-branch review reports from data that only exists in memory during compilation, so either one forces a compile. (`--diff` and `--annotate` are still accepted as aliases.)
+**Compile options** — `-d`/`--with-diff`, `-a`/`--with-annotate`, `-i`/`--with-inventory`, `-c`/`--clean`, `-v`/`--verbose` — modify a compile rather than selecting one. The first three emit review reports from data that only exists in memory during compilation, so any of them forces a compile. (`--diff`, `--annotate` and `--inventory` are accepted as aliases.)
 
 | Flags | What happens |
 |---|---|
@@ -98,6 +98,21 @@ Two files are written to the overview folder:
 | `{name}.bodysize.csv` | `Branch, Title, Body Size` — character count of each compiled item body, sorted by branch |
 
 Sort by **Body Size** ascending to spot items that variants may have gutted, or descending to find items that are likely too large for AID's context window. For single-branch scenarios the `Branch` column is omitted.
+
+**Slot inventory** (`-i`/`--with-inventory`) — Writes `Overview/Inventory.md`, listing every slot a component declares and which items landed in it, per branch. Because an item declares where it renders and a component never learns who filled it, this is the one place the two ends are put back together.
+
+It answers what the diagnostics cannot. `CL0611` fires when a target names a slot no component declares and `CL0614` fires when a declared slot ends up empty, so the typo cases are already loud — but a slot holding the *wrong* items is well-formed by every check the compiler runs, and reading that off the output tree means opening every leaf.
+
+Two tables, and both compress:
+
+| Section | Rows |
+|---|---|
+| One per slot | Branches grouped by what the slot holds, so a slot filled the same way everywhere is one row reading `all 32` |
+| `Items` | Every item with a component target, its slot, and the branches it landed on |
+
+A branch set is written as a path pattern when one describes it exactly — `*/Aness/*/*` rather than sixteen full paths — which also names the axis that decided the row. When no pattern matches the set exactly the branches are listed instead, because a pattern that over-matched would claim a placement that never happened.
+
+Empty and gated slots stay distinct: `(empty)` is a declared, placeable slot nobody targeted, while `(gated off this branch)` is a section the component's own `branches:` excluded, which is a legitimate way to drop a slot's whole contents from one branch.
 
 **Lint** (`-L`/`--lint`) — Reads compiled output (`Story Cards/` and `Components/` `.md` files) and mechanically scans for compile-time artifacts that should never survive into rendered output: unresolved pronoun/character/field tokens (`{$she}`, `{$Aria}`, `{$body.Field}`), unexpanded compile variables (`{%key}`), leaked template render functions and control tags (`{join(...)}`, `{if}`/`{/if}`, `{wrapper}`, `{include}`, etc.), unresolved verb-conjugation markers (`[s]`, `[is]`, `[was]`, ...), a bracketed word that *looks like* an attempted verb marker but isn't one of the real five (e.g. `[does]`, `[have]` — an author-typo case a fixed pattern list alone can't catch, so this is flagged even without knowing what the "correct" token should have been), and JS interpolation artifacts (`[object Object]`, bare `undefined`/`NaN`). It also checks Story Cards for one structural error: an empty or missing trigger list, which means a card that can never be pulled into context.
 

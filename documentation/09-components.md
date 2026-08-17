@@ -154,197 +154,174 @@ A `components.opening` pointing to a `.md`, `.txt`, or inline string continues t
 
 `Components/Plot Essentials.md` aggregates genre, setting, character blocks, and other context. It is defined in a YAML file referenced by `components.plotEssential`.
 
-The Plot Essentials file is a **YAML sequence** of block definitions. Blocks compile in the order they appear (with optional position sorting).
+**The file is a record of named `sections:`, and it describes shape only — it never names an item.** A section either carries `text:` or is marked `slot: true`, and a slot is a place items route *into*. Membership lives on the item: an item declares `render.plotEssential` naming the slot it belongs in, and the component never learns who filled it. This is the inversion described in [01-overview.md](01-overview.md) — the component says where content can go, the item says where it goes.
 
-### Block types
+Naming every section is what makes the file overridable. An importing project can reposition, edit or delete a named section; v3's blocks were anonymous and could only ever be replaced wholesale.
 
-#### Freeform block
-
-Provides arbitrary text content. Goes through pronoun and conjugation token resolution.
+### Sections and slots
 
 ```yaml
-- body:
+sections:
+  genre:
     text: |
       Genre: Psychological Thriller | Dark Character Study
       Setting: Steampunk Fantasy Feudal Europe; the Royal Academy
-  render:
-    wrapper: square
-    position: 1
+    render: {position: 1, wrapper: square}
+
+  you:
+    slot: true                      # items route in here
+    render: {position: 5, wrapper: curly}
+
+  cast:
+    slot: true
+    heading: Cast
+    headingLevel: 0                 # 0 = plain text (the default here); 1-6 = Markdown heading
+    render: {position: 6, wrapper: curly}
+
+  hints:
+    slot: true
+    heading: Hints
+    render: {position: 7, wrapper: curly}
+    branches:
+      flashback: ~                  # drop the whole section on this branch
 ```
 
-#### Item import block
-
-Imports an item from the registry and renders it through a template. Useful for character blocks in PE.
+And the item side, which lives in the item's own file:
 
 ```yaml
-- import: Aness
-  importVariants: [networked]
+- id: Aness
+  name: {display: Aness, full: Aness Vale}
+  aid: {type: Character, triggers: [Aness, Vale]}
   render:
-    wrapper: curly
-    position: 3
-  branches:
-    subject: networked
+    template: Character
+    storyCard: false                # this item lives in PE, not in a story card
+    plotEssential: {slot: you, order: 1}
 ```
 
-#### Section block
+An item may name several targets: `storyCard: true` alongside a `plotEssential:` target produces both. See [03-item-yaml.md](03-item-yaml.md) for the full `render:` surface.
 
-A section block groups multiple child blocks under a single shared wrapper with an optional heading. Presence of the `blocks:` key identifies it as a section. Child `render.wrapper` values are ignored — the section applies the wrapper to the combined output.
+### Wrapping — `each` or `all`
+
+**A slot owns the wrapping of what lands in it, and the item's own `render.wrapper` is ignored there.** `render.wrapper` governs story-card output only. Without this rule an item with `wrapper: curly` placed in a slot with `wrapper: curly` would ship double-braced.
+
+**`render.wrap` decides whether that wrapper encloses each occupant or the whole collection.** The default is `each`, which is the ordinary Plot Essentials idiom — every character its own bracketed block.
 
 ```yaml
-# Group two genre lines under one square bracket
-- blocks:
-    - body:
-        text: "Genre: Psychological Thriller"
-    - body:
-        text: "Genre: Dark Character Study"
-  render:
-    wrapper: square
-    position: 1
+  cast:
+    slot: true
+    render: {position: 6, wrapper: curly}              # wrap: each — four occupants, four blocks
+
+  party:
+    slot: true
+    heading: The Coinflip Company
+    render: {position: 7, wrapper: curly, wrap: all}   # one wrapper around the joined list
 ```
 
-With a heading and hint-style item imports:
+### Ordering
 
-```yaml
-- blocks:
-    - import: Aness
-      render:
-        style: hint
-        position: 1
-    - import: Kaiden
-      render:
-        style: hint
-        position: 2
-  heading: Hints
-  headingLevel: 0        # 0 = plain text (default); 1-6 = Markdown heading
-  render:
-    wrapper: curly
-    position: 4
-    compact: false       # true = no blank line between heading and children
-  branches:
-    flashback: ~         # null = exclude entire section from this branch
-```
+**Sections sort by `render.position`, then by the order they are written in the file.** A document has a reading order, so it can be the tiebreak.
 
-Sections are **not nestable** — a child block may not itself have a `blocks:` key.
-
-### Block fields
-
-| Field | Description |
-|---|---|
-| `import` | Item ID to import. If absent, block is freeform. |
-| `importVariants` | Variant chains to apply to the imported item (slash-separated paths). |
-| `body` | For freeform blocks: content mapping with a `text` key. For import blocks: additional body field overrides. |
-| `pronouns` | For freeform blocks: pronoun set for token resolution within `body.text`. |
-| `branches` | Branch dispatch spec — uses the same `resolveBranchSpec` mechanism as item-level `branches:`. |
-| `render.style` | `full` (default), `hint`, or `skip`. `hint` tries a `TemplateName.hint` template first. `skip` excludes the block. |
-| `render.wrapper` | `square` → `[ ... ]`, `curly` → `{ ... }`, `none` → raw. |
-| `render.position` | Numeric sort key for block ordering. Default `5`. Lower numbers appear first. |
-| `render.template` | Template override for the imported item. Falls back to the item's own `render.template` / `aid.type`. |
-| `variants` | Local item deltas applied after import resolution. |
+**Occupants within a slot sort by the target's `order:`, then by item id.** Items live in their own files after the inversion, so there is no document order to fall back on — and filesystem traversal order varies between machines and shifts when a file is renamed, which would make compiled output irreproducible. Set `order:` explicitly when a slot's sequence matters.
 
 ### Section fields
 
-| Field | Description |
-|---|---|
-| `blocks` | Sequence of child block definitions. Presence of this key identifies the entry as a section. |
-| `heading` | Optional heading placed before child content, inside the wrapper. Omit to suppress entirely. |
-| `headingLevel` | `1`–`6` adds a Markdown `#` prefix. `0` (default) renders plain text. |
-| `render.wrapper` | Applied to the entire section output (heading + joined children). Child `render.wrapper` values are ignored. |
-| `render.position` | Sort key for the section among all top-level PE segments. Default `5`. |
-| `render.compact` | When `true`, suppresses the blank line between the heading and the first child. Default `false`. |
-| `branches` | Branch dispatch for the entire section. `~` excludes the whole section. Child blocks may also carry their own `branches:`. |
+| Field | Default | Effect |
+|---|---|---|
+| `slot` | `false` | `true` marks a section items can route into. A slot section takes no `text:`. |
+| `text` | — | A string, or a mapping of named lines. With a mapping only the values render; the names exist so a variant can edit one line without restating the block. |
+| `heading` | — | Placed before the content, inside the wrapper. Omit to suppress entirely. |
+| `headingLevel` | `0` here | `1`–`6` adds a Markdown `#` prefix; `0` renders plain text. AI Instructions and Author's Note default to `2` instead. |
+| `render.position` | `5` | Sort key among sections; lower is earlier. |
+| `render.wrapper` | `none` | `square` → `[ … ]`, `curly` → `{ … }`, `none` → raw. |
+| `render.wrap` | `each` | `each` wraps every occupant; `all` wraps the joined collection. Slots only. |
+| `render.compact` | `false` | Suppress the blank line between the heading and what follows. |
+| `render.bullet` | `false` | Prefix each `text:` line with `- `. |
+| `branches` | — | Branch dispatch for the section, using the same `resolveBranchSpec` as items. `~` drops the section on that branch. |
+| `variants` | — | Named deltas this section's `branches:` can select. |
 
-`only:` and `except:` are **not** supported directly on PE blocks; use `branches:` with null values to exclude blocks from specific branches:
+`only:` and `except:` are not supported; use `branches:` with `~`.
 
-```yaml
-branches:
-  flashback: ~    # null → exclude this block from the flashback branch
-```
-
-### Imported item example
-
-An imported item renders through its own template, which produces body text and nothing else — the `## Name` heading and `~~~` fence belong to story-card output, and Plot Essentials is not a story card. `render.stripFence` existed to cut that envelope back off and was retired with it; a PE config that still sets the key can simply delete it.
+### Branch dispatch and variants are per section
 
 ```yaml
-- import: Aness
-  importVariants: [networked]
-  render:
-    wrapper: curly
-  branches:
-    subject: networked
-    researcher: ~       # exclude from researcher branch
+sections:
+  genre:
+    text: |
+      Genre: Psychological Thriller
+    branches:
+      flashback: lighter            # apply this section's "lighter" variant
+      briefing: ~                   # drop this section entirely
+    variants:
+      lighter:
+        text: |
+          Genre: Character Study
 ```
 
-Rendered output (wrapper=curly):
-```
-{
-Aness - Journeyman Healer; Magic Researcher; Fused-Squad Subject
-Physical Traits: female; mid 20s; black hair, braided, waist-length; ...
-...
-}
-```
+**Gating a slot off is a legitimate way to drop its whole contents from one branch**, and does not require editing every item that targets it. It becomes an ERROR only when it would make an item vanish from *every* output it declared — see `CL0610` in [11-diagnostics.md](11-diagnostics.md).
 
 ### Full example
 
 ```yaml
-# Genre — all branches
-- body:
+sections:
+  genre:
     text: |
       Genre: Psychological Thriller | Dark Character Study
-  render:
-    wrapper: square
-    position: 1
+    render: {position: 1, wrapper: square}
 
-# Setting — all branches
-- body:
+  setting:
     text: |
       Setting: Steampunk Fantasy Feudal Europe; the Royal Academy
-  render:
-    wrapper: square
-    position: 2
+    render: {position: 2, wrapper: square}
 
-# NPC compact reference — all branches
-- import: Kaiden
-  render:
-    wrapper: curly
-    template: pe-character
-    position: 4
+  you:
+    slot: true
+    render: {position: 5, wrapper: curly}
 
-# You-block — one per branch, subject branch gets networked variant
-- import: Aness
-  importVariants: [networked]
-  render:
-    wrapper: curly
-    position: 5
-  branches:
-    subject: networked
-    researcher: ~
+  cast:
+    slot: true
+    render: {position: 6, wrapper: curly}
 
-- import: Veyrn
-  render:
-    wrapper: curly
-    position: 5
-  branches:
-    researcher: base
-    subject: ~
-
-# Grouped hints — one curly block with heading, excluded from flashback branch
-- blocks:
-    - import: Aness
-      render:
-        style: hint
-        position: 1
-    - import: Kaiden
-      render:
-        style: hint
-        position: 2
-  heading: Hints
-  headingLevel: 0
-  render:
-    wrapper: curly
-    position: 6
-  branches:
-    flashback: ~
+  hints:
+    slot: true
+    heading: Hints
+    render: {position: 7, wrapper: curly}
+    branches:
+      flashback: ~
 ```
+
+```yaml
+# The items that fill it, in their own files
+- id: Aness
+  render:
+    template: Character
+    storyCard: false
+    plotEssential: {slot: you, order: 1}
+  branches: {researcher: ~}
+
+- id: Kaiden
+  aid: {type: Character, triggers: [Kaiden]}
+  render:
+    template: Character
+    plotEssential: {slot: cast, order: 1, template: CharacterBrief}
+```
+
+**A per-target `template:` is what `style: hint` used to be**, and it is more flexible: the story card and the Plot Essentials entry can use any two templates, rather than one template and its `.hint` sibling.
+
+An item rendered into a slot produces body text and nothing else — the `## Name` heading and `~~~` fence belong to story-card output, and Plot Essentials is not a story card.
+
+### Migrating a v3 Plot Essentials file
+
+A v3 file validated against this grammar reports `blocks:` as an unknown key, which is the intended signal.
+
+| v3 | v4 |
+|---|---|
+| A freeform block with `body.text` | A named section with `text:` |
+| `- import: Aness` with `render.wrapper` | A slot section, plus `render.plotEssential: {slot: …}` on the Aness item |
+| `blocks:` grouping under a heading | One slot with that `heading:`, and `wrap: all` if the group shared a wrapper |
+| `render.style: hint` | A per-target `template:` on the item's render target |
+| `render.style: skip` | Do not declare the target |
+| `render.stripFence` | Deleted with the fence it removed; drop the key |
+| Block `position:` deciding occupant order | `order:` on each item's render target |
 
 ---
 
