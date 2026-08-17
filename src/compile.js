@@ -608,19 +608,6 @@ function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, file) {
 }
 
 /**
- * A component's segments as one segment, keyed by the component's own name.
- *
- * The cross-branch reports diff component content by segment key. Plot Essentials reports
- * per section, which is what §7.2's naming bought; AI Instructions and Author's Note
- * reported as one blob before they moved onto the sectioned path, and keeping that shape
- * is what makes this step's report fixtures byte-identical.
- */
-function collapseSegments(label, segments) {
-  if (!segments || segments.length === 0) return [];
-  return [{ key: label, text: segments.map((s) => s.text).join('\n\n') }];
-}
-
-/**
  * A declared slot that no item filled on this branch (§7.4) — a WARN, not an error.
  *
  * An empty cast is a legitimate branch. The warning exists because an empty slot and a
@@ -1198,13 +1185,14 @@ function compile(configPath, options = {}) {
         fileBase: branchPath.length ? branchPath.join(' - ') : rootDirName,
         items: renderedById,
         components: {
+          // Every sectioned component reports per section, keyed by section name. The
+          // cross-branch reports diff component content by segment key, so per-section
+          // keys localize a difference to the section that carries it rather than
+          // reporting the whole component as changed — which is what §7.2's naming bought
+          // Plot Essentials, and there is no reason the prose components report worse.
           plotEssentials: sectionedSegments.plotEssential || [],
-          // AI Instructions and Author's Note report as one segment keyed by the component
-          // rather than per section, which is what they reported before they moved onto
-          // this path. Per-section segments are available and are a better report; taking
-          // them is a report re-baseline, and step 10 is the session that reads one.
-          aiInstructions: collapseSegments('AI Instructions', sectionedSegments.aiInstructions),
-          authorsNote:    collapseSegments("Author's Note", sectionedSegments.authorsNote),
+          aiInstructions: sectionedSegments.aiInstructions || [],
+          authorsNote:    sectionedSegments.authorsNote || [],
         },
       });
     }
