@@ -1049,6 +1049,13 @@ function compile(configPath, options = {}) {
   const rootDirName = path.basename(config._resolvedOutput);
   const leafData = [];
 
+  // `--inventory` reads the slot index and the occupant map, which exist only inside the
+  // leaf loop and are gone by the time an output tree is on disk — the file records what a
+  // slot rendered to, never who filled it. Captured separately from `leafData` because it
+  // needs neither the rendered item bodies nor the component segments that make that
+  // structure expensive.
+  const inventoryData = [];
+
   // Track components that were requested (a spec/path was provided) but produced
   // no output file. A requested-but-unwritten component is almost always a silent
   // failure (bad path, unexpanded {%var}/{@key}, empty source) rather than intent —
@@ -1122,6 +1129,14 @@ function compile(configPath, options = {}) {
     );
     totalFiles += written.length;
     reportCompileDiagnostics();
+
+    if (options.inventory) {
+      inventoryData.push(
+        require('./inventory').captureLeafInventory(
+          label, branchPath, sectionedForLeaf, slotIndex, occupants,
+        ),
+      );
+    }
 
     // Sectioned components (§7.2) — all four of them now. The shape comes from the
     // component document, the content from the items that named its slots. This runs
@@ -1300,10 +1315,15 @@ function compile(configPath, options = {}) {
   }
 
   // Cross-branch review reports — emitted from the per-leaf data captured above.
-  if (captureReports && leafData.length > 0) {
+  if ((captureReports && leafData.length > 0) || (options.inventory && inventoryData.length > 0)) {
     const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
     const { runDiffMode, runAnnotateMode } = require('./diff');
     const reportSummary = [];
+    if (options.inventory) {
+      fs.mkdirSync(reportBase, { recursive: true });
+      const w = require('./inventory').runInventoryMode(inventoryData, reportBase);
+      reportSummary.push(`${w.length} inventory file(s)`);
+    }
     if (options.diff) {
       const diffDir = path.join(reportBase, 'diff');
       fs.mkdirSync(diffDir, { recursive: true });
@@ -1434,6 +1454,7 @@ if (require.main === module) {
     ['lint',       ['--lint',       '-L']],
     ['diff',       ['--with-diff',     '--diff',     '-d']],
     ['annotate',   ['--with-annotate', '--annotate', '-a']],
+    ['inventory',  ['--with-inventory', '--inventory', '-i']],
     ['clean',      ['--clean',      '-c']],
     ['verbose',    ['--verbose',    '-v']],
   ];
@@ -1451,7 +1472,7 @@ if (require.main === module) {
   // --with-diff / --with-annotate need data captured during compilation (the on-disk markdown is
   // lossy), so they are compile *options* — they force a compile rather than reading the
   // output dir like the post-hoc report modes (--leafReview/--overview/--seed-map/--card-sizes).
-  const doCompile    = flags.compile || flags.diff || flags.annotate ||
+  const doCompile    = flags.compile || flags.diff || flags.annotate || flags.inventory ||
     (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint);
   const doLeafReview = flags.leafReview;
   const doOverview   = flags.overview;
@@ -1460,11 +1481,12 @@ if (require.main === module) {
   const doLint       = flags.lint;
 
   if (positional.length === 0 && !flags.compile && !flags.diff && !flags.annotate &&
+      !flags.inventory &&
       !flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint) {
     console.error(
       'Usage: codex-loom [mode flags] [compile options] [<folder | compile.yaml>]\n' +
       '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --card-sizes|-b  --lint|-L\n' +
-      '  Compile options:       --with-diff|-d  --with-annotate|-a  --clean|-c  --verbose|-v\n' +
+      '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-inventory|-i  --clean|-c  --verbose|-v\n' +
       '  No mode flag compiles. Report modes read the existing output tree; compile options force a compile.'
     );
     process.exit(1);
@@ -1487,7 +1509,10 @@ if (require.main === module) {
       }
     } else {
       try {
-        compile(configPath, { clean: flags.clean, verbose: flags.verbose, diff: flags.diff, annotate: flags.annotate });
+        compile(configPath, {
+          clean: flags.clean, verbose: flags.verbose,
+          diff: flags.diff, annotate: flags.annotate, inventory: flags.inventory,
+        });
       } catch (err) {
         console.error(`\nFatal: ${err.message}`);
         process.exit(1);

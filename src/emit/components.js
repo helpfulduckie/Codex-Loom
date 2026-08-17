@@ -230,16 +230,25 @@ function renderSection(section, occupants, options) {
  * order must never reach the output, and the only way to be sure of that is for the sort
  * to have no other input.
  */
+/**
+ * A slot's occupants in output order — `order:` then item id (§7.4).
+ *
+ * Exported so the inventory report can name the same sequence the file does. Filesystem
+ * traversal order must never reach either one, and the only way to be sure of that is for
+ * both to read the rule from here rather than restate it.
+ */
+function sortOccupants(placed) {
+  return (placed || []).slice().sort(
+    (a, b) => (a.order - b.order) || String(a.id).localeCompare(String(b.id)),
+  );
+}
+
 function renderSectionedComponent(component, branchPath, occupants, options = {}) {
   if (!component) return { text: null, segments: [] };
 
   const segments = [];
   for (const { section } of sectionsForBranch(component, branchPath, options.onWarn)) {
-    const placed = section.isSlot
-      ? (occupants.get(section.name.toLowerCase()) || []).slice().sort(
-        (a, b) => (a.order - b.order) || String(a.id).localeCompare(String(b.id)),
-      )
-      : [];
+    const placed = section.isSlot ? sortOccupants(occupants.get(section.name.toLowerCase())) : [];
     const text = renderSection(section, placed, options);
     if (text && text.trim()) segments.push({ key: `section:${section.name}`, text });
   }
@@ -277,6 +286,7 @@ module.exports = {
   isPassthrough,
   readPassthrough,
   renderSection,
+  sortOccupants,
   renderSectionedComponent,
   writeSectionedComponent,
 };
