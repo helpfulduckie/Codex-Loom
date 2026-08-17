@@ -12,7 +12,6 @@ const {
   applyFieldRenderFunctions,
   normalizeWhitespace,
   applyWrapper,
-  resolveTemplateName,
   evaluateProse,
   evaluateBlock,
   evaluateKeys,
@@ -588,22 +587,6 @@ describe('applyWrapper', () => {
 
   test('case-insensitive wrapper name', () => {
     expect(applyWrapper('content', 'SQUARE')).toBe('[\ncontent\n]');
-  });
-});
-
-// ── resolveTemplateName ───────────────────────────────────────────────────────
-
-describe('resolveTemplateName', () => {
-  test('no style → returns name unchanged', () => {
-    expect(resolveTemplateName('character', undefined)).toBe('character');
-  });
-
-  test('hint style → appends .hint suffix', () => {
-    expect(resolveTemplateName('character', 'hint')).toBe('character.hint');
-  });
-
-  test('other style → returns name unchanged', () => {
-    expect(resolveTemplateName('character', 'skip')).toBe('character');
   });
 });
 

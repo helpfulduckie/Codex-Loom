@@ -489,14 +489,6 @@ function processFieldRenderFunctions(value, context) {
 }
 
 /**
- * Look up a template name. For style:'hint', tries templateName.hint first.
- */
-function resolveTemplateName(templateName, style) {
-  if (style === 'hint') return templateName + '.hint';
-  return templateName;
-}
-
-/**
  * Render a template string with the given card data.
  *
  * Pipeline:
@@ -568,7 +560,6 @@ module.exports = {
   processWrapperBlocks,
   normalizeWhitespace,
   applyWrapper,
-  resolveTemplateName,
   isTruthy,
   evaluateJoin,
   evaluateList,

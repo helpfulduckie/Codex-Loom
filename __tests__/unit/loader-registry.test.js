@@ -6,7 +6,7 @@ const path = require('path');
 const { Diagnostics } = require('../../src/diag');
 const { CODES: SCHEMA_CODES } = require('../../src/schema');
 const {
-  loadItemsFromDir, buildRegistry, mergeRegistries, buildOverlays,
+  loadItemsFromDir, buildRegistry, mergeRegistries,
   buildCanonRegistry, resolveIncludes, findConfigEntry, CODES,
 } = require('../../src/loader/registry');
 const { YAML_SUFFIXES, CONFIG_BASENAMES } = require('../../src/util');
@@ -238,40 +238,6 @@ describe('registries', () => {
   test('mergeRegistries throws on a canon/project collision', () => {
     expect(() => mergeRegistries(buildRegistry([item('A')], 'c'), buildRegistry([item('A')], 'p')))
       .toThrow('exists in both canon and project');
-  });
-});
-
-describe('overlays', () => {
-  test('collects import-only defs keyed by target', () => {
-    const overlays = buildOverlays([{ import: 'Aness', _source: 'a' }]);
-    expect(overlays.get('aness')).toBeDefined();
-  });
-
-  test('ignores defs with no import', () => {
-    expect(buildOverlays([{ id: 'A', _source: 'a' }]).size).toBe(0);
-  });
-
-  test('keeps the first of a duplicate pair and reports it', () => {
-    const diagnostics = new Diagnostics();
-    const overlays = buildOverlays(
-      [{ import: 'A', _source: 'one' }, { import: 'A', _source: 'two' }],
-      { diagnostics }
-    );
-    expect(overlays.get('a')._source).toBe('one');
-    expect(diagnostics.warnings[0].code).toBe(CODES.DUPLICATE_OVERLAY);
-  });
-
-  test('a renamed import (id + import) is not collected as an overlay (§17.4)', () => {
-    const overlays = buildOverlays([{ id: 'Dragon', import: 'wyvern', _source: 'a' }]);
-    expect(overlays.size).toBe(0);
-  });
-
-  test('a bare import alongside a renamed one still captures the bare one', () => {
-    const overlays = buildOverlays([
-      { id: 'Dragon', import: 'wyvern', _source: 'a' },
-      { import: 'wyvern', _source: 'b' },
-    ]);
-    expect(overlays.get('wyvern')._source).toBe('b');
   });
 });
 

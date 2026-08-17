@@ -9,8 +9,8 @@
  * field ops know nothing of items or branches, and branch-spec resolution knows nothing
  * of item content, so the three form a DAG with no circular imports.
  *
- * This file re-exports them so `compile.js`, `pe.js`, `diff.js` and the existing test
- * suite keep their import paths. It goes away when those call sites move.
+ * This file re-exports them so `compile.js`, `diff.js` and the existing test suite keep
+ * their import paths. It goes away when those call sites move.
  *
  * `deepClone` was never defined here — it was imported from `util.js` and re-exported.
  * It is re-exported again for the same reason, and consumers should prefer `util.js`.
@@ -20,14 +20,13 @@ const { deepClone } = require('./util');
 const { applyFieldOp, applyFieldsDelta, applyDelta } = require('./model/fieldops');
 const { resolveItem, collectVariantDeltas, parseVariantsList } = require('./model/item');
 const {
-  mergeBranchSpecs, resolveBranchSpec, enumerateLeaves, getBranchConfig,
+  resolveBranchSpec, enumerateLeaves, getBranchConfig,
   walkBranchChain, walkBranchTree,
 } = require('./model/branches');
 
 module.exports = {
   resolveItem,
   resolveBranchSpec,
-  mergeBranchSpecs,
   enumerateLeaves,
   getBranchConfig,
   walkBranchChain,

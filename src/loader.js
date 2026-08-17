@@ -5,7 +5,7 @@ const path = require('path');
 const { findFiles, loadYaml } = require('./util');
 const { loadCompileConfig } = require('./config/load');
 const {
-  loadItemsFromDir, buildRegistry, mergeRegistries, buildOverlays,
+  loadItemsFromDir, buildRegistry, mergeRegistries,
 } = require('./loader/registry');
 
 /**
@@ -93,5 +93,4 @@ module.exports = {
   loadCompileConfig,
   buildRegistry,
   mergeRegistries,
-  buildOverlays,
 };

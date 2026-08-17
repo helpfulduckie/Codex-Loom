@@ -31,7 +31,6 @@ const CODES = Object.freeze({
   ITEM_WITHOUT_IDENTITY: 'CL0140',
   DUPLICATE_ITEM_ID: 'CL0141',
   MULTIPLE_VAR_ALIASES: 'CL0142',
-  DUPLICATE_OVERLAY: 'CL0143',
   ID_CONTAINS_COLON: 'CL0144',
 });
 
@@ -218,33 +217,6 @@ function mergeRegistries(canonRegistry, projectRegistry) {
 }
 
 /**
- * Collect Codex overlays: project defs carrying `import:` but no `id:`.
- *
- * These are invisible to `buildRegistry`, which is the point — they let a Plot Essentials
- * block pick up Codex-level importVariants, variants, branches and body without
- * re-declaring them.
- */
-function buildOverlays(items, options = {}) {
-  const { diagnostics } = options;
-  const overlays = new Map();
-  for (const item of items) {
-    // A renamed import (§17.4) is a local item, not an override of the one it copies, so it
-    // is not an overlay. Without this it would be both, and its deltas would leak onto the
-    // canon original wherever a PE block imported that.
-    if (!item.import || item.id) continue;
-    const key = normalizeRef(item.import);
-    if (overlays.has(key)) {
-      const message = `duplicate Codex overlay for "${item.import}" in ${item._source}; keeping first`;
-      if (diagnostics) diagnostics.warn(CODES.DUPLICATE_OVERLAY, message, { file: item._source });
-      else console.warn(`  WARN: ${message}`);
-      continue;
-    }
-    overlays.set(key, item);
-  }
-  return overlays;
-}
-
-/**
  * Load every named canon directory into one registry (§17.2).
  *
  * A duplicate id *within* one set is still an error, raised by `buildRegistry` — one set
@@ -378,7 +350,6 @@ module.exports = {
   normalizeItemVarField,
   buildRegistry,
   mergeRegistries,
-  buildOverlays,
   buildCanonRegistry,
   resolveIncludes,
   findConfigEntry,

@@ -13,61 +13,6 @@
 const { deepClone, findKey } = require('../util');
 
 /**
- * Deep-merge two branch specs (override layered over base), with branch-spec
- * semantics rather than field-op semantics.
- *
- * Branch specs are dispatch trees, not field-delta data, so the merge must NOT
- * route values through applyFieldOp:
- *   - A leaf in `override` (array — including `[]` — scalar, or null/`~`) replaces
- *     the base value outright. Crucially `[]` ("include, no variants") survives
- *     instead of evaporating, and `~` is preserved as an explicit exclude rather
- *     than deleting the key.
- *   - A mapping in `override` recurses, merging into the matching base mapping.
- * Keys present only in `base` are kept.
- *
- * @param {object} base     - the lower-priority branches mapping (e.g. item/overlay)
- * @param {object} override - the higher-priority branches mapping (e.g. PE block)
- * @returns {object} merged branches mapping
- */
-function mergeBranchSpecs(base, override) {
-  if (override === undefined) return base;
-  if (override === null) return override; // explicit exclusion wins
-  if (typeof override !== 'object' || Array.isArray(override)) return override;
-  if (base === null || base === undefined || typeof base !== 'object' || Array.isArray(base)) {
-    return deepClone(override);
-  }
-
-  const result = deepClone(base);
-  for (const [key, overrideVal] of Object.entries(override)) {
-    const baseKey = Object.keys(result).find(k => k.toLowerCase() === key.toLowerCase());
-    const baseVal = baseKey !== undefined ? result[baseKey] : undefined;
-    const targetKey = baseKey !== undefined ? baseKey : key;
-
-    if (overrideVal === null || overrideVal === undefined) {
-      // Explicit exclusion (or override omits this key) — override wins.
-      result[targetKey] = overrideVal;
-    } else if (typeof overrideVal === 'object' && !Array.isArray(overrideVal) &&
-        baseVal !== null && typeof baseVal === 'object' && !Array.isArray(baseVal)) {
-      result[targetKey] = mergeBranchSpecs(baseVal, overrideVal);
-    } else if (baseVal !== null && baseVal !== undefined) {
-      // Leaf override (array/scalar/apply-only mapping) stacked on a present base value:
-      // compose apply lists and keep descending into the base's sub-branches unless the
-      // override supplies its own — a block-level visibility override like `[]` must not
-      // silently discard the item's nested route-variant tree.
-      const baseApply = extractApplyList(baseVal);
-      const overrideApply = extractApplyList(overrideVal);
-      const mergedApply = [...baseApply, ...overrideApply];
-      const mergedSub = extractSubBranches(overrideVal) || extractSubBranches(baseVal);
-      result[targetKey] = mergedSub ? { apply: mergedApply, branches: mergedSub } : mergedApply;
-    } else {
-      // No base value at this key — override replaces outright.
-      result[targetKey] = deepClone(overrideVal);
-    }
-  }
-  return result;
-}
-
-/**
  * Resolve the branch spec for an item/block, walking the branch path.
  *
  * Returns:
@@ -312,6 +257,6 @@ function walkBranchTree(branches, visit, state = null, path = []) {
 }
 
 module.exports = {
-  mergeBranchSpecs, resolveBranchSpec, enumerateLeaves, getBranchConfig,
+  resolveBranchSpec, enumerateLeaves, getBranchConfig,
   walkBranchChain, walkBranchTree,
 };

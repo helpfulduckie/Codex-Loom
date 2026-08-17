@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const {
   loadItemsFromDir, loadTemplates, loadCompileConfig,
-  buildRegistry, mergeRegistries, buildOverlays, loadYaml,
+  buildRegistry, mergeRegistries, loadYaml,
 } = require('./loader');
 const {
   resolveItem, enumerateLeaves, walkBranchChain, walkBranchTree,
@@ -835,11 +835,6 @@ function compile(configPath, options = {}) {
 
   const projectRegistry = buildRegistry(projectItems, 'project');
   console.log(`Loaded ${projectRegistry.size} project item definition(s).`);
-
-  const overlays = buildOverlays(projectItems, { diagnostics: loadDiagnostics });
-  if (overlays.size > 0) {
-    console.log(`Loaded ${overlays.size} Codex overlay(s).`);
-  }
 
   const registry = mergeRegistries(canonRegistry, projectRegistry);
 

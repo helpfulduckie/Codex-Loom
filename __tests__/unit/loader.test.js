@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const {
   buildRegistry, mergeRegistries, loadTemplates,
-  loadItemsFromDir, buildOverlays, loadCompileConfig, CODES,
+  loadItemsFromDir, loadCompileConfig, CODES,
 } = require('../../src/loader');
 const { Diagnostics } = require('../../src/diag');
 
@@ -251,46 +251,6 @@ describe('loadItemsFromDir', () => {
     const items = loadItemsFromDir(dir);
     expect(items).toHaveLength(1);
     expect(items[0].id).toBe('Solo');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildOverlays
-// ---------------------------------------------------------------------------
-
-describe('buildOverlays', () => {
-  test('returns empty map when no items have import:', () => {
-    expect(buildOverlays([{ id: 'Aria', _source: 'items.yaml' }]).size).toBe(0);
-  });
-
-  test('maps import: target (lowercased) to the item', () => {
-    const item = { import: 'Felicia', _source: 'items.yaml' };
-    const overlays = buildOverlays([item]);
-    expect(overlays.has('felicia')).toBe(true);
-    expect(overlays.get('felicia')).toBe(item);
-  });
-
-  test('key is stored lowercase regardless of import: casing', () => {
-    const item = { import: 'MYCARD', _source: 'x.yaml' };
-    expect(buildOverlays([item]).has('mycard')).toBe(true);
-  });
-
-  test('duplicate import: target warns and keeps first', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const first  = { import: 'Felicia', _source: 'a.yaml' };
-    const second = { import: 'Felicia', _source: 'b.yaml' };
-    const overlays = buildOverlays([first, second]);
-    expect(overlays.get('felicia')).toBe(first);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Felicia'));
-    warn.mockRestore();
-  });
-
-  test('ignores non-import items, includes only import items', () => {
-    const items = [
-      { id: 'Hero', _source: 'a.yaml' },
-      { import: 'Villain', _source: 'b.yaml' },
-    ];
-    expect(buildOverlays(items).size).toBe(1);
   });
 });
 

@@ -45,7 +45,7 @@ const CODES = Object.freeze({
   TOKEN_SWALLOWED_BY_YAML: 'CL0105',
 
   // Items and render (§3.2, §7). These live here rather than in `compile.js` because
-  // `pe.js` raises the same three and cannot import from `compile.js` without a cycle.
+  // `emit/` raises them too and cannot import from `compile.js` without a cycle.
   ITEM_RESOLUTION_FAILED: 'CL0324',
   TEMPLATE_NOT_FOUND: 'CL0420',
   RENDER_FAILED: 'CL0421',

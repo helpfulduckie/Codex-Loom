@@ -247,9 +247,9 @@ describe('CODES', () => {
   });
 });
 
-describe('CL0324/CL0420/CL0421 (compile.js/pe.js item and render failures)', () => {
+describe('CL0324/CL0420/CL0421 (item and render failures)', () => {
   // These deliberately have no SEVERITY_BY_CODE entry: they are raised through
-  // `diagnostics.error()` at call sites in compile.js/pe.js that already hold a bus,
+  // `diagnostics.error()` at call sites that already hold a bus,
   // not through model/'s severity-blind `onWarn(code, message)` callback.
   test('ITEM_RESOLUTION_FAILED is CL0324', () => {
     expect(CODES.ITEM_RESOLUTION_FAILED).toBe('CL0324');
