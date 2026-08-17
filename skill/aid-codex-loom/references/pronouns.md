@@ -1,6 +1,6 @@
 # Pronoun System Reference
 
-Three token forms in card field values and templates. All begin with `{$...}`.
+Three token forms in item field values and templates. All begin with `{$...}`.
 
 ---
 
@@ -27,9 +27,9 @@ All tokens in a column are synonymous — use whichever reads naturally. Capital
 
 ## 1. Unscoped Pronoun Tokens — `{$she}`, `{$her~}`, etc.
 
-Resolve against the **card's own `pronouns:` field**. Do NOT set the conjugation scope.
+Resolve against the **item's own `pronouns:` field**. Do NOT set the conjugation scope.
 
-Use when the token refers to the card's subject (the character the card is about).
+Use when the token refers to the item's subject (the character the item is about).
 
 ```yaml
 body:
@@ -37,7 +37,7 @@ body:
     one of the top Academy mages; built {$her~} reputation through research
 ```
 
-Swapping `pronouns: male` via a variant automatically updates all `{$her~}` tokens throughout the card.
+Swapping `pronouns: male` via a variant automatically updates all `{$her~}` tokens throughout the item.
 
 ---
 
@@ -65,7 +65,7 @@ When Aness is NPC with `pronouns: female`:
 
 Resolve against the **referenced character's `pronouns:` field**, protagonist-aware. Also sets the conjugation scope to that character.
 
-Use when writing about a specific named character from any card.
+Use when writing about a specific named character from any item.
 
 ```yaml
 - {$Aness.her~} polite nature is a social shield
@@ -96,22 +96,22 @@ Based on the **most recently referenced `{$Id}` or `{$Id.pronoun}` token** in th
 - `{$Id}` and `{$Id.pronoun}` set the scope to that character's effective pronoun set
 - `{$she}` unscoped does **not** set the scope
 - Scope carries forward until a new `{$Id}` is encountered
-- If no scope set, conjugation falls back to the card's own `pronouns:` field
+- If no scope set, conjugation falls back to the item's own `pronouns:` field
 
 **Avoid mixing forms for the same character.** Use `{$Id.pronoun}` consistently when writing about a specific character so the scope is always explicitly set.
 
 ---
 
-## Cross-Card Field References
+## Cross-Item Field References
 
-After all cards for a branch are compiled, a second pass resolves:
+After all items for a branch are compiled, a second pass resolves:
 
 ```
-{$Mentor.body.Tagline}    → Tagline field from the Mentor card
-{$Setting.body.Era}       → Era field from the Setting card
+{$Mentor.body.Tagline}    → Tagline field from the Mentor item
+{$Setting.body.Era}       → Era field from the Setting item
 ```
 
-If the referenced card was excluded from this branch via null dispatch, falls back to the canonical base card. If the card or field is not found, emits a warning and leaves the token as-is.
+If the referenced item was excluded from this branch via null dispatch, falls back to the canonical base item. If the item or field is not found, emits a warning and leaves the token as-is.
 
 ---
 
@@ -135,8 +135,8 @@ branches:
 
 | Situation | Use |
 |---|---|
-| Card refers to its own subject's pronouns | `{$she}` unscoped |
+| Item refers to its own subject's pronouns | `{$she}` unscoped |
 | Referring to a specific named character (pronouns only) | `{$Aness.she}` scoped |
 | Referring to a character by name (may become "you") | `{$Aness}` ID reference |
 | Verb agreement following a character reference | `[s]`, `[is]` etc. |
-| Cross-card body field access | `{$Aness.body.Tagline}` |
+| Cross-item body field access | `{$Aness.body.Tagline}` |

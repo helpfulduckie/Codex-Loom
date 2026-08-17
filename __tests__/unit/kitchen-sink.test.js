@@ -31,6 +31,7 @@ const { CONFIG_SCHEMA } = require('../../src/config/schema');
 const { ITEM_SCHEMA } = require('../../src/loader/schema');
 const { COMPONENT_SCHEMA } = require('../../src/loader/component-schema');
 const { normalizeComponent } = require('../../src/model/component');
+const { SLOTTED_COMPONENTS } = require('../../src/emit/components');
 const { missingPaths, notedPaths } = require('../helpers/schema-paths');
 
 const FIXTURE_DIR = path.resolve(__dirname, '../fixtures/kitchen-sink');
@@ -169,6 +170,25 @@ describe('kitchen-sink items (Codex/items.cl.yaml)', () => {
       .filter((d) => d.code === SCHEMA_CODES.NOT_YET_IMPLEMENTED)
       .map(warnedKey));
     expect([...warned].sort()).toEqual([...notedKeys(ITEM_SCHEMA)].sort());
+  });
+
+  /**
+   * The inverse of the pairing above, and the one it cannot make.
+   *
+   * A `note` says "recognized but not yet implemented — it will be ignored", so a note
+   * left on a key that *is* implemented tells the author their target does nothing while
+   * the compiler quietly honors it. The tests above only prove every declared note is
+   * reachable; a stale one is reachable too. This was real: step 8 put AI Instructions and
+   * Author's Note on the sections grammar and left `note: 'Phase 3, step 8'` on both
+   * targets, so a correct placement warned that it would be dropped.
+   *
+   * Driven off `SLOTTED_COMPONENTS` rather than a literal list, so a component gaining
+   * slots later cannot pass by being forgotten here.
+   */
+  test('a render target for an implemented component carries no not-yet-implemented note', () => {
+    const noted = notedKeys(ITEM_SCHEMA);
+    const implemented = SLOTTED_COMPONENTS.map((c) => c.key);
+    expect(implemented.filter((key) => noted.has(key))).toEqual([]);
   });
 
   /**

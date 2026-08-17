@@ -14,7 +14,7 @@ body:
 ```
 
 ### Remove Field
-Set to null (`~`) or empty value — removes the field from the card.
+Set to null (`~`) or empty value — removes the field from the item.
 ```yaml
 body:
   Magic:               # empty value → remove field

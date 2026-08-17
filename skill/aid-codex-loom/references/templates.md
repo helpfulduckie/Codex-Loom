@@ -1,6 +1,6 @@
 # Templates & Partials Reference
 
-Templates are plain-text files controlling how a card's fields are rendered to markdown.
+Templates are plain-text files controlling how an item's fields are rendered to markdown.
 
 ---
 
@@ -8,22 +8,22 @@ Templates are plain-text files controlling how a card's fields are rendered to m
 
 | Extension | Purpose |
 |---|---|
-| `TypeName.template` | Renders cards whose `render.template` or `aid.type` matches `TypeName` (case-insensitive) |
+| `TypeName.template` | Renders items whose `render.template` or `aid.type` matches `TypeName` (case-insensitive) |
 | `PartialName.partial` | Reusable fragment, included with `{include PartialName}` |
 
 Templates loaded recursively from `structure.input.templates` directories. Later directories override earlier on name collision. Duplicates within the same directory are an error.
 
 ---
 
-## Card Data Available in Templates
+## Item Data Available in Templates
 
 | Key | Accessed as |
 |---|---|
 | `id` | `{$id}` |
 | `name` | `{$name}` (display name), `{$name.display}`, `{$name.full}` |
 | `pronouns` | `{$pronouns}` |
-| `aid` | `{$aid.type}`, `{$aid.title}`, `{$aid.triggers}`, `{$aid.encapsulate}`, `{$aid.known}` |
-| `render` | `{$render.template}`, `{$render.wrapper}` |
+| `aid` | `{$aid.type}`, `{$aid.title}`, `{$aid.triggers}` |
+| `render` | `{$render.template}`, `{$render.wrapper}`, `{$render.storyCard}` |
 | `body` | `{$body.FieldName}`, `{$body.Nested.sub}` |
 
 Body fields matched case-insensitively. Missing fields resolve to empty string.
@@ -81,14 +81,14 @@ Space-joins all values of a mapping into a single line.
 
 ## Render Functions in Body Fields
 
-Render functions work inside card body field values:
+Render functions work inside item body field values:
 
 ```yaml
 body:
   head: "{join('; ', $body.Physical Traits.gender, $body.Physical Traits.hair)}"
 ```
 
-Resolved after field interpolation and cross-card refs, before the pronoun pass. Pronoun tokens inside body values (`{$she}`, `{$Aness}`) are left for the pronoun pass. Conditionals (`{if}`) are template-only and not supported in body fields.
+Resolved after field interpolation and cross-item refs, before the pronoun pass. Pronoun tokens inside body values (`{$she}`, `{$Aness}`) are left for the pronoun pass. Conditionals (`{if}`) are template-only and not supported in body fields.
 
 ---
 
@@ -100,7 +100,7 @@ Background:
 {$body.Background}
 {/if}
 
-{if $aid.known}notes: [e]{else}notes: \]{/if}
+{if $body.Secret}notes: hidden{else}notes: open{/if}
 ```
 
 **Falsy:** missing, empty string, `"false"`, `"0"`, empty array, empty mapping. Everything else truthy.
@@ -114,7 +114,6 @@ Conditionals are processed innermost-first and support nesting.
 ```
 {wrapper}
 triggers: [{join(", ", $aid.triggers)}]
-encapsulate: {$aid.encapsulate}
 {/wrapper}
 ```
 
@@ -134,7 +133,7 @@ If no `{wrapper}` block is used, the wrapper is applied to the entire rendered o
 {include CardHeader}
 ```
 
-Matched case-insensitively against `.partial` filename. Partial sees the same card data. Circular includes are detected and raise an error.
+Matched case-insensitively against `.partial` filename. Partial sees the same item data. Circular includes are detected and raise an error.
 
 ---
 
@@ -179,7 +178,5 @@ Personality: {join(", ", $body.Personality.keywords)}
 ## {$aid.title}
 ~~~
 triggers: [{join(", ", $aid.triggers)}]
-{if $aid.encapsulate}encapsulate: {$aid.encapsulate}
-{/if}{if $aid.known}notes: [e]
-{/if}~~~
+~~~
 ```

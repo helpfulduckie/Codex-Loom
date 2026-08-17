@@ -25,9 +25,9 @@ No `branches:` key at all → single root-level output, no `Branches/` folder.
 
 ---
 
-## Variants on Cards
+## Variants on Items
 
-`variants:` holds named deltas. Each variant maps to a partial card definition layered on top of the card.
+`variants:` holds named deltas. Each variant maps to a partial item definition layered on top of the item.
 
 ```yaml
 variants:
@@ -50,9 +50,9 @@ The `id` field is immutable — no variant can change it.
 
 ---
 
-## Branch Dispatch on Cards
+## Branch Dispatch on Items
 
-The `branches:` key on a card or import maps branch names to variant names. Evaluated for each leaf being compiled.
+The `branches:` key on an item or import maps branch names to variant names. Evaluated for each leaf being compiled.
 
 ### Scalar — apply one variant
 ```yaml
@@ -67,7 +67,7 @@ branches:
   felix: [base, Felix]
 ```
 
-### Null — exclude card from branch
+### Null — exclude item from branch
 ```yaml
 branches:
   flashback: ~
@@ -102,13 +102,13 @@ For a leaf path `A/X`:
 1. At depth 0: collect `*` and `A` variants
 2. If `A`'s value is a mapping with `branches:`, descend into it
 3. At depth 1: collect `*` and `X` variants
-4. All collected variants applied to the card in order
+4. All collected variants applied to the item in order
 
 ---
 
-## Excluding Cards from Branches
+## Excluding Items from Branches
 
-No `only:` or `except:` keys exist in v3. Use the wildcard-plus-null pattern instead.
+There are no `only:` or `except:` keys. Use the wildcard-plus-null pattern instead.
 
 **Exclude from one branch, include in all others:**
 ```yaml
@@ -124,13 +124,13 @@ branches:
   '*': ~           # exclude from all other branches
 ```
 
-**Null excludes immediately** — when the dispatch resolves a null for the exact branch key, the card is skipped with no further wildcard processing at that level.
+**Null excludes immediately** — when the dispatch resolves a null for the exact branch key, the item is skipped with no further wildcard processing at that level.
 
 ---
 
 ## Worked Example
 
-**Canon card Felicia** has a `Felix` variant (male gender swap).
+**Canon item Felicia** has a `Felix` variant (male gender swap).
 
 **Project import:**
 ```yaml
