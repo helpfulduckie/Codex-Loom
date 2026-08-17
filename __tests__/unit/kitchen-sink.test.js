@@ -275,4 +275,40 @@ describe('kitchen-sink component (components/plot-essentials.cl.yaml)', () => {
     expect(bus.errors.map((d) => d.code)).toEqual([SCHEMA_CODES.UNKNOWN_KEY]);
     expect(bus.errors[0].message).toContain('blocks');
   });
+
+  /**
+   * The same migration signal, for the document layer AI Instructions used to carry.
+   * A v3 AIN file's `branches:`/`variants:` fail loudly rather than being read by nothing:
+   * they were a second branch walker and a second delta vocabulary for what a section's
+   * own `branches:` and `variants:` do, and the two disagreed — `~` excluded an item but
+   * meant "apply no variants" on a document.
+   *
+   * They land as `MISPLACED_KEY` rather than `UNKNOWN_KEY`, which is the better of the two
+   * and comes for free: the validator recognizes both names from the section surface, so
+   * the report says the key exists but not here. The migration is exactly "move it down
+   * one level", and that is what the author is told.
+   */
+  test('a v3 document-level branches: is reported as misplaced, not merely unknown', () => {
+    const bus = new Diagnostics();
+    validate({ sections: {}, branches: { noir: ['terse'] } }, COMPONENT_SCHEMA, { diagnostics: bus });
+    expect(bus.errors.map((d) => d.code)).toEqual([SCHEMA_CODES.MISPLACED_KEY]);
+    expect(bus.errors[0].message).toContain('branches');
+  });
+
+  test('a v3 document-level variants: is reported as misplaced too', () => {
+    const bus = new Diagnostics();
+    validate({ sections: {}, variants: { terse: { apply: ['terse'] } } }, COMPONENT_SCHEMA, { diagnostics: bus });
+    expect(bus.errors.map((d) => d.code)).toEqual([SCHEMA_CODES.MISPLACED_KEY]);
+    expect(bus.errors[0].message).toContain('variants');
+  });
+
+  test('a section-level branches: and variants: are still accepted', () => {
+    // The replacement, not a coincidence — the migration is "move it down one level".
+    const bus = new Diagnostics();
+    validate(
+      { sections: { rules: { text: 'x', branches: { noir: 'terse' }, variants: { terse: { text: 'y' } } } } },
+      COMPONENT_SCHEMA, { diagnostics: bus },
+    );
+    expect(bus.errors).toEqual([]);
+  });
 });

@@ -20,12 +20,10 @@ const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
 const { Diagnostics, busWarner, CODES: DIAG_CODES } = require('./diag');
 const { renderCard } = require('./emit/vl');
-const { loadAINConfig, compileAIN, writeAIN } = require('./ain');
-const { loadANConfig, compileAN, writeAN } = require('./an');
 const { loadDescConfig, extractScriptBanner, writeDescription } = require('./description');
 const { loadOpeningConfig, compileOpening } = require('./opening');
 const {
-  DOCUMENT_COMPONENTS, SLOTTED_COMPONENTS, emitDocumentComponent,
+  SLOTTED_COMPONENTS, isPassthrough, readPassthrough,
   renderSectionedComponent, writeSectionedComponent,
 } = require('./emit/components');
 
@@ -480,12 +478,30 @@ function resolveSectionedComponents(compileContext, label, { loadSectioned, reco
       recordGap(label, descriptor.label, spec, 'unresolved reference — token did not expand to a path');
       continue;
     }
+
+    // Prose copied verbatim, not a document to compile. It declares no sections and so no
+    // slots, which is a fact the slot index needs — an item targeting a slot in a `.md`
+    // component would otherwise be dropped in silence.
+    if (isPassthrough(spec)) {
+      if (!fs.existsSync(spec)) {
+        recordGap(label, descriptor.label, spec, 'source not found');
+        continue;
+      }
+      const text = readPassthrough(spec);
+      if (text === null) {
+        recordGap(label, descriptor.label, spec, 'source is empty');
+        continue;
+      }
+      resolved.push({ descriptor, spec, component: null, passthrough: text });
+      continue;
+    }
+
     const component = loadSectioned(spec, descriptor);
     if (!component) {
       recordGap(label, descriptor.label, spec, 'source declared no sections (missing or empty file)');
       continue;
     }
-    resolved.push({ descriptor, spec, component });
+    resolved.push({ descriptor, spec, component, passthrough: null });
   }
   return resolved;
 }
@@ -506,7 +522,14 @@ function resolveSectionedComponents(compileContext, label, { loadSectioned, reco
  */
 function buildSlotIndex(sectionedForLeaf, branchPath) {
   const index = new Map();
-  for (const { descriptor, component } of sectionedForLeaf) {
+  for (const { descriptor, component, passthrough } of sectionedForLeaf) {
+    if (passthrough !== null && passthrough !== undefined) {
+      index.set(descriptor.key, {
+        slots: new Map(), documentSlots: new Set(), sections: new Set(),
+        label: descriptor.label, passthrough: true,
+      });
+      continue;
+    }
     const slots = new Map();
     for (const [name, section] of slotsForBranch(component, branchPath)) {
       slots.set(name.toLowerCase(), section);
@@ -515,7 +538,9 @@ function buildSlotIndex(sectionedForLeaf, branchPath) {
       component.sections.filter((s) => s.isSlot).map((s) => s.name.toLowerCase()),
     );
     const sections = new Set(component.sections.map((s) => s.name.toLowerCase()));
-    index.set(descriptor.key, { slots, documentSlots, sections, label: descriptor.label });
+    index.set(descriptor.key, {
+      slots, documentSlots, sections, label: descriptor.label, passthrough: false,
+    });
   }
   return index;
 }
@@ -535,6 +560,17 @@ function buildSlotIndex(sectionedForLeaf, branchPath) {
 function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, file) {
   const known = slotIndex.get(target.component);
   if (!known) return true;
+
+  if (known.passthrough) {
+    diagnostics.error(
+      DIAG_CODES.TARGET_UNDECLARED_SLOT,
+      `item "${itemId}" targets slot "${target.slot || '(unnamed)'}" in ${known.label}, which is `
+      + 'prose copied verbatim and declares no slots. Point the component at a YAML '
+      + 'document with "sections:" to route items into it.',
+      { file },
+    );
+    return false;
+  }
 
   if (!target.slot) {
     diagnostics.error(
@@ -569,6 +605,19 @@ function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, file) {
     { file },
   );
   return false;
+}
+
+/**
+ * A component's segments as one segment, keyed by the component's own name.
+ *
+ * The cross-branch reports diff component content by segment key. Plot Essentials reports
+ * per section, which is what §7.2's naming bought; AI Instructions and Author's Note
+ * reported as one blob before they moved onto the sectioned path, and keeping that shape
+ * is what makes this step's report fixtures byte-identical.
+ */
+function collapseSegments(label, segments) {
+  if (!segments || segments.length === 0) return [];
+  return [{ key: label, text: segments.map((s) => s.text).join('\n\n') }];
 }
 
 /**
@@ -1087,27 +1136,32 @@ function compile(configPath, options = {}) {
     totalFiles += written.length;
     reportCompileDiagnostics();
 
-    // Capture component text for cross-branch reports (set as each component compiles below).
-    let ainBlockText = null;
-    let anBlockText  = null;
-
-    // Sectioned components (§7.2) — the shape comes from the component document, the
-    // content from the items that named its slots. This runs *after* story cards now
-    // rather than before: the ordering constraint existed only so suppression could
+    // Sectioned components (§7.2) — all four of them now. The shape comes from the
+    // component document, the content from the items that named its slots. This runs
+    // *after* story cards: the ordering constraint existed only so suppression could
     // follow what Plot Essentials had actually emitted, and there is no suppression left.
     const sectionedWritten = {};
     const sectionedSegments = {};
-    for (const { descriptor, spec, component } of sectionedForLeaf) {
+    for (const { descriptor, spec, component, passthrough } of sectionedForLeaf) {
       const filled = occupants.get(descriptor.key) || new Map();
-      warnEmptySlots(descriptor, slotIndex, filled, label, compileDiagnostics);
-      const { text, segments } = renderSectionedComponent(
-        component, branchPath, filled,
-        {
-          defaultHeadingLevel: descriptor.defaultHeadingLevel,
-          variables: ctx.variables, registry, branchProtagonist,
-          onWarn: busWarner(compileDiagnostics, { file: String(spec) }),
-        },
-      );
+      let text;
+      let segments;
+      if (passthrough !== null && passthrough !== undefined) {
+        // Prose has no sections to render, warn about, or report separately. It is one
+        // segment keyed by the component so the cross-branch reports still name it.
+        text = passthrough;
+        segments = [{ key: descriptor.label, text: passthrough }];
+      } else {
+        warnEmptySlots(descriptor, slotIndex, filled, label, compileDiagnostics);
+        ({ text, segments } = renderSectionedComponent(
+          component, branchPath, filled,
+          {
+            defaultHeadingLevel: descriptor.defaultHeadingLevel,
+            variables: ctx.variables, registry, branchProtagonist,
+            onWarn: busWarner(compileDiagnostics, { file: String(spec) }),
+          },
+        ));
+      }
       const outPath = writeSectionedComponent(outputDir, descriptor, text);
       if (outPath) {
         sectionedWritten[descriptor.key] = true;
@@ -1128,26 +1182,8 @@ function compile(configPath, options = {}) {
       }
     }
     const hasPE = !!sectionedWritten.plotEssential;
-
-    // Document components (AI Instructions, Author's Note) — one table, iterated once.
-    // Both were near-identical twenty-line blocks differing only in loader, compiler,
-    // writer and label; those differences are now table columns (§3.3, §7.3).
-    const componentText = {};
-    const componentWritten = {};
-    for (const descriptor of DOCUMENT_COMPONENTS) {
-      const spec = compileContext.componentRefs[descriptor.key];
-      if (!spec) continue;
-      const { content, written, gap } = emitDocumentComponent(descriptor, spec, {
-        outputDir, registry, compileContext, verbose,
-      });
-      if (captureReports) componentText[descriptor.key] = content;
-      if (written) { componentWritten[descriptor.key] = true; totalFiles++; }
-      if (gap) recordGap(label, descriptor.label, spec, gap);
-    }
-    const hasAIN = !!componentWritten.aiInstructions;
-    const hasAN = !!componentWritten.authorsNote;
-    ainBlockText = captureReports ? (componentText.aiInstructions ?? null) : null;
-    anBlockText = captureReports ? (componentText.authorsNote ?? null) : null;
+    const hasAIN = !!sectionedWritten.aiInstructions;
+    const hasAN = !!sectionedWritten.authorsNote;
 
     // Scripts
     const scriptsSpec = compileContext.componentRefs.scripts;
@@ -1163,8 +1199,12 @@ function compile(configPath, options = {}) {
         items: renderedById,
         components: {
           plotEssentials: sectionedSegments.plotEssential || [],
-          aiInstructions: ainBlockText != null ? [{ key: 'AI Instructions', text: ainBlockText }] : [],
-          authorsNote:    anBlockText  != null ? [{ key: "Author's Note",   text: anBlockText  }] : [],
+          // AI Instructions and Author's Note report as one segment keyed by the component
+          // rather than per section, which is what they reported before they moved onto
+          // this path. Per-section segments are available and are a better report; taking
+          // them is a report re-baseline, and step 10 is the session that reads one.
+          aiInstructions: collapseSegments('AI Instructions', sectionedSegments.aiInstructions),
+          authorsNote:    collapseSegments("Author's Note", sectionedSegments.authorsNote),
         },
       });
     }

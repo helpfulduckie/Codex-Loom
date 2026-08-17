@@ -350,49 +350,23 @@ Physical Traits: female; mid 20s; black hair, braided, waist-length; ...
 
 ## AI Instructions
 
-`Components/AI Instructions.md` provides AID with explicit authoring or behavioral instructions. It is defined in a YAML file referenced by `components.aiInstructions`.
+`Components/AI Instructions.md` provides AID with explicit authoring or behavioral instructions, set by `components.aiInstructions`.
 
-The AIN file is a **YAML mapping** with:
+**It is a sectioned component, exactly like Plot Essentials and Summary.** The four differ only in the file they write and in what a bare `heading:` means — Plot Essentials and Summary read it as level 0, AI Instructions and Author's Note as level 2. Everything else on this page about sections, slots, wrapping, branch gating and section variants applies unchanged.
+
+### Prose, or a document
+
+The spec may point at either:
 
 ```yaml
-sections:
-  SectionId:
-    heading: "Section Title"
-    headingLevel: 2            # default: 2
-    text: "prose content"      # OR a mapping: {RuleId: text} — keys are internal only, not rendered
-    headingLevel: 2            # 0 = plain text heading; omit heading: to suppress entirely
-    render:
-      position: 5              # sort order; default 5
-      compact: false           # true = no blank line between heading and text
-      bullet: false            # true = prefix each text line with "- "
-
-variants:
-  DocumentVariant:
-    apply: [SectionVariantName]   # apply named variant to all sections that define it
-    sections:
-      SectionId:                   # null → remove this section
-item:                              # optional; story card metadata for AIN item output
-  ...
-
-branches:                          # branch dispatch
-  branchName: variantName
-  branchName:
-    ain: variantName               # variant for the AIN document
-    cards: [cardVariantSet]        # variant sets for story card output
+components:
+  aiInstructions: ./components/ai-instructions.md      # copied through verbatim
+  aiInstructions: ./components/ai-instructions.yaml    # sections, compiled
 ```
 
+A `.md` or `.txt` file is copied through with trailing blank lines trimmed and nothing else done to it. It declares no sections, so it declares no slots — an item whose `render.aiInstructions` names a slot in a passthrough component is an ERROR (`CL0611`) saying so, rather than a silent drop.
+
 ### Sections
-
-Each section has an optional heading and text. Text can be a plain string or a mapping — when using a mapping, the keys are purely internal identifiers (for field operations); only the values are rendered.
-
-**Render controls:**
-
-| Field | Default | Effect |
-|---|---|---|
-| `render.position` | `5` | Sort order; lower = earlier |
-| `render.compact` | `false` | Suppress blank line between heading and text |
-| `render.bullet` | `false` | Prefix each text line with `- ` |
-| `headingLevel` | `2` | Markdown heading depth; `0` = plain text heading; omit `heading:` to suppress entirely |
 
 ```yaml
 sections:
@@ -412,57 +386,78 @@ sections:
     text:
       pov: Second person, present tense.
       tone: Clinical observation punctuated by visceral sensation.
+
+  cast:
+    slot: true               # items route in here via render.aiInstructions
+    render:
+      position: 3
 ```
 
-The `rules` section above renders as:
+The `rules` section renders as:
+
 ```
 ## Writing Rules
 - Second person, present tense.
 - Clinical observation punctuated by visceral sensation.
 ```
 
-### Branch variants
+**Text may be a string or a mapping of named lines.** With a mapping, the keys are internal identifiers and only the values are rendered — the names exist so a variant can replace or delete one rule without restating the block.
+
+| Field | Default | Effect |
+|---|---|---|
+| `render.position` | `5` | Sort order; lower = earlier |
+| `render.compact` | `false` | Suppress the blank line between heading and text |
+| `render.bullet` | `false` | Prefix each text line with `- ` |
+| `headingLevel` | `2` | Heading depth; `0` = plain text heading; omit `heading:` to suppress entirely |
+
+### Branch dispatch and variants are per section
 
 ```yaml
-branches:
-  subject: intimate       # apply "intimate" document variant for subject branch
-  researcher: detached
-
-variants:
-  intimate:
-    apply: [close]        # apply "close" section variant to all sections that have it
-  detached:
-    apply: [distant]
-    sections:
-      rules:              # remove the "rules" section for detached variant
+sections:
+  rules:
+    text:
+      pov: Second person, present tense.
+      tone: Clinical observation.
+    branches:
+      subject: close          # on the subject branch, apply this section's "close" variant
+      researcher: ~           # on the researcher branch, drop this section entirely
+    variants:
+      close:
+        text:
+          tone: Close, unsparing observation.    # edits one line; "pov" is untouched
 ```
+
+**Document-level `branches:` and `variants:` no longer exist.** v3's AI Instructions carried both, and they were a second branch walker and a second delta vocabulary for what a section already does. Writing either now reports a misplaced-key ERROR pointing at the section surface, because the migration is exactly "move it down one level":
+
+| v3, at the document level | v4, on the section |
+|---|---|
+| `branches: {subject: intimate}` with `variants: {intimate: {apply: [close]}}` | `branches: {subject: close}` on each section that defines a `close` variant |
+| `variants: {detached: {sections: {rules: ~}}}` | `branches: {detached: ~}` on the `rules` section |
+| `branches: {x: {ain: …, cards: …}}` | `render.storyCards` (§7.8, Phase 6) |
+
+The two dispatches disagreed, which is the other half of why only one survives: `~` on an item or a section excludes it, while `~` on an AI Instructions document meant "apply no variants".
 
 ---
 
 ## Author's Note
 
-`Components/Author's Note.md` works identically to AI Instructions except:
-
-- The file structure is the same (sections, variants, branches)
-- No `item:` block is supported (ignored with a warning if present)
-- No story card output is produced
+`Components/Author Notes.md` — Velvet Lattice's spelling, not a typo — works exactly like AI Instructions, including the level-2 heading default, slots, and per-section variants.
 
 ```yaml
-# authors-note.yaml
 sections:
   tone:
-    text: |
-      Maintain second-person perspective throughout.
-
-branches:
-  subject: subject-tone
-
-variants:
-  subject-tone:
-    apply: [close]
+    text: Maintain second-person perspective throughout.
+    branches:
+      subject: close
+    variants:
+      close:
+        text: Stay inside the subject's head; report sensation before thought.
 ```
 
+A `card:` block is carried through but not yet read — §7.8, Phase 6. Author's Note produces no story card.
+
 ---
+
 
 ## Scripts
 

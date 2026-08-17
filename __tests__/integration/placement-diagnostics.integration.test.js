@@ -429,3 +429,124 @@ describe('a section variant changes a rendered section', () => {
     expect(text).not.toContain('Thriller');
   });
 });
+
+// ── AI Instructions and Author's Note on the sections grammar ─────────────────
+
+describe('the prose components accept slots (§7.3)', () => {
+  const project = (ainSource) => ({
+    'templates/Full.template': '{$name.full}',
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'components:',
+      '  aiInstructions: ./components/ain.yaml',
+      "  authorsNote: ./components/an.yaml",
+      'branches:',
+      '  shown: {}',
+    ].join('\n'),
+    'components/ain.yaml': ainSource,
+    'components/an.yaml': [
+      'sections:',
+      '  note:',
+      '    text: Continue from where it left off.',
+    ].join('\n'),
+    'Codex/items.yaml': [
+      '- id: Hero',
+      '  name: {display: Hero, full: Hero Vale}',
+      '  aid: {type: Character, triggers: [Hero]}',
+      '  render:',
+      '    template: Full',
+      '    aiInstructions: {slot: cast}',
+    ].join('\n'),
+  });
+
+  const withSlot = [
+    'sections:',
+    '  rules:',
+    '    heading: Rules',
+    '    text: Stay in character.',
+    '    render: {position: 1}',
+    '  cast:',
+    '    slot: true',
+    '    render: {position: 2}',
+  ].join('\n');
+
+  test('an item routes into an AI Instructions slot, under a level-2 heading', () => {
+    const { tmpDir, threw } = compileProject(project(withSlot));
+    expect(threw).toBeNull();
+    const dir = path.join(tmpDir, 'output', 'Branches', 'shown', 'Components');
+    expect(fs.readFileSync(path.join(dir, 'AI Instructions.md'), 'utf8'))
+      .toBe('## Rules\n\nStay in character.\n\nHero Vale\n');
+  });
+
+  test("Author's Note writes VL's spelling, not its own name", () => {
+    const { tmpDir } = compileProject(project(withSlot));
+    const dir = path.join(tmpDir, 'output', 'Branches', 'shown', 'Components');
+    expect(fs.existsSync(path.join(dir, 'Author Notes.md'))).toBe(true);
+    expect(fs.existsSync(path.join(dir, "Author's Note.md"))).toBe(false);
+  });
+});
+
+describe('a passthrough component declares no slots', () => {
+  test('targeting one is an ERROR that says why, rather than a silent drop', () => {
+    // Every fixture's AI Instructions is a shared .md. An item routing into it used to be
+    // filed under a slot key nothing matched and dropped without a word.
+    const { output, threw } = compileProject({
+      'templates/Full.template': '{$name.full}',
+      'compile.yaml': [
+        'version: 4',
+        'structure:',
+        '  input:',
+        '    items: [%TMP%/Codex]',
+        '    templates: [%TMP%/templates]',
+        '  output: %TMP%/output',
+        'components:',
+        '  aiInstructions: ./components/ain.md',
+        'branches:',
+        '  shown: {}',
+      ].join('\n'),
+      'components/ain.md': 'Stay in character.\n',
+      'Codex/items.yaml': [
+        '- id: Hero',
+        '  name: {display: Hero, full: Hero Vale}',
+        '  aid: {type: Character, triggers: [Hero]}',
+        '  render: {template: Full, aiInstructions: {slot: cast}}',
+      ].join('\n'),
+    });
+    expect(output).toContain('CL0611');
+    expect(output).toContain('prose copied verbatim');
+    expect(threw).not.toBeNull();
+  });
+
+  test('a passthrough with no item targeting it still writes its prose verbatim', () => {
+    const { tmpDir, threw } = compileProject({
+      'templates/Full.template': '{$name.full}',
+      'compile.yaml': [
+        'version: 4',
+        'structure:',
+        '  input:',
+        '    items: [%TMP%/Codex]',
+        '    templates: [%TMP%/templates]',
+        '  output: %TMP%/output',
+        'components:',
+        '  aiInstructions: ./components/ain.md',
+        'branches:',
+        '  shown: {}',
+      ].join('\n'),
+      'components/ain.md': 'Stay in character.\n\nNever break the fourth wall.\n',
+      'Codex/items.yaml': [
+        '- id: Hero',
+        '  name: {display: Hero, full: Hero Vale}',
+        '  aid: {type: Character, triggers: [Hero]}',
+        '  render: {template: Full}',
+      ].join('\n'),
+    });
+    expect(threw).toBeNull();
+    const out = path.join(tmpDir, 'output', 'Branches', 'shown', 'Components', 'AI Instructions.md');
+    expect(fs.readFileSync(out, 'utf8')).toBe('Stay in character.\n\nNever break the fourth wall.\n');
+  });
+});

@@ -62,13 +62,10 @@ sections:
       wrap: all
 
 # ── Document level ───────────────────────────────────────────────────────────
-branches:
-  subject: [terse]
-
-variants:
-  terse:
-    apply: [terse]
-
+# `branches:` and `variants:` are deliberately absent here, because the surface no longer
+# declares them. A section dispatches its own variants through its own `branches:` — see
+# `rules:` above — and the document layer that used to do it a second way is gone.
+#
 # §7.6 and §7.8 — declared, noted, not yet read.
 imports:
   - from: '{%components}/plot-essentials.cl.yaml'

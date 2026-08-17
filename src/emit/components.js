@@ -28,8 +28,6 @@
 const fs = require('fs');
 const path = require('path');
 
-const { loadAINConfig, compileAIN, writeAIN } = require('../ain');
-const { loadANConfig, compileAN, writeAN } = require('../an');
 const { sectionsForBranch, WRAP } = require('../model/component');
 const { applyWrapper } = require('../template');
 const { applyTokenPass } = require('../model/pronouns');
@@ -51,44 +49,20 @@ const DECLARATION = Object.freeze({
 });
 
 /**
- * Components that are one document: a spec resolving either to prose passed through
- * verbatim (`.md`/`.txt`) or to a YAML document that is loaded and compiled.
- *
- * AI Instructions and Author's Note were two near-identical twenty-line blocks in
- * `compile()`, differing only in loader, compiler, writer and label. They are now two
- * rows. `summary:` (§7.3) becomes a third when Phase 6 lands.
- */
-const DOCUMENT_COMPONENTS = Object.freeze([
-  {
-    key: 'aiInstructions',
-    label: 'AI Instructions',
-    verboseLabel: 'AIInstructions',
-    declaration: DECLARATION.INHERITED,
-    load: loadAINConfig,
-    // compileAIN also returns a storyCard; only the document half is written here.
-    compile: (doc, registry, context) => compileAIN(doc, registry, context).ain,
-    write: writeAIN,
-  },
-  {
-    key: 'authorsNote',
-    label: "Author's Note",
-    verboseLabel: 'AuthorsNote',
-    declaration: DECLARATION.INHERITED,
-    load: loadANConfig,
-    compile: compileAN,
-    write: writeAN,
-  },
-]);
-
-/**
  * Components built from `sections:`, some of which are slots items route into (§7.2).
  *
- * Plot Essentials and Summary. `defaultHeadingLevel`
- * is a column rather than a constant because v3's two formats disagree about what a bare
- * `heading:` means — Plot Essentials reads it as level 0 and AI Instructions as level 2 —
- * and both are right for their own output. `model/component.js` therefore carries
- * `headingLevel` through unset, and the default is applied here, where the component is
- * known.
+ * All four rows now, which is the point of §7.3's table: the four differ by output file
+ * and heading default and by nothing else. AI Instructions and Author's Note reached this
+ * table by having their own document layer deleted rather than ported — `ain.js` ran a
+ * second branch walker and a second delta vocabulary for what a section's own `branches:`
+ * and `variants:` already do. See `loader/component-schema.js` for what went and why.
+ *
+ * `defaultHeadingLevel` is a column rather than a constant because v3's two formats
+ * disagree about what a bare `heading:` means — Plot Essentials reads it as level 0 and
+ * AI Instructions as level 2 — and both are right for their own output.
+ * `model/component.js` therefore carries `headingLevel` through unset, and the default is
+ * applied here, where the component is known. That disagreement is the whole reason the
+ * four rows are not one constant, and it survives the merge intact.
  */
 const SLOTTED_COMPONENTS = Object.freeze([
   {
@@ -111,6 +85,26 @@ const SLOTTED_COMPONENTS = Object.freeze([
     verboseLabel: 'Summary',
     defaultHeadingLevel: 0,
   },
+  {
+    key: 'aiInstructions',
+    label: 'AI Instructions',
+    file: 'AI Instructions.md',
+    declaration: DECLARATION.INHERITED,
+    verboseLabel: 'AIInstructions',
+    // v3's AI Instructions format reads a bare `heading:` as level 2, and every shipped
+    // file was written against that reading.
+    defaultHeadingLevel: 2,
+  },
+  {
+    // Velvet Lattice expects the file to be named "Author Notes.md", not "Author's
+    // Note.md". That is VL's spelling, not a typo, and changing it breaks the import.
+    key: 'authorsNote',
+    label: "Author's Note",
+    file: 'Author Notes.md',
+    declaration: DECLARATION.INHERITED,
+    verboseLabel: 'AuthorsNote',
+    defaultHeadingLevel: 2,
+  },
 ]);
 
 /** Components handled by their own pipelines, listed so the table is the whole picture. */
@@ -124,32 +118,20 @@ const OTHER_COMPONENTS = Object.freeze([
 const PASSTHROUGH_EXTENSIONS = new Set(['.md', '.txt']);
 
 /**
- * Emit one document component for one branch leaf.
+ * True when a component spec points at prose to copy rather than a document to compile.
  *
- * Returns `{ content, written, gap }` — `gap` is a reason string when the component was
- * requested and produced nothing, which is what the caller reports.
+ * Every component may be either. All three golden corpora point `aiInstructions:` at a
+ * shared `.md` file, so this is not a legacy path — it is how the largest component in the
+ * corpus is actually authored, and it survives the move onto the sections grammar
+ * unchanged.
  */
-function emitDocumentComponent(descriptor, spec, options) {
-  const { outputDir, registry, compileContext, verbose = false } = options;
+function isPassthrough(spec) {
+  return typeof spec === 'string' && PASSTHROUGH_EXTENSIONS.has(path.extname(spec).toLowerCase());
+}
 
-  if (!spec) return { content: null, written: null, gap: null };
-  if (typeof spec !== 'string' || !fs.existsSync(spec)) {
-    return { content: null, written: null, gap: 'source not found' };
-  }
-
-  const extension = path.extname(spec).toLowerCase();
-  const content = PASSTHROUGH_EXTENSIONS.has(extension)
-    ? (fs.readFileSync(spec, 'utf8').trimEnd() || null)
-    : descriptor.compile(descriptor.load(spec), registry, compileContext);
-
-  const written = descriptor.write(outputDir, content);
-  if (written && verbose) console.log(`    OK: ${descriptor.verboseLabel} → ${written}`);
-
-  return {
-    content,
-    written: written || null,
-    gap: written ? null : 'compiled to empty content',
-  };
+/** The prose a passthrough spec holds, or null when the file is empty. */
+function readPassthrough(spec) {
+  return fs.readFileSync(spec, 'utf8').trimEnd() || null;
 }
 
 // ── Sectioned components (§7.2, §7.4) ────────────────────────────────────────
@@ -290,10 +272,10 @@ function writeSectionedComponent(outputDir, descriptor, content) {
 
 module.exports = {
   DECLARATION,
-  DOCUMENT_COMPONENTS,
   SLOTTED_COMPONENTS,
   OTHER_COMPONENTS,
-  emitDocumentComponent,
+  isPassthrough,
+  readPassthrough,
   renderSection,
   renderSectionedComponent,
   writeSectionedComponent,

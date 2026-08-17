@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
-  DECLARATION, DOCUMENT_COMPONENTS, SLOTTED_COMPONENTS, OTHER_COMPONENTS, emitDocumentComponent,
+  DECLARATION, SLOTTED_COMPONENTS, OTHER_COMPONENTS, isPassthrough, readPassthrough,
   renderSectionedComponent, writeSectionedComponent,
 } = require('../../src/emit/components');
 const { normalizeComponent } = require('../../src/model/component');
@@ -13,8 +13,7 @@ let tmpDir;
 beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-emit-')); });
 afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
 
-const AIN = DOCUMENT_COMPONENTS.find((d) => d.key === 'aiInstructions');
-const AN = DOCUMENT_COMPONENTS.find((d) => d.key === 'authorsNote');
+const AIN = SLOTTED_COMPONENTS.find((d) => d.key === 'aiInstructions');
 
 function write(name, content) {
   const full = path.join(tmpDir, name);
@@ -22,26 +21,42 @@ function write(name, content) {
   return full;
 }
 
-function emit(descriptor, spec) {
-  return emitDocumentComponent(descriptor, spec, {
-    outputDir: tmpDir,
-    registry: new Map(),
-    compileContext: { branchPath: [], variables: {}, componentRefs: {} },
-  });
-}
-
 describe('the descriptor table', () => {
-  test('AI Instructions and Author\'s Note are table rows, not bespoke blocks', () => {
-    expect(DOCUMENT_COMPONENTS.map((d) => d.key)).toEqual(['aiInstructions', 'authorsNote']);
+  test('all four sectioned components are rows, not bespoke blocks', () => {
+    // AI Instructions and Author's Note arrived here by having their document layer
+    // deleted rather than ported — it was a second branch walker and a second delta
+    // vocabulary for what a section's own branches: and variants: already do.
+    expect(SLOTTED_COMPONENTS.map((d) => d.key))
+      .toEqual(['plotEssential', 'summary', 'aiInstructions', 'authorsNote']);
   });
 
   test('every row declares the fields the emitter needs', () => {
-    for (const descriptor of DOCUMENT_COMPONENTS) {
-      expect(typeof descriptor.load).toBe('function');
-      expect(typeof descriptor.compile).toBe('function');
-      expect(typeof descriptor.write).toBe('function');
+    for (const descriptor of SLOTTED_COMPONENTS) {
+      expect(descriptor.file).toEqual(expect.any(String));
       expect(descriptor.label).toEqual(expect.any(String));
+      expect(descriptor.verboseLabel).toEqual(expect.any(String));
+      expect(typeof descriptor.defaultHeadingLevel).toBe('number');
+      expect(descriptor.declaration).toBe(DECLARATION.INHERITED);
     }
+  });
+
+  test("each row writes to its own filename, in VL's spelling", () => {
+    const byKey = Object.fromEntries(SLOTTED_COMPONENTS.map((d) => [d.key, d.file]));
+    expect(byKey).toEqual({
+      plotEssential: 'Plot Essentials.md',
+      summary: 'Summary.md',
+      aiInstructions: 'AI Instructions.md',
+      // Deliberately not "Author's Note.md" — Velvet Lattice requires this spelling.
+      authorsNote: 'Author Notes.md',
+    });
+  });
+
+  test('the two heading defaults survive the merge, because v3 formats disagree', () => {
+    // Plot Essentials reads a bare heading: as level 0, AI Instructions as level 2. Both
+    // are right for their own output, which is why this is a column and not a constant.
+    const level = (key) => SLOTTED_COMPONENTS.find((d) => d.key === key).defaultHeadingLevel;
+    expect([level('plotEssential'), level('summary')]).toEqual([0, 0]);
+    expect([level('aiInstructions'), level('authorsNote')]).toEqual([2, 2]);
   });
 
   test('declaration describes branch-chain merging, not a write location', () => {
@@ -52,27 +67,8 @@ describe('the descriptor table', () => {
     expect(OTHER_COMPONENTS.find((d) => d.key === 'description').declaration).toBe(DECLARATION.PROJECT);
   });
 
-  test('Plot Essentials is a slotted component, no longer its own pipeline', () => {
-    const pe = SLOTTED_COMPONENTS.find((d) => d.key === 'plotEssential');
-    expect(pe.file).toBe('Plot Essentials.md');
-    expect(pe.declaration).toBe(DECLARATION.INHERITED);
-    // v3's two formats disagree about a bare heading; Plot Essentials reads it as level 0.
-    expect(pe.defaultHeadingLevel).toBe(0);
-  });
-
-  test('Summary is the second slotted component and shares Plot Essentials\' settings', () => {
-    // §7.3 treats the two identically because authors shape them alike — one states
-    // standing fact and the other narrative past, but both are Plot-Essentials-shaped.
-    expect(SLOTTED_COMPONENTS.map((d) => d.key)).toEqual(['plotEssential', 'summary']);
-    const summary = SLOTTED_COMPONENTS.find((d) => d.key === 'summary');
-    expect(summary.file).toBe('Summary.md');
-    expect(summary.declaration).toBe(DECLARATION.INHERITED);
-    expect(summary.defaultHeadingLevel).toBe(0);
-  });
-
-  test('the three tables together cover the §7.3 component set', () => {
-    const covered = [...DOCUMENT_COMPONENTS, ...SLOTTED_COMPONENTS, ...OTHER_COMPONENTS]
-      .map((d) => d.key).sort();
+  test('the two tables together cover the §7.3 component set', () => {
+    const covered = [...SLOTTED_COMPONENTS, ...OTHER_COMPONENTS].map((d) => d.key).sort();
     expect(covered).toEqual([
       'aiInstructions', 'authorsNote', 'branchFraming', 'description',
       'opening', 'plotEssential', 'scripts', 'summary',
@@ -80,54 +76,30 @@ describe('the descriptor table', () => {
   });
 });
 
-describe('emitDocumentComponent', () => {
-  test('an absent spec emits nothing and reports no gap', () => {
-    expect(emit(AIN, null)).toEqual({ content: null, written: null, gap: null });
+
+describe('passthrough components', () => {
+  test('.md is prose to copy, not a document to compile', () => {
+    const spec = write('ain.md', 'Stay in character.');
+    expect(isPassthrough(spec)).toBe(true);
+    expect(readPassthrough(spec)).toBe('Stay in character.');
   });
 
-  test('a spec pointing nowhere reports a gap rather than throwing', () => {
-    expect(emit(AIN, path.join(tmpDir, 'missing.md')).gap).toBe('source not found');
+  test('.txt counts too, and trailing blank lines are trimmed', () => {
+    expect(isPassthrough(write('ain.txt', 'Plain text.'))).toBe(true);
+    expect(readPassthrough(write('trail.md', 'Body.\n\n\n'))).toBe('Body.');
   });
 
-  test('a non-string spec reports a gap', () => {
-    expect(emit(AIN, { not: 'a path' }).gap).toBe('source not found');
+  test('a whitespace-only file reads as nothing rather than as blank prose', () => {
+    expect(readPassthrough(write('blank.md', '   \n'))).toBeNull();
   });
 
-  test('.md passes through verbatim', () => {
-    const { content, written } = emit(AIN, write('ain.md', 'Stay in character.\n\n'));
-    expect(content).toBe('Stay in character.');
-    expect(fs.readFileSync(written, 'utf8')).toContain('Stay in character.');
-  });
-
-  test('.txt passes through verbatim too', () => {
-    expect(emit(AIN, write('ain.txt', 'Plain text.')).content).toBe('Plain text.');
-  });
-
-  test('an empty passthrough file reports a gap', () => {
-    expect(emit(AIN, write('ain.md', '   \n')).gap).toBe('compiled to empty content');
-  });
-
-  test('a YAML spec is loaded and compiled rather than passed through', () => {
-    const spec = write('ain.cl.yaml', 'sections:\n  - text: Compiled section.\n');
-    expect(emit(AIN, spec).content).toContain('Compiled section.');
-  });
-
-  test('each row writes to its own filename', () => {
-    const ainPath = emit(AIN, write('ain.md', 'A')).written;
-    const anPath = emit(AN, write('an.md', 'B')).written;
-    expect(path.basename(ainPath)).toBe('AI Instructions.md');
-    // Deliberately not "Author's Note.md" — Velvet Lattice requires this spelling.
-    expect(path.basename(anPath)).toBe('Author Notes.md');
-  });
-
-  test('both rows run through the same code path', () => {
-    for (const descriptor of DOCUMENT_COMPONENTS) {
-      const result = emit(descriptor, write(`${descriptor.key}.md`, 'Shared.'));
-      expect(result.content).toBe('Shared.');
-      expect(result.gap).toBeNull();
-    }
+  test('a YAML spec is not passthrough, so it goes down the sections path', () => {
+    expect(isPassthrough(write('ain.cl.yaml', 'sections: {}'))).toBe(false);
+    expect(isPassthrough(null)).toBe(false);
+    expect(isPassthrough({ not: 'a path' })).toBe(false);
   });
 });
+
 
 // ── Sections and slots (§7.2, §7.4) ──────────────────────────────────────────
 //
@@ -313,5 +285,72 @@ describe('writeSectionedComponent', () => {
     const outPath = writeSectionedComponent(tmpDir, PE, '[\nGenre\n]');
     expect(outPath).toBe(path.join(tmpDir, 'Components', 'Plot Essentials.md'));
     expect(fs.readFileSync(outPath, 'utf8')).toBe('[\nGenre\n]\n');
+  });
+});
+
+// ── The AI Instructions format, after its own pipeline was deleted ────────────
+//
+// These were `ain.test.js`'s `compileAIN` cases. They live here now because the behavior
+// does: `ain.js` had its own section renderer, its own sort, and its own heading default,
+// and all three turned out to be the sectioned renderer with `defaultHeadingLevel: 2`.
+// Keeping the cases is the point — the golden fixtures cannot fail on any of this, since
+// every fixture's AI Instructions is a `.md` passthrough.
+
+const renderAIN = (sections, branchPath = []) => renderSectionedComponent(
+  component(sections), branchPath, new Map(),
+  { defaultHeadingLevel: AIN.defaultHeadingLevel, variables: {}, registry: new Map() },
+).text;
+
+describe('renderSectionedComponent — the AI Instructions heading default', () => {
+  test('a bare heading renders at level 2', () => {
+    expect(renderAIN({ rules: { heading: 'Rules', text: 'Stay in character.' } }))
+      .toBe('## Rules\n\nStay in character.');
+  });
+
+  test('an explicit headingLevel overrides the default', () => {
+    expect(renderAIN({ rules: { heading: 'Rules', headingLevel: 3, text: 'x' } }))
+      .toBe('### Rules\n\nx');
+  });
+
+  test('headingLevel 0 renders the heading with no hashes at all', () => {
+    // Which is how the same key behaves in Plot Essentials by default — the two formats
+    // disagree about the default, never about what a level means.
+    expect(renderAIN({ rules: { heading: 'Rules', headingLevel: 0, text: 'x' } }))
+      .toBe('Rules\n\nx');
+  });
+});
+
+describe('renderSectionedComponent — the AI Instructions section shapes', () => {
+  test('mapping-form text renders one line per entry, names discarded', () => {
+    // The names are not output; they exist so a variant can replace or delete one rule
+    // without restating the block.
+    expect(renderAIN({
+      rules: { text: { pacing: 'Scenes advance on player action.', register: 'Close third person.' } },
+    })).toBe('Scenes advance on player action.\nClose third person.');
+  });
+
+  test('bullet renders each line of a mapping as a list item', () => {
+    expect(renderAIN({
+      rules: { text: { a: 'First.', b: 'Second.' }, render: { bullet: true } },
+    })).toBe('- First.\n- Second.');
+  });
+
+  test('sections sort by render.position, and declaration order breaks the tie', () => {
+    expect(renderAIN({
+      last: { text: 'C', render: { position: 9 } },
+      first: { text: 'A', render: { position: 1 } },
+      alsoFive: { text: 'B1' },
+      andFive: { text: 'B2' },
+    })).toBe('A\n\nB1\n\nB2\n\nC');
+  });
+
+  test('a document whose every section is empty renders as nothing, not as blank lines', () => {
+    expect(renderAIN({ hollow: { text: '' } })).toBeNull();
+    expect(renderAIN({})).toBeNull();
+  });
+
+  test('compact suppresses the blank line between a heading and its text', () => {
+    expect(renderAIN({ rules: { heading: 'Rules', text: 'x', render: { compact: true } } }))
+      .toBe('## Rules\nx');
   });
 });

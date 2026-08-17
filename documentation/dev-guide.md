@@ -31,10 +31,8 @@ Phase 1 split the three files that had accreted several concerns each — `loade
 | `src/template.js` | Template rendering engine; field interpolation; all render functions |
 | `src/tokens.js` | `{%variable}` expansion — the single expander (§5.1) |
 | `src/emit/vl.js` | The Velvet Lattice format — the only place that knows the envelope (§8) |
-| `src/emit/components.js` | Table-driven emission of the document components |
-| `src/pe.js` | Plot Essentials compilation and output (deleted in Phase 3, §7.5) |
-| `src/ain.js` | AI Instructions compilation, branch dispatch, document variants |
-| `src/an.js` | Author's Note compilation (thin wrapper over `ain.js` logic) |
+| `src/emit/components.js` | The component descriptor table; sectioned rendering and passthrough (§7.2, §7.3) |
+| `src/model/component.js` | Component documents: sections, slots, section variants, branch gating (§7.2) |
 | `src/description.js`, `src/opening.js` | Description and Opening component compilation |
 | `src/overview.js` | Leaf-review and whole-tree overview file generation |
 | `src/diff.js` | Cross-branch `--with-diff` (Shared/delta) and `--with-annotate` report generation |

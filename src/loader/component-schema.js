@@ -87,9 +87,18 @@ const COMPONENT_SCHEMA = {
   keys: {
     sections: { type: TYPES.RECORD, of: SECTION },
 
-    // Document-level dispatch and deltas, carried forward from the AI Instructions format.
-    branches: ANY,
-    variants: ANY,
+    // Document-level `branches:` and `variants:` are deliberately absent, so a v3 AI
+    // Instructions file carrying them reports an unknown key — the same migration signal
+    // `blocks:` gives a v3 Plot Essentials file.
+    //
+    // They were a second branch walker and a second delta vocabulary for what sections now
+    // do themselves. `resolveAINBranches` disagreed with `resolveBranchSpec` on three
+    // points, the sharpest being `~`: on an item it excludes, on a document it meant
+    // "apply no variants". A document variant's `apply:` fanned a section-variant name
+    // across every section defining it, and its `sections: {x: ~}` removed a section —
+    // both reachable from the section's own `branches:` dispatch, from the other end.
+    // The `ain:`/`cards:` split was a render-target concept wearing dispatch clothing and
+    // becomes `render.storyCards` in Phase 6.
 
     // §7.6 and §7.8, both Phase 6. Declared so writing one is a clear "not yet" rather
     // than a confusing unknown-key ERROR — the same courtesy the item surface extends to

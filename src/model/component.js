@@ -59,7 +59,11 @@ function normalizeComponent(doc, options = {}) {
     if (section.isSlot) slots.set(section.name, section);
   }
 
-  return { sections, slots };
+  // `card:` is §7.8 and belongs to Phase 6. It is carried through opaque rather than
+  // normalized or dropped: dropping it would silently lose an author's declaration, and
+  // normalizing it would mean pinning a copy of the story-card key surface here, a second
+  // declaration to keep in step with the first.
+  return { sections, slots, card: (doc && doc.card) || null };
 }
 
 /**
