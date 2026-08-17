@@ -320,3 +320,112 @@ describe('CL0615 — a component that renders to nothing on a branch', () => {
     expect(threw).not.toBeNull();
   });
 });
+
+// ── Step 8's safe half: summary, and section variants that do something ───────
+
+describe('summary is a sectioned component like Plot Essentials (§7.3)', () => {
+  const compiled = () => compileProject({
+    'templates/Full.template': '{$name.full}',
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'components:',
+      '  plotEssential: ./components/pe.yaml',
+      '  summary: ./components/summary.yaml',
+      'branches:',
+      '  shown: {}',
+    ].join('\n'),
+    'components/pe.yaml': component(),
+    'components/summary.yaml': [
+      'sections:',
+      '  past:',
+      '    text: "The war ended a year ago."',
+      '    render: {position: 1}',
+      '  survivors:',
+      '    slot: true',
+      '    render: {position: 2}',
+    ].join('\n'),
+    'Codex/items.yaml': [
+      '- id: Hero',
+      '  name: {display: Hero, full: Hero Vale}',
+      '  aid: {type: Character, triggers: [Hero]}',
+      '  render:',
+      '    template: Full',
+      '    plotEssential: {slot: cast}',
+      '    summary: {slot: survivors}',
+    ].join('\n'),
+  });
+
+  test('writes Components/Summary.md, which is what VL reads into storySummary', () => {
+    const { tmpDir, threw } = compiled();
+    expect(threw).toBeNull();
+    const out = path.join(tmpDir, 'output', 'Branches', 'shown', 'Components', 'Summary.md');
+    expect(fs.readFileSync(out, 'utf8')).toBe('The war ended a year ago.\n\nHero Vale\n');
+  });
+
+  test('one item routes into both components without either suppressing the other', () => {
+    const { tmpDir } = compiled();
+    const dir = path.join(tmpDir, 'output', 'Branches', 'shown', 'Components');
+    expect(fs.readFileSync(path.join(dir, 'Plot Essentials.md'), 'utf8')).toContain('Hero Vale');
+    expect(fs.readFileSync(path.join(dir, 'Summary.md'), 'utf8')).toContain('Hero Vale');
+  });
+});
+
+describe('a section variant changes a rendered section', () => {
+  const compiled = (branch) => compileProject({
+    'templates/Full.template': '{$name.full}',
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'components:',
+      '  plotEssential: ./components/pe.yaml',
+      'branches:',
+      '  plain: {}',
+      '  noir: {}',
+    ].join('\n'),
+    'components/pe.yaml': [
+      'sections:',
+      '  genre:',
+      '    text: "Genre: Thriller"',
+      '    render: {position: 1}',
+      '    branches: {noir: dark}',
+      '    variants:',
+      '      dark:',
+      '        text: "Genre: Noir"',
+      '        render: {wrapper: square}',
+      '  cast:',
+      '    slot: true',
+      '    render: {position: 2}',
+    ].join('\n'),
+    'Codex/items.yaml': [
+      '- id: Hero',
+      '  name: {display: Hero, full: Hero Vale}',
+      '  aid: {type: Character, triggers: [Hero]}',
+      '  render: {template: Full, plotEssential: {slot: cast}}',
+    ].join('\n'),
+  }).tmpDir;
+
+  test('the undispatched branch renders the section as written', () => {
+    const dir = compiled();
+    const text = fs.readFileSync(path.join(dir, 'output', 'Branches', 'plain', 'Components', 'Plot Essentials.md'), 'utf8');
+    expect(text).toContain('Genre: Thriller');
+    expect(text).not.toContain('Genre: Noir');
+  });
+
+  test('the dispatched branch renders the variant, wrapper and all', () => {
+    // Before this, `variants:` on a section was a key the schema accepted, `model/component`
+    // normalized, and nothing read — the §4.3 defect the schema exists to catch.
+    const dir = compiled();
+    const text = fs.readFileSync(path.join(dir, 'output', 'Branches', 'noir', 'Components', 'Plot Essentials.md'), 'utf8');
+    expect(text).toContain('[\nGenre: Noir\n]');
+    expect(text).not.toContain('Thriller');
+  });
+});

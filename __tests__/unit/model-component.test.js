@@ -11,7 +11,7 @@
  */
 
 const {
-  normalizeComponent, sectionsForBranch, slotsForBranch, WRAP, DEFAULT_POSITION,
+  normalizeComponent, applySectionVariant, sectionsForBranch, slotsForBranch, WRAP, DEFAULT_POSITION,
 } = require('../../src/model/component');
 const { CODES } = require('../../src/diag');
 
@@ -164,5 +164,93 @@ describe('branch gating (§7.2 component-level visibility)', () => {
   test('slotsForBranch reports only the slots that survive the branch', () => {
     expect([...slotsForBranch(component(), ['flashback']).keys()]).toEqual(['hints']);
     expect([...slotsForBranch(component(), ['present']).keys()]).toEqual(['cast', 'hints']);
+  });
+});
+
+describe('section variants (§7.2)', () => {
+  const doc = (extra = {}) => normalizeComponent({
+    sections: {
+      genre: {
+        text: 'Genre: Thriller',
+        render: { position: 1 },
+        branches: { terse: 'brief', missing: 'nope' },
+        variants: {
+          brief: { text: 'Genre: Noir', heading: 'Setting', render: { position: 9, bullet: true } },
+        },
+        ...extra,
+      },
+      cast: { slot: true, render: { position: 5 } },
+    },
+  });
+
+  test('a dispatched variant replaces the section it names', () => {
+    const genre = sectionsForBranch(doc(), ['terse']).find((s) => s.section.name === 'genre');
+    expect(genre.section.text).toBe('Genre: Noir');
+    expect(genre.section.heading).toBe('Setting');
+    expect(genre.section.bullet).toBe(true);
+  });
+
+  test('a variant that moves a section re-sorts the output', () => {
+    // `render.position: 9` on the variant has to move `genre` past `cast`, or the variant
+    // is only half-applied — the flattened position would change and the order would not.
+    expect(sectionsForBranch(doc(), ['terse']).map((s) => s.section.name)).toEqual(['cast', 'genre']);
+    expect(sectionsForBranch(doc(), ['other']).map((s) => s.section.name)).toEqual(['genre', 'cast']);
+  });
+
+  test('applying a variant on one branch does not leak onto the next', () => {
+    // The normalized document is shared by every leaf, so this is the property that makes
+    // normalize-once-per-file safe rather than a cross-branch bleed waiting to happen.
+    const shared = doc();
+    sectionsForBranch(shared, ['terse']);
+    const plain = sectionsForBranch(shared, ['other']).find((s) => s.section.name === 'genre');
+    expect(plain.section.text).toBe('Genre: Thriller');
+    expect(plain.section.heading).toBeNull();
+  });
+
+  test('a dispatch naming a variant the section does not define warns and changes nothing', () => {
+    const seen = [];
+    const genre = sectionsForBranch(doc(), ['missing'], (code, message) => seen.push({ code, message }))
+      .find((s) => s.section.name === 'genre');
+    expect(seen.map((w) => w.code)).toEqual([CODES.SECTION_VARIANT_NOT_FOUND]);
+    expect(seen[0].message).toContain('nope');
+    expect(genre.section.text).toBe('Genre: Thriller');
+  });
+
+  test('variant names match case-insensitively, as they do on items', () => {
+    const withCaps = normalizeComponent({
+      sections: {
+        genre: { text: 'plain', branches: { x: 'Brief' }, variants: { brief: { text: 'variant' } } },
+      },
+    });
+    expect(sectionsForBranch(withCaps, ['x'])[0].section.text).toBe('variant');
+  });
+});
+
+describe('applySectionVariant text forms', () => {
+  const base = () => normalizeComponent({
+    sections: { rules: { text: { a: 'first', b: 'second' } } },
+  }).sections[0];
+
+  test('a string replaces the whole text', () => {
+    expect(applySectionVariant(base(), { text: 'replaced' }).text).toBe('replaced');
+  });
+
+  test('null drops the text', () => {
+    expect(applySectionVariant(base(), { text: null }).text).toBeNull();
+  });
+
+  test('a mapping edits one key and leaves the rest, so a variant need not restate them', () => {
+    const out = applySectionVariant(base(), { text: { b: 'changed', c: 'added' } });
+    expect(out.text).toEqual({ a: 'first', b: 'changed', c: 'added' });
+  });
+
+  test('a mapping key set to null deletes that line only', () => {
+    expect(applySectionVariant(base(), { text: { a: null } }).text).toEqual({ b: 'second' });
+  });
+
+  test('a delta that is not a mapping is ignored rather than throwing', () => {
+    const section = base();
+    expect(applySectionVariant(section, 'nonsense')).toBe(section);
+    expect(applySectionVariant(section, null)).toBe(section);
   });
 });

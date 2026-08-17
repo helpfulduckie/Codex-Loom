@@ -244,7 +244,7 @@ function buildCompileContext(config, branchPath) {
   if (scripts !== undefined) components.scripts = scripts;
 
   // Resolve component specs to file paths
-  const componentTypes = ['aiInstructions', 'opening', 'branchFraming', 'plotEssential', 'authorsNote', 'scripts'];
+  const componentTypes = ['aiInstructions', 'opening', 'branchFraming', 'plotEssential', 'summary', 'authorsNote', 'scripts'];
   const componentRefs = {};
   for (const type of componentTypes) {
     const spec = components[type] !== undefined ? components[type] : null;
@@ -1105,6 +1105,7 @@ function compile(configPath, options = {}) {
         {
           defaultHeadingLevel: descriptor.defaultHeadingLevel,
           variables: ctx.variables, registry, branchProtagonist,
+          onWarn: busWarner(compileDiagnostics, { file: String(spec) }),
         },
       );
       const outPath = writeSectionedComponent(outputDir, descriptor, text);

@@ -48,7 +48,7 @@ const COMPONENTS = {
     plotEssential: STRING,
     opening: STRING,
     branchFraming: STRING,
-    summary: { type: TYPES.STRING, note: 'Phase 6' },
+    summary: STRING,
 
   },
 };

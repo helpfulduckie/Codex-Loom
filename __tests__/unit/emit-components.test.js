@@ -53,12 +53,21 @@ describe('the descriptor table', () => {
   });
 
   test('Plot Essentials is a slotted component, no longer its own pipeline', () => {
-    expect(SLOTTED_COMPONENTS.map((d) => d.key)).toEqual(['plotEssential']);
-    const pe = SLOTTED_COMPONENTS[0];
+    const pe = SLOTTED_COMPONENTS.find((d) => d.key === 'plotEssential');
     expect(pe.file).toBe('Plot Essentials.md');
     expect(pe.declaration).toBe(DECLARATION.INHERITED);
     // v3's two formats disagree about a bare heading; Plot Essentials reads it as level 0.
     expect(pe.defaultHeadingLevel).toBe(0);
+  });
+
+  test('Summary is the second slotted component and shares Plot Essentials\' settings', () => {
+    // §7.3 treats the two identically because authors shape them alike — one states
+    // standing fact and the other narrative past, but both are Plot-Essentials-shaped.
+    expect(SLOTTED_COMPONENTS.map((d) => d.key)).toEqual(['plotEssential', 'summary']);
+    const summary = SLOTTED_COMPONENTS.find((d) => d.key === 'summary');
+    expect(summary.file).toBe('Summary.md');
+    expect(summary.declaration).toBe(DECLARATION.INHERITED);
+    expect(summary.defaultHeadingLevel).toBe(0);
   });
 
   test('the three tables together cover the §7.3 component set', () => {
@@ -66,7 +75,7 @@ describe('the descriptor table', () => {
       .map((d) => d.key).sort();
     expect(covered).toEqual([
       'aiInstructions', 'authorsNote', 'branchFraming', 'description',
-      'opening', 'plotEssential', 'scripts',
+      'opening', 'plotEssential', 'scripts', 'summary',
     ]);
   });
 });

@@ -83,7 +83,7 @@ const DOCUMENT_COMPONENTS = Object.freeze([
 /**
  * Components built from `sections:`, some of which are slots items route into (§7.2).
  *
- * Plot Essentials is the first row and, until step 8, the only one. `defaultHeadingLevel`
+ * Plot Essentials and Summary. `defaultHeadingLevel`
  * is a column rather than a constant because v3's two formats disagree about what a bare
  * `heading:` means — Plot Essentials reads it as level 0 and AI Instructions as level 2 —
  * and both are right for their own output. `model/component.js` therefore carries
@@ -97,6 +97,18 @@ const SLOTTED_COMPONENTS = Object.freeze([
     file: 'Plot Essentials.md',
     declaration: DECLARATION.INHERITED,
     verboseLabel: 'PlotEssentials',
+    defaultHeadingLevel: 0,
+  },
+  {
+    // §7.3: VL reads this into `storySummary`, AID's context slot 4 — the running "what
+    // has happened so far". Plot Essentials states standing fact and Summary states
+    // narrative past, and authors shape the two alike, so it takes Plot Essentials'
+    // settings rather than a format of its own. Expect it to be used rarely.
+    key: 'summary',
+    label: 'Summary',
+    file: 'Summary.md',
+    declaration: DECLARATION.INHERITED,
+    verboseLabel: 'Summary',
     defaultHeadingLevel: 0,
   },
 ]);
@@ -240,7 +252,7 @@ function renderSectionedComponent(component, branchPath, occupants, options = {}
   if (!component) return { text: null, segments: [] };
 
   const segments = [];
-  for (const { section } of sectionsForBranch(component, branchPath)) {
+  for (const { section } of sectionsForBranch(component, branchPath, options.onWarn)) {
     const placed = section.isSlot
       ? (occupants.get(section.name.toLowerCase()) || []).slice().sort(
         (a, b) => (a.order - b.order) || String(a.id).localeCompare(String(b.id)),

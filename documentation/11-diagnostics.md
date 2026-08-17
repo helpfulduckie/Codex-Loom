@@ -176,6 +176,7 @@ once the tree is written.
 | `CL0601` | ERROR | A section declares both `text:` and `slot: true`. |
 | `CL0602` | WARN | A section has no text, no heading and is not a slot, so it renders nothing. |
 | `CL0603` | WARN | A section's `render.wrap` is neither `each` nor `all`; `each` is used. |
+| `CL0604` | WARN | A section's branch dispatch names a variant the section does not define. |
 | `CL0610` | ERROR | An item resolves onto a branch and produces no output there. |
 | `CL0611` | ERROR | A render target names a slot the component does not declare. |
 | `CL0612` | ERROR | A render target names a section that exists but is not a slot. |

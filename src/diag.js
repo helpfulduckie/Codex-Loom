@@ -55,6 +55,7 @@ const CODES = Object.freeze({
   SECTION_TEXT_AND_SLOT: 'CL0601',
   SECTION_RENDERS_NOTHING: 'CL0602',
   SECTION_WRAP_UNKNOWN: 'CL0603',
+  SECTION_VARIANT_NOT_FOUND: 'CL0604',
 
   // Placement (§7.4). Raised in `compile.js`, which is the only place that holds an item's
   // targets and the branch's slot set at the same time, so these carry their severity at
@@ -90,6 +91,7 @@ const SEVERITY_BY_CODE = Object.freeze({
   CL0601: SEVERITY.ERROR,
   CL0602: SEVERITY.WARN,
   CL0603: SEVERITY.WARN,
+  CL0604: SEVERITY.WARN,
 });
 
 /** WARN is the default: an unregistered code is still reported, never silently dropped. */

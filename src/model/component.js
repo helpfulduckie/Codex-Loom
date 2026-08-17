@@ -22,6 +22,7 @@
  */
 
 const { resolveBranchSpec } = require('./branches');
+const { applyFieldOp } = require('./fieldops');
 const { CODES } = require('../diag');
 
 /** How a slot's `wrapper:` applies to what lands in it. */
@@ -126,20 +127,97 @@ function normalizeSection(name, def, index, onWarn) {
 }
 
 /**
- * The sections that apply to one branch, in output order.
+ * Layer one section variant's delta over a normalized section.
+ *
+ * Returns a new section; the input is never mutated, because the same normalized document
+ * is shared by every leaf and a variant applied on one branch must not be visible on the
+ * next. That sharing is the point of normalizing once per file rather than once per leaf.
+ *
+ * The delta shape is v3's, carried across unchanged so that a component file written for
+ * v3's AI Instructions still means what it meant. The one translation is `render:` — the
+ * normalized section has its render options flattened onto it, so a delta's `render:`
+ * mapping is merged key by key rather than replacing an object.
+ *
+ * `text:` takes three forms, which is where the shape earns its complexity:
+ *   null      drop the section's text entirely
+ *   string    replace it
+ *   mapping   treat the section's text as a keyed collection and apply a field op per key,
+ *             so a variant can add, replace or delete one line without restating the rest
+ */
+function applySectionVariant(section, delta) {
+  if (!delta || typeof delta !== 'object' || Array.isArray(delta)) return section;
+  const result = { ...section };
+
+  if (delta.text !== undefined) {
+    if (delta.text === null) {
+      result.text = null;
+    } else if (typeof delta.text === 'string') {
+      result.text = delta.text;
+    } else if (typeof delta.text === 'object') {
+      const base = (result.text && typeof result.text === 'object' && !Array.isArray(result.text))
+        ? { ...result.text } : {};
+      for (const [key, op] of Object.entries(delta.text)) {
+        if (op === null) { delete base[key]; continue; }
+        const next = applyFieldOp(base[key], op);
+        if (next === '__DELETE__') delete base[key]; else base[key] = next;
+      }
+      result.text = base;
+    }
+  }
+
+  if (delta.heading !== undefined) result.heading = delta.heading;
+  if (delta.headingLevel !== undefined) result.headingLevel = delta.headingLevel;
+
+  const render = (delta.render && typeof delta.render === 'object') ? delta.render : null;
+  if (render) {
+    if (render.position !== undefined) result.position = render.position;
+    if (render.wrapper !== undefined) result.wrapper = render.wrapper;
+    if (render.wrap !== undefined) result.wrap = String(render.wrap).toLowerCase();
+    if (render.compact !== undefined) result.compact = render.compact === true;
+    if (render.bullet !== undefined) result.bullet = render.bullet === true;
+  }
+
+  return result;
+}
+
+/**
+ * The sections that apply to one branch, in output order, with their variants applied.
  *
  * A section excluded by its own `branches:` dispatch is dropped entirely — §7.2's
  * component-level visibility gating, which is how an author drops a whole slot's contents
- * from one branch without editing every item that routes into it. The variant names the
- * dispatch selected travel with each section; applying them is the caller's business.
+ * from one branch without editing every item that routes into it.
+ *
+ * The variants the dispatch selected are applied here rather than handed back for the
+ * caller to apply. Returning the names and trusting someone downstream to act on them is
+ * how `variants:` came to be a declared key that nothing read, which is the §4.3 defect
+ * the schema exists to catch. The names still travel alongside, for the reports.
+ *
+ * Re-sorting after applying is deliberate: a variant may set `render.position`, and a
+ * section that moves has to move in the output too. The sort is the same one
+ * `normalizeComponent` uses — position, then declaration order.
  */
-function sectionsForBranch(component, branchPath) {
+function sectionsForBranch(component, branchPath, onWarn = () => {}) {
   const applicable = [];
   for (const section of component.sections) {
     const variants = section.branches ? resolveBranchSpec(section.branches, branchPath) : [];
     if (variants === null) continue;
-    applicable.push({ section, variants });
+
+    let resolved = section;
+    for (const name of variants) {
+      const key = section.variants
+        ? Object.keys(section.variants).find((k) => k.toLowerCase() === String(name).toLowerCase())
+        : undefined;
+      if (key === undefined) {
+        onWarn(CODES.SECTION_VARIANT_NOT_FOUND,
+          `section "${section.name}" dispatches to variant "${name}", which it does not define.`);
+        continue;
+      }
+      resolved = applySectionVariant(resolved, section.variants[key]);
+    }
+    applicable.push({ section: resolved, variants });
   }
+  applicable.sort((a, b) => (a.section.position - b.section.position)
+    || (a.section.index - b.section.index));
   return applicable;
 }
 
@@ -154,6 +232,7 @@ function slotsForBranch(component, branchPath) {
 
 module.exports = {
   normalizeComponent,
+  applySectionVariant,
   sectionsForBranch,
   slotsForBranch,
   WRAP,
