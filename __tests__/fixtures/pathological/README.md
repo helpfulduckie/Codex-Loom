@@ -45,6 +45,15 @@ prove nothing about the checks the fixture was written for.
 
 **None.** Every row the snapshot now holds is a row the fixture means to raise.
 
+**One known-incorrect *absence*, which is the harder kind to see.** The bare `import:
+Anchor` def in `placement/Codex/items.cl.yaml` emits a second `Anchor` — a duplicate entry
+in the `cast` slot and a second `## Anchor` story card carrying the same trigger — and the
+snapshot does not move at all when that def is added or removed. `buildRegistry` skips a
+bare import by design, so the registry's duplicate-id check never sees the pair, and
+nothing downstream asks the question again. A snapshot cannot hold a row that was never
+raised, so this one is recorded here instead: the day a duplicate check lands, the fixture
+already carries the case that should trip it.
+
 `CL0322` on `Ghost` and `Silent` was the last entry here, and was resolved by scoping the
 check rather than by editing the fixture: it now fires only when a story-card target
 exists, which is what §7.4 said all along. `Ghost` is specified by the `template:` on its

@@ -103,3 +103,17 @@
     triggers: [MistypedType]
   body:
     Tagline: Its type carries a placeholder, which is not a thing AID fills.
+
+# ── §17.4: a bare `import:` def, carrying no `id:` of its own ────────────────
+# `buildRegistry` skips a bare import by design — it *is* the item it names, so it claims
+# no id of its own — while `resolveBranchItems` resolves it like any other def. Together
+# that means this def emits a second `Anchor`, under `Anchor`'s id, with no diagnostic
+# anywhere: the registry's duplicate-id check never sees it, because neither def is in
+# the registry twice.
+#
+# Two items sharing an id is a mistake in every case the spec describes, so this should
+# report. It does not today — see the README's known-incorrect section, which records
+# this one as a *missing* row rather than a wrong one.
+- import: Anchor
+  body:
+    Tagline: A second Anchor, arriving with no id and no complaint.

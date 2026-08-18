@@ -7,8 +7,10 @@ const {
   compile,
   getTemplate, validateCardType, writeOpening, resolveOpeningContent, resolveBranchFolderPath,
   buildBranchOutputDir, buildCompileContext, writeOutput, writeOpeningsRecursive,
-  resolveIncludes, resolveNotesTemplateName,
+  resolveIncludes, resolveNotesTemplateName, resolveBranchItems,
 } = require('../../src/compile');
+const { buildRegistry } = require('../../src/loader/registry');
+const { Diagnostics } = require('../../src/diag');
 
 describe('getTemplate', () => {
   const templates = new Map([
@@ -959,5 +961,62 @@ describe('the notes ladder end to end', () => {
     expect(() => build({
       branches: ['  a:', '    render:', '      notesTemplate: AlsoMissing'],
     })).toThrow(/error/i);
+  });
+});
+
+/**
+ * A project def carrying `import:` and no `id:` of its own (§17.4).
+ *
+ * [[2026-08-17 The Document Layer Goes]] recorded such a def as having become *silently
+ * inert* when `buildOverlays` was deleted, and asked for a diagnostic. The symptom has
+ * changed shape since: Phase 3's `resolveBranchItems` iterates every def including bare
+ * imports, so the def renders — under the id of the item it names, which is the behavior
+ * `documentation/04-imports-and-includes.md` documents throughout and the one an author
+ * wants. Nothing is inert.
+ *
+ * What replaced it is a duplicate. `buildRegistry` skips a bare import by design, so two
+ * of them naming one canon item never meet in the registry and its duplicate-id check
+ * never runs — while the resolver produces two items with the same id, one story card
+ * name and one trigger list. These tests pin both halves, so the day a duplicate check
+ * lands it is the second of them that changes.
+ */
+describe('a bare import def carries no id of its own', () => {
+  const canon = () => buildRegistry([{
+    id: 'aness', name: 'Aness', aid: { type: 'Character', triggers: ['Aness'] },
+    body: { text: 'canon body' }, _source: 'canon.cl.yaml',
+  }], 'canon');
+
+  test('it resolves and renders, under the id of the item it imports', () => {
+    const defs = [{ import: 'Aness', _source: 'project.cl.yaml' }];
+    const items = resolveBranchItems(defs, canon(), [], {}, new Diagnostics());
+    expect(items).toHaveLength(1);
+    expect(items[0].id).toBe('aness');
+    expect(items[0].body.text).toBe('canon body');
+  });
+
+  test('it claims no registry id, which is what keeps rename-on-import a rename', () => {
+    expect([...buildRegistry([
+      { import: 'Aness', _source: 'project.cl.yaml' },
+      { id: 'dragon', import: 'Aness', _source: 'project.cl.yaml' },
+    ], 'project').keys()]).toEqual(['dragon']);
+  });
+
+  test('two of them emit one id twice, and report nothing — the open case', () => {
+    const defs = [
+      { import: 'Aness', body: { text: 'first' }, _source: 'a.cl.yaml' },
+      { import: 'Aness', body: { text: 'second' }, _source: 'b.cl.yaml' },
+    ];
+    const diagnostics = new Diagnostics();
+    const items = resolveBranchItems(defs, canon(), [], {}, diagnostics);
+
+    expect(items.map((i) => i.id)).toEqual(['aness', 'aness']);
+    expect(diagnostics.all).toHaveLength(0);
+  });
+
+  test('the same collision through explicit ids is caught at load', () => {
+    expect(() => buildRegistry([
+      { id: 'aness', name: 'Aness', _source: 'a.cl.yaml' },
+      { id: 'aness', name: 'Aness', _source: 'b.cl.yaml' },
+    ], 'project')).toThrow(/Duplicate item ID/i);
   });
 });
