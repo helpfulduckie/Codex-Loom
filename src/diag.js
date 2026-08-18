@@ -57,7 +57,7 @@ const CODES = Object.freeze({
   PLACEHOLDER_CYCLE: 'CL0531',
   PLACEHOLDER_UNDECLARED: 'CL0532',
   PLACEHOLDER_INVALID_CONTEXT: 'CL0533',
-  PLACEHOLDER_TITLE_PARTIAL: 'CL0534',
+  PLACEHOLDER_IN_TITLE: 'CL0534',
 
   // Components (§7.2). Raised by `model/component.js`, which reports through `onWarn`
   // and therefore takes its severity from the table below.

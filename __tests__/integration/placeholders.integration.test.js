@@ -223,7 +223,23 @@ describe('§12.3 check 3 — where a placeholder may not go', () => {
         HEAD, ...DECLARED, 'branches:', '  north:', '    title: The %hero% Road', '',
       ].join('\n'),
     });
-    expect(byCode(diags, CODES.PLACEHOLDER_TITLE_PARTIAL)).toHaveLength(1);
+    expect(byCode(diags, CODES.PLACEHOLDER_IN_TITLE)).toHaveLength(1);
+    expect(byCode(diags, CODES.PLACEHOLDER_INVALID_CONTEXT)).toEqual([]);
+  });
+
+  test('the scenario title warns — it is never filled, only legal', () => {
+    // Confirmed with Beth: AID does not substitute in the listing name, and no author
+    // expects it to. A WARN rather than an ERROR because writing one is legal and can even
+    // be the joke — `${Roleplaying A Cool AID Scenario}` works *because* it is never
+    // replaced.
+    const diags = run({
+      'compile.cl.yaml': [
+        'version: 4', 'title: The %hero% Chronicle', 'structure:', '  input:',
+        "    items: ['./Codex']", "    templates: ['./templates']", "  output: './out'",
+        ...DECLARED, '',
+      ].join('\n'),
+    });
+    expect(byCode(diags, CODES.PLACEHOLDER_IN_TITLE)).toHaveLength(1);
     expect(byCode(diags, CODES.PLACEHOLDER_INVALID_CONTEXT)).toEqual([]);
   });
 
@@ -242,6 +258,6 @@ describe('§12.3 check 3 — where a placeholder may not go', () => {
       ].join('\n'),
     });
     expect(byCode(diags, CODES.PLACEHOLDER_INVALID_CONTEXT)).toEqual([]);
-    expect(byCode(diags, CODES.PLACEHOLDER_TITLE_PARTIAL)).toEqual([]);
+    expect(byCode(diags, CODES.PLACEHOLDER_IN_TITLE)).toEqual([]);
   });
 });

@@ -1440,6 +1440,16 @@ function compileRun(configPath, options, buses) {
     checkUndeclaredPlaceholders(rootLabel, config.placeholders, {
       diagnostics: compileDiagnostics, file: configPath, where: 'the project title',
     });
+    checkPlaceholderContext(rootLabel, {
+      diagnostics: compileDiagnostics,
+      file: configPath,
+      where: 'the scenario title',
+      severity: 'warn',
+      reason: 'AID never fills a placeholder in the scenario title. The title names the '
+        + 'scenario in listings, before any adventure exists to answer a prompt, so the '
+        + 'raw text is what readers see. Legal to write, and occasionally meant as a '
+        + 'joke, but never substituted.',
+    });
     fs.writeFileSync(labelPath, rootLabel + '\n', 'utf8');
     if (verbose) console.log(`  OK: Label → ${labelPath}`);
   }

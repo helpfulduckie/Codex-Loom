@@ -242,7 +242,7 @@ that can still see the difference.
 | `CL0531` | ERROR | Placeholder questions form a reference cycle; every key in the loop is named. |
 | `CL0532` | ERROR | A `%key%` reaching compiled output is not declared on that branch. |
 | `CL0533` | ERROR | A placeholder reached a destination AID does not fill: the Description, or a card's `type`. |
-| `CL0534` | WARN | A placeholder reached a branch title, where it only half-works. |
+| `CL0534` | WARN | A placeholder reached a title, where AID does not do what writing one implies. |
 
 `CL0530` takes its own decade because `051x` is variables and `052x` is scoping; placeholders
 are a third thing in the band and will want neighbors as §12's remaining checks land.
@@ -287,6 +287,7 @@ Three destinations survive:
 | The Description | Never filled — it is shown before an adventure exists to answer it | `CL0533` |
 | A card's `type` | Never filled — it is a category, and a path segment in the compiled tree | `CL0533` |
 | A branch title | Prompt fills and the player sees the answer while choosing; the saved adventure keeps the raw text | `CL0534` |
+| The scenario title | Never filled — it names the scenario in listings, before an adventure exists | `CL0534` |
 
 Both check the `${...}` spelling as well as `%key%`, and both ignore whether the key is
 declared: where a placeholder cannot go, declaring it changes nothing.
@@ -298,9 +299,14 @@ in particular runs *before* template resolution: `aid.type` selects the template
 explicit one is named, so a placeholder there also fails to find a template, and CL0420
 would otherwise be the only thing reported — the symptom, with the cause skipped past.
 
-`CL0534` is a WARN because a branch title genuinely half-works and an author may want it
-anyway. The message states the consequence rather than the rule, since the behavior is
-not inferable from anything visible in the source.
+`CL0534` covers both titles under one code because it is one authoring mistake — writing
+a placeholder into a title and expecting substitution — with two different outcomes. The
+message states the outcome rather than the rule, since neither is inferable from anything
+visible in the source.
+
+It is a WARN rather than an ERROR in both cases because both are legal to write and a
+deliberate one is imaginable: a scenario called `${Roleplaying A Cool AID Scenario}` is a
+joke that works precisely because the text is never replaced.
 
 It is scoped to placeholders today. §6.4 gives `~` the same meaning for variables, roles,
 scripts and lint packs, none of which implement it yet — a `~` there sets the key to null

@@ -103,7 +103,11 @@ function findAllPlaceholders(text) {
  * for, on rules that no longer exist.
  *
  * What is left is two destinations where a placeholder does not function at all — the
- * scenario Description, and a story card's `type` — and one where it half-works.
+ * scenario Description, and a story card's `type` — and two titles where what happens is
+ * not what an author writing one would expect. A branch title half-works: the prompt
+ * fills, the player sees the answer while choosing, and the saved adventure keeps the raw
+ * text. A scenario title does not fill at all. Both are WARNs, because both are legal to
+ * write and a deliberate one is imaginable.
  *
  * The check is per *placement*, not per file: §7.10 lets an item route into any
  * component, so the same item body is legal in one destination and not another, on a
@@ -117,7 +121,7 @@ function checkPlaceholderContext(text, { diagnostics, file, where, branch, sever
   const unique = [...new Set(found)];
   for (const occurrence of unique) {
     diagnostics[severity === 'warn' ? 'warn' : 'error'](
-      severity === 'warn' ? CODES.PLACEHOLDER_TITLE_PARTIAL : CODES.PLACEHOLDER_INVALID_CONTEXT,
+      severity === 'warn' ? CODES.PLACEHOLDER_IN_TITLE : CODES.PLACEHOLDER_INVALID_CONTEXT,
       `placeholder "${occurrence}" in ${where}${branch ? ` on branch "${branch}"` : ''} — ${reason}`,
       { file: file == null ? undefined : String(file) },
     );

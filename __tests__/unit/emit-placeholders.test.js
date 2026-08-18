@@ -310,12 +310,12 @@ describe('checkPlaceholderContext', () => {
     expect(found).toHaveLength(1);
   });
 
-  test('severity warn uses the half-works code', () => {
+  test('severity warn uses the title code', () => {
     const { found, diagnostics } = bus();
     checkPlaceholderContext('The %heroName% Path', {
       diagnostics, where: 'a branch title', severity: 'warn', reason: 'half-works',
     });
-    expect(found[0].code).toBe(CODES.PLACEHOLDER_TITLE_PARTIAL);
+    expect(found[0].code).toBe(CODES.PLACEHOLDER_IN_TITLE);
     expect(found[0].severity).toBe('warn');
   });
 
