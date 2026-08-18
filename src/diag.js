@@ -50,6 +50,11 @@ const CODES = Object.freeze({
   TEMPLATE_NOT_FOUND: 'CL0420',
   RENDER_FAILED: 'CL0421',
 
+  // Tokens (§6.4, §12). `~` unbinds an inherited binding; unbinding something that was
+  // never inherited is meaningless as written and reliably means the author meant to
+  // include, so it warns rather than passing silently.
+  PLACEHOLDER_UNBIND_UNKNOWN: 'CL0530',
+
   // Components (§7.2). Raised by `model/component.js`, which reports through `onWarn`
   // and therefore takes its severity from the table below.
   SECTION_TEXT_AND_SLOT: 'CL0601',
@@ -84,6 +89,7 @@ const CODES = Object.freeze({
  */
 const SEVERITY_BY_CODE = Object.freeze({
   CL0320: SEVERITY.WARN,
+  CL0530: SEVERITY.WARN,
   CL0321: SEVERITY.WARN,
   CL0322: SEVERITY.WARN,
   CL0323: SEVERITY.ERROR,

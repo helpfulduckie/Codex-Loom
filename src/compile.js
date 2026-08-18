@@ -228,8 +228,11 @@ function resolveComponentSpec(spec, base, variables) {
  * Build the CompileContext for a given branch path.
  * Merges variables, components and render defaults from root → branch chain.
  */
-function buildCompileContext(config, branchPath) {
-  const chain = walkBranchChain(config.branches, branchPath);
+function buildCompileContext(config, branchPath, options = {}) {
+  const chain = walkBranchChain(config.branches, branchPath, {
+    rootPlaceholders: config.placeholders,
+    onWarn: options.onWarn || null,
+  });
   const variables = Object.assign({}, config._variables || config.variables || {}, chain.variables);
   const components = Object.assign({}, config.components || {}, chain.components);
   const render = Object.assign({}, config.render || {}, chain.render);
@@ -249,7 +252,11 @@ function buildCompileContext(config, branchPath) {
     componentRefs[type] = resolveComponentSpec(spec, config._base, variables);
   }
 
-  return { variables, componentRefs, render };
+  // The branch-merged placeholder table (§12.2). Sits beside `variables` because it is the
+  // same kind of thing — a per-branch mapping every check and the emitter read — and
+  // because §12.3's question text expands against `variables`, so the two are always
+  // wanted together.
+  return { variables, componentRefs, render, placeholders: chain.placeholders };
 }
 
 /**
@@ -1127,7 +1134,9 @@ function compileRun(configPath, options, buses) {
     const inheritedProtagonist = chain.protagonist;
     const folderPath = chain.folderPath;
     const outputDir = buildBranchOutputDir(config._resolvedOutput, folderPath);
-    const ctx = buildCompileContext(config, branchPath);
+    const ctx = buildCompileContext(config, branchPath, {
+      onWarn: busWarner(compileDiagnostics, { file: configPath }),
+    });
     // Expand {%var} in protagonist using branch-merged variables, before the
     // case-insensitive match against item ids.
     const branchProtagonist = resolveVariables(inheritedProtagonist, ctx.variables).toLowerCase() || null;

@@ -13,9 +13,7 @@ ERROR CL0201 compile.cl.yaml
 `;
 
 exports[`pathological fixture placement invariants and latent placeholder content 1`] = `
-"WARN CL0204 compile.cl.yaml
-  "placeholders" is recognized but not yet implemented — Phase 4. It will be ignored.
-WARN CL0322 Codex/items.cl.yaml
+"WARN CL0322 Codex/items.cl.yaml
   item "Ghost" has neither aid.type nor render.template
 WARN CL0322 Codex/items.cl.yaml
   item "Silent" has neither aid.type nor render.template

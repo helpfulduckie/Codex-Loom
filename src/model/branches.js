@@ -11,6 +11,7 @@
  */
 
 const { deepClone, findKey } = require('../util');
+const { CODES } = require('../diag');
 
 /**
  * Resolve the branch spec for an item/block, walking the branch path.
@@ -178,13 +179,14 @@ function getBranchConfig(branches, branchPath) {
  *                and the ones that used to push the raw id both need to know
  */
 function walkBranchChain(branches, branchPath, options = {}) {
-  const { rootProtagonist = null } = options;
+  const { rootProtagonist = null, rootPlaceholders = null, onWarn = null } = options;
   const result = {
     nodes: [],
     folderPath: [],
     variables: {},
     components: {},
     render: {},
+    placeholders: Object.assign({}, rootPlaceholders || {}),
     scripts: undefined,
     protagonist: rootProtagonist,
     node: null,
@@ -219,6 +221,33 @@ function walkBranchChain(branches, branchPath, options = {}) {
       // which is how a branch without the mod that reads the marker turns it off.
       if (node.render) Object.assign(result.render, node.render);
       if (node.protagonist) result.protagonist = node.protagonist;
+      // Placeholders merge key-wise, and `~` deletes rather than overriding with null
+      // (§6.4). Velvet Lattice does the same merge with `{**parent, **local}`, so the
+      // emitted table matches what VL would compute from the same declarations — including
+      // the detail that an overriding key keeps the *parent's* position rather than moving
+      // to the end, which is what `delete`-then-set below would otherwise change.
+      //
+      // Only placeholders unbind today. `variables:` and `roles:` are listed alongside
+      // them in §6.4 and still use a plain assign above, so a `~` there sets null instead
+      // of deleting; retrofitting them is a behavior change for existing projects and
+      // belongs to whichever phase owns those keys, not to this one.
+      if (node.placeholders && typeof node.placeholders === 'object') {
+        for (const [key, question] of Object.entries(node.placeholders)) {
+          if (question === null || question === undefined) {
+            if (!(key in result.placeholders) && onWarn) {
+              onWarn(
+                CODES.PLACEHOLDER_UNBIND_UNKNOWN,
+                `placeholder "${key}" is unbound with ~ but was never inherited here — `
+                + 'nothing was removed. A bare "' + key + ':" with no question also parses '
+                + 'as ~, which is usually the cause.',
+              );
+            }
+            delete result.placeholders[key];
+          } else {
+            result.placeholders[key] = question;
+          }
+        }
+      }
       // `scripts:` is top-level rather than a component (§6.3) but merges the same way,
       // so a branch can swap one hook bundle and inherit the rest.
       if (node.scripts !== undefined) result.scripts = node.scripts;

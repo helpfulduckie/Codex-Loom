@@ -91,7 +91,7 @@ const BRANCH_NODE = {
     title: STRING,
     variables: STRING_RECORD,
     roles: { type: TYPES.RECORD, of: STRING, note: 'Phase 8' },
-    placeholders: { type: TYPES.RECORD, of: STRING, note: 'Phase 4' },
+    placeholders: STRING_RECORD,
     scripts: SCRIPTS,
     lint: LINT,
     components: COMPONENTS,
@@ -135,7 +135,7 @@ const CONFIG_SCHEMA = {
 
     variables: STRING_RECORD,
     roles: { type: TYPES.RECORD, of: STRING, note: 'Phase 8' },
-    placeholders: { type: TYPES.RECORD, of: STRING, note: 'Phase 4' },
+    placeholders: STRING_RECORD,
     scripts: SCRIPTS,
     lint: LINT,
     components: COMPONENTS,

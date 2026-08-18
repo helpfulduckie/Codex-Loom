@@ -238,6 +238,21 @@ that can still see the difference.
 | `CL0511` | ERROR | Variables form a reference cycle; every key in the loop is named. |
 | `CL0520` | ERROR | A branch-scoped variable was used where only root variables resolve. |
 | `CL0521` | ERROR | A canon name collides with a declared variable. |
+| `CL0530` | WARN | A placeholder is unbound with `~` but was never inherited at that node. |
+
+`CL0530` takes its own decade because `051x` is variables and `052x` is scoping; placeholders
+are a third thing in the band and will want neighbors as §12's remaining checks land.
+
+It exists for the §6.4 footgun rather than for careless authors. A bare `heroName:` with
+nothing after it parses as null, and null is `~` — so the most natural-looking way to
+declare a placeholder is also the way to silently delete one. Unbinding something never
+inherited removes nothing and cannot have been meant, which makes it a reliable signal that
+the question text is missing; the message says so rather than reporting the deletion
+neutrally.
+
+It is scoped to placeholders today. §6.4 gives `~` the same meaning for variables, roles,
+scripts and lint packs, none of which implement it yet — a `~` there sets the key to null
+instead of removing it, so there is nothing for this check to say about them.
 
 `CL0521` exists because canon names are auto-exposed as variables (§6.1), so the two share
 one namespace. A collision is an ERROR rather than a silent precedence rule: there is no

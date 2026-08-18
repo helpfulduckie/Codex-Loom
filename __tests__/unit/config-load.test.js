@@ -323,11 +323,22 @@ describe('every diagnostic the config surface can emit', () => {
 describe('later-phase keys are recognized, not rejected', () => {
   test.each([
     ['roles', 'roles:\n  protagonist: Aness\n'],
-    ['placeholders', 'placeholders:\n  heroName: Who?\n'],
     ['lint', 'lint:\n  level: warn\n'],
   ])('%s WARNs as unimplemented rather than erroring', (_name, yaml) => {
     const { diagnostics } = load(yaml);
     expect(diagnostics.hasErrors()).toBe(false);
     expect(diagnostics.warnings.some((d) => d.message.includes('not yet implemented'))).toBe(true);
+  });
+
+  /**
+   * The inverse, and the half a stale `note:` would otherwise pass. `placeholders:` moved
+   * off the list above in Phase 4 Step 1; a note left on an implemented key tells authors
+   * their declaration will be ignored while the compiler honors it, which is worse than no
+   * note at all — the same failure `kitchen-sink.test.js` pins for slotted components.
+   */
+  test('placeholders is implemented and no longer warns', () => {
+    const { diagnostics } = load("placeholders:" + String.fromCharCode(10) + "  heroName: Who?" + String.fromCharCode(10));
+    expect(diagnostics.hasErrors()).toBe(false);
+    expect(diagnostics.warnings.some((d) => d.message.includes('not yet implemented'))).toBe(false);
   });
 });
