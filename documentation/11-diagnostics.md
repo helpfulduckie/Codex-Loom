@@ -244,6 +244,7 @@ that can still see the difference.
 | `CL0533` | ERROR | A placeholder reached a destination AID does not fill: the Description, or a card's `type`. |
 | `CL0534` | WARN | A placeholder reached a title, where AID does not do what writing one implies. |
 | `CL0535` | WARN | A placeholder is declared and referenced nowhere beneath its declaring node. |
+| `CL0536` | WARN | Two or more placeholders declare the same question text. |
 
 `CL0530` takes its own decade because `051x` is variables and `052x` is scoping; placeholders
 are a third thing in the band and will want neighbors as §12's remaining checks land.
@@ -326,6 +327,22 @@ expansion substitutes the reference away.
 
 It is a WARN and an opinion rather than a fact (§12.5): an author mid-draft may reasonably
 declare a question before writing the text that will use it.
+
+`CL0536` reads declarations and never use sites, and the distinction matters because the
+name invites getting it wrong. Two *keys* declaring one question string is the finding; one
+key referenced from twenty places is the feature working as intended and says nothing.
+
+AID collapses identical question text into a single prompt, so two such keys are asked once
+and both receive that one answer. An author who believed they had two independently
+answerable fields has one, and nothing in the source reveals it — which is why the message
+states the consequence rather than the rule.
+
+Compared on the *expanded* question, since two keys can differ in source and agree once
+`{%variables}` and nesting resolve. What AID sees is the expanded form, so that is what
+decides whether the prompts collapse. Collected against each node's merged table — the set
+of keys visible together is the set that can collide — and reported once per distinct
+group, because a duplicate declared at the root is otherwise re-found at every node beneath
+it and is still one mistake to fix.
 
 It is scoped to placeholders today. §6.4 gives `~` the same meaning for variables, roles,
 scripts and lint packs, none of which implement it yet — a `~` there sets the key to null

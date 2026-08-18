@@ -370,6 +370,66 @@ function reportUnusedPlaceholders(declarations, usage, { diagnostics, file } = {
 }
 
 /**
+ * §12.3 check 4: two keys asking the player the same question.
+ *
+ * **This reads declarations and never use sites.** Two *keys* declaring one question string
+ * is the finding; one key referenced from twenty places is the feature working as intended
+ * and draws nothing.
+ *
+ * AID collapses identical question strings into a single prompt, so two such keys are asked
+ * once and both receive that one answer. An author who believed they had two independently
+ * answerable fields has one, and nothing in the source says so — which is why the message
+ * states the consequence rather than the rule.
+ *
+ * Compared on the *expanded* question, because two keys can differ in source and agree once
+ * `{%variables}` and nesting resolve (§12.2). What AID sees is the expanded form, so that is
+ * what has to match for the collapse to happen.
+ *
+ * Collected per node against the merged table — which is the set of keys visible together,
+ * and therefore the set that can collide — then reported once per distinct pair, since a
+ * duplicate declared at the root is otherwise re-found at every node beneath it.
+ */
+function collectDuplicateQuestions(expandedTable, duplicates, where) {
+  if (!duplicates) return;
+
+  const byQuestion = new Map();
+  for (const [key, question] of Object.entries(expandedTable)) {
+    if (question == null) continue;
+    const normalized = String(question).trim();
+    if (!normalized) continue;
+    if (!byQuestion.has(normalized)) byQuestion.set(normalized, []);
+    byQuestion.get(normalized).push(key);
+  }
+
+  for (const [question, keys] of byQuestion) {
+    if (keys.length < 2) continue;
+    const signature = `${[...keys].sort().join('\u0000')}\u0000${question}`;
+    if (duplicates.has(signature)) continue;
+    duplicates.set(signature, { keys: [...keys].sort(), question, where });
+  }
+}
+
+/** Report what `collectDuplicateQuestions` gathered, once per distinct pair. */
+function reportDuplicateQuestions(duplicates, { diagnostics, file } = {}) {
+  if (!diagnostics || !duplicates) return [];
+  for (const { keys, question } of duplicates.values()) {
+    diagnostics.warn(
+      CODES.PLACEHOLDER_DUPLICATE_QUESTION,
+      `placeholders ${keys.map((k) => `"${k}"`).join(' and ')} ask the same question `
+      + `("${question}"). AID treats identical question text as one placeholder, so the `
+      + 'player is prompted once and every one of these keys receives that single answer.',
+      { file: file == null ? undefined : String(file) },
+      {
+        hint: 'If they are meant to be answered separately, give them different question '
+          + 'text. If they are meant to share an answer, one key does it with no duplicate '
+          + 'prompt to explain.',
+      },
+    );
+  }
+  return [...duplicates.values()];
+}
+
+/**
  * The keys a node contributes: its own declarations, minus unbinds.
  *
  * `~` is filtered rather than emitted as null, because a null value in the YAML would read
@@ -388,7 +448,7 @@ function localKeysOf(node) {
  * longer does would otherwise keep an orphan file that VL still reads and still inherits
  * down the subtree, so the declaration would outlive its deletion from the source.
  */
-function writeNodePlaceholders(nodeDir, node, mergedTable, variables, { onWarn, file, diagnostics, usage, usagePath } = {}) {
+function writeNodePlaceholders(nodeDir, node, mergedTable, variables, { onWarn, file, diagnostics, usage, usagePath, duplicates } = {}) {
   const keys = localKeysOf(node);
   const outPath = path.join(nodeDir, FILENAME);
 
@@ -422,6 +482,11 @@ function writeNodePlaceholders(nodeDir, node, mergedTable, variables, { onWarn, 
   // VL will not resolve the reference itself.
   const expanded = expandQuestions(mergedTable, variables, { onWarn, file });
 
+  // Against the merged table rather than the emitted subset: a branch key colliding with an
+  // inherited one is the interesting case, and the inherited key is not in what this node
+  // writes.
+  collectDuplicateQuestions(expanded, duplicates, usagePath || '');
+
   const emitted = {};
   for (const key of keys) {
     if (expanded[key] !== undefined && expanded[key] !== null) emitted[key] = expanded[key];
@@ -451,6 +516,8 @@ module.exports = {
   checkUndeclaredPlaceholders,
   checkPlaceholderContext,
   reportUnusedPlaceholders,
+  collectDuplicateQuestions,
+  reportDuplicateQuestions,
   findAllPlaceholders,
   findNativePlaceholders,
   expandQuestions,

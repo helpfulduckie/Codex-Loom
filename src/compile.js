@@ -22,7 +22,7 @@ const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES } = require('./dia
 const { renderCard } = require('./emit/vl');
 const {
   FILENAME: PLACEHOLDERS_FILENAME, writeNodePlaceholders, checkUndeclaredPlaceholders,
-  checkPlaceholderContext, reportUnusedPlaceholders, localKeysOf,
+  checkPlaceholderContext, reportUnusedPlaceholders, reportDuplicateQuestions, localKeysOf,
 } = require('./emit/placeholders');
 const { loadDescConfig, extractScriptBanner, writeDescription } = require('./description');
 const { loadOpeningConfig, compileOpening } = require('./opening');
@@ -1035,7 +1035,7 @@ function writeLabelsRecursive(branches, outputBase, variables, verbose = false, 
  * key carries that key's question inline — see `emit/placeholders.js` for why the nesting
  * cannot be left to VL.
  */
-function writePlaceholdersRecursive(branches, outputBase, rootPlaceholders, variables, configPath, diagnostics, verbose = false, usage = null, declarations = null) {
+function writePlaceholdersRecursive(branches, outputBase, rootPlaceholders, variables, configPath, diagnostics, verbose = false, usage = null, declarations = null, duplicates = null) {
   const onWarn = (code, message, file) => diagnostics.add(
     severityOf(code), code, message, { file: file || configPath },
   );
@@ -1048,7 +1048,7 @@ function writePlaceholdersRecursive(branches, outputBase, rootPlaceholders, vari
     });
   }
   const written = writeNodePlaceholders(outputBase, rootNode, rootTable, variables, {
-    onWarn, file: configPath, diagnostics, usage, usagePath: '',
+    onWarn, file: configPath, diagnostics, usage, usagePath: '', duplicates,
   });
   if (written && verbose) console.log(`    OK: Placeholders → ${written}`);
 
@@ -1073,7 +1073,7 @@ function writePlaceholdersRecursive(branches, outputBase, rootPlaceholders, vari
     }
 
     const outPath = writeNodePlaceholders(nodeOutput, node, table, branchVars, {
-      onWarn, file: configPath, diagnostics, usage, usagePath: path_.join('/'),
+      onWarn, file: configPath, diagnostics, usage, usagePath: path_.join('/'), duplicates,
     });
     if (outPath && verbose) console.log(`    OK: Placeholders → ${outPath}`);
 
@@ -1218,6 +1218,7 @@ function compileRun(configPath, options, buses) {
   // the declarations say what was promised and where, the usage says what was spent.
   const placeholderUsage = new Map();
   const placeholderDeclarations = [];
+  const placeholderDuplicates = new Map();
 
   const leaves = enumerateLeaves(config.branches);
 
@@ -1459,7 +1460,7 @@ function compileRun(configPath, options, buses) {
   writePlaceholdersRecursive(
     config.branches, config._resolvedOutput, config.placeholders,
     config._variables || config.variables || {}, configPath, compileDiagnostics, verbose,
-    placeholderUsage, placeholderDeclarations,
+    placeholderUsage, placeholderDeclarations, placeholderDuplicates,
   );
   reportCompileDiagnostics();
 
@@ -1588,6 +1589,9 @@ function compileRun(configPath, options, buses) {
   // Last, because "unused" is only knowable once every write point has run — and the
   // Description and the scenario title are written after the branch tree.
   reportUnusedPlaceholders(placeholderDeclarations, placeholderUsage, {
+    diagnostics: compileDiagnostics, file: configPath,
+  });
+  reportDuplicateQuestions(placeholderDuplicates, {
     diagnostics: compileDiagnostics, file: configPath,
   });
   reportCompileDiagnostics();

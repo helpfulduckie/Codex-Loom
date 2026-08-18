@@ -69,5 +69,8 @@ WARN CL0535 compile.cl.yaml
   hint: Declared at the project root, so this counts every branch.
 WARN CL0535 compile.cl.yaml
   placeholder "neverUsed" is declared at the project root but no text beneath it references "%neverUsed%" — the player is asked the question and the answer goes nowhere.
-  hint: Declared at the project root, so this counts every branch."
+  hint: Declared at the project root, so this counts every branch.
+WARN CL0536 compile.cl.yaml
+  placeholders "altName" and "heroName" ask the same question ("What is your name?"). AID treats identical question text as one placeholder, so the player is prompted once and every one of these keys receives that single answer.
+  hint: If they are meant to be answered separately, give them different question text. If they are meant to share an answer, one key does it with no duplicate prompt to explain."
 `;

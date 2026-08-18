@@ -329,3 +329,67 @@ describe('§12.3 check 2 — declared but never used', () => {
     expect(unused(diags)).toEqual([]);
   });
 });
+
+describe('duplicate question text, end to end', () => {
+  const dupes = (diags) => diags
+    .filter((d) => d.code === CODES.PLACEHOLDER_DUPLICATE_QUESTION)
+    .map((d) => d.message);
+
+  test('two root keys with one question warn once', () => {
+    const diags = run({
+      'compile.cl.yaml': [
+        HEAD,
+        'placeholders:',
+        '  heroName: What is your name?',
+        '  pcName: What is your name?',
+        // Quoted because a plain YAML scalar may not start with `%` — see the
+        // preparse gap noted in the Phase 4 plan.
+        'components:', '  opening: "%heroName% and %pcName% set out."', '',
+      ].join('\n'),
+    });
+    expect(dupes(diags)).toHaveLength(1);
+  });
+
+  test('one key used many times is not a duplicate', () => {
+    // The distinction the check's name invites getting wrong: reuse is the feature.
+    const diags = run({
+      'compile.cl.yaml': [
+        HEAD,
+        'placeholders:', '  hero: What is your name?',
+        'components:', '  opening: "%hero%, %hero%, and %hero% again."',
+        'branches:', '  north:', '    title: The %hero% Road', '',
+      ].join('\n'),
+    });
+    expect(dupes(diags)).toEqual([]);
+  });
+
+  test('keys that differ in source but agree after variables expand still collide', () => {
+    // Compared on the expanded form, because that is what AID sees — and what decides
+    // whether the two prompts collapse into one.
+    const diags = run({
+      'compile.cl.yaml': [
+        HEAD,
+        'variables:', '  noun: name',
+        'placeholders:',
+        '  a: What is your {%noun} ?',
+        '  b: What is your name ?',
+        'components:', '  opening: "%a% %b%"', '',
+      ].join('\n'),
+    });
+    expect(dupes(diags)).toHaveLength(1);
+  });
+
+  test('a branch key colliding with an inherited one is caught', () => {
+    const diags = run({
+      'compile.cl.yaml': [
+        HEAD,
+        'placeholders:', '  hero: What is your name?',
+        'components:', '  opening: You are %hero%.',
+        'branches:',
+        '  north:', '    placeholders:', '      alias: What is your name?',
+        '    title: The %alias% Road', '',
+      ].join('\n'),
+    });
+    expect(dupes(diags)).toHaveLength(1);
+  });
+});

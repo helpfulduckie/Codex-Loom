@@ -21,7 +21,7 @@ const YAML = require('yaml');
 const {
   expandQuestions, localKeysOf, writeNodePlaceholders, checkUndeclaredPlaceholders,
   checkPlaceholderContext, findAllPlaceholders, findNativePlaceholders,
-  reportUnusedPlaceholders, FILENAME,
+  reportUnusedPlaceholders, collectDuplicateQuestions, reportDuplicateQuestions, FILENAME,
 } = require('../../src/emit/placeholders');
 const { CODES } = require('../../src/diag');
 
@@ -389,5 +389,65 @@ describe('reportUnusedPlaceholders — §12.3 check 2', () => {
     );
     expect(found).toHaveLength(1);
     expect(found[0].message).toContain('%ghost%');
+  });
+});
+
+describe('duplicate question text — §12.3 check 4', () => {
+  const collect = (table, where) => {
+    const duplicates = new Map();
+    collectDuplicateQuestions(table, duplicates, where || '');
+    return duplicates;
+  };
+  const bus = () => {
+    const found = [];
+    return { found, diagnostics: { warn: (code, message) => found.push({ code, message }) } };
+  };
+
+  test('two keys with one question are a finding', () => {
+    const dups = collect({ heroName: 'What is your name?', pcName: 'What is your name?' });
+    expect(dups.size).toBe(1);
+    expect([...dups.values()][0].keys).toEqual(['heroName', 'pcName']);
+  });
+
+  test('distinct questions are silent', () => {
+    expect(collect({ a: 'Your name?', b: 'Your age?' }).size).toBe(0);
+  });
+
+  test('one key is never a duplicate of itself, however often it is used', () => {
+    // The scope line, asserted: this check reads declarations and never use sites. A key
+    // referenced from twenty places is the feature working.
+    expect(collect({ only: 'Your name?' }).size).toBe(0);
+  });
+
+  test('leading and trailing whitespace does not make two questions different', () => {
+    expect(collect({ a: 'Your name?', b: '  Your name?  ' }).size).toBe(1);
+  });
+
+  test('an empty question is not matched against another empty one', () => {
+    expect(collect({ a: '', b: '' }).size).toBe(0);
+  });
+
+  test('three keys sharing a question are one finding naming all three', () => {
+    const dups = collect({ a: 'Q?', b: 'Q?', c: 'Q?' });
+    expect(dups.size).toBe(1);
+    expect([...dups.values()][0].keys).toEqual(['a', 'b', 'c']);
+  });
+
+  test('the same pair found at two nodes is recorded once', () => {
+    // A duplicate declared at the root is re-found in the merged table of every node
+    // beneath it, and the author has one mistake to fix.
+    const duplicates = new Map();
+    collectDuplicateQuestions({ a: 'Q?', b: 'Q?' }, duplicates, '');
+    collectDuplicateQuestions({ a: 'Q?', b: 'Q?' }, duplicates, 'north');
+    collectDuplicateQuestions({ a: 'Q?', b: 'Q?' }, duplicates, 'north/keep');
+    expect(duplicates.size).toBe(1);
+  });
+
+  test('the message states the consequence, not the rule', () => {
+    const { found, diagnostics } = bus();
+    reportDuplicateQuestions(collect({ a: 'Q?', b: 'Q?' }), { diagnostics });
+    expect(found).toHaveLength(1);
+    expect(found[0].code).toBe(CODES.PLACEHOLDER_DUPLICATE_QUESTION);
+    expect(found[0].message).toMatch(/prompted once/);
   });
 });
