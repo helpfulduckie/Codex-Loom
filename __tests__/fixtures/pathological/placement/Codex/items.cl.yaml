@@ -111,9 +111,10 @@
 # anywhere: the registry's duplicate-id check never sees it, because neither def is in
 # the registry twice.
 #
-# Two items sharing an id is a mistake in every case the spec describes, so this should
-# report. It does not today — see the README's known-incorrect section, which records
-# this one as a *missing* row rather than a wrong one.
+# Two items sharing an id is a mistake in every case the spec describes, so this reports
+# CL0325 from `resolveBranchItems` — the only stage that sees both resolved items at once.
+# One row per branch on which both defs survive dispatch, because dispatching one of a
+# colliding pair away is the documented way to write mutually exclusive versions.
 - import: Anchor
   body:
     Tagline: A second Anchor, arriving with no id and no complaint.

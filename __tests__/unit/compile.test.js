@@ -977,8 +977,9 @@ describe('the notes ladder end to end', () => {
  * What replaced it is a duplicate. `buildRegistry` skips a bare import by design, so two
  * of them naming one canon item never meet in the registry and its duplicate-id check
  * never runs — while the resolver produces two items with the same id, one story card
- * name and one trigger list. These tests pin both halves, so the day a duplicate check
- * lands it is the second of them that changes.
+ * name and one trigger list. `resolveBranchItems` raises CL0325 on that, because it is
+ * the only stage that sees both resolved items at once, and it asks per branch: branch
+ * dispatch can legitimately send one of a colliding pair away.
  */
 describe('a bare import def carries no id of its own', () => {
   const canon = () => buildRegistry([{
@@ -1001,19 +1002,44 @@ describe('a bare import def carries no id of its own', () => {
     ], 'project').keys()]).toEqual(['dragon']);
   });
 
-  test('two of them emit one id twice, and report nothing — the open case', () => {
+  test('two of them resolving to one id is an ERROR naming both sources', () => {
     const defs = [
       { import: 'Aness', body: { text: 'first' }, _source: 'a.cl.yaml' },
       { import: 'Aness', body: { text: 'second' }, _source: 'b.cl.yaml' },
     ];
     const diagnostics = new Diagnostics();
-    const items = resolveBranchItems(defs, canon(), [], {}, diagnostics);
+    resolveBranchItems(defs, canon(), [], {}, diagnostics);
 
-    expect(items.map((i) => i.id)).toEqual(['aness', 'aness']);
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0].code).toBe('CL0325');
+    expect(diagnostics.errors[0].message).toMatch(/the first is in a\.cl\.yaml/);
+    expect(diagnostics.errors[0].file).toBe('b.cl.yaml');
+  });
+
+  test('a bare import colliding with an explicit def of that id reports the same way', () => {
+    const defs = [
+      { id: 'Aness', name: 'Aness', _source: 'items.cl.yaml' },
+      { import: 'Aness', body: { text: 'second' }, _source: 'items.cl.yaml' },
+    ];
+    const diagnostics = new Diagnostics();
+    resolveBranchItems(defs, canon(), [], {}, diagnostics);
+
+    expect(diagnostics.errors.map((d) => d.code)).toEqual(['CL0325']);
+  });
+
+  test('branch dispatch sending one of the pair away is not a collision', () => {
+    const defs = [
+      { import: 'Aness', body: { text: 'first' }, branches: { alpha: [], beta: null }, _source: 'a.cl.yaml' },
+      { import: 'Aness', body: { text: 'second' }, branches: { alpha: null, beta: [] }, _source: 'b.cl.yaml' },
+    ];
+    const diagnostics = new Diagnostics();
+    const items = resolveBranchItems(defs, canon(), ['alpha'], {}, diagnostics);
+
+    expect(items).toHaveLength(1);
     expect(diagnostics.all).toHaveLength(0);
   });
 
-  test('the same collision through explicit ids is caught at load', () => {
+  test('the same collision through explicit ids is still caught earlier, at load', () => {
     expect(() => buildRegistry([
       { id: 'aness', name: 'Aness', _source: 'a.cl.yaml' },
       { id: 'aness', name: 'Aness', _source: 'b.cl.yaml' },

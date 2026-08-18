@@ -13,7 +13,10 @@ ERROR CL0201 compile.cl.yaml
 `;
 
 exports[`pathological fixture placement invariants and latent placeholder content 1`] = `
-"ERROR CL0532 Codex/items.cl.yaml
+"ERROR CL0325 Codex/items.cl.yaml
+  two item definitions resolve to id "anchor" on this branch.
+  hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
+ERROR CL0532 Codex/items.cl.yaml
   undeclared placeholder "%ghostName%" in item "Greeter" rendering into plotEssential slot "cast" on branch "open" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed.
 ERROR CL0532 Codex/items.cl.yaml
@@ -33,6 +36,9 @@ ERROR CL0420 Codex/items.cl.yaml
   no template found for item "MistypedType" (type: Character-%heroName%)
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "open".
+ERROR CL0325 Codex/items.cl.yaml
+  two item definitions resolve to id "anchor" on this branch.
+  hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
 ERROR CL0532 Codex/items.cl.yaml
   undeclared placeholder "%ghostName%" in story card "Greeter" on branch "gated" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed.

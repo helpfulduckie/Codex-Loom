@@ -31,7 +31,7 @@ here.
 - **`Vault:4.3.11 AID Tools - Codex Loom`** — durable references and plans.
   - `Codex Loom.md` — hub note; current state, known problems with v3, links to the v4 spec.
   - `v4-design-spec.md` — the v4 design spec draft; decisions and open questions for the next iteration.
-  - `v4 Phase 3 plan.md`, `v4 Phase 4 plan.md` — per-phase plans. Each carries the decisions
+  - `v4 Phase 3 plan.md`, `v4 Phase 4 plan.md`, `v4 Phase 5 plan.md` — per-phase plans. Each carries the decisions
     settled during planning, and a `## Claude` queue of what the phase deliberately left
     undone. The spec is current as of 2026-08-18 and wins on any disagreement; the plans are
     the record of how a phase went and why a section says what it says.

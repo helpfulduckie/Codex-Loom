@@ -439,9 +439,26 @@ function buildCanonManifest(config) {
  *
  * Phase A: resolve + field interpolation
  * Phase B (caller): cross-item refs + pronouns + render
+ *
+ * ── Why the duplicate-id check is here and not in the registry ──────────────
+ *
+ * `buildRegistry` throws on two defs claiming one id, but it never sees the whole
+ * question: a bare `import:` def claims no id of its own — it *is* the item it names
+ * (§17.4) — so it is filtered out before the registry's check runs. Two of them naming
+ * one canon item, or a bare import alongside an explicit def of the same id, therefore
+ * pass load and meet for the first time here, as two resolved items with one id. What
+ * reaches AID is two entries in one Plot Essentials slot and two story cards sharing a
+ * name and a trigger list, from a compile that reported nothing.
+ *
+ * **Per branch, because the answer is per branch.** `resolveItem` returns null for a def
+ * the branch spec excludes, so two defs sharing an id collide only on the branches where
+ * both survive dispatch — dispatching one of a pair away is the documented way to write
+ * mutually exclusive versions of an item. Asking once over the def list would report
+ * that legitimate pattern as an error.
  */
 function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagnostics = new Diagnostics()) {
   const resolvedItems = [];
+  const claimedBy = new Map(); // lowercased resolved id → the source file that claimed it
 
   for (const itemDef of allItemDefs) {
     let item;
@@ -458,6 +475,31 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagno
     }
 
     if (!item) continue; // excluded by branch spec
+
+    const claimKey = String(item.id || '').toLowerCase();
+    if (claimKey) {
+      if (claimedBy.has(claimKey)) {
+        // The other def's *basename* only, and only when it differs. `loc.file` already
+        // carries this def's position, and an absolute path in a message body escapes
+        // every normalization a report or a snapshot applies to `file`.
+        const rival = claimedBy.get(claimKey);
+        const here = itemDef._source ? path.basename(itemDef._source) : null;
+        const elsewhere = rival && rival !== here ? ` (the first is in ${rival})` : '';
+        diagnostics.error(
+          DIAG_CODES.DUPLICATE_RESOLVED_ID,
+          `two item definitions resolve to id "${claimKey}" on this branch${elsewhere}.`,
+          { file: itemDef._source },
+          {
+            hint: 'A def carrying `import:` with no `id:` of its own claims the id of the item '
+              + 'it imports, so two of them — or one alongside an explicit def of that id — emit '
+              + 'the same item twice. Give one of them its own `id:` to make it a copy (§17.4), '
+              + 'or dispatch them to different branches.',
+          },
+        );
+      } else {
+        claimedBy.set(claimKey, itemDef._source ? path.basename(itemDef._source) : null);
+      }
+    }
 
     applyFieldInterpolation(item);
     applyVariableInterpolation(item, variables);

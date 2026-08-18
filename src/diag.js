@@ -47,6 +47,7 @@ const CODES = Object.freeze({
   // Items and render (§3.2, §7). These live here rather than in `compile.js` because
   // `emit/` raises them too and cannot import from `compile.js` without a cycle.
   ITEM_RESOLUTION_FAILED: 'CL0324',
+  DUPLICATE_RESOLVED_ID: 'CL0325',
   TEMPLATE_NOT_FOUND: 'CL0420',
   RENDER_FAILED: 'CL0421',
 

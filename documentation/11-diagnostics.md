@@ -119,6 +119,7 @@ Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein 
 | `CL0322` | WARN | An item emitting a story card has neither `aid.type` nor `render.template`. |
 | `CL0323` | ERROR | An item declares both `notes:` and `description:`. |
 | `CL0324` | ERROR | An item could not be resolved — most often a failed `import:`. |
+| `CL0325` | ERROR | Two item definitions resolve to the same id on one branch. |
 | `CL0340` | ERROR | A reference is defined in more than one canon set and is not qualified. |
 | `CL0341` | ERROR | A reference names a canon set not declared in `structure.input.canon`. |
 | `CL0342` | ERROR | A reference names an id that no canon set defines. |
@@ -139,6 +140,14 @@ card count, tidy summary table, every branch present. What is missing is whateve
 import was carrying — which, when the import also drove a branch's variant dispatch, can
 be the entire difference between one leaf and the next. The output is written, then the
 run exits non-zero.
+
+`CL0325` catches the duplicate that the registry structurally cannot see. A def carrying
+`import:` with no `id:` of its own claims no registry id — it *is* the item it names — so
+two of them, or one alongside an explicit def of that id, never meet in the registry and
+its duplicate-id check never runs. What ships is two entries in one Plot Essentials slot
+and two story cards sharing a name and a trigger list, from a compile that reported
+nothing. The check runs per branch, because branch dispatch legitimately sends one of a
+colliding pair away; a def dispatched off this branch is not a duplicate on it.
 
 ### CL04xx — render
 
