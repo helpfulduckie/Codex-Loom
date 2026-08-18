@@ -101,6 +101,34 @@ function wireNotesTemplate(configPath, options = {}) {
 }
 
 /**
+ * Phase 4's migration step, which converts nothing — and says so out loud (§15).
+ *
+ * There is no v3 Codex Loom syntax for player placeholders. `placeholders:` is a new
+ * `compile.cl.yaml` key with no v3 spelling to rename from, and no v3 project holds the
+ * data in some other form: measured across `Git\Scenarios`, all eighteen projects with a
+ * `compile.yaml` have no `Placeholders.yaml` and no `%key%` anywhere in their sources.
+ *
+ * The two `Placeholders.yaml` files that do exist in that repo belong to hand-authored
+ * Velvet Lattice trees — Traveling Terraces and MonsterEvolution — which have no `Loom/`
+ * directory and no config, so the migrator never sees them. Adopting one into Codex Loom
+ * means reading a VL tree and producing a project from it, which is a different tool from
+ * the v3-to-v4 migrator and is not this function's job.
+ *
+ * **This exists because a no-op that is merely true is indistinguishable from one that was
+ * forgotten.** §15's rule — a phase that changes syntax and does not name its migration
+ * step has not finished planning — was written after Phase 3 recorded "migrate/v3.js
+ * untouched, per plan" and nothing carried the obligation forward, so the migrator silently
+ * lacked the one phase that changed structure for months. A stage that returns a note is
+ * checkable; an absence is not.
+ */
+function migratePlaceholders() {
+  return {
+    changed: false,
+    notes: [],
+  };
+}
+
+/**
  * Migrate a v3 project in place. Returns every note the run produced.
  *
  * Notes are the deliverable as much as the edits are: slot names are guesses, a dropped
@@ -137,7 +165,11 @@ function migrateProjectFully(configPath, options = {}) {
   notes.push(...pe.notes);
   touched.push(...pe.touched);
 
+  // Phase 4. Deliberately last and deliberately empty — see migratePlaceholders.
+  const placeholders = migratePlaceholders();
+  notes.push(...placeholders.notes);
+
   return { notes, touched, changes: config.changes };
 }
 
-module.exports = { migrateProjectFully, wireNotesTemplate };
+module.exports = { migrateProjectFully, wireNotesTemplate, migratePlaceholders };

@@ -27,9 +27,10 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const YAML = require('yaml');
 
 const { compile } = require('../../src/compile');
-const { migrateProjectFully } = require('../../src/migrate');
+const { migrateProjectFully, migratePlaceholders } = require('../../src/migrate');
 const { PROJECTS, OUTPUT_SUBDIR, BASELINE_SUBDIR } = require('../../goldenFixtures/projects');
 
 const GOLDEN_DIR = path.resolve(__dirname, '..', '..', 'goldenFixtures');
@@ -104,6 +105,57 @@ describe('migrating a real v3 project reproduces the hand conversion\'s output',
       });
     });
   }
+
+  describe('Phase 4 — a migration step that converts nothing, proven rather than assumed', () => {
+    // §15: a phase that changes syntax and does not name its migration step has not
+    // finished planning. Phase 4 changes syntax and genuinely has nothing to convert —
+    // there is no v3 spelling of `placeholders:` and no v3 project holds the data in
+    // another form — so the obligation is discharged by asserting the silence.
+    //
+    // Phase 3 is why this is not left implicit. That phase recorded "migrate/v3.js
+    // untouched, per plan", nothing carried the obligation forward, and the migrator
+    // silently lacked the one phase that changed structure for months. A no-op that is
+    // merely true is indistinguishable from one that was forgotten.
+
+    test('the stage exists and reports no change', () => {
+      expect(migratePlaceholders()).toEqual({ changed: false, notes: [] });
+    });
+
+    test('no migrated config acquires a placeholders: key', () => {
+      // Read as `compile.yaml`, not `compile.cl.yaml`: the migrator edits in place and does
+      // not rename, though §14.2 lists the rename as a high-confidence transformation. That
+      // gap is real and is recorded against the plan rather than fixed here.
+      for (const project of PROJECTS) {
+        const configPath = path.join(tmpDir, project.dir, LOOM_SUBDIR, 'compile.yaml');
+        const config = YAML.parse(fs.readFileSync(configPath, 'utf8'));
+        expect([project.name, config.placeholders]).toEqual([project.name, undefined]);
+      }
+    });
+
+    test('no migrated source grows a %key% anywhere', () => {
+      // The inverse of the pairing, which a stale no-op would also pass: assert the
+      // migrator does not *introduce* the new syntax, not merely that it left the config
+      // alone. These three projects use no placeholders at all, so any %key% in a migrated
+      // tree came from the migrator.
+      const offenders = [];
+      for (const project of PROJECTS) {
+        const loomDir = path.join(tmpDir, project.dir, LOOM_SUBDIR);
+        const walk = (dir) => {
+          if (!fs.existsSync(dir)) return;
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) { walk(full); continue; }
+            if (!/\.(ya?ml|md)$/i.test(entry.name)) continue;
+            if (/%\w+%/.test(fs.readFileSync(full, 'utf8'))) {
+              offenders.push(path.relative(tmpDir, full));
+            }
+          }
+        };
+        walk(loomDir);
+      }
+      expect(offenders).toEqual([]);
+    });
+  });
 
   test('the migration reports what it guessed, so nothing lands unreviewed', () => {
     // Slot names have no source in v3 — blocks are anonymous — so every one is a guess, and
