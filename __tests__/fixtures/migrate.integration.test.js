@@ -122,9 +122,11 @@ describe('migrating a real v3 project reproduces the hand conversion\'s output',
     });
 
     test('no migrated config acquires a placeholders: key', () => {
-      // Read as `compile.yaml`, not `compile.cl.yaml`: the migrator edits in place and does
-      // not rename, though §14.2 lists the rename as a high-confidence transformation. That
-      // gap is real and is recorded against the plan rather than fixed here.
+      // Read as `compile.yaml`, not `compile.cl.yaml`: `migrateAndCompile` passes no
+      // options, and §4.6 makes the rename opt-in — plain `.yaml` is not deprecated and
+      // `--migrate` renames only when asked. This line is that default's proof, since a
+      // rename slipping into the default path would fail here rather than anywhere the
+      // rename is the subject.
       for (const project of PROJECTS) {
         const configPath = path.join(tmpDir, project.dir, LOOM_SUBDIR, 'compile.yaml');
         const config = YAML.parse(fs.readFileSync(configPath, 'utf8'));

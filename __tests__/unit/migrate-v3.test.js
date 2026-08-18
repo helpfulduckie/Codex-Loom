@@ -9,6 +9,7 @@ const {
   rewriteAtTokens, migrateItemDocument, migrateItemFiles, stripTemplateHeader,
   encodeTriggerPadding,
 } = require('../../src/migrate/v3');
+const { renameConfigToCl, migrateProjectFully } = require('../../src/migrate');
 
 let tmpDir;
 beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-mig-')); });
@@ -350,5 +351,76 @@ describe('migrateItemDocument', () => {
   test('comments survive', () => {
     const { text } = migrate('# keep me\n- id: A\n  aid:\n    known: true\n');
     expect(text).toContain('# keep me');
+  });
+});
+
+/**
+ * §14.2's rename row, which the migrator half-implemented for four phases.
+ *
+ * The row reads "Add `version: 4`; rename to `.cl.yaml`" at high confidence. `version: 4`
+ * landed; the rename never did, and nothing failed — the loader accepts `compile.yaml`, so
+ * a migrated project kept the v3 name and the discrepancy was invisible. §4.6 is why it is
+ * an option rather than a default: plain `.yaml` is not deprecated and `--migrate` renames
+ * only when asked.
+ */
+describe('renaming the entry point to compile.cl.yaml (§4.6)', () => {
+  test('off by default — a migrated project keeps compile.yaml', () => {
+    // Not dryRun: the later stages read the project back through the compiler's loader,
+    // which rejects a config the earlier stages were told not to write.
+    const configPath = writeConfig(V3);
+    migrateProjectFully(configPath);
+    expect(fs.existsSync(configPath)).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'compile.cl.yaml'))).toBe(false);
+  });
+
+  test('on request, the file moves and the new path comes back', () => {
+    const configPath = writeConfig(V3);
+    const result = renameConfigToCl(configPath);
+
+    expect(result.changed).toBe(true);
+    expect(result.configPath).toBe(path.join(tmpDir, 'compile.cl.yaml'));
+    expect(fs.existsSync(configPath)).toBe(false);
+    expect(fs.readFileSync(result.configPath, 'utf8')).toContain('A comment that must survive');
+  });
+
+  test('dryRun reports the rename it would make without making it', () => {
+    const configPath = writeConfig(V3);
+    const result = renameConfigToCl(configPath, { dryRun: true });
+
+    expect(result.notes).toEqual([expect.stringMatching(/renamed compile\.yaml/)]);
+    expect(fs.existsSync(configPath)).toBe(true);
+  });
+
+  test('an existing compile.cl.yaml is never overwritten', () => {
+    const configPath = writeConfig(V3);
+    const target = path.join(tmpDir, 'compile.cl.yaml');
+    fs.writeFileSync(target, 'version: 4\n', 'utf8');
+
+    const result = renameConfigToCl(configPath);
+
+    expect(result.changed).toBe(false);
+    expect(result.notes).toEqual([expect.stringMatching(/already exists/)]);
+    expect(fs.readFileSync(target, 'utf8')).toBe('version: 4\n');
+    expect(fs.existsSync(configPath)).toBe(true);
+  });
+
+  test('a project already on compile.cl.yaml is left alone, silently', () => {
+    const configPath = path.join(tmpDir, 'compile.cl.yaml');
+    fs.writeFileSync(configPath, V3, 'utf8');
+
+    expect(renameConfigToCl(configPath)).toEqual({
+      notes: [], changed: false, configPath,
+    });
+  });
+
+  test('renameToCl runs after every stage that reads the project back', () => {
+    const configPath = writeConfig(V3);
+    const result = migrateProjectFully(configPath, { renameToCl: true });
+
+    expect(result.configPath).toBe(path.join(tmpDir, 'compile.cl.yaml'));
+    expect(result.notes).toContainEqual(expect.stringMatching(/renamed compile\.yaml/));
+    // The config transformations still landed, which is what proves the rename came last
+    // rather than orphaning the stages that read `configPath`.
+    expect(fs.readFileSync(result.configPath, 'utf8')).toMatch(/^version: 4$/m);
   });
 });

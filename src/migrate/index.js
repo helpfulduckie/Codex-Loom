@@ -129,6 +129,48 @@ function migratePlaceholders() {
 }
 
 /**
+ * Rename the entry point to `compile.cl.yaml` (§4.6), when asked and only when asked.
+ *
+ * §4.6 settles the default: plain `.yaml` is not deprecated, every loader accepts both
+ * suffixes, and `--migrate` renames only on request. §14.2's table listed the rename beside
+ * `version: 4` as though it were unconditional, which is the half of the row the migrator
+ * never implemented — so the table claimed a transformation that did not exist while the
+ * spec elsewhere said it should not happen by default. This closes it as an option rather
+ * than as a default, which is what §4.6 asks for.
+ *
+ * **The entry point only, not every file Codex Loom authors.** §4.6's naming convention is
+ * uniform across items, components and lint packs, but a migrator that renamed those would
+ * have to rewrite every `include:` and every component path that names them, and an
+ * un-rewritten reference fails at load rather than degrading. The entry point has no such
+ * dependents: it is located by directory search, and `structure.input` paths resolve
+ * relative to its directory regardless of what it is called. Renaming the rest is a
+ * reference-rewriting pass, and belongs with whatever builds the `--migrate` CLI surface.
+ *
+ * Runs last. Every earlier stage reads the project back through the compiler's own loader
+ * using `configPath`, so moving the file before they run would invalidate the handle they
+ * were given.
+ */
+function renameConfigToCl(configPath, options = {}) {
+  const notes = [];
+  if (path.basename(configPath) !== 'compile.yaml') {
+    return { notes, changed: false, configPath };
+  }
+
+  const target = path.join(path.dirname(configPath), 'compile.cl.yaml');
+  if (fs.existsSync(target)) {
+    notes.push(
+      'compile.cl.yaml already exists beside compile.yaml, so the rename was skipped. Two '
+      + 'configs in one directory is a load-time ERROR (§4.6) — delete whichever is stale.',
+    );
+    return { notes, changed: false, configPath };
+  }
+
+  if (!options.dryRun) fs.renameSync(configPath, target);
+  notes.push('renamed compile.yaml to compile.cl.yaml (§4.6).');
+  return { notes, changed: true, configPath: target };
+}
+
+/**
  * Migrate a v3 project in place. Returns every note the run produced.
  *
  * Notes are the deliverable as much as the edits are: slot names are guesses, a dropped
@@ -169,7 +211,18 @@ function migrateProjectFully(configPath, options = {}) {
   const placeholders = migratePlaceholders();
   notes.push(...placeholders.notes);
 
-  return { notes, touched, changes: config.changes };
+  // §4.6, opt-in. After every stage that reads the project back through configPath.
+  let finalConfigPath = configPath;
+  if (options.renameToCl) {
+    const renamed = renameConfigToCl(configPath, options);
+    notes.push(...renamed.notes);
+    if (renamed.changed) touched.push(renamed.configPath);
+    finalConfigPath = renamed.configPath;
+  }
+
+  return { notes, touched, changes: config.changes, configPath: finalConfigPath };
 }
 
-module.exports = { migrateProjectFully, wireNotesTemplate, migratePlaceholders };
+module.exports = {
+  migrateProjectFully, wireNotesTemplate, migratePlaceholders, renameConfigToCl,
+};
