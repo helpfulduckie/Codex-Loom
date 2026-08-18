@@ -19,7 +19,7 @@ const path = require('path');
 const fs = require('fs');
 const YAML = require('yaml');
 const {
-  expandQuestions, localKeysOf, writeNodePlaceholders, FILENAME,
+  expandQuestions, localKeysOf, writeNodePlaceholders, checkUndeclaredPlaceholders, FILENAME,
 } = require('../../src/emit/placeholders');
 const { CODES } = require('../../src/diag');
 
@@ -171,5 +171,78 @@ describe('writeNodePlaceholders', () => {
     const question = 'Name: which one? (e.g. "Aness", or leave blank)';
     writeNodePlaceholders(dir, { placeholders: { q: question } }, { q: question }, {});
     expect(YAML.parse(fs.readFileSync(path.join(dir, FILENAME), 'utf8')).q).toBe(question);
+  });
+});
+
+describe('checkUndeclaredPlaceholders', () => {
+  const bus = () => {
+    const found = [];
+    return {
+      found,
+      diagnostics: {
+        error: (code, message, loc, opts) => found.push({ code, message, hint: opts && opts.hint }),
+      },
+    };
+  };
+
+  test('a declared key is silent', () => {
+    const { found, diagnostics } = bus();
+    checkUndeclaredPlaceholders('Hello %heroName%.', { heroName: 'Name?' }, {
+      diagnostics, where: 'a card',
+    });
+    expect(found).toHaveLength(0);
+  });
+
+  test('an undeclared key errors and names the site and branch', () => {
+    const { found, diagnostics } = bus();
+    checkUndeclaredPlaceholders('Hello %ghost%.', { heroName: 'Name?' }, {
+      diagnostics, where: 'story card "Greeter"', branch: 'open',
+    });
+    expect(found).toHaveLength(1);
+    expect(found[0].code).toBe(CODES.PLACEHOLDER_UNDECLARED);
+    expect(found[0].message).toContain('story card "Greeter"');
+    expect(found[0].message).toContain('open');
+    // The declared list is the actionable half — an undeclared key is usually a typo of a
+    // declared one, and the two are indistinguishable until printed together.
+    expect(found[0].hint).toContain('heroName');
+  });
+
+  test('one key repeated in one text reports once', () => {
+    const { found, diagnostics } = bus();
+    checkUndeclaredPlaceholders('%x% and %x% and %x%', {}, { diagnostics, where: 'a card' });
+    expect(found).toHaveLength(1);
+  });
+
+  test('prose percentages are not placeholders', () => {
+    // VL's own pattern requires word characters between the delimiters, so "up 5% and down
+    // 3%" has spaces where a key would be. Matching it would fire on ordinary prose.
+    const { found, diagnostics } = bus();
+    checkUndeclaredPlaceholders('Morale is up 5% and supplies down 3%.', {}, {
+      diagnostics, where: 'a card',
+    });
+    expect(found).toHaveLength(0);
+  });
+
+  test('says so when nothing is declared, rather than printing an empty list', () => {
+    const { found, diagnostics } = bus();
+    checkUndeclaredPlaceholders('%x%', {}, { diagnostics, where: 'a card' });
+    expect(found[0].hint).toMatch(/No placeholders are declared/);
+  });
+
+  test('skip suppresses names already reported against a finer location', () => {
+    const { found, diagnostics } = bus();
+    checkUndeclaredPlaceholders('%a% and %b%', {}, {
+      diagnostics, where: 'component "Plot Essentials"', skip: new Set(['a']),
+    });
+    expect(found).toHaveLength(1);
+    expect(found[0].message).toContain('%b%');
+  });
+
+  test('returns the names it reported, so a caller can build a skip set', () => {
+    const { diagnostics } = bus();
+    const reported = checkUndeclaredPlaceholders('%a% %b% %a%', {}, {
+      diagnostics, where: 'a card',
+    });
+    expect(reported).toEqual(['a', 'b']);
   });
 });

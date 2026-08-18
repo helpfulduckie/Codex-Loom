@@ -1,0 +1,181 @@
+'use strict';
+
+/**
+ * §12.3 check 1 across every destination — Phase 4 Step 3.
+ *
+ * These are integration tests because the question is *which write points are covered*, and
+ * no unit can answer it. `checkUndeclaredPlaceholders` is unit-tested on its own; what it
+ * cannot tell you is whether the branch title, the Opening, the Description and a
+ * placeholder's own question text each reach it. Every one of those is written by a
+ * different function, and three of them run outside the leaf loop where the merged table
+ * lives — which is exactly how a destination gets forgotten.
+ *
+ * The pathological fixture covers the item and component paths and pins them in a snapshot.
+ * These cover the four it does not, and assert on codes rather than on rendered text so
+ * rewording a message does not fail them.
+ */
+
+const os = require('os');
+const path = require('path');
+const fs = require('fs');
+const { compile } = require('../../src/compile');
+const { Diagnostics } = require('../../src/diag');
+const { CODES } = require('../../src/diag');
+
+const dirs = [];
+afterAll(() => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }); });
+
+const ITEM = [
+  '- id: Anchor',
+  '  name: Anchor',
+  '  aid: {type: Character, triggers: [Anchor]}',
+  '  body: {Tagline: Nothing interesting.}',
+  '',
+].join('\n');
+
+/** Compile a one-off project and return every diagnostic it raised. */
+function run(files) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-ph-int-'));
+  dirs.push(dir);
+  for (const [rel, content] of Object.entries(files)) {
+    const full = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, content, 'utf8');
+  }
+  fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'templates', 'Character.template'), '{$body.Tagline}\n', 'utf8');
+  if (!files['Codex/items.cl.yaml']) {
+    fs.mkdirSync(path.join(dir, 'Codex'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'Codex', 'items.cl.yaml'), ITEM, 'utf8');
+  }
+
+  const diagnostics = new Diagnostics();
+  const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
+  try {
+    compile(path.join(dir, 'compile.cl.yaml'), { diagnostics });
+  } catch (err) { /* ERRORs are the subject; the throw carries only a count */ } finally {
+    spies.forEach((s) => s.mockRestore());
+  }
+  return diagnostics.all;
+}
+
+const undeclared = (diags) => diags
+  .filter((d) => d.code === CODES.PLACEHOLDER_UNDECLARED)
+  .map((d) => d.message);
+
+const HEAD = [
+  'version: 4',
+  'title: Probe',
+  'structure:',
+  '  input:',
+  "    items: ['./Codex']",
+  "    templates: ['./templates']",
+  "  output: './out'",
+].join('\n');
+
+describe('undeclared placeholders are caught in every destination', () => {
+  test('a branch title', () => {
+    const found = undeclared(run({
+      'compile.cl.yaml': [HEAD, 'branches:', '  north:', '    title: The %missing% Road', ''].join('\n'),
+    }));
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain('%missing%');
+    expect(found[0]).toContain('north');
+  });
+
+  test('the project title', () => {
+    const found = undeclared(run({
+      'compile.cl.yaml': [
+        'version: 4', 'title: The %missing% Chronicle', 'structure:', '  input:',
+        "    items: ['./Codex']", "    templates: ['./templates']", "  output: './out'", '',
+      ].join('\n'),
+    }));
+    expect(found.some((m) => m.includes('the project title'))).toBe(true);
+  });
+
+  test('an Opening', () => {
+    const found = undeclared(run({
+      'compile.cl.yaml': [
+        HEAD, 'components:', '  opening: You wake in %missing%, alone.', '',
+      ].join('\n'),
+    }));
+    expect(found.some((m) => m.includes('Opening'))).toBe(true);
+  });
+
+  test('branch framing on a non-leaf', () => {
+    const found = undeclared(run({
+      'compile.cl.yaml': [
+        HEAD, 'branches:', '  north:', '    components:',
+        '      branchFraming: Where in %missing% do you begin?',
+        '    branches:', '      keep:', '        title: The Keep', '',
+      ].join('\n'),
+    }));
+    expect(found.some((m) => m.includes('branch framing'))).toBe(true);
+  });
+
+  test('the Description', () => {
+    const found = undeclared(run({
+      'compile.cl.yaml': [HEAD, 'components:', "  description: './desc.md'", ''].join('\n'),
+      'desc.md': 'A tale of %missing% and its people.\n',
+    }));
+    expect(found.some((m) => m.includes('Description'))).toBe(true);
+  });
+
+  test("a placeholder's own question text", () => {
+    // After compile-time expansion every declared key has had its chance to substitute, so
+    // a surviving `%x%` in a question is unambiguously undeclared.
+    const found = undeclared(run({
+      'compile.cl.yaml': [
+        HEAD, 'placeholders:', '  liGender: What is %liName% gender?', '',
+      ].join('\n'),
+    }));
+    expect(found.some((m) => m.includes('question text') && m.includes('%liName%'))).toBe(true);
+  });
+});
+
+describe('declared placeholders are silent everywhere', () => {
+  test('every destination at once, with the key declared', () => {
+    const diags = run({
+      'compile.cl.yaml': [
+        'version: 4',
+        'title: The %saga% Chronicle',
+        'structure:', '  input:', "    items: ['./Codex']", "    templates: ['./templates']",
+        "  output: './out'",
+        'placeholders:', '  saga: Name your saga?',
+        'components:', '  opening: You wake in the %saga% lands.', "  description: './desc.md'",
+        'branches:', '  north:', '    title: The %saga% Road', '',
+      ].join('\n'),
+      'desc.md': 'A tale of the %saga%.\n',
+    });
+    expect(undeclared(diags)).toEqual([]);
+  });
+
+  test('a key declared on a branch covers that branch and not its sibling', () => {
+    const found = undeclared(run({
+      'compile.cl.yaml': [
+        HEAD,
+        'branches:',
+        '  north:', '    title: The %hold% Road', '    placeholders:', '      hold: Which hold?',
+        '  south:', '    title: The %hold% Coast', '',
+      ].join('\n'),
+    }));
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain('south');
+  });
+
+  test('a key unbound with ~ becomes undeclared on that branch', () => {
+    // This is what the unbind actually buys. It cannot be expressed in the emitted output —
+    // Velvet Lattice has no way to remove an inherited key — so its whole effect is here.
+    const found = undeclared(run({
+      'compile.cl.yaml': [
+        HEAD,
+        'placeholders:', '  hold: Which hold?',
+        'branches:',
+        '  north:', '    title: The %hold% Road',
+        '  south:', '    title: The %hold% Coast', '    placeholders:', '      hold: ~', '',
+      ].join('\n'),
+    }));
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain('south');
+  });
+});

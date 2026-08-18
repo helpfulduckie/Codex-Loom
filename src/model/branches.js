@@ -231,23 +231,7 @@ function walkBranchChain(branches, branchPath, options = {}) {
       // them in §6.4 and still use a plain assign above, so a `~` there sets null instead
       // of deleting; retrofitting them is a behavior change for existing projects and
       // belongs to whichever phase owns those keys, not to this one.
-      if (node.placeholders && typeof node.placeholders === 'object') {
-        for (const [key, question] of Object.entries(node.placeholders)) {
-          if (question === null || question === undefined) {
-            if (!(key in result.placeholders) && onWarn) {
-              onWarn(
-                CODES.PLACEHOLDER_UNBIND_UNKNOWN,
-                `placeholder "${key}" is unbound with ~ but was never inherited here — `
-                + 'nothing was removed. A bare "' + key + ':" with no question also parses '
-                + 'as ~, which is usually the cause.',
-              );
-            }
-            delete result.placeholders[key];
-          } else {
-            result.placeholders[key] = question;
-          }
-        }
-      }
+      result.placeholders = mergePlaceholders(result.placeholders, node, onWarn);
       // `scripts:` is top-level rather than a component (§6.3) but merges the same way,
       // so a branch can swap one hook bundle and inherit the rest.
       if (node.scripts !== undefined) result.scripts = node.scripts;
@@ -257,6 +241,46 @@ function walkBranchChain(branches, branchPath, options = {}) {
   }
 
   return result;
+}
+
+/**
+ * Fold one node's `placeholders:` into an inherited table (§6.4, §12.2).
+ *
+ * Returns a new table; the input is not mutated. Mutating in place would be enough for the
+ * chain walk, which accumulates along one path, but the *tree* walk hands the same parent
+ * table to every sibling — so a shared object would let one branch's declarations leak
+ * into the next.
+ *
+ * The merge is key-wise and matches Velvet Lattice's `{**parent, **local}` exactly,
+ * including that an overriding key keeps the parent's position rather than moving to the
+ * end. `~` deletes, and unbinding something never inherited warns: a bare `heroName:` with
+ * no question parses as null, so the most natural-looking way to declare a placeholder is
+ * also the way to remove one.
+ *
+ * One rule, three callers — the chain walk, the emitter's tree walk, and the label and
+ * opening walks that need the same table to check the text they write.
+ */
+function mergePlaceholders(table, node, onWarn = null) {
+  const merged = Object.assign({}, table || {});
+  const local = node && node.placeholders;
+  if (!local || typeof local !== 'object') return merged;
+
+  for (const [key, question] of Object.entries(local)) {
+    if (question === null || question === undefined) {
+      if (!(key in merged) && onWarn) {
+        onWarn(
+          CODES.PLACEHOLDER_UNBIND_UNKNOWN,
+          `placeholder "${key}" is unbound with ~ but was never inherited here — `
+          + 'nothing was removed. A bare "' + key + ':" with no question also parses '
+          + 'as ~, which is usually the cause.',
+        );
+      }
+      delete merged[key];
+    } else {
+      merged[key] = question;
+    }
+  }
+  return merged;
 }
 
 /**
@@ -287,5 +311,5 @@ function walkBranchTree(branches, visit, state = null, path = []) {
 
 module.exports = {
   resolveBranchSpec, enumerateLeaves, getBranchConfig,
-  walkBranchChain, walkBranchTree,
+  walkBranchChain, walkBranchTree, mergePlaceholders,
 };

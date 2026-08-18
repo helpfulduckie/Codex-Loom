@@ -240,6 +240,7 @@ that can still see the difference.
 | `CL0521` | ERROR | A canon name collides with a declared variable. |
 | `CL0530` | WARN | A placeholder is unbound with `~` but was never inherited at that node. |
 | `CL0531` | ERROR | Placeholder questions form a reference cycle; every key in the loop is named. |
+| `CL0532` | ERROR | A `%key%` reaching compiled output is not declared on that branch. |
 
 `CL0530` takes its own decade because `051x` is variables and `052x` is scoping; placeholders
 are a third thing in the band and will want neighbors as §12's remaining checks land.
@@ -256,6 +257,19 @@ neutrally.
 the file so that Velvet Lattice's single substitution pass cannot get the order wrong. A
 cycle has no expansion, so it is named in full — the author has to break the loop somewhere
 and which key the traversal entered on says nothing about where.
+
+`CL0532` is the one placeholder check that is a *fact* rather than an opinion, and so is a
+compiler diagnostic rather than lint (§12.5). Velvet Lattice substitutes only the keys its
+merged table holds; anything else survives its single pass untouched and is uploaded to AID
+as the literal text `%key%`, where the model reads it as noise mid-sentence. Nothing
+downstream catches it — VL's own warning scan is about *context*, and fires on keys that are
+perfectly fine.
+
+It reports once per key per site, and names the site rather than only the file: by the time
+text reaches a write point its source may be a template, a component document or
+`compile.cl.yaml`, so a path alone rarely locates the `%key%`. The declared list rides along
+as a hint, because an undeclared key is usually a typo of a real one and `%heroname%`
+against a declared `heroName` is invisible until the two are printed together.
 
 It is scoped to placeholders today. §6.4 gives `~` the same meaning for variables, roles,
 scripts and lint packs, none of which implement it yet — a `~` there sets the key to null

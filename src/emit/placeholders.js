@@ -155,6 +155,67 @@ function expandQuestions(table, variables, { onWarn, file } = {}) {
 }
 
 /**
+ * §12.3 check 1: every `%x%` reaching compiled output must be declared.
+ *
+ * Velvet Lattice substitutes only the keys its merged table holds; anything else survives
+ * its single pass untouched and is uploaded to AID as the literal text `%x%`, where it
+ * reads to the model as noise in the middle of a sentence. Nothing downstream reports it —
+ * VL's own warning scan is about *context*, not declaration, and fires on keys that are
+ * perfectly fine.
+ *
+ * Reported once per key per site. A name repeated four times in one card body is one
+ * mistake, and four copies of the message would bury the other three sites.
+ *
+ * `skip` suppresses names a caller has already reported against a *finer* location in
+ * the same output file. An occupant's body is scanned per placement, where the item and
+ * the slot are both known, and then again inside the assembled component — which is the
+ * same bytes described worse. The assembled scan still runs, because a section's own
+ * `text:` reaches the file without passing through any item, and nothing else would see
+ * it. A story card is *not* skipped: an item routed into both a card and a component
+ * ships the literal text into two different files, and each is separately wrong.
+ *
+ * `where` names the thing an author can go and edit — an item, a component, a branch
+ * label — because by the time text reaches a write point the file it came from may be a
+ * template, a component document, or `compile.cl.yaml`, and the path alone rarely locates
+ * the `%x%`.
+ */
+function checkUndeclaredPlaceholders(text, table, { diagnostics, file, where, branch, skip } = {}) {
+  if (!text || !diagnostics) return [];
+
+  const declared = table || {};
+  const seen = new Set();
+  const undeclared = [];
+  String(text).replace(PLACEHOLDER_RE, (match, name) => {
+    if (skip && skip.has(name)) return match;
+    if (Object.prototype.hasOwnProperty.call(declared, name) || seen.has(name)) return match;
+    seen.add(name);
+    undeclared.push(name);
+    return match;
+  });
+  if (undeclared.length === 0) return [];
+
+  const known = Object.keys(declared);
+  // The declared list is the actionable half: an undeclared key is usually a typo of a
+  // real one, and a `%heroname%` against a declared `heroName` is invisible until the two
+  // are printed together.
+  const hint = known.length
+    ? `Declared on this branch: ${known.join(', ')}.`
+    : 'No placeholders are declared on this branch.';
+
+  for (const name of undeclared) {
+    diagnostics.error(
+      CODES.PLACEHOLDER_UNDECLARED,
+      `undeclared placeholder "%${name}%" in ${where}${branch ? ` on branch "${branch}"` : ''}`
+      + ' — Velvet Lattice substitutes only declared keys, so this reaches the AI as the'
+      + ` literal text "%${name}%".`,
+      { file: file == null ? undefined : String(file) },
+      { hint },
+    );
+  }
+  return undeclared;
+}
+
+/**
  * The keys a node contributes: its own declarations, minus unbinds.
  *
  * `~` is filtered rather than emitted as null, because a null value in the YAML would read
@@ -173,7 +234,7 @@ function localKeysOf(node) {
  * longer does would otherwise keep an orphan file that VL still reads and still inherits
  * down the subtree, so the declaration would outlive its deletion from the source.
  */
-function writeNodePlaceholders(nodeDir, node, mergedTable, variables, { onWarn, file } = {}) {
+function writeNodePlaceholders(nodeDir, node, mergedTable, variables, { onWarn, file, diagnostics } = {}) {
   const keys = localKeysOf(node);
   const outPath = path.join(nodeDir, FILENAME);
 
@@ -196,6 +257,15 @@ function writeNodePlaceholders(nodeDir, node, mergedTable, variables, { onWarn, 
     return null;
   }
 
+  // A `%x%` surviving expansion is unambiguously undeclared: every declared key was
+  // available to substitute and did not match. Cyclic keys keep their own references, but
+  // those name declared keys and so are not reported here — the cycle ERROR covers them.
+  for (const [key, question] of Object.entries(emitted)) {
+    checkUndeclaredPlaceholders(question, mergedTable, {
+      diagnostics, file, where: `the question text for placeholder "${key}"`,
+    });
+  }
+
   fs.mkdirSync(nodeDir, { recursive: true });
   fs.writeFileSync(outPath, YAML.stringify(emitted), 'utf8');
   return outPath;
@@ -204,6 +274,7 @@ function writeNodePlaceholders(nodeDir, node, mergedTable, variables, { onWarn, 
 module.exports = {
   FILENAME,
   PLACEHOLDER_RE,
+  checkUndeclaredPlaceholders,
   expandQuestions,
   localKeysOf,
   writeNodePlaceholders,

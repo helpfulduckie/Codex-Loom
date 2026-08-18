@@ -17,6 +17,12 @@ exports[`pathological fixture placement invariants and latent placeholder conten
   item "Ghost" has neither aid.type nor render.template
 WARN CL0322 Codex/items.cl.yaml
   item "Silent" has neither aid.type nor render.template
+ERROR CL0532 Codex/items.cl.yaml
+  undeclared placeholder "%ghostName%" in item "Greeter" rendering into plotEssential slot "cast" on branch "open" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
+  hint: Declared on this branch: heroName, altName, neverUsed.
+ERROR CL0532 Codex/items.cl.yaml
+  undeclared placeholder "%ghostName%" in story card "Greeter" on branch "open" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
+  hint: Declared on this branch: heroName, altName, neverUsed.
 ERROR CL0610 Codex/items.cl.yaml
   item "Silent" resolves on branch "open" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
 ERROR CL0611 Codex/items.cl.yaml
@@ -31,6 +37,9 @@ WARN CL0322 Codex/items.cl.yaml
   item "Ghost" has neither aid.type nor render.template
 WARN CL0322 Codex/items.cl.yaml
   item "Silent" has neither aid.type nor render.template
+ERROR CL0532 Codex/items.cl.yaml
+  undeclared placeholder "%ghostName%" in story card "Greeter" on branch "gated" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
+  hint: Declared on this branch: heroName, altName, neverUsed.
 ERROR CL0610 Codex/items.cl.yaml
   item "Ghost" resolves on branch "gated" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
 ERROR CL0610 Codex/items.cl.yaml
