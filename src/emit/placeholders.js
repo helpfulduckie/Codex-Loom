@@ -243,6 +243,12 @@ function expandQuestions(table, variables, { onWarn, file } = {}) {
  * Reported once per key per site. A name repeated four times in one card body is one
  * mistake, and four copies of the message would bury the other three sites.
  *
+ * `usage` records every *declared* key this text referenced, keyed by the branch path the
+ * text was written for. §12.3's declared-but-unused check reads it. Collected here rather
+ * than by a separate scan because this function already visits every `%key%` at every write
+ * point, and a second scanner would be a second list of destinations to keep in step — the
+ * exact drift that made check 1 worth centralizing.
+ *
  * `skip` suppresses names a caller has already reported against a *finer* location in
  * the same output file. An occupant's body is scanned per placement, where the item and
  * the slot are both known, and then again inside the assembled component — which is the
@@ -256,15 +262,22 @@ function expandQuestions(table, variables, { onWarn, file } = {}) {
  * template, a component document, or `compile.cl.yaml`, and the path alone rarely locates
  * the `%x%`.
  */
-function checkUndeclaredPlaceholders(text, table, { diagnostics, file, where, branch, skip } = {}) {
+function checkUndeclaredPlaceholders(text, table, { diagnostics, file, where, branch, skip, usage, usagePath } = {}) {
   if (!text || !diagnostics) return [];
 
   const declared = table || {};
   const seen = new Set();
   const undeclared = [];
   String(text).replace(PLACEHOLDER_RE, (match, name) => {
+    // Usage is recorded before `skip`, and for declared names only. A name the caller has
+    // already reported elsewhere was still *used* here, and suppressing the second report
+    // must not also suppress the fact.
+    if (Object.prototype.hasOwnProperty.call(declared, name)) {
+      recordUsage(usage, name, usagePath);
+      return match;
+    }
     if (skip && skip.has(name)) return match;
-    if (Object.prototype.hasOwnProperty.call(declared, name) || seen.has(name)) return match;
+    if (seen.has(name)) return match;
     seen.add(name);
     undeclared.push(name);
     return match;
@@ -293,6 +306,70 @@ function checkUndeclaredPlaceholders(text, table, { diagnostics, file, where, br
 }
 
 /**
+ * Note that `name` was referenced by text written for `usagePath`.
+ *
+ * The path is the branch path as a `/`-joined string, with the empty string for text that
+ * belongs to the project rather than to any branch — the Description, the scenario title.
+ * §12.3's check is subtree-scoped, so the path is what makes "declared at the root and used
+ * on one branch of three" distinguishable from "declared on a branch and used on its
+ * sibling".
+ */
+function recordUsage(usage, name, usagePath) {
+  if (!usage) return;
+  if (!usage.has(name)) usage.set(name, new Set());
+  usage.get(name).add(usagePath || '');
+}
+
+/**
+ * §12.3 check 2: a placeholder declared and never referenced beneath its declaring node.
+ *
+ * The player is asked a question and the answer goes nowhere — which is a wasted prompt on
+ * a budget AID's own guidance puts at about ten before players start abandoning scenarios.
+ *
+ * **Subtree-scoped, and the scope is the whole check.** A root-level placeholder used on
+ * one branch of three is normal and correct, so an unscoped version would fire constantly
+ * on well-formed projects (§6.4). The signal is only in the subtree where the declaration
+ * is actually in effect: declared at the root and used nowhere at all, or declared on a
+ * branch and used nowhere beneath it.
+ *
+ * A reference inside another placeholder's question counts as use. The nesting is expanded
+ * into the emitted file (§12.2), so the inner question does reach the player — through the
+ * outer prompt rather than on its own.
+ *
+ * WARN, and an opinion rather than a fact: an author mid-draft may declare a question
+ * before writing the text that uses it, and that is not a broken build.
+ */
+function reportUnusedPlaceholders(declarations, usage, { diagnostics, file } = {}) {
+  if (!diagnostics) return [];
+  const unused = [];
+
+  for (const { path: declPath, label, keys } of declarations) {
+    for (const key of keys) {
+      const paths = usage.get(key);
+      const usedInSubtree = paths && [...paths].some((used) => (
+        declPath === '' || used === declPath || used.startsWith(`${declPath}/`)
+      ));
+      if (usedInSubtree) continue;
+
+      unused.push(key);
+      diagnostics.warn(
+        CODES.PLACEHOLDER_UNUSED,
+        `placeholder "${key}" is declared ${label} but no text beneath it references `
+        + `"%${key}%" — the player is asked the question and the answer goes nowhere.`,
+        { file: file == null ? undefined : String(file) },
+        {
+          hint: declPath === ''
+            ? 'Declared at the project root, so this counts every branch.'
+            : `Scoped to "${declPath}" and everything under it; a sibling branch using it `
+              + 'does not count, because the declaration does not reach there.',
+        },
+      );
+    }
+  }
+  return unused;
+}
+
+/**
  * The keys a node contributes: its own declarations, minus unbinds.
  *
  * `~` is filtered rather than emitted as null, because a null value in the YAML would read
@@ -311,13 +388,33 @@ function localKeysOf(node) {
  * longer does would otherwise keep an orphan file that VL still reads and still inherits
  * down the subtree, so the declaration would outlive its deletion from the source.
  */
-function writeNodePlaceholders(nodeDir, node, mergedTable, variables, { onWarn, file, diagnostics } = {}) {
+function writeNodePlaceholders(nodeDir, node, mergedTable, variables, { onWarn, file, diagnostics, usage, usagePath } = {}) {
   const keys = localKeysOf(node);
   const outPath = path.join(nodeDir, FILENAME);
 
   if (keys.length === 0) {
     if (fs.existsSync(outPath)) fs.rmSync(outPath);
     return null;
+  }
+
+  // Usage is read off the *raw* questions, before expansion, and this ordering is the whole
+  // of it: expansion replaces `%liName%` with the inner question text, so by the time the
+  // emitted value exists the reference that proves the key was used has been substituted
+  // away. Scanning the expanded form would report every nested-only placeholder as unused.
+  //
+  // Local declarations only. An inherited question referencing another key was already
+  // recorded at the node that declared it, and counting it again here would credit the use
+  // to a subtree that did not write it.
+  if (usage) {
+    const local = (node && node.placeholders) || {};
+    for (const key of keys) {
+      String(local[key] == null ? '' : local[key]).replace(PLACEHOLDER_RE, (match, name) => {
+        if (Object.prototype.hasOwnProperty.call(mergedTable, name)) {
+          recordUsage(usage, name, usagePath);
+        }
+        return match;
+      });
+    }
   }
 
   // Expanded against the *merged* table: a local question may nest a key declared at an
@@ -353,6 +450,7 @@ module.exports = {
   PLACEHOLDER_RE,
   checkUndeclaredPlaceholders,
   checkPlaceholderContext,
+  reportUnusedPlaceholders,
   findAllPlaceholders,
   findNativePlaceholders,
   expandQuestions,

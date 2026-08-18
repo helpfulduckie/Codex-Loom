@@ -261,3 +261,71 @@ describe('§12.3 check 3 — where a placeholder may not go', () => {
     expect(byCode(diags, CODES.PLACEHOLDER_IN_TITLE)).toEqual([]);
   });
 });
+
+describe('§12.3 check 2 — declared but never used', () => {
+  const unused = (diags) => diags
+    .filter((d) => d.code === CODES.PLACEHOLDER_UNUSED)
+    .map((d) => d.message);
+
+  test('a root key used on one branch of three is silent', () => {
+    const diags = run({
+      'compile.cl.yaml': [
+        HEAD,
+        'placeholders:', '  saga: Name your saga?',
+        'branches:',
+        '  north:', '    title: The %saga% Road',
+        '  south:', '    title: The Coast',
+        '  east:', '    title: The Marches', '',
+      ].join('\n'),
+    });
+    expect(unused(diags)).toEqual([]);
+  });
+
+  test('a root key used nowhere warns once', () => {
+    const diags = run({
+      'compile.cl.yaml': [HEAD, 'placeholders:', '  ghost: Never asked for?', ''].join('\n'),
+    });
+    expect(unused(diags)).toHaveLength(1);
+    expect(unused(diags)[0]).toContain('%ghost%');
+  });
+
+  test('a branch key used only on a sibling warns', () => {
+    const diags = run({
+      'compile.cl.yaml': [
+        HEAD,
+        'branches:',
+        '  north:', '    placeholders:', '      hold: Which hold?', '    title: The North',
+        '  south:', '    title: The %hold% Coast', '',
+      ].join('\n'),
+    });
+    expect(unused(diags)).toHaveLength(1);
+    expect(unused(diags)[0]).toContain('north');
+  });
+
+  test('use inside another question counts — the nesting reaches the player', () => {
+    // Step 2 expands nesting into the emitted file, so the inner question does reach the
+    // player, through the outer prompt rather than on its own.
+    const diags = run({
+      'compile.cl.yaml': [
+        HEAD,
+        'placeholders:',
+        '  liName: Their name?',
+        '  liGender: What is %liName% gender?',
+        'components:', '  opening: You travel with %liGender%.', '',
+      ].join('\n'),
+    });
+    expect(unused(diags)).toEqual([]);
+  });
+
+  test('a card body counts as use', () => {
+    const diags = run({
+      'compile.cl.yaml': [HEAD, 'placeholders:', '  hero: Your name?', ''].join('\n'),
+      'Codex/items.cl.yaml': [
+        '- id: Anchor', '  name: Anchor',
+        '  aid: {type: Character, triggers: [Anchor]}',
+        '  body: {Tagline: "They call you %hero%."}', '',
+      ].join('\n'),
+    });
+    expect(unused(diags)).toEqual([]);
+  });
+});

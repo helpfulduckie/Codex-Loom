@@ -22,7 +22,7 @@ const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES } = require('./dia
 const { renderCard } = require('./emit/vl');
 const {
   FILENAME: PLACEHOLDERS_FILENAME, writeNodePlaceholders, checkUndeclaredPlaceholders,
-  checkPlaceholderContext,
+  checkPlaceholderContext, reportUnusedPlaceholders, localKeysOf,
 } = require('./emit/placeholders');
 const { loadDescConfig, extractScriptBanner, writeDescription } = require('./description');
 const { loadOpeningConfig, compileOpening } = require('./opening');
@@ -654,7 +654,7 @@ function warnEmptySlots(descriptor, slotIndex, filled, label, diagnostics, file)
  * component content, then reconciled them through a suppression side channel. There is
  * nothing to reconcile when one pass over one resolved item decides both.
  */
-function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, variables = {}, verbose = false, renderedById = null, projectNotesTemplate = null, diagnostics = new Diagnostics(), slotIndex = new Map(), branchLabel = '(root)', placeholders = {}) {
+function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, variables = {}, verbose = false, renderedById = null, projectNotesTemplate = null, diagnostics = new Diagnostics(), slotIndex = new Map(), branchLabel = '(root)', placeholders = {}, usage = null, usagePath = '') {
   // Build early so render functions can resolve cross-item refs during field expansion.
   const resolvedById = new Map();
   for (const item of resolvedItems) {
@@ -731,6 +731,8 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
         file: item._source,
         where: `item "${itemId}" rendering into ${target.component} slot "${target.slot}"`,
         branch: branchLabel,
+        usage,
+        usagePath,
       });
       if (reported.length) {
         if (!placeholderNoise.has(target.component)) placeholderNoise.set(target.component, new Set());
@@ -827,6 +829,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     // story-card field AID accepts a placeholder in.
     checkUndeclaredPlaceholders(rendered, placeholders, {
       diagnostics, file: item._source, where: `story card "${itemId}"`, branch: branchLabel,
+      usage, usagePath,
     });
     if (!grouped.has(type)) grouped.set(type, []);
     // Carry a sort key (the item's real id, lowercased) so output order is
@@ -902,10 +905,10 @@ function resolveYamlOpeningPath(spec, base, variables) {
  *
  * Node-level writes are why this uses the tree visitor rather than the leaf loop.
  */
-function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables, currentPath = [], verbose = false, rootPlaceholders = null, diagnostics = null) {
+function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables, currentPath = [], verbose = false, rootPlaceholders = null, diagnostics = null, usage = null) {
   const writtenLeaves = new Set();
 
-  const emitOpening = (spec, outputDir, leafPath, vars, table, where) => {
+  const emitOpening = (spec, outputDir, leafPath, vars, table, where, usagePath) => {
     // {@Key} expands in path mode here — the result is a path, not file contents.
     const expanded = spec;
     const yamlPath = resolveYamlOpeningPath(expanded, configBase, vars);
@@ -915,6 +918,7 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
     if (!content) return;
     checkUndeclaredPlaceholders(content, table, {
       diagnostics, file: typeof spec === 'string' ? spec : undefined, where,
+      usage, usagePath,
     });
     const outPath = writeComponentFile(outputDir, 'Opening.md', content);
     if (verbose) console.log(`    OK: Opening → ${outPath}`);
@@ -925,7 +929,7 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
   const rootTable = Object.assign({}, rootPlaceholders || {});
   if (!branches || typeof branches !== 'object') {
     if (inheritedOpening != null) {
-      emitOpening(inheritedOpening, outputBase, currentPath, variables, rootTable, 'the Opening');
+      emitOpening(inheritedOpening, outputBase, currentPath, variables, rootTable, 'the Opening', '');
     }
     return writtenLeaves;
   }
@@ -955,6 +959,7 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
         const framingText = resolveOpeningContent(framing, configBase, branchVars);
         checkUndeclaredPlaceholders(framingText, table, {
           diagnostics, where: `the branch framing on "${name}"`,
+          usage, usagePath: nodePath.join('/'),
         });
         const outPath = writeComponentFile(nodeOutput, 'Opening.md', framingText);
         if (verbose) console.log(`    OK: OpeningChoice → ${outPath}`);
@@ -964,7 +969,7 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
     if (isLeaf && effectiveOpening != null) {
       emitOpening(
         effectiveOpening, nodeOutput, [...currentPath, ...nodePath], branchVars, table,
-        `the Opening on branch "${name}"`,
+        `the Opening on branch "${name}"`, nodePath.join('/'),
       );
     }
 
@@ -982,8 +987,8 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
  * Node-level, not leaf-level, which is why it uses the tree visitor rather than the
  * leaf loop: a branch label belongs to the node the player is choosing.
  */
-function writeLabelsRecursive(branches, outputBase, variables, verbose = false, rootPlaceholders = null, diagnostics = null, configPath = null) {
-  walkBranchTree(branches, ({ name, node, state }) => {
+function writeLabelsRecursive(branches, outputBase, variables, verbose = false, rootPlaceholders = null, diagnostics = null, configPath = null, usage = null) {
+  walkBranchTree(branches, ({ name, node, path: path_, state }) => {
     const nodeOutput = path.join(state.outputBase, 'Branches', name);
     const branchVars = (node && node.variables)
       ? Object.assign({}, state.variables, node.variables)
@@ -1000,6 +1005,7 @@ function writeLabelsRecursive(branches, outputBase, variables, verbose = false, 
     // half-working case is Step 4's WARN.
     checkUndeclaredPlaceholders(labelText, table, {
       diagnostics, file: configPath, where: `the title of branch "${name}"`,
+      usage, usagePath: path_.join('/'),
     });
     checkPlaceholderContext(labelText, {
       diagnostics,
@@ -1029,19 +1035,24 @@ function writeLabelsRecursive(branches, outputBase, variables, verbose = false, 
  * key carries that key's question inline — see `emit/placeholders.js` for why the nesting
  * cannot be left to VL.
  */
-function writePlaceholdersRecursive(branches, outputBase, rootPlaceholders, variables, configPath, diagnostics, verbose = false) {
+function writePlaceholdersRecursive(branches, outputBase, rootPlaceholders, variables, configPath, diagnostics, verbose = false, usage = null, declarations = null) {
   const onWarn = (code, message, file) => diagnostics.add(
     severityOf(code), code, message, { file: file || configPath },
   );
 
   const rootNode = { placeholders: rootPlaceholders };
   const rootTable = Object.assign({}, rootPlaceholders || {});
+  if (declarations && rootPlaceholders) {
+    declarations.push({
+      path: '', label: 'at the project root', keys: localKeysOf(rootNode),
+    });
+  }
   const written = writeNodePlaceholders(outputBase, rootNode, rootTable, variables, {
-    onWarn, file: configPath, diagnostics,
+    onWarn, file: configPath, diagnostics, usage, usagePath: '',
   });
   if (written && verbose) console.log(`    OK: Placeholders → ${written}`);
 
-  walkBranchTree(branches, ({ name, node, state }) => {
+  walkBranchTree(branches, ({ name, node, path: path_, state }) => {
     const nodeOutput = path.join(state.outputBase, 'Branches', name);
     const branchVars = (node && node.variables)
       ? Object.assign({}, state.variables, node.variables)
@@ -1052,8 +1063,17 @@ function writePlaceholdersRecursive(branches, outputBase, rootPlaceholders, vari
     // looked up because the tree walk already has the chain in hand as `state`.
     const table = mergePlaceholders(state.table, node);
 
+    if (declarations) {
+      const keys = localKeysOf(node);
+      if (keys.length) {
+        declarations.push({
+          path: path_.join('/'), label: `on branch "${path_.join('/')}"`, keys,
+        });
+      }
+    }
+
     const outPath = writeNodePlaceholders(nodeOutput, node, table, branchVars, {
-      onWarn, file: configPath, diagnostics,
+      onWarn, file: configPath, diagnostics, usage, usagePath: path_.join('/'),
     });
     if (outPath && verbose) console.log(`    OK: Placeholders → ${outPath}`);
 
@@ -1193,6 +1213,12 @@ function compileRun(configPath, options, buses) {
 
   const registry = mergeRegistries(canonRegistry, projectRegistry);
 
+  // Every declared key referenced by any text this compile writes, keyed by the branch path
+  // the text belongs to, and every node that declared one. §12.3's unused check needs both:
+  // the declarations say what was promised and where, the usage says what was spent.
+  const placeholderUsage = new Map();
+  const placeholderDeclarations = [];
+
   const leaves = enumerateLeaves(config.branches);
 
   if (options.clean) {
@@ -1291,7 +1317,8 @@ function compileRun(configPath, options, buses) {
     const { written, occupants, placeholderNoise } = renderBranchItems(
       resolvedItems, registry, templates, partials, outputDir, branchProtagonist, ctx.variables, verbose, renderedById,
       (compileContext.render && compileContext.render.notesTemplate) || null,
-      compileDiagnostics, slotIndex, label, ctx.placeholders
+      compileDiagnostics, slotIndex, label, ctx.placeholders,
+      placeholderUsage, branchPath.join('/')
     );
     totalFiles += written.length;
     reportCompileDiagnostics();
@@ -1340,6 +1367,8 @@ function compileRun(configPath, options, buses) {
         where: `component "${descriptor.label}"`,
         branch: label,
         skip: placeholderNoise.get(descriptor.key),
+        usage: placeholderUsage,
+        usagePath: branchPath.join('/'),
       });
 
       const outPath = writeSectionedComponent(outputDir, descriptor, text);
@@ -1419,17 +1448,18 @@ function compileRun(configPath, options, buses) {
   const leafOpeningKeys = writeOpeningsRecursive(
     config.branches, config._resolvedOutput, config._base,
     rootOpening, config._variables || config.variables || {},
-    [], verbose, config.placeholders, compileDiagnostics
+    [], verbose, config.placeholders, compileDiagnostics, placeholderUsage
   );
 
   writeLabelsRecursive(
     config.branches, config._resolvedOutput, config._variables || config.variables || {}, verbose,
-    config.placeholders, compileDiagnostics, configPath,
+    config.placeholders, compileDiagnostics, configPath, placeholderUsage,
   );
 
   writePlaceholdersRecursive(
     config.branches, config._resolvedOutput, config.placeholders,
     config._variables || config.variables || {}, configPath, compileDiagnostics, verbose,
+    placeholderUsage, placeholderDeclarations,
   );
   reportCompileDiagnostics();
 
@@ -1439,6 +1469,7 @@ function compileRun(configPath, options, buses) {
     const labelPath = path.join(config._resolvedOutput, 'Label.md');
     checkUndeclaredPlaceholders(rootLabel, config.placeholders, {
       diagnostics: compileDiagnostics, file: configPath, where: 'the project title',
+      usage: placeholderUsage, usagePath: '',
     });
     checkPlaceholderContext(rootLabel, {
       diagnostics: compileDiagnostics,
@@ -1483,6 +1514,7 @@ function compileRun(configPath, options, buses) {
     // no branch whose declarations could apply to it.
     checkUndeclaredPlaceholders(combined, config.placeholders, {
       diagnostics: compileDiagnostics, file: descSpec, where: 'the Description',
+      usage: placeholderUsage, usagePath: '',
     });
     checkPlaceholderContext(combined, {
       diagnostics: compileDiagnostics,
@@ -1552,6 +1584,13 @@ function compileRun(configPath, options, buses) {
       console.log(`\nWrote ${reportSummary.join(' and ')} to:\n  ${reportBase}`);
     }
   }
+
+  // Last, because "unused" is only knowable once every write point has run — and the
+  // Description and the scenario title are written after the branch tree.
+  reportUnusedPlaceholders(placeholderDeclarations, placeholderUsage, {
+    diagnostics: compileDiagnostics, file: configPath,
+  });
+  reportCompileDiagnostics();
 
   // Requested-but-unwritten components: surface as an error so the gap is never silent.
   if (componentGaps.length > 0) {

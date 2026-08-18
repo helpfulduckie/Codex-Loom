@@ -243,6 +243,7 @@ that can still see the difference.
 | `CL0532` | ERROR | A `%key%` reaching compiled output is not declared on that branch. |
 | `CL0533` | ERROR | A placeholder reached a destination AID does not fill: the Description, or a card's `type`. |
 | `CL0534` | WARN | A placeholder reached a title, where AID does not do what writing one implies. |
+| `CL0535` | WARN | A placeholder is declared and referenced nowhere beneath its declaring node. |
 
 `CL0530` takes its own decade because `051x` is variables and `052x` is scoping; placeholders
 are a third thing in the band and will want neighbors as §12's remaining checks land.
@@ -307,6 +308,24 @@ visible in the source.
 It is a WARN rather than an ERROR in both cases because both are legal to write and a
 deliberate one is imaginable: a scenario called `${Roleplaying A Cool AID Scenario}` is a
 joke that works precisely because the text is never replaced.
+
+`CL0535` is the reverse of `CL0532`: a question the player answers for nothing. AID's own
+guidance puts the practical ceiling at about ten placeholders before players start
+abandoning a scenario, so a prompt whose answer goes nowhere is spending a real budget.
+
+**The scope is the check.** It is measured over the declaring node's subtree, not over the
+project (§6.4). A root-level placeholder used on one branch of three is normal and correct,
+so an unscoped version would fire constantly on well-formed projects; a branch-level one
+used only on a sibling really is dead, because the declaration does not reach the sibling.
+The hint says which of the two rules applied.
+
+A reference inside another placeholder's question counts as use. Nesting is expanded into
+the emitted file (§12.2), so the inner question does reach the player — through the outer
+prompt rather than on its own. Usage is therefore read off the raw question text, before
+expansion substitutes the reference away.
+
+It is a WARN and an opinion rather than a fact (§12.5): an author mid-draft may reasonably
+declare a question before writing the text that will use it.
 
 It is scoped to placeholders today. §6.4 gives `~` the same meaning for variables, roles,
 scripts and lint packs, none of which implement it yet — a `~` there sets the key to null

@@ -63,5 +63,11 @@ WARN CL0614 components/plot-essentials.cl.yaml
 WARN CL0534 compile.cl.yaml
   placeholder "%heroName%" in the title of branch "gated" — a branch title half-works. AID fills the prompt and shows the answer while the player is choosing, then keeps the raw placeholder text in the saved adventure’s title. Deliberate is possible; usually it is not.
 ERROR CL0533 components/description.md
-  placeholder "%heroName%" in the Description — AID does not fill placeholders in the Description. It is shown before any adventure exists to answer them, so the raw text is what a reader sees."
+  placeholder "%heroName%" in the Description — AID does not fill placeholders in the Description. It is shown before any adventure exists to answer them, so the raw text is what a reader sees.
+WARN CL0535 compile.cl.yaml
+  placeholder "altName" is declared at the project root but no text beneath it references "%altName%" — the player is asked the question and the answer goes nowhere.
+  hint: Declared at the project root, so this counts every branch.
+WARN CL0535 compile.cl.yaml
+  placeholder "neverUsed" is declared at the project root but no text beneath it references "%neverUsed%" — the player is asked the question and the answer goes nowhere.
+  hint: Declared at the project root, so this counts every branch."
 `;

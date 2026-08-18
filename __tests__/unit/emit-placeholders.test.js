@@ -20,7 +20,8 @@ const fs = require('fs');
 const YAML = require('yaml');
 const {
   expandQuestions, localKeysOf, writeNodePlaceholders, checkUndeclaredPlaceholders,
-  checkPlaceholderContext, findAllPlaceholders, findNativePlaceholders, FILENAME,
+  checkPlaceholderContext, findAllPlaceholders, findNativePlaceholders,
+  reportUnusedPlaceholders, FILENAME,
 } = require('../../src/emit/placeholders');
 const { CODES } = require('../../src/diag');
 
@@ -323,5 +324,70 @@ describe('checkPlaceholderContext', () => {
     const { found, diagnostics } = bus();
     checkPlaceholderContext('%a% %a% %b%', { diagnostics, where: 'x', reason: 'r' });
     expect(found).toHaveLength(2);
+  });
+});
+
+describe('reportUnusedPlaceholders — §12.3 check 2', () => {
+  const bus = () => {
+    const found = [];
+    return { found, diagnostics: { warn: (code, message) => found.push({ code, message }) } };
+  };
+  const usageOf = (pairs) => new Map(pairs.map(([k, paths]) => [k, new Set(paths)]));
+
+  test('a key used somewhere beneath its declaring node is silent', () => {
+    const { found, diagnostics } = bus();
+    reportUnusedPlaceholders(
+      [{ path: 'north', label: 'on branch "north"', keys: ['hold'] }],
+      usageOf([['hold', ['north/keep']]]),
+      { diagnostics },
+    );
+    expect(found).toHaveLength(0);
+  });
+
+  test('a root key used on one branch of three is silent — the whole point of the scope', () => {
+    // An unscoped version of this check fires constantly on well-formed projects (§6.4):
+    // declaring a placeholder at the root and using it on some branches is normal.
+    const { found, diagnostics } = bus();
+    reportUnusedPlaceholders(
+      [{ path: '', label: 'at the project root', keys: ['saga'] }],
+      usageOf([['saga', ['north']]]),
+      { diagnostics },
+    );
+    expect(found).toHaveLength(0);
+  });
+
+  test('a branch key used only on a sibling still warns', () => {
+    // The declaration does not reach the sibling, so the sibling's use is somebody else's
+    // key with the same name — and this branch's prompt really does go nowhere.
+    const { found, diagnostics } = bus();
+    reportUnusedPlaceholders(
+      [{ path: 'north', label: 'on branch "north"', keys: ['hold'] }],
+      usageOf([['hold', ['south']]]),
+      { diagnostics },
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0].code).toBe(CODES.PLACEHOLDER_UNUSED);
+  });
+
+  test('a prefix that is not a path boundary does not count as beneath', () => {
+    // "northgate" starts with "north" as a string and is not under it as a branch.
+    const { found, diagnostics } = bus();
+    reportUnusedPlaceholders(
+      [{ path: 'north', label: 'on branch "north"', keys: ['hold'] }],
+      usageOf([['hold', ['northgate']]]),
+      { diagnostics },
+    );
+    expect(found).toHaveLength(1);
+  });
+
+  test('a key never referenced anywhere warns', () => {
+    const { found, diagnostics } = bus();
+    reportUnusedPlaceholders(
+      [{ path: '', label: 'at the project root', keys: ['ghost'] }],
+      new Map(),
+      { diagnostics },
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0].message).toContain('%ghost%');
   });
 });
