@@ -38,6 +38,7 @@ Body fields matched case-insensitively. Missing fields resolve to empty string.
 {$aid.title}                        aid block field
 {$aid.triggers}                     aid triggers array ("; " joined when used directly)
 {%setting}                          compile.yaml variable
+%heroName%                          player placeholder — passes through to the player
 ```
 
 An array field used directly via `{$body.Field}` joins elements with `"; "`. A mapping field used directly returns the first value only.
@@ -76,6 +77,27 @@ Renders mapping as `key: value` pairs, one per line.
 
 ### `{inline($body.mapping)}`
 Space-joins all values of a mapping into a single line.
+
+---
+
+## Player Placeholders in Templates
+
+**A template is not a destination — the text it renders is.** `%heroName%` passes through the template engine untouched and is judged wherever that output lands, so one template can be legal in one place and an ERROR in another. A `Character.template` used for a story card is fine; the same text reaching a Description is `CL0533`.
+
+**Where the rendered text may carry a placeholder:**
+
+| Lands in | Verdict |
+|---|---|
+| A story card's entry, name, triggers or notes | Works |
+| Plot Essentials, Summary, AI Instructions, Author Notes, Opening | Works |
+| A card's `type` — which `aid.type` also selects the template by | **ERROR** `CL0533` |
+| The Description | **ERROR** `CL0533` |
+
+**Do not put a placeholder in `aid.type`.** It is a category in AID and a folder name in the compiled tree, and it is also what picks the template when `render.template` is absent — so a placeholder there fails to match any template as well as never being filled.
+
+**Placeholders are declared in `compile.yaml`, never in a template.** A `%key%` a template emits must be declared on every branch that renders it, or it is `CL0532`. See `references/compile-yaml.md` → Player Placeholders.
+
+**`{%setting}` and `%setting%` are not the same token.** The first is a compile-time variable resolved into the output; the second is a question asked of the player. Templates commonly use the first.
 
 ---
 

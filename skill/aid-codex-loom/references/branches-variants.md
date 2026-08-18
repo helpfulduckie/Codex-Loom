@@ -23,6 +23,8 @@ Each leaf path is the slash-joined sequence of YAML keys from root to leaf. The 
 
 No `branches:` key at all → single root-level output, no `Branches/` folder.
 
+**A branch may declare `placeholders:` alongside `variables:`, and both merge per key onto the parent's.** A branch adds keys, overrides same-named ones, and inherits the rest; `~` unbinds an inherited key for that subtree, which is what makes a `%key%` written there report as undeclared. Full semantics in `references/compile-yaml.md` → Player Placeholders.
+
 ---
 
 ## Variants on Items

@@ -100,18 +100,23 @@ structure:
 
 protagonist: Aria
 
+placeholders:                      # asked of the player at the start of an adventure
+  heroName: What should we call you?
+
 components:
   plotEssential: ./components/plot-essentials.yaml
 
 branches:
   knight:
     protagonist: Aria
+    placeholders:                  # adds to the root table on this branch only
+      oath: Which oath did you swear?
     components:
-      opening: "You are a knight sworn to the crown."
+      opening: "%heroName% woke with %oath% still ringing."
   mage:
     protagonist: Aria
     components:
-      opening: "You are a mage of the Academy."
+      opening: "%heroName% woke to the smell of chalk dust."
 ```
 
 **Codex/characters.yaml**
@@ -130,7 +135,7 @@ branches:
     storyCard: false               # Aria is the protagonist; she lives in Plot Essentials
     plotEssential: {slot: you, order: 1}
   body:
-    Tagline: Sworn Protector
+    Tagline: '%heroName%, Sworn Protector'
     Physical Traits:
       gender: female
       age: late 20s
@@ -161,6 +166,15 @@ sections:
     render: {position: 5, wrapper: curly}
 ```
 
+**templates/Character.template**
+```
+{$aid.title} - {$body.Tagline}
+Physical Traits: {join("; ", $body.Physical Traits.gender, $body.Physical Traits.age, $body.Physical Traits.hair, $body.Physical Traits.other)}
+Personality: {join(", ", $body.Personality.keywords)}
+```
+
+A template renders the **body alone** — the story-card envelope (`##` heading, `~~~` fence, `triggers:`) is emitted by Codex Loom. A `~~~` fence left in a `.template` file is `CL0410`.
+
 Then run: `codex-loom ./my-project`
 
 ---
@@ -182,6 +196,8 @@ Then run: `codex-loom ./my-project`
 **Branch dispatch** maps branch names to variant names, in a `branches:` block on an item, an import, or a component *section*. Scalar = one variant; array = several in order; `~` = exclude; `'*'` = wildcard baseline. One walker serves all three, so `~` means the same thing everywhere.
 
 **Canon vs project items** — canon items live in shared directories named under `structure.input.canon`; project items live under `structure.input.items`. Each canon name is automatically a `{%name}` variable. Pull canon in with `import:` (one item, full control) or `include:` (a whole file, optionally filtered).
+
+**Player placeholders** (`%heroName%`) are questions the player answers once at the start of an adventure; the answer is substituted everywhere the key appears. Declared under `placeholders:` in `compile.yaml`, at root or per branch, merging per key down the tree. They work in every component and in a card's entry, name, triggers and notes — but never in the Description or a card's `type`, which are ERRORs. AID's native `${What is your name?}` spelling is also valid to write raw, and Latitude's premade `${character.name}` and its pronoun siblings *must* be, since they have no `%key%` form.
 
 **Pronoun tokens** (`{$she}`, `{$her~}`, `{$she's}`) resolve against an item's `pronouns:` field. Character ID tokens (`{$Aria}`) resolve to "you" if that character is the active protagonist, or to their display name otherwise — with automatic verb conjugation via `[s]`, `[is]`, `[was]` markers.
 
@@ -397,13 +413,13 @@ Read these reference files when you need schema detail:
 
 | File | Read when you need... |
 |---|---|
-| `references/compile-yaml.md` | Full `compile.yaml` schema — `version:`, `structure:`, `protagonist:`, `variables:`, `components:`, `branches:` |
+| `references/compile-yaml.md` | Full `compile.yaml` schema — `version:`, `structure:`, `protagonist:`, `variables:`, `placeholders:`, `components:`, `branches:`; player placeholders in full |
 | `references/item-yaml.md` | Item schema — `id`, `name`, `pronouns`, `aid:`, `render:` and its targets, `body:`, `notes:`, `variants:`, `branches:` |
 | `references/components.md` | The sectioned grammar — sections, slots, wrapping, ordering, per-section variants; Opening, branch framing, description, scripts |
 | `references/field-operations.md` | Field ops — `+{}` append, `-{}` remove substring, `/{}/{}` swap, null remove, chained ops |
 | `references/branches-variants.md` | Branch tree structure, dispatch syntax (scalar/array/null/mapping/wildcard), nested paths |
 | `references/imports-includes.md` | `import:` vs `include:`, `importVariants:`, resolution order, primary variant path syntax |
-| `references/templates.md` | Template syntax — `{$field}`, `{join}`, `{list}`, `{if}`, `{wrapper}`, partials, `{%var}` |
+| `references/templates.md` | Template syntax — `{$field}`, `{join}`, `{list}`, `{if}`, `{wrapper}`, partials, `{%var}`, and where `%placeholders%` may land |
 | `references/pronouns.md` | Unscoped `{$she}`, ID refs `{$Aria}`, scoped `{$Aria.she}`, verb markers `[s]` `[is]`, cross-item refs |
 
 ---
