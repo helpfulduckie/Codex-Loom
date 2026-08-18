@@ -47,6 +47,7 @@
 
 const YAML = require('yaml');
 const { CODES, Diagnostics } = require('../diag');
+const { LIMITS, checkLimit } = require('../limits');
 
 /** The fence delimiter. VL matches it anchored at line start (`loader.py:7`). */
 const FENCE = '~~~';
@@ -221,9 +222,10 @@ function triggerLine(item, diagnostics, loc) {
  * @param {string}      [args.notesText]   pre-rendered notes; defaults to §4.5's rule
  * @param {Diagnostics} [args.diagnostics] collector; one is created if omitted
  * @param {object}      [args.loc]         `{ file, line, col }` for diagnostics
+ * @param {object}      [args.questions]   merged, expanded placeholder table (§8.5)
  * @returns {{ text: string, diagnostics: Diagnostics }}
  */
-function renderCard({ item, bodyText = '', notesText, diagnostics, loc = {} }) {
+function renderCard({ item, bodyText = '', notesText, diagnostics, loc = {}, questions = null }) {
   const diags = diagnostics || new Diagnostics();
   const lines = [`## ${cardTitle(item)}`, FENCE];
 
@@ -252,6 +254,16 @@ function renderCard({ item, bodyText = '', notesText, diagnostics, loc = {} }) {
 
   lines.push(FENCE);
   const body = String(bodyText === undefined || bodyText === null ? '' : bodyText);
+
+  // §8.5's cap, measured here because here is the only place the final string exists. The
+  // body arrives already wrapped — §8.4 applies `render.wrapper` compile-side — and the
+  // envelope above is outside the cap, since VL's `entry` is the fence-stripped body and
+  // `encapsulate: false` means AID's `value` is exactly that. Applies to `kind: reference`
+  // items like any other: a field cap is a platform constraint, not an opinion (§4.8).
+  checkLimit(body, questions, LIMITS.cardBody, {
+    diagnostics: diags, loc, label: `"${cardTitle(item) || (item && item.id) || '?'}"`,
+  });
+
   return { text: `${lines.join('\n')}\n${body}`, diagnostics: diags };
 }
 

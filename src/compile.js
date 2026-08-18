@@ -23,7 +23,9 @@ const { renderCard } = require('./emit/vl');
 const {
   FILENAME: PLACEHOLDERS_FILENAME, writeNodePlaceholders, checkUndeclaredPlaceholders,
   checkPlaceholderContext, reportUnusedPlaceholders, reportDuplicateQuestions, localKeysOf,
+  expandQuestions,
 } = require('./emit/placeholders');
+const { LIMITS, checkLimit } = require('./limits');
 const { loadDescConfig, extractScriptBanner, writeDescription } = require('./description');
 const { loadOpeningConfig, compileOpening } = require('./opening');
 const {
@@ -735,6 +737,24 @@ function warnEmptySlots(descriptor, slotIndex, filled, label, diagnostics, file)
  * component content, then reconciled them through a suppression side channel. There is
  * nothing to reconcile when one pass over one resolved item decides both.
  */
+
+/**
+ * The placeholder table as Velvet Lattice will hold it at this node, for §8.5's caps.
+ *
+ * VL substitutes `%key%` with the *question*, so measuring the stored length needs the
+ * questions and needs them already nested — which is what `expandQuestions` produces and
+ * what `Placeholders.yaml` therefore contains (§12.2). Expanding the merged table here
+ * gives the same values a leaf's inherited chain of those files would.
+ *
+ * Deliberately given no `onWarn`: `writePlaceholdersRecursive` runs the same expansion
+ * with the bus attached, so passing one here would report every cycle and every undeclared
+ * nested reference a second time. This call wants the strings, not the findings.
+ */
+function questionsForMeasurement(table, variables) {
+  if (!table || Object.keys(table).length === 0) return null;
+  return expandQuestions(table, variables);
+}
+
 function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, variables = {}, verbose = false, renderedById = null, projectNotesTemplate = null, diagnostics = new Diagnostics(), slotIndex = new Map(), branchLabel = '(root)', placeholders = {}, usage = null, usagePath = '') {
   // Build early so render functions can resolve cross-item refs during field expansion.
   const resolvedById = new Map();
@@ -747,6 +767,10 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
   // The assembled-component scan reads this so one mistake is not described twice for
   // one file, once well and once vaguely.
   const placeholderNoise = new Map();
+
+  // §8.5 measures what AID stores, which is the *substituted* string, so the length check
+  // needs the questions rather than the keys. Expanded once per branch and handed down.
+  const questions = questionsForMeasurement(placeholders, variables);
 
   applyCrossItemRefs(resolvedItems, registry, busWarner(diagnostics), resolvedById);
 
@@ -892,6 +916,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
         notesText: renderNotesText(item, context, templates, partials, variables, projectNotesTemplate, diagnostics),
         diagnostics,
         loc: { file: item._source },
+        questions,
       }).text;
     } catch (err) {
       diagnostics.error(
@@ -1001,6 +1026,14 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
       diagnostics, file: typeof spec === 'string' ? spec : undefined, where,
       usage, usagePath,
     });
+    // §8.5's 4,000-character cap, per file. This is the target with the least headroom in
+    // the real corpus and the one placeholders concentrate in, which is why §15 refused to
+    // let limits ship before the placeholder table existed.
+    checkLimit(content, questionsForMeasurement(table, vars), LIMITS.opening, {
+      diagnostics,
+      loc: { file: typeof spec === 'string' ? spec : undefined },
+      label: leafPath.length ? `branch "${leafPath[leafPath.length - 1]}"` : 'the project root',
+    });
     const outPath = writeComponentFile(outputDir, 'Opening.md', content);
     if (verbose) console.log(`    OK: Opening → ${outPath}`);
     writtenLeaves.add(leafPath.join('/') || '(root)');
@@ -1041,6 +1074,12 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
         checkUndeclaredPlaceholders(framingText, table, {
           diagnostics, where: `the branch framing on "${name}"`,
           usage, usagePath: nodePath.join('/'),
+        });
+        // Framing lands in the same `Opening.md` filename at an interior node, and VL caps
+        // the file rather than the chain — components merge per filename, so a leaf's
+        // opening replaces this rather than adding to it (§8.5).
+        checkLimit(framingText, questionsForMeasurement(table, branchVars), LIMITS.opening, {
+          diagnostics, label: `branch "${name}" (framing)`,
         });
         const outPath = writeComponentFile(nodeOutput, 'Opening.md', framingText);
         if (verbose) console.log(`    OK: OpeningChoice → ${outPath}`);
@@ -1519,6 +1558,15 @@ function compileRun(configPath, options, buses) {
         ? rootOpeningChoice
         : rootOpeningChoice;
       const content = resolveOpeningContent(expandedChoice, config._base, config.variables || {});
+      // The third `Opening.md` the compiler writes, and the one easiest to miss: root
+      // framing is non-inheriting and lands outside both recursive writers. Capped like
+      // the other two — VL reads it as this node's Opening and caps the file (§8.5).
+      checkLimit(
+        content,
+        questionsForMeasurement(config.placeholders, config._variables || config.variables || {}),
+        LIMITS.opening,
+        { diagnostics: compileDiagnostics, loc: { file: configPath }, label: 'the project root (framing)' },
+      );
       const outPath = writeComponentFile(config._resolvedOutput, 'Opening.md', content);
       if (verbose) console.log(`    OK: Root OpeningChoice → ${outPath}`);
     }

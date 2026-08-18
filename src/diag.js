@@ -83,6 +83,15 @@ const CODES = Object.freeze({
   // about content — which is why they live in the compiler rather than in lint (§12.5).
   TRIGGER_CONTAINS_COMMA: 'CL0701',
   TRIGGER_EMPTY: 'CL0702',
+
+  // Platform field caps (§8.5). Facts about what AID stores, measured after placeholder
+  // substitution because Velvet Lattice expands `%key%` to its longer question text on the
+  // way there. Each cap needs two codes rather than one: severity is a property of the
+  // code (see `SEVERITY_BY_CODE` below), so a band and its cap cannot share one.
+  OPENING_OVER_LIMIT: 'CL0710',
+  OPENING_NEAR_LIMIT: 'CL0711',
+  CARD_BODY_OVER_LIMIT: 'CL0712',
+  CARD_BODY_NEAR_LIMIT: 'CL0713',
 });
 
 /**

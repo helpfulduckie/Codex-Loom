@@ -233,12 +233,50 @@ correct.
 |---|---|---|
 | `CL0701` | ERROR | A trigger value contains a comma. |
 | `CL0702` | WARN | A trigger value is empty and will reach AID as an empty key. |
+| `CL0710` | ERROR | An `Opening.md` exceeds AID's 4,000-character limit. |
+| `CL0711` | WARN | An `Opening.md` is within 10% of the 4,000-character limit. |
+| `CL0712` | ERROR | A story card body exceeds AID's 2,000-character limit. |
+| `CL0713` | WARN | A story card body is within 10% of the 2,000-character limit. |
 
-Both are facts about what Velvet Lattice can carry to AID rather than opinions about
-content, which is why they live in the compiler and not in lint. `CL0701` is the sharper
-of the two: VL joins the trigger list into AID's single `keys` string with commas, so a
-comma *inside* a trigger silently becomes two triggers, and the emitter is the last stage
-that can still see the difference.
+Both trigger codes are facts about what Velvet Lattice can carry to AID rather than
+opinions about content, which is why they live in the compiler and not in lint. `CL0701` is
+the sharper of the two: VL joins the trigger list into AID's single `keys` string with
+commas, so a comma *inside* a trigger silently becomes two triggers, and the emitter is the
+last stage that can still see the difference.
+
+### The platform caps in detail
+
+`CL0710`–`CL0713` are §8.5's field limits. AID truncates rather than refusing, so exceeding
+one does not fail the upload — the content arrives shortened and the loss surfaces during
+play. A `kind: reference` item is **not** exempt: soft heuristics skip reference items and
+hard limits do not, because the platform does not care why an item exists (§4.8).
+
+**Each cap measures less than the file it lives in.**
+
+- A **card body** is Velvet Lattice's `entry` — the section with its `~~~` fence removed
+  and trimmed — which becomes AID's `value`. The `## Title` line, the fence and `notes:`
+  are all outside the cap. `notes:` has no documented limit of its own.
+- An **`Opening.md`** is capped per file, not per branch chain. VL merges components keyed
+  by filename, so a leaf's opening *replaces* an ancestor's rather than extending it. The
+  interior-node framing file and the root framing file are each capped the same way.
+
+**The length measured is the one after placeholder substitution, and that is the whole
+point of the check.** VL replaces `%key%` with `${question}`, and a question is longer than
+the key naming it — roughly `len(question) - len(key) + 1` characters per reference. An
+Opening of 3,900 rendered characters with several placeholders is over 4,000 in AID. When
+the two lengths differ the diagnostic prints both:
+
+```
+ERROR CL0710 Branches/subject/Components/Opening.md
+  Opening for branch "subject" is 4,118 characters after placeholder substitution
+  (limit 4,000).
+  Rendered length is 3,902; the 6 placeholder references add 216 characters when
+  Velvet Lattice expands them to their question text.
+```
+
+**The WARN band is 90% of each cap.** Discovering a hard failure at the cap with no prior
+signal means finding out when the card is already too big to trim comfortably. A value
+exactly at the cap warns rather than erroring — the cap is inclusive.
 
 ### CL05xx — tokens
 
