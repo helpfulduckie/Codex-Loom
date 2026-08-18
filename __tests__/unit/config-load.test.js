@@ -310,11 +310,15 @@ describe('every diagnostic the config surface can emit', () => {
   });
 
   test('the table covers every code the config surface declares', () => {
-    // CL0205 (SUPERSEDED_KEY) is the one omission, and it is not reachable: no key in
-    // CONFIG_SCHEMA declares an `alias`. The v3 spellings were removed outright at the
-    // config break rather than kept as warned aliases (§14.1).
+    // Two omissions, both unreachable from this surface rather than untested.
+    // CL0205 (SUPERSEDED_KEY): no key in CONFIG_SCHEMA declares an `alias` — the v3
+    // spellings were removed outright at the config break rather than kept as warned
+    // aliases (§14.1). CL0206 (VALUE_NOT_ALLOWED): no key in CONFIG_SCHEMA declares a
+    // `values:` set. The item schema does, for `kind:` (§4.8), and `schema.test.js`
+    // covers it there.
+    const unreachable = new Set([SCHEMA_CODES.SUPERSEDED_KEY, SCHEMA_CODES.VALUE_NOT_ALLOWED]);
     const reachable = [...Object.values(CODES), ...Object.values(SCHEMA_CODES)]
-      .filter((c) => c !== SCHEMA_CODES.SUPERSEDED_KEY);
+      .filter((c) => !unreachable.has(c));
     const exercised = new Set(CASES.map(([, code]) => code));
     expect(reachable.filter((c) => !exercised.has(c))).toEqual([]);
   });

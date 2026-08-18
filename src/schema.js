@@ -43,6 +43,8 @@ const CODES = Object.freeze({
   MISSING_REQUIRED: 'CL0203',
   NOT_YET_IMPLEMENTED: 'CL0204',
   SUPERSEDED_KEY: 'CL0205',
+  /** A key whose descriptor declares `values:` — a closed set — got something else. */
+  VALUE_NOT_ALLOWED: 'CL0206',
   /** The canonical §4.3 case: a valid key written at the wrong level. */
   MISPLACED_KEY: 'CL0210',
 });
@@ -268,6 +270,21 @@ function validate(value, schema, options = {}) {
         diagnostics.error(
           CODES.WRONG_TYPE,
           `"${display(currentPath) || '<root>'}" must be ${typeName(types)}, but is ${describeType(normalized)}${inContext}.`,
+          locate(currentPath)
+        );
+      }
+      return normalized;
+    }
+
+    // A closed value set, checked after the type test so that a wrong-typed value reports
+    // as a type error rather than as an unlisted one — "must be a string" is the more
+    // actionable of the two messages when both are true.
+    if (descriptor.values && !descriptor.values.includes(normalized)) {
+      if (diagnostics) {
+        diagnostics.error(
+          CODES.VALUE_NOT_ALLOWED,
+          `"${display(currentPath) || '<root>'}" is ${JSON.stringify(normalized)}, but must be `
+          + `${descriptor.values.map((v) => JSON.stringify(v)).join(' or ')}${inContext}.`,
           locate(currentPath)
         );
       }

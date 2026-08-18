@@ -141,8 +141,10 @@ const ITEM_SCHEMA = {
     importVariants: { type: [TYPES.SEQ, TYPES.STRING], of: STRING },
     include: STRING,
 
-    // v4 additions, declared so authors can write ahead of the implementation.
-    kind: { type: TYPES.STRING, note: 'Phase 5' },
+    // §4.8. `story` is the default and needs no declaration; `reference` marks an item
+    // that exists to be read by a script or by a human in the story-card editor rather
+    // than by the AI, which exempts it from the prose heuristics and from nothing else.
+    kind: { type: TYPES.STRING, values: ['story', 'reference'] },
   },
 };
 

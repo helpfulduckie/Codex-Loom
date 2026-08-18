@@ -23,6 +23,7 @@ encapsulate: false
 ## WTG Time Config
 ~~~
 encapsulate: false
+kind: reference
 notes: |-
   startDate: 06/28/1320
   startTime: 9:00 PM

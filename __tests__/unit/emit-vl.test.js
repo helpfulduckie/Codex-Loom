@@ -212,6 +212,39 @@ describe('renderCard', () => {
     const { diagnostics } = renderCard({ item: aness(), bodyText: 'x' });
     expect(diagnostics.all).toEqual([]);
   });
+
+  /**
+   * §4.8's `kind:` reaches the fence, one value only.
+   *
+   * `story` is the default and writing it would move every existing byte to say nothing,
+   * which is also why no golden fixture moves when this lands. `reference` is written
+   * because the reports that act on it — `--card-sizes`, `--lint` — parse the compiled
+   * tree and have no other channel back to the source.
+   */
+  describe('kind: reference in the fence', () => {
+    const reference = () => ({ id: 'WTG Time Config', kind: 'reference', aid: { type: 'System', triggers: [] } });
+
+    test('a reference item writes the key', () => {
+      const { text } = renderCard({ item: reference(), bodyText: 'x' });
+      expect(text).toContain('\nkind: reference\n');
+    });
+
+    test('a story item writes nothing, and neither does an item with no kind', () => {
+      expect(renderCard({ item: { ...reference(), kind: 'story' }, bodyText: 'x' }).text)
+        .not.toContain('kind:');
+      expect(renderCard({ item: aness(), bodyText: 'x' }).text).not.toContain('kind:');
+    });
+
+    test('it round-trips through parseCards', () => {
+      const { text } = renderCard({ item: reference(), bodyText: 'x' });
+      expect(parseCards(text)[0].kind).toBe('reference');
+    });
+
+    test('the key sits after encapsulate, where VL reads it as ordinary fence YAML', () => {
+      const { text } = renderCard({ item: reference(), bodyText: 'x' });
+      expect(text).toMatch(/encapsulate: false\nkind: reference/);
+    });
+  });
 });
 
 describe('defaultNotesText', () => {
@@ -262,6 +295,10 @@ describe('parseCards', () => {
     expect(card.triggers).toEqual(['Felicia', 'Grayls']);
     expect(card.notes).toBe('[e]');
     expect(card.body).toBe('{\nFelicia Grayls - Academy Researcher\n}');
+  });
+
+  test('a card with no kind key is story, which is what every card written before §4.8 is', () => {
+    expect(parseCards(file).map((c) => c.kind)).toEqual(['story', 'story']);
   });
 
   test('a card without notes reports an empty string, as VL does', () => {

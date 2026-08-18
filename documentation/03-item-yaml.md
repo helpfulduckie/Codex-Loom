@@ -99,6 +99,36 @@ Declared pronoun set for this item. Controls how `{$she}`, `{$her~}`, `{$they}` 
 
 When this item is the active branch protagonist, pronouns resolve to the `you` set instead. See [Pronoun System](08-pronouns.md).
 
+### `kind`
+
+Whether this item is narrative content or reference material. `story` (the default) or `reference` — any other value is an error.
+
+```yaml
+- id: WTG Time Config
+  kind: reference
+  aid: {type: System, triggers: []}
+  notes:
+    startDate: "06/28/1320"
+```
+
+**Declare `reference` for an item that exists to be read by a script or by a person in the story-card editor, rather than by the AI.** A mod's config card is the clearest case: it is a real story card with a deliberately empty trigger list, and no render target can express that — only you know it. Swappable alternates offered to the player (a longer or shorter copy of the AI Instructions, say) are the other case.
+
+**What `reference` exempts is the prose heuristics, and nothing else.**
+
+| Check | Applies to `reference`? |
+|---|---|
+| `empty-triggers` lint | No — trigger-less is the intended state |
+| Seed-map inclusion | No — it would sit permanently atop "never seeded" |
+| Card-size ranking | Reported separately — it never enters context |
+| Platform field caps | **Yes** |
+| Unresolved-token and artifact diagnostics | **Yes** |
+
+The rule is that soft heuristics skip reference items and hard limits apply to everything: a card over AID's field cap is malformed whatever it exists for.
+
+**A `reference` item's compiled card carries `kind: reference` in its fence.** Velvet Lattice keeps unrecognized fence keys as metadata and never forwards them to AID, so the key changes nothing about the uploaded card — it is there so the reports, which read the compiled tree rather than your YAML, can tell which cards to treat as reference material.
+
+**`kind:` is a property of the copy, not of the canon item.** Importing a narrative item and declaring `kind: reference` on the import makes that copy reference material and leaves the canon item alone. Variants can change it too.
+
 ---
 
 ## `aid:` Block

@@ -29,6 +29,7 @@ const SCHEMA = {
     body: { type: TYPES.ANY },
     future: { type: TYPES.STRING, note: 'Phase 9' },
     legacy: { type: TYPES.STRING, alias: 'title' },
+    kind: { type: TYPES.STRING, values: ['story', 'reference'] },
   },
 };
 
@@ -190,6 +191,36 @@ describe('later-phase and superseded keys', () => {
     const { diagnostics, codes } = run({ legacy: 'x' });
     expect(codes).toEqual([CODES.SUPERSEDED_KEY]);
     expect(diagnostics.warnings[0].message).toContain('"title"');
+  });
+});
+
+/**
+ * `values:` — a closed set, added for §4.8's `kind:`.
+ *
+ * It reports after the type test rather than instead of it, because "must be a string" is
+ * the more actionable message when a value is both wrong-typed and unlisted.
+ */
+describe('closed value sets', () => {
+  test('a listed value passes', () => {
+    expect(run({ kind: 'reference' }).codes).toEqual([]);
+  });
+
+  test('an unlisted value is an ERROR naming the whole set', () => {
+    const { diagnostics, codes } = run({ kind: 'refrence' });
+    expect(codes).toEqual([CODES.VALUE_NOT_ALLOWED]);
+    expect(diagnostics.errors[0].message).toContain('"story" or "reference"');
+  });
+
+  test('case matters — the set is keywords, not prose', () => {
+    expect(run({ kind: 'Reference' }).codes).toEqual([CODES.VALUE_NOT_ALLOWED]);
+  });
+
+  test('a wrong-typed value reports as a type error, not an unlisted one', () => {
+    expect(run({ kind: 42 }).codes).toEqual([CODES.WRONG_TYPE]);
+  });
+
+  test('an absent key is not a violation — `values:` does not imply required', () => {
+    expect(run({ title: 'x' }).codes).toEqual([]);
   });
 });
 

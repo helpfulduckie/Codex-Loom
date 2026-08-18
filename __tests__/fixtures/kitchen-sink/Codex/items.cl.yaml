@@ -49,7 +49,7 @@
 
 # ── A reference item, and the notes: field (§4.5) ────────────────────────────
 - id: WTG Time Config
-  # Phase 5. Author intent no render target can infer: this IS a story card, with a
+  # Author intent no render target can infer: this IS a story card, with a
   # deliberately empty trigger list (§4.8).
   kind: reference
   aid:

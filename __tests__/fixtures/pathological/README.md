@@ -40,6 +40,13 @@ prove nothing about the checks the fixture was written for.
   than rewriting the fixture until it matches.
 - **One deliberate mistake per item**, named in a comment with the code it should raise.
 - **Nothing here is an example.** Every file in both projects is wrong somewhere.
+- **An item-level *schema* ERROR cannot live here at all**, and it is worth knowing why
+  before trying. `reportLoadDiagnostics` throws the moment loading finishes with any ERROR,
+  so a bad key or value on an item in `placement/` would abort that project's compile and
+  take every placement row with it — while `schema/` never reaches item loading, because its
+  config violations abort first. Both projects were checked; neither can carry one. Item
+  schema violations are `schema.test.js`'s to cover, and the fixture's own scope is the
+  diagnostic stream of a project that *compiles*.
 
 ## Known-incorrect rows in the snapshot
 
@@ -69,6 +76,9 @@ Both items keep their `CL0610`, which is the ERROR that actually describes `Sile
 |---|---|
 | 0 | `CL0325` appears on the bare `import: Anchor`, once per branch — **landed** |
 | 9 | `CL0710`–`CL0713` appear once the fixture gains over-cap and in-band content |
+
+Step 1's `kind:` enum (`CL0206`) is deliberately absent from that table: it is an item-level
+schema ERROR, which the editing rules above explain this fixture cannot hold.
 
 Phase 4's table, kept for the shape it records: `CL0204` on `placeholders:` disappeared at
 Step 1, undeclared `%ghostName%` in `Greeter` started erroring at Step 3, the invalid-context

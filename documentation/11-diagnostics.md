@@ -87,6 +87,7 @@ guard still recognizes the sigil so a half-migrated project fails clearly.)
 | `CL0203` | ERROR | A required key is missing. |
 | `CL0204` | WARN | Key is recognized but its phase has not landed; it is ignored. |
 | `CL0205` | WARN | Key has been superseded by another spelling. |
+| `CL0206` | ERROR | Key takes a closed set of values and got something else. |
 | `CL0210` | ERROR | Key is valid, but at a different level — with the level named. |
 
 ### CL0210 in detail

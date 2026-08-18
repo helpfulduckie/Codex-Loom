@@ -114,8 +114,14 @@ const VAR_ALIASES = new Set(['v', 'var', 'vars', 'variable', 'variables']);
  * `id` is absent deliberately — it is immutable to variants and branches, and moves only
  * through rename-on-import (§17.4). `body:` is absent because it is not a whole-value
  * field: deltas apply to it subfield by subfield.
+ *
+ * `kind` is present because a canon item's story/reference nature is a property of the
+ * copy, not of the canon (§4.8): importing a narrative item and rendering it into a
+ * component as a swappable alternate makes *that* copy reference material while the canon
+ * item stays narrative. Author intent is what `kind:` carries, and the importer is an
+ * author.
  */
-const ITEM_TOP_LEVEL_FIELDS = Object.freeze(['name', 'pronouns', 'aid', 'render', 'v', 'notes']);
+const ITEM_TOP_LEVEL_FIELDS = Object.freeze(['name', 'pronouns', 'aid', 'render', 'v', 'notes', 'kind']);
 
 /**
  * `description:` is an accepted alias for `notes:` (§4.5), normalized at the boundary so

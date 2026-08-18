@@ -461,6 +461,29 @@ describe('resolveItem', () => {
       expect(item.aid.triggers).toEqual(['uniform']);
     });
 
+    /**
+     * §4.8's `kind:` moves like every other top-level field, which is the point: whether an
+     * item is narrative or reference material is a property of *this copy*, not of the canon
+     * it came from. Importing a narrative item and rendering it into a component as a
+     * swappable alternate makes that copy reference material while canon stays narrative.
+     */
+    test('kind: inherits from canon when the import does not declare it', () => {
+      const withKind = new Map([['outfit', { ...baseItem, kind: 'reference' }]]);
+      expect(resolveItem({ import: 'outfit' }, withKind, []).kind).toBe('reference');
+    });
+
+    test('kind: an import declaring it overrides canon, leaving canon alone', () => {
+      const item = resolveItem({ import: 'outfit', kind: 'reference' }, reg, []);
+      expect(item.kind).toBe('reference');
+      expect(baseItem.kind).toBeUndefined();
+    });
+
+    test('kind: a variant can flip it', () => {
+      const withVariant = new Map([['outfit', { ...baseItem, variants: { alt: { kind: 'reference' } } }]]);
+      expect(resolveItem({ import: 'outfit', importVariants: ['alt'] }, withVariant, []).kind)
+        .toBe('reference');
+    });
+
     test('aid.triggers: +{} appends to array', () => {
       const item = resolveItem({ import: 'outfit', aid: { triggers: '+{uniform}' } }, reg, []);
       expect(item.aid.triggers).toEqual(['clothing', 'style', 'uniform']);

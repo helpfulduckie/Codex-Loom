@@ -233,6 +233,16 @@ function renderCard({ item, bodyText = '', notesText, diagnostics, loc = {} }) {
   // §8.4: unconditional, because all four sites in the VL source default it to true.
   lines.push('encapsulate: false');
 
+  // §4.8. Written only for `reference`, because `story` is the default and emitting it
+  // would move every existing byte to say nothing. VL parks unknown fence keys in
+  // `StoryCard.metadata` (`loader.py:78`) and `to_latitude_dict` forwards only title,
+  // type, keys, value and description — so this reaches AID nowhere and costs nothing
+  // downstream. It is here rather than inferred from an empty trigger list because the
+  // two are not the same claim: a narrative card that *lost* its triggers is the bug the
+  // `empty-triggers` lint exists to find, and inference would make it indistinguishable
+  // from a reference card, retiring that check by accident.
+  if (item && item.kind === 'reference') lines.push('kind: reference');
+
   // `description:` never reaches here — `model/item.js` collapses it into `notes:` at
   // resolution (§4.5), so the emitter knows exactly one spelling.
   const notes = notesLines(
@@ -335,6 +345,12 @@ function parseCards(markdown, { type = null, fallbackTitle = null } = {}) {
       // and an empty one both parse to `{}` — and consumers do distinguish them: a
       // headed section with no fence is prose, not a malformed card.
       hasFence: Boolean(fence),
+      // §4.8, and §8.6's reason for putting it on the parsed model rather than leaving
+      // consumers to read `meta`: reports and convention packs consume this shape, not the
+      // file format, so `kind` has to survive a change of emitter the way `triggers` does.
+      // Anything other than `reference` is `story`, including absent — the schema has
+      // already rejected a third value by the time a card is written.
+      kind: meta.kind === 'reference' ? 'reference' : 'story',
       triggers,
       notes: meta.notes === undefined || meta.notes === null ? '' : String(meta.notes),
       body: body.trim(),
