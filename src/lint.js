@@ -140,6 +140,83 @@ function scanText(text) {
   return findings;
 }
 
+// ── the ${...} confusability check (§12.4) ───────────────────────────────────
+//
+// `${What is your name?}` is AID's native placeholder and entirely legitimate. `{$she}` is
+// a Codex Loom token. They are one transposition apart, and a mistyped `${she}` reaches the
+// player as a prompt asking them to type the word "she" — which is why the check exists.
+//
+// §12.4 describes it as a WARN on *every* `${...}`, and that version is unusable. Measured
+// against the live corpus before this was written: three projects author native
+// placeholders on purpose — World Time Generator has eleven, Lab Rat and Shared Perspective
+// one each — so a blanket check opens with thirteen false positives, which is how an author
+// learns to skip a category of message.
+//
+// **The shape of the content separates them.** A Codex Loom token holds an identifier:
+// `{$she}`, `{$Aria}`, `{$Aria.she}`, `{$body.Field}` — no spaces, no punctuation beyond
+// dots. An AID placeholder holds a *question* written for a human: spaces, usually a `?` or
+// a `:`. So the check fires only on identifier-shaped content, which catches the
+// transposition and stays silent on every intentional placeholder in the corpus.
+//
+// The exception is Latitude's premade specials, which are identifier-shaped by
+// construction: `${character.name}`, `${character.gender}`, and five pronoun forms. They
+// have no `%key%` equivalent — Velvet Lattice's substitution produces a question from a
+// declared key and cannot produce a special — so every project that wants them writes them
+// raw, permanently. Warning about them would be permanent noise.
+
+const TOKEN_SHAPED = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*$/;
+
+/** Latitude's premade placeholders. Identifier-shaped, legitimate, and unavoidable. */
+const AID_SPECIAL_PREFIX = 'character.';
+
+/**
+ * Find `${...}` occurrences whose content looks like a Codex Loom token.
+ *
+ * Brace-balanced rather than a regex: Codex Loom emits nested placeholders (§12.2), and a
+ * non-greedy `[^}]*` reads `${What is ${Their name?} like?}` as one truncated match plus a
+ * stray tail — which would then be judged on the wrong content.
+ */
+function scanNativePlaceholders(text) {
+  const grouped = new Map();
+
+  for (let i = 0; i < text.length - 1; i += 1) {
+    if (text[i] !== '$' || text[i + 1] !== '{') continue;
+    let depth = 0;
+    let j = i;
+    for (; j < text.length; j += 1) {
+      if (text[j] === '{') depth += 1;
+      else if (text[j] === '}') {
+        depth -= 1;
+        if (depth === 0) { j += 1; break; }
+      }
+    }
+    const whole = text.slice(i, j);
+    const inner = whole.slice(2, -1);
+    i = j - 1;
+
+    if (!TOKEN_SHAPED.test(inner)) continue;
+    if (inner.toLowerCase().startsWith(AID_SPECIAL_PREFIX)) continue;
+
+    if (!grouped.has(whole)) grouped.set(whole, []);
+    grouped.get(whole).push(lineAt(text, i));
+  }
+
+  const findings = [];
+  for (const [match, lines] of grouped) {
+    const inner = match.slice(2, -1);
+    findings.push({
+      category: 'native-placeholder-shape',
+      severity: 'WARN',
+      match,
+      lines,
+      hint: `"${match}" reads as an AID placeholder that would prompt the player to type `
+        + `"${inner}". If a Codex Loom token was meant, it is written {$${inner}} — the `
+        + 'brace and the dollar the other way round.',
+    });
+  }
+  return findings;
+}
+
 // ── story-card structural checks ─────────────────────────────────────────────
 //
 // One check, and the reason there is only one is worth stating.
@@ -225,6 +302,7 @@ function runLintMode(scenarioRoot, outputDir, verbose = false) {
     const content  = fs.readFileSync(file, 'utf8');
     const relPath  = path.relative(rootAbs, file);
     const findings = scanText(content);
+    findings.push(...scanNativePlaceholders(content));
     if (path.dirname(file).split(path.sep).includes('Story Cards')) {
       findings.push(...scanStoryCardStructure(content));
     }
@@ -250,4 +328,7 @@ function runLintMode(scenarioRoot, outputDir, verbose = false) {
   return { reportPath, errorCount, warnCount };
 }
 
-module.exports = { runLintMode, findLintableFiles, scanText, scanStoryCardStructure, CHECKS };
+module.exports = {
+  runLintMode, findLintableFiles, scanText, scanStoryCardStructure,
+  scanNativePlaceholders, CHECKS,
+};

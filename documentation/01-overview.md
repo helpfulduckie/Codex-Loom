@@ -116,6 +116,16 @@ Empty and gated slots stay distinct: `(empty)` is a declared, placeable slot nob
 
 **Lint** (`-L`/`--lint`) — Reads compiled output (`Story Cards/` and `Components/` `.md` files) and mechanically scans for compile-time artifacts that should never survive into rendered output: unresolved pronoun/character/field tokens (`{$she}`, `{$Aria}`, `{$body.Field}`), unexpanded compile variables (`{%key}`), leaked template render functions and control tags (`{join(...)}`, `{if}`/`{/if}`, `{wrapper}`, `{include}`, etc.), unresolved verb-conjugation markers (`[s]`, `[is]`, `[was]`, ...), a bracketed word that *looks like* an attempted verb marker but isn't one of the real five (e.g. `[does]`, `[have]` — an author-typo case a fixed pattern list alone can't catch, so this is flagged even without knowing what the "correct" token should have been), and JS interpolation artifacts (`[object Object]`, bare `undefined`/`NaN`). It also checks Story Cards for one structural error: an empty or missing trigger list, which means a card that can never be pulled into context.
 
+It also carries one check about *intent* rather than about artifacts: a `${...}` whose
+content is identifier-shaped, like `${she}` or `${Aria.she}`. AID's native placeholder and
+a Codex Loom token are one transposition apart, and a mistyped `${she}` reaches the player
+as a prompt asking them to type the word "she". The content is what separates them: a
+token holds an identifier, a real placeholder holds a question written for a human, so
+`${What is your name?}` and `${Date: (MM/DD/YYYY)}` draw nothing. Latitude's premade
+specials — `${character.name}`, `${character.gender}` and the five pronoun forms — are
+identifier-shaped by construction and exempt; they have no `%key%` equivalent, so every
+project that wants them writes them raw.
+
 Core lint carries only that one structural check on purpose. Rules about what a card's *content* should say — the `[e]` background-knowledge marker, the `/]` discovery marker, and their mutual exclusion — belong to a particular mod's convention and fire wrongly for every project that does not use it, so they move to convention packs rather than living here. `encapsulate` is no longer checked at all: the compiler writes it, not the author.
 
 This is pure pattern-matching — deterministic and exhaustive, with no false-negative risk from an LLM guessing at the token list. It catches the mechanical half of a QA pass; bleed, missing-information, and cross-branch consistency checks still require holding the whole branch structure in mind and are out of scope here.

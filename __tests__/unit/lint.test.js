@@ -10,6 +10,7 @@ const {
 
   findLintableFiles,
   runLintMode,
+  scanNativePlaceholders,
 } = require('../../src/lint');
 
 function makeTmp() {
@@ -220,6 +221,55 @@ encapsulate: true
 });
 
 // ── findLintableFiles ─────────────────────────────────────────────────────────
+
+describe('scanNativePlaceholders — the §12.4 confusability check', () => {
+  const matches = (text) => scanNativePlaceholders(text).map((f) => f.match);
+
+  test('identifier-shaped content warns — that is the transposition', () => {
+    // `{$she}` mistyped as `${she}` reaches the player as a prompt asking them to
+    // type the word "she".
+    expect(matches('The wind caught ${she} hair.')).toEqual(['${she}']);
+  });
+
+  test('dotted token shapes warn too', () => {
+    expect(matches('${Aria.she} and ${body.Field}'))
+      .toEqual(['${Aria.she}', '${body.Field}']);
+  });
+
+  test('a question is a real placeholder and stays silent', () => {
+    // The whole reason this is a shape test rather than §12.4's blanket WARN: three live
+    // projects author native placeholders on purpose, and a blanket check opens with
+    // thirteen false positives.
+    expect(matches('${What is your name?}')).toEqual([]);
+    expect(matches('${Date: (MM/DD/YYYY)}')).toEqual([]);
+    expect(matches('${Opening:}')).toEqual([]);
+  });
+
+  test("Latitude's premade specials stay silent", () => {
+    // Identifier-shaped by construction, and unavoidable: VL's substitution produces a
+    // question from a declared key and cannot produce a special, so every project wanting
+    // them writes them raw forever.
+    expect(matches('${character.name} and ${character.gender}')).toEqual([]);
+    expect(matches('${character.pronoun.themselves}')).toEqual([]);
+  });
+
+  test('a nested placeholder is judged as one occurrence', () => {
+    // Codex Loom emits nesting (§12.2), so a non-greedy matcher would split its own output
+    // and then judge the fragments on the wrong content.
+    expect(matches('${What is ${Their name?} like?}')).toEqual([]);
+  });
+
+  test('groups repeats and records every line', () => {
+    const [finding] = scanNativePlaceholders('${she}\nfiller\n${she}');
+    expect(finding.lines).toHaveLength(2);
+    expect(finding.severity).toBe('WARN');
+  });
+
+  test('the hint shows the token spelling that was probably meant', () => {
+    const [finding] = scanNativePlaceholders('${she}');
+    expect(finding.hint).toContain('{$she}');
+  });
+});
 
 describe('findLintableFiles', () => {
   test('only collects .md files under Story Cards / Components segments', () => {
