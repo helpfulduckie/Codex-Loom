@@ -12,6 +12,17 @@
  * schema uses a mapping key beginning with `$` or `%`, so those sequences in leading
  * value position are never a legitimate flow mapping.
  *
+ * A leading `%key%` player placeholder (§12) is wrapped for the same reason and a
+ * different one: `%` is YAML's directive indicator, so a plain scalar may not begin with
+ * it at all. `opening: %heroName% woke up.` is not a subtly wrong parse but a hard error —
+ * "Plain value cannot start with directive indicator character %" — naming neither
+ * placeholders nor the fix. Phase 4 made that shape worth writing, so it is handled here
+ * rather than left as a defensive quote every author has to learn.
+ *
+ * Only the `%key%` form is recognized, not a bare `%`. A value like `% nope` is still a
+ * YAML error, which is right: it is not a placeholder and inventing a general rule for `%`
+ * would quote things this module has no reason to have an opinion about.
+ *
  * The transform only ever *inserts* quote characters within a line, so line numbers are
  * preserved exactly and diagnostics stay accurate. Columns after a wrap shift by one or
  * two characters.
@@ -35,8 +46,30 @@ const BLOCK_SCALAR_RE = /^[|>][+-]?\d*[+-]?\s*(#.*)?$/;
 /** A document separator or terminator, which resets all structural state. */
 const DOC_MARKER_RE = /^(---|\.\.\.)(\s|$)/;
 
+/**
+ * The cheap test for "is there anything here to rescue at all".
+ *
+ * Matched against the whole document to skip the line scanner entirely, so it has to admit
+ * every shape the scanner handles. The placeholder arm is a pattern rather than a bare `%`
+ * because a percent sign is ordinary in prose — "up 5% this quarter" — and a substring test
+ * would give up the fast path for most documents to catch a form none of them use.
+ */
+const PREPARSE_TRIGGER_RE = /\{\$|\{%|%\w+%/;
+
+/**
+ * A `%key%` placeholder at `i`, matching Velvet Lattice's own `%(\w+)%` pattern so what
+ * the preparser rescues and what VL substitutes cannot drift apart.
+ */
+function isPlaceholderStart(line, i) {
+  if (line[i] !== '%') return false;
+  let j = i + 1;
+  while (j < line.length && /\w/.test(line[j])) j++;
+  return j > i + 1 && line[j] === '%';
+}
+
 function isTokenStart(line, i) {
-  return line[i] === '{' && (line[i + 1] === '$' || line[i + 1] === '%');
+  if (line[i] === '{' && (line[i + 1] === '$' || line[i + 1] === '%')) return true;
+  return isPlaceholderStart(line, i);
 }
 
 function isSpace(ch) {
@@ -316,7 +349,7 @@ function preparseLine(rawLine, state) {
  */
 function preparse(text) {
   if (typeof text !== 'string') return text;
-  if (!text.includes('{$') && !text.includes('{%')) return text;
+  if (!PREPARSE_TRIGGER_RE.test(text)) return text;
 
   const state = { flowDepth: 0, expectFlowEntry: false, blockScalarIndent: null };
   const lines = text.split('\n');

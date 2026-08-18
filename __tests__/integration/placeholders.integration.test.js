@@ -342,9 +342,7 @@ describe('duplicate question text, end to end', () => {
         'placeholders:',
         '  heroName: What is your name?',
         '  pcName: What is your name?',
-        // Quoted because a plain YAML scalar may not start with `%` — see the
-        // preparse gap noted in the Phase 4 plan.
-        'components:', '  opening: "%heroName% and %pcName% set out."', '',
+        'components:', '  opening: %heroName% and %pcName% set out.', '',
       ].join('\n'),
     });
     expect(dupes(diags)).toHaveLength(1);
@@ -356,7 +354,7 @@ describe('duplicate question text, end to end', () => {
       'compile.cl.yaml': [
         HEAD,
         'placeholders:', '  hero: What is your name?',
-        'components:', '  opening: "%hero%, %hero%, and %hero% again."',
+        'components:', '  opening: %hero%, %hero%, and %hero% again.',
         'branches:', '  north:', '    title: The %hero% Road', '',
       ].join('\n'),
     });
@@ -373,7 +371,7 @@ describe('duplicate question text, end to end', () => {
         'placeholders:',
         '  a: What is your {%noun} ?',
         '  b: What is your name ?',
-        'components:', '  opening: "%a% %b%"', '',
+        'components:', '  opening: %a% %b%', '',
       ].join('\n'),
     });
     expect(dupes(diags)).toHaveLength(1);

@@ -348,3 +348,43 @@ describe('findSwallowedTokens', () => {
     expect(findSwallowedTokens({ a: { '$x': null }, b: { '%y': null } })).toHaveLength(2);
   });
 });
+
+describe('%key% placeholders in leading value position (§12, Phase 4)', () => {
+  // `%` is YAML's directive indicator, so a plain scalar may not begin with one at all.
+  // Unrescued, `opening: %heroName% woke up.` is a hard parse error naming neither
+  // placeholders nor the fix — the paper cut §4.1 exists to remove.
+  const parse = (src) => YAML.parse(preparse(src));
+
+  test('a leading placeholder in block position', () => {
+    expect(parse('opening: %heroName% woke up.')).toEqual({ opening: '%heroName% woke up.' });
+  });
+
+  test('a placeholder alone as the whole value', () => {
+    expect(parse('opening: %heroName%')).toEqual({ opening: '%heroName%' });
+  });
+
+  test('a leading placeholder in a flow sequence entry', () => {
+    // Triggers are a real destination: AID fills placeholders in a card's trigger field.
+    expect(parse('triggers: [%name%, Aness]')).toEqual({ triggers: ['%name%', 'Aness'] });
+  });
+
+  test('a leading placeholder as a flow mapping value', () => {
+    expect(parse('aid: {type: %kind%}')).toEqual({ aid: { type: '%kind%' } });
+  });
+
+  test('a percentage in prose is left alone', () => {
+    // The reason the trigger is a pattern and not a bare `%`: percent signs are ordinary.
+    expect(parse('note: 100% done')).toEqual({ note: '100% done' });
+    expect(preparse('note: 100% done')).toBe('note: 100% done');
+  });
+
+  test('a placeholder mid-value needs no rescue and gets none', () => {
+    expect(preparse('note: You are %name%.')).toBe('note: You are %name%.');
+  });
+
+  test('a bare % is still an error, because it is not a placeholder', () => {
+    // Inventing a general rule for `%` would quote things this module has no reason to
+    // have an opinion about.
+    expect(() => parse('note: % nope')).toThrow();
+  });
+});
