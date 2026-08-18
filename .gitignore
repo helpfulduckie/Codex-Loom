@@ -1,6 +1,5 @@
 /test/output
 /node_modules
-CLAUDE.md
 
 # The golden fixture harness compiles into a temp copy of the tree; these only appear
 # if the CLI is pointed at a fixture directly, and must never be committed — the frozen
