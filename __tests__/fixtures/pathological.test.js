@@ -85,12 +85,11 @@ describe('pathological fixture', () => {
    * `placeholders:` draws a NOT_YET_IMPLEMENTED WARN and is ignored — and that WARN
    * disappearing is the first row Phase 4 Step 1 is expected to change.
    *
-   * One row in this snapshot is known to be WRONG, and is pinned rather than blessed:
-   * CL0322 fires on `Ghost`, an item with `storyCard: false` whose only template sits on
-   * its component target. §7.4 says an item routed only into components needs neither
-   * `aid.type` nor `render.template`, so the check is a Phase 3 leftover that the item/slot
-   * flip never rescoped. It is tracked separately; when it is fixed, this snapshot loses
-   * two rows and that is the intended diff.
+   * Every row here is now a row the fixture means to raise. CL0322 used to fire on `Ghost`
+   * and `Silent` — items with `storyCard: false`, which §7.4 says are owed neither
+   * `aid.type` nor `render.template` — and was pinned as known-incorrect until the check
+   * was scoped to story-card targets. `Ghost` and `Silent` keep their CL0610, which is the
+   * diagnostic that describes them.
    */
   test('placement invariants and latent placeholder content', () => {
     expect(diagnoseProject('placement')).toMatchSnapshot();

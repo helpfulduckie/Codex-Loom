@@ -644,3 +644,49 @@ describe('resolveItem', () => {
     });
   });
 });
+
+/**
+ * CL0322 was unconditional until the item/slot flip caught up with it: any item lacking
+ * both `aid.type` and `render.template` warned, including one routed only into components,
+ * where §7.4 says neither key is owed. The check is now scoped to items that emit a story
+ * card — the one output with no verbatim rung to fall through to.
+ */
+describe('CL0322 — no type and no template', () => {
+  const NO_TYPE = 'CL0322';
+
+  function warnCodesFor(render) {
+    const onWarn = jest.fn();
+    const itemDef = { id: 'Subject', name: 'Subject', body: { Tagline: 'x' } };
+    if (render) itemDef.render = render;
+    resolveItem(itemDef, new Map(), [], onWarn);
+    return onWarn.mock.calls.map(([code]) => code);
+  }
+
+  test('a story card with neither key warns', () => {
+    // No `render:` at all — storyCard defaults to true, so a card is emitted and nothing
+    // can select a template for it.
+    expect(warnCodesFor(undefined)).toContain(NO_TYPE);
+  });
+
+  test('an item routed only into components does not warn', () => {
+    // `Ghost` from the placement fixture: the template sits on the target, which
+    // `resolvePlacements` reads as the first rung of the ladder.
+    expect(warnCodesFor({
+      storyCard: false,
+      plotEssential: { slot: 'cast', order: 3, template: 'Character' },
+    })).not.toContain(NO_TYPE);
+  });
+
+  test('an item with no story card and no target does not warn either', () => {
+    // `Silent`. It produces no output at all, which is CL0610's ERROR to report — naming
+    // the missing type as well would describe a field that would change nothing.
+    expect(warnCodesFor({ storyCard: false })).not.toContain(NO_TYPE);
+  });
+
+  test('a story card keeps its warning when a component target carries the template', () => {
+    // The target's template does not reach the card, so the card is still unspecified.
+    expect(warnCodesFor({
+      plotEssential: { slot: 'cast', template: 'Character' },
+    })).toContain(NO_TYPE);
+  });
+});

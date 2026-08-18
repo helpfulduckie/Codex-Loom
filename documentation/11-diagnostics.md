@@ -116,7 +116,7 @@ Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein 
 |---|---|---|
 | `CL0320` | WARN | A variant delta declares more than one `v:` alias; they are merged. |
 | `CL0321` | WARN | A named variant does not exist in the item's variant tree. |
-| `CL0322` | WARN | An item has neither `aid.type` nor `render.template`. |
+| `CL0322` | WARN | An item emitting a story card has neither `aid.type` nor `render.template`. |
 | `CL0323` | ERROR | An item declares both `notes:` and `description:`. |
 | `CL0324` | ERROR | An item could not be resolved — most often a failed `import:`. |
 | `CL0340` | ERROR | A reference is defined in more than one canon set and is not qualified. |

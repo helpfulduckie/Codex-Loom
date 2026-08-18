@@ -43,12 +43,14 @@ prove nothing about the checks the fixture was written for.
 
 ## Known-incorrect rows in the snapshot
 
-**`CL0322` on `Ghost` and `Silent`** — "has neither aid.type nor render.template". §7.4 says
-`aid:` is required only when a story-card target exists, and that an item routed only into
-components needs neither key; the check also ignores per-target templates, which is where
-`Ghost`'s template lives. It is a Phase 3 leftover the item/slot flip never rescoped.
-Pinned, not blessed: when it is fixed the snapshot loses those rows, and that is the
-intended diff.
+**None.** Every row the snapshot now holds is a row the fixture means to raise.
+
+`CL0322` on `Ghost` and `Silent` was the last entry here, and was resolved by scoping the
+check rather than by editing the fixture: it now fires only when a story-card target
+exists, which is what §7.4 said all along. `Ghost` is specified by the `template:` on its
+`plotEssential` target and `Silent` emits nothing at all, so neither is owed an `aid.type`.
+Both items keep their `CL0610`, which is the ERROR that actually describes `Silent` — the
+`CL0322` row was a second, weaker report of the same fact.
 
 ## What the snapshot is expected to lose and gain in Phase 4
 

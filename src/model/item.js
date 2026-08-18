@@ -225,9 +225,25 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
   if (!item.aid.type && item.render.template) item.aid.type = item.render.template;
   if (!item.render.template && item.aid.type) item.render.template = item.aid.type;
 
-  if (!item.aid.type && !item.render.template) {
+  // Scoped to items that emit a story card (§7.4). An item routed only into components
+  // needs neither key: `resolvePlacements` builds each target's template from
+  // `target.template || render.template || aid.type`, so a template on the target alone
+  // fully specifies it, and a component placement that reaches none of the three still
+  // falls through to verbatim pass-through. A story card has no such rung — `getTemplate`
+  // failing is CL0420 — which is what leaves a card, and only a card, with something to
+  // warn about.
+  //
+  // Reported here rather than left to CL0420 for the same reason the placeholder context
+  // check runs before the ladder: CL0420 names the type it could not find, and when the
+  // author set no type at all it reports `?`. This names the cause.
+  if (item.render.storyCard !== false && !item.aid.type && !item.render.template) {
     const name = item.id || (typeof item.name === 'string' ? item.name : '');
-    if (onWarn) onWarn(CODES.NO_TYPE_OR_TEMPLATE, `item "${name}" has neither aid.type nor render.template`);
+    if (onWarn) {
+      onWarn(CODES.NO_TYPE_OR_TEMPLATE,
+        `item "${name}" emits a story card but has neither aid.type nor render.template, `
+        + 'so no template can be selected for it. Add one, or set "render.storyCard: false" '
+        + 'if it was only ever meant to render into a component.');
+    }
   }
 
   // Collapse `description:` into `notes:` (§4.5). Downstream — the emitter, field ops,
