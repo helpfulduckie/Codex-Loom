@@ -54,6 +54,7 @@ const CODES = Object.freeze({
   // never inherited is meaningless as written and reliably means the author meant to
   // include, so it warns rather than passing silently.
   PLACEHOLDER_UNBIND_UNKNOWN: 'CL0530',
+  PLACEHOLDER_CYCLE: 'CL0531',
 
   // Components (§7.2). Raised by `model/component.js`, which reports through `onWarn`
   // and therefore takes its severity from the table below.
@@ -90,6 +91,7 @@ const CODES = Object.freeze({
 const SEVERITY_BY_CODE = Object.freeze({
   CL0320: SEVERITY.WARN,
   CL0530: SEVERITY.WARN,
+  CL0531: SEVERITY.ERROR,
   CL0321: SEVERITY.WARN,
   CL0322: SEVERITY.WARN,
   CL0323: SEVERITY.ERROR,

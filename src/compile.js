@@ -18,8 +18,11 @@ const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldR
 const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, itemContext } = require('./util');
 const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
-const { Diagnostics, busWarner, CODES: DIAG_CODES } = require('./diag');
+const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES } = require('./diag');
 const { renderCard } = require('./emit/vl');
+const {
+  FILENAME: PLACEHOLDERS_FILENAME, writeNodePlaceholders,
+} = require('./emit/placeholders');
 const { loadDescConfig, extractScriptBanner, writeDescription } = require('./description');
 const { loadOpeningConfig, compileOpening } = require('./opening');
 const {
@@ -279,8 +282,10 @@ function cleanBranchOutputDir(dir) {
     const target = path.join(dir, sub);
     if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
   }
-  const label = path.join(dir, 'Label.md');
-  if (fs.existsSync(label)) fs.rmSync(label);
+  for (const file of ['Label.md', PLACEHOLDERS_FILENAME]) {
+    const target = path.join(dir, file);
+    if (fs.existsSync(target)) fs.rmSync(target);
+  }
 }
 
 /**
@@ -940,6 +945,56 @@ function writeLabelsRecursive(branches, outputBase, variables, verbose = false) 
 }
 
 /**
+ * Write `Placeholders.yaml` across the branch tree (§12.2).
+ *
+ * Node-level, like `Label.md` and for the same reason: Velvet Lattice reads one file per
+ * scenario node and merges them down itself, so the leaf loop is the wrong shape — it
+ * would emit a leaf's accumulated table and never write the interior nodes at all.
+ *
+ * Each node emits only the keys it declares. What it emits are those keys' *expanded*
+ * questions, resolved against the merged table so a local question nesting an inherited
+ * key carries that key's question inline — see `emit/placeholders.js` for why the nesting
+ * cannot be left to VL.
+ */
+function writePlaceholdersRecursive(branches, outputBase, rootPlaceholders, variables, configPath, diagnostics, verbose = false) {
+  const onWarn = (code, message, file) => diagnostics.add(
+    severityOf(code), code, message, { file: file || configPath },
+  );
+
+  const rootNode = { placeholders: rootPlaceholders };
+  const rootTable = Object.assign({}, rootPlaceholders || {});
+  const written = writeNodePlaceholders(outputBase, rootNode, rootTable, variables, {
+    onWarn, file: configPath,
+  });
+  if (written && verbose) console.log(`    OK: Placeholders → ${written}`);
+
+  walkBranchTree(branches, ({ name, node, state }) => {
+    const nodeOutput = path.join(state.outputBase, 'Branches', name);
+    const branchVars = (node && node.variables)
+      ? Object.assign({}, state.variables, node.variables)
+      : state.variables;
+
+    // The merged table at this node, by the same rules `walkBranchChain` applies along a
+    // path: local keys override inherited ones, `~` deletes. Accumulated here rather than
+    // looked up because the tree walk already has the chain in hand as `state`.
+    const table = Object.assign({}, state.table);
+    if (node && node.placeholders && typeof node.placeholders === 'object') {
+      for (const [key, question] of Object.entries(node.placeholders)) {
+        if (question === null || question === undefined) delete table[key];
+        else table[key] = question;
+      }
+    }
+
+    const outPath = writeNodePlaceholders(nodeOutput, node, table, branchVars, {
+      onWarn, file: configPath,
+    });
+    if (outPath && verbose) console.log(`    OK: Placeholders → ${outPath}`);
+
+    return { outputBase: nodeOutput, variables: branchVars, table };
+  }, { outputBase, variables, table: rootTable });
+}
+
+/**
  * Print what the loading phase has collected since `since`, and abort if any of it —
  * checked across the whole bus, not just what's new — is an error.
  *
@@ -1289,6 +1344,12 @@ function compileRun(configPath, options, buses) {
   );
 
   writeLabelsRecursive(config.branches, config._resolvedOutput, config._variables || config.variables || {}, verbose);
+
+  writePlaceholdersRecursive(
+    config.branches, config._resolvedOutput, config.placeholders,
+    config._variables || config.variables || {}, configPath, compileDiagnostics, verbose,
+  );
+  reportCompileDiagnostics();
 
   // Root Label (project-level, written once to output root alongside Description.md)
   if (config.title != null) {

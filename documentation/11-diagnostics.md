@@ -239,6 +239,7 @@ that can still see the difference.
 | `CL0520` | ERROR | A branch-scoped variable was used where only root variables resolve. |
 | `CL0521` | ERROR | A canon name collides with a declared variable. |
 | `CL0530` | WARN | A placeholder is unbound with `~` but was never inherited at that node. |
+| `CL0531` | ERROR | Placeholder questions form a reference cycle; every key in the loop is named. |
 
 `CL0530` takes its own decade because `051x` is variables and `052x` is scoping; placeholders
 are a third thing in the band and will want neighbors as §12's remaining checks land.
@@ -249,6 +250,12 @@ declare a placeholder is also the way to silently delete one. Unbinding somethin
 inherited removes nothing and cannot have been meant, which makes it a reliable signal that
 the question text is missing; the message says so rather than reporting the deletion
 neutrally.
+
+`CL0531` is the cost of resolving nesting at compile time (§12.2). A question may contain
+`%key%` referring to another declared placeholder, which Codex Loom expands before writing
+the file so that Velvet Lattice's single substitution pass cannot get the order wrong. A
+cycle has no expansion, so it is named in full — the author has to break the loop somewhere
+and which key the traversal entered on says nothing about where.
 
 It is scoped to placeholders today. §6.4 gives `~` the same meaning for variables, roles,
 scripts and lint packs, none of which implement it yet — a `~` there sets the key to null
