@@ -1,0 +1,30 @@
+# Plot Essentials for the placement fixture. Two slots and one text section, arranged so
+# that every §7.4 target error has something real to point at.
+
+sections:
+  # A text section, not a slot. An item targeting it earns CL0612 — "not a slot" — which is
+  # a different mistake from naming a slot that does not exist, and the two must not
+  # collapse into one message.
+  genre:
+    text: 'Genre: a fixture that is wrong on purpose.'
+    render:
+      position: 1
+
+  # The slot that goes away on one branch. `Ghost` targets it and declares no other output,
+  # so on `gated` it produces nothing at all — CL0610.
+  cast:
+    slot: true
+    heading: Cast
+    render:
+      position: 2
+      wrapper: curly
+    branches:
+      gated: ~
+
+  # Declared and never filled on any branch. A declared slot with no items is a WARN, not
+  # an error (§7.4) — a branch may legitimately have an empty cast.
+  party:
+    slot: true
+    heading: Party
+    render:
+      position: 3

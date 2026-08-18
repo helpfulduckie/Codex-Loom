@@ -1,0 +1,51 @@
+# The pathological fixture, placement layer — a project that is wrong on purpose.
+#
+# Authored from the spec (§7.4's invariant table, §12.3's four checks) *before* Phase 4's
+# code exists, so it states what should happen rather than snapshotting what does. See
+# ../README.md for why the fixture is split by diagnostic layer.
+#
+# Every mistake here is deliberate. Nothing in this project should be copied as an example.
+
+version: 4
+title: Pathological — Placement
+
+variables:
+  here: .
+
+structure:
+  input:
+    items:
+      - '{%here}/Codex'
+    templates:
+      - '{%here}/templates'
+  output: './out'
+
+# ── §12.3 checks 2 and 4, latent until Phase 4 ───────────────────────────────
+# Today `placeholders:` draws a NOT_YET_IMPLEMENTED WARN and is ignored, so none of these
+# produce a placeholder diagnostic yet. That is the point of authoring them now: the rows
+# appear in the snapshot as each check lands, and the diff is the review artifact.
+#
+#   heroName / altName — check 4: two keys, one question string. AID collapses identical
+#                        questions, so the player is prompted once and both keys receive
+#                        that answer.
+#   neverUsed          — check 2: declared at root, referenced by no body on any branch.
+placeholders:
+  heroName: What is your name?
+  altName: What is your name?
+  neverUsed: Which house raised you?
+
+components:
+  plotEssential: '{%here}/components/plot-essentials.cl.yaml'
+  # A `.md` passthrough (§7.3): no sections, therefore no slots. An item targeting a slot
+  # inside it must get CL0611 naming the reason, not silence.
+  aiInstructions: '{%here}/components/ai-instructions.md'
+
+branches:
+  open:
+    title: The Open Path
+
+  gated:
+    title: The Gated Path
+    # The `cast` slot excludes itself on this branch, in the component file. Gating a slot
+    # off is legitimate (§7.4) — until it makes an item with no other target vanish
+    # entirely, which is what `Ghost` does below.

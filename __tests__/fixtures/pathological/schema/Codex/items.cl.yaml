@@ -1,0 +1,9 @@
+# One valid item. The schema fixture is about the config, and an items path that does not
+# exist would add a CL0120 WARN that has nothing to do with what it demonstrates.
+- id: Placeholder Item
+  name: Placeholder Item
+  aid:
+    type: Character
+    triggers: [Placeholder]
+  body:
+    Tagline: Exists so the items path resolves.

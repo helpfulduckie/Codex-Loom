@@ -1,0 +1,33 @@
+# The pathological fixture, schema layer — a config that cannot be loaded.
+#
+# Split from ../placement/ because the layers abort differently (§4.3). A schema violation
+# is an ERROR that stops the compile *before anything is written*: `reportLoadDiagnostics`
+# throws as soon as the config is validated, so nothing downstream runs and no placement
+# diagnostic is ever raised. Putting both classes in one project would mean the load errors
+# fired and everything the placement fixture exists to demonstrate silently vanished — the
+# fixture would still be red, and would prove nothing about the checks it was written for.
+#
+# Every mistake here is deliberate. Nothing in this project should be copied as an example.
+
+version: 4
+title: Pathological — Schema
+
+variables:
+  here: .
+
+structure:
+  input:
+    items:
+      - '{%here}/Codex'
+  output: './out'
+  # Unknown key with a near neighbor — CL0201, and the suggestion machinery should offer
+  # "reports" rather than shrugging.
+  report: './Review'
+
+# Misplaced rather than unknown: a real key written at the wrong level. CL0210 exists so
+# this reads as "you put it in the wrong place" instead of "no such key", which is the
+# difference between a one-line fix and a hunt through the schema.
+notesTemplate: ProjectNotes
+
+# Unknown key with no near neighbor, so the no-suggestion arm is covered too.
+placeholder: What is your name?

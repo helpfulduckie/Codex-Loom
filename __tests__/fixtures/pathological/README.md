@@ -1,0 +1,61 @@
+# The pathological fixture
+
+Two projects that are wrong on purpose, and a committed snapshot of every diagnostic they
+raise. Added as Step 0 of Phase 4 (see `v4 Phase 4 plan` in the vault).
+
+## Why it exists
+
+**The three golden corpora are all correct projects, so they can go red on a byte and never
+on a check.** They pin whole-output identity, which is exactly what a refactor needs and
+exactly what a new diagnostic does not. No fixture names a slot that does not exist, no
+declared slot is empty on any leaf, and none of them uses placeholders at all — so §7.4's
+invariant table and every §12 check are invisible to them. A version of those checks that
+never fires would pass the whole suite.
+
+**This fixture is the missing third source.** Not bytes, but the diagnostic stream: code,
+severity, file, message, in the order the compiler produces them.
+
+## Why it is not a fourth golden corpus
+
+A golden fixture freezes v3-compiled output and asserts byte identity. A project that is
+wrong on purpose has no v3 baseline worth freezing — v3 would refuse it or compile it
+wrongly, and either way the bytes are not the thing under test.
+
+## Why it is two projects
+
+**The layers abort differently (§4.3).** A schema violation is an ERROR that stops the
+compile before anything is written: `reportLoadDiagnostics` throws as soon as the config is
+validated. Putting a bad config in the placement project would mean the load errors fired
+and every placement diagnostic silently vanished — the suite would still be red, and would
+prove nothing about the checks the fixture was written for.
+
+- `placement/` — load-clean on purpose, so the compile phase runs in full. Carries §7.4's
+  placement invariants and the §12 placeholder content that is still inert.
+- `schema/` — three unknown-key shapes, asserted for their hints as much as their codes.
+
+## Editing rules
+
+- **Author from the spec, not from the implementation.** The fixture states what *should*
+  happen. Where the compiler currently disagrees, pin the disagreement and mark it, rather
+  than rewriting the fixture until it matches.
+- **One deliberate mistake per item**, named in a comment with the code it should raise.
+- **Nothing here is an example.** Every file in both projects is wrong somewhere.
+
+## Known-incorrect rows in the snapshot
+
+**`CL0322` on `Ghost` and `Silent`** — "has neither aid.type nor render.template". §7.4 says
+`aid:` is required only when a story-card target exists, and that an item routed only into
+components needs neither key; the check also ignores per-target templates, which is where
+`Ghost`'s template lives. It is a Phase 3 leftover the item/slot flip never rescoped.
+Pinned, not blessed: when it is fixed the snapshot loses those rows, and that is the
+intended diff.
+
+## What the snapshot is expected to lose and gain in Phase 4
+
+| Step | Expected change |
+|---|---|
+| 1 | `CL0204` on `placeholders:` disappears — the key stops being "not yet implemented" |
+| 3 | Undeclared `%ghostName%` in `Greeter` starts erroring |
+| 4 | The invalid-context checks appear on Description and card `type` |
+| 6 | `neverUsed` starts warning |
+| 7 | `heroName` / `altName` start warning as one collapsed prompt |

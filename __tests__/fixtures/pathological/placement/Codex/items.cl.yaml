@@ -1,0 +1,94 @@
+# The placement fixture's items. One correct item, then one item per deliberate mistake.
+#
+# `Anchor` is correct and exists so the components have an occupant and render — without
+# it every component would fail the §7.4 "renders to nothing" ERROR and bury the errors
+# this fixture is actually about.
+
+# ── Correct. The control case. ───────────────────────────────────────────────
+- id: Anchor
+  name: Anchor
+  aid:
+    type: Character
+    triggers: [Anchor]
+  body:
+    Tagline: The one item here that is written correctly.
+  render:
+    plotEssential:
+      slot: cast
+      order: 1
+
+# ── §12.3 check 1: an undeclared placeholder, latent until Phase 4 ───────────
+# `%heroName%` is declared in ../compile.cl.yaml; `%ghostName%` is not. Today both survive
+# into compiled output as literal text and nothing reports the second.
+- id: Greeter
+  name: Greeter
+  aid:
+    type: Character
+    triggers: [Greeter]
+  body:
+    Tagline: '%heroName% is greeted by a stranger who will not give %ghostName% a name.'
+  render:
+    plotEssential:
+      slot: cast
+      order: 2
+
+# ── §7.4: an item that vanishes on one branch ────────────────────────────────
+# No story card, and its only component target is the `cast` slot — which excludes itself
+# on `gated`. Fine on `open`, CL0610 on `gated`.
+- id: Ghost
+  name: Ghost
+  body:
+    Tagline: Present on the open path, gone entirely on the gated one.
+  render:
+    storyCard: false
+    plotEssential:
+      slot: cast
+      order: 3
+      template: Character
+
+# ── §7.4: an item with no output anywhere ────────────────────────────────────
+# No story card and no component target at all. CL0610 on every branch.
+- id: Silent
+  name: Silent
+  render:
+    storyCard: false
+
+# ── §7.4: a target naming a slot no component declares ───────────────────────
+# The typo class. `casst` for `cast` — CL0611.
+- id: Typo
+  name: Typo
+  aid:
+    type: Character
+    triggers: [Typo]
+  body:
+    Tagline: Targets a slot that does not exist.
+  render:
+    plotEssential:
+      slot: casst
+
+# ── §7.4: a target naming a section that exists but is not a slot ────────────
+# `genre` is a text section. CL0612 — a different mistake from the typo above.
+- id: NotASlot
+  name: NotASlot
+  aid:
+    type: Character
+    triggers: [NotASlot]
+  body:
+    Tagline: Targets a text section as though it were a slot.
+  render:
+    plotEssential:
+      slot: genre
+
+# ── §7.3: a target naming a slot inside a passthrough component ──────────────
+# `ai-instructions.md` is prose and declares no slots at all. CL0611, with a reason that
+# says so rather than reading as a typo.
+- id: IntoPassthrough
+  name: IntoPassthrough
+  aid:
+    type: Character
+    triggers: [IntoPassthrough]
+  body:
+    Tagline: Targets a slot inside a component that has none.
+  render:
+    aiInstructions:
+      slot: rules

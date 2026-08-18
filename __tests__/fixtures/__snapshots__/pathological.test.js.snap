@@ -1,0 +1,48 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`pathological fixture config schema violations abort the load 1`] = `
+"ERROR CL0201 compile.cl.yaml
+  Unknown key "report" under "structure".
+  hint: Did you mean "reports"?
+ERROR CL0210 compile.cl.yaml
+  Unknown key "notesTemplate" at the top level.
+  hint: "notesTemplate" is valid under "render:" — did you mean to nest it there?
+ERROR CL0201 compile.cl.yaml
+  Unknown key "placeholder" at the top level.
+  hint: Did you mean "placeholders"?"
+`;
+
+exports[`pathological fixture placement invariants and latent placeholder content 1`] = `
+"WARN CL0204 compile.cl.yaml
+  "placeholders" is recognized but not yet implemented — Phase 4. It will be ignored.
+WARN CL0322 Codex/items.cl.yaml
+  item "Ghost" has neither aid.type nor render.template
+WARN CL0322 Codex/items.cl.yaml
+  item "Silent" has neither aid.type nor render.template
+ERROR CL0610 Codex/items.cl.yaml
+  item "Silent" resolves on branch "open" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
+ERROR CL0611 Codex/items.cl.yaml
+  item "Typo" targets slot "casst" in Plot Essentials on branch "open", which declares no such slot. Declared here: cast, party.
+ERROR CL0612 Codex/items.cl.yaml
+  item "NotASlot" targets "genre" in Plot Essentials, which is a section but not a slot — only a section declaring "slot: true" can hold items.
+ERROR CL0611 Codex/items.cl.yaml
+  item "IntoPassthrough" targets slot "rules" in AI Instructions, which is prose copied verbatim and declares no slots. Point the component at a YAML document with "sections:" to route items into it.
+WARN CL0614 components/plot-essentials.cl.yaml
+  slot "party" in Plot Essentials has no items on branch "open".
+WARN CL0322 Codex/items.cl.yaml
+  item "Ghost" has neither aid.type nor render.template
+WARN CL0322 Codex/items.cl.yaml
+  item "Silent" has neither aid.type nor render.template
+ERROR CL0610 Codex/items.cl.yaml
+  item "Ghost" resolves on branch "gated" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
+ERROR CL0610 Codex/items.cl.yaml
+  item "Silent" resolves on branch "gated" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
+ERROR CL0611 Codex/items.cl.yaml
+  item "Typo" targets slot "casst" in Plot Essentials on branch "gated", which declares no such slot. Declared here: cast, party.
+ERROR CL0612 Codex/items.cl.yaml
+  item "NotASlot" targets "genre" in Plot Essentials, which is a section but not a slot — only a section declaring "slot: true" can hold items.
+ERROR CL0611 Codex/items.cl.yaml
+  item "IntoPassthrough" targets slot "rules" in AI Instructions, which is prose copied verbatim and declares no slots. Point the component at a YAML document with "sections:" to route items into it.
+WARN CL0614 components/plot-essentials.cl.yaml
+  slot "party" in Plot Essentials has no items on branch "gated"."
+`;

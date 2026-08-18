@@ -614,15 +614,20 @@ function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, file) {
  * slot whose occupants all mis-typed their `slot:` look identical in the output file, and
  * the second is worth a line on the way past.
  */
-function warnEmptySlots(descriptor, slotIndex, filled, label, diagnostics) {
+function warnEmptySlots(descriptor, slotIndex, filled, label, diagnostics, file) {
   const known = slotIndex.get(descriptor.key);
   if (!known) return;
   for (const name of known.slots.keys()) {
     const placed = filled.get(name);
     if (placed && placed.length > 0) continue;
+    // Located at the component that declared the slot, not at the item that failed to
+    // fill it — there is no such item, which is the whole finding. §4.4's "every
+    // diagnostic names a file" otherwise has one exception, and an author reading
+    // "slot X has no items" with no path has to guess which component declared X.
     diagnostics.warn(
       DIAG_CODES.SLOT_EMPTY,
       `slot "${name}" in ${known.label} has no items on branch "${label}".`,
+      { file: file == null ? undefined : String(file) },
     );
   }
 }
@@ -956,7 +961,35 @@ function reportLoadDiagnostics(diagnostics, since = 0) {
 
 // ── Main compile function ─────────────────────────────────────────────────────
 
+/**
+ * Compile a project, optionally handing the caller the diagnostics as data.
+ *
+ * `compileRun` reports through the console and signals failure by throwing a *count* —
+ * which is right for an author at a terminal and useless to a test that wants to assert
+ * on codes. Passing `options.diagnostics` (a `Diagnostics`) collects everything both
+ * internal buses saw, on every exit path: the early load throw, the component-gap throw,
+ * the final error throw, and success alike. That is what the `finally` is for — a compile
+ * that failed is precisely the one whose diagnostics are worth reading, so merging only
+ * on the success path would collect nothing in the interesting case.
+ *
+ * The buses stay separate internally because their abort semantics differ (§4.3): a load
+ * error stops the compile before anything is written, a compile error lets the tree land
+ * and fails the run afterward. The sink flattens them because a caller reading
+ * diagnostics wants the whole stream in one place.
+ */
 function compile(configPath, options = {}) {
+  const buses = {};
+  try {
+    return compileRun(configPath, options, buses);
+  } finally {
+    if (options.diagnostics) {
+      if (buses.load) options.diagnostics.merge(buses.load);
+      if (buses.compile) options.diagnostics.merge(buses.compile);
+    }
+  }
+}
+
+function compileRun(configPath, options, buses) {
   const verbose = !!options.verbose;
 
   // One bus for everything the loading phase reports, so item schema violations are
@@ -964,12 +997,14 @@ function compile(configPath, options = {}) {
   // of console warnings interleaved with progress output. The compile phases still warn
   // directly; they move onto the bus as their modules are decomposed.
   const loadDiagnostics = new Diagnostics();
+  buses.load = loadDiagnostics;
 
   // A second bus for everything the compile phases report — item resolution, cross-item
   // refs, emit. Unlike the load bus this one never aborts mid-run: its errors mean the tree
   // that gets written is wrong, not that it cannot be written, so it is checked once at the
   // end and the author gets both the artifact and a failed build.
   const compileDiagnostics = new Diagnostics();
+  buses.compile = compileDiagnostics;
   let compileCursor = 0;
   const reportCompileDiagnostics = () => {
     for (const diag of compileDiagnostics.all.slice(compileCursor)) {
@@ -1154,7 +1189,7 @@ function compile(configPath, options = {}) {
         text = passthrough;
         segments = [{ key: descriptor.label, text: passthrough }];
       } else {
-        warnEmptySlots(descriptor, slotIndex, filled, label, compileDiagnostics);
+        warnEmptySlots(descriptor, slotIndex, filled, label, compileDiagnostics, spec);
         ({ text, segments } = renderSectionedComponent(
           component, branchPath, filled,
           {
