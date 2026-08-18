@@ -22,6 +22,7 @@ const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES } = require('./dia
 const { renderCard } = require('./emit/vl');
 const {
   FILENAME: PLACEHOLDERS_FILENAME, writeNodePlaceholders, checkUndeclaredPlaceholders,
+  checkPlaceholderContext,
 } = require('./emit/placeholders');
 const { loadDescConfig, extractScriptBanner, writeDescription } = require('./description');
 const { loadOpeningConfig, compileOpening } = require('./opening');
@@ -762,6 +763,23 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     // renders only into a component never produces one, so there is nothing to suppress.
     if (!placement.storyCard) continue;
 
+    // Before the template ladder, deliberately. `aid.type` selects the template when no
+    // explicit one is named, so a placeholder in it also fails to match a template — and
+    // that failure `continue`s past every later check. Reported here, the author is told
+    // the cause; reported after, they get CL0420 about a template they never wrote.
+    //
+    // Per branch rather than once per item, because a variant can change `aid.type` and
+    // only some branches may apply it.
+    checkPlaceholderContext(item.aid && item.aid.type, {
+      diagnostics,
+      file: item._source,
+      where: `the type of story card "${itemId}"`,
+      branch: branchLabel,
+      reason: 'AID does not fill placeholders in a card’s type. It is a category, and '
+        + 'Codex Loom also makes it a folder and file name in the compiled tree, so the '
+        + 'raw text would become part of a path.',
+    });
+
     // Validate the fully-resolved aid.type (it becomes a folder/file name). Runs here,
     // after all {%}/{$} passes, so it sees the final on-disk type. Aborts on invalid.
     validateCardType(item);
@@ -982,6 +1000,15 @@ function writeLabelsRecursive(branches, outputBase, variables, verbose = false, 
     // half-working case is Step 4's WARN.
     checkUndeclaredPlaceholders(labelText, table, {
       diagnostics, file: configPath, where: `the title of branch "${name}"`,
+    });
+    checkPlaceholderContext(labelText, {
+      diagnostics,
+      file: configPath,
+      where: `the title of branch "${name}"`,
+      severity: 'warn',
+      reason: 'a branch title half-works. AID fills the prompt and shows the answer while '
+        + 'the player is choosing, then keeps the raw placeholder text in the saved '
+        + 'adventure’s title. Deliberate is possible; usually it is not.',
     });
     fs.writeFileSync(outPath, labelText + '\n', 'utf8');
     if (verbose) console.log(`    OK: Label → ${outPath}`);
@@ -1446,6 +1473,13 @@ function compileRun(configPath, options, buses) {
     // no branch whose declarations could apply to it.
     checkUndeclaredPlaceholders(combined, config.placeholders, {
       diagnostics: compileDiagnostics, file: descSpec, where: 'the Description',
+    });
+    checkPlaceholderContext(combined, {
+      diagnostics: compileDiagnostics,
+      file: descSpec,
+      where: 'the Description',
+      reason: 'AID does not fill placeholders in the Description. It is shown before any '
+        + 'adventure exists to answer them, so the raw text is what a reader sees.',
     });
     const descPath = writeDescription(config._resolvedOutput, combined);
     if (descPath) { if (verbose) console.log(`  OK: Description → ${descPath}`); }

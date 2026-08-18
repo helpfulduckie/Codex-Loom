@@ -36,6 +36,10 @@ placeholders:
 
 components:
   plotEssential: '{%here}/components/plot-essentials.cl.yaml'
+  # §12.3 check 3: the Description is one of two destinations where a placeholder does
+  # not function at all. Declared or not makes no difference — it is shown before any
+  # adventure exists to answer it.
+  description: '{%here}/components/description.md'
   # A `.md` passthrough (§7.3): no sections, therefore no slots. An item targeting a slot
   # inside it must get CL0611 naming the reason, not silence.
   aiInstructions: '{%here}/components/ai-instructions.md'
@@ -45,7 +49,11 @@ branches:
     title: The Open Path
 
   gated:
-    title: The Gated Path
+    # A branch title half-works: the prompt fills and the player sees the answer while
+    # choosing, then the saved adventure keeps the raw text. WARN, not ERROR — a
+    # deliberate use is possible. The key is declared, so this is the context check
+    # firing on its own rather than riding on an undeclared one.
+    title: The %heroName% Path
     # The `cast` slot excludes itself on this branch, in the component file. Gating a slot
     # off is legitimate (§7.4) — until it makes an item with no other target vanish
     # entirely, which is what `Ghost` does below.

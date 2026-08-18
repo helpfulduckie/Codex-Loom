@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * §12.3 check 1 across every destination — Phase 4 Step 3.
+ * §12.3 checks 1 and 3 across every destination — Phase 4 Steps 3 and 4.
  *
  * These are integration tests because the question is *which write points are covered*, and
  * no unit can answer it. `checkUndeclaredPlaceholders` is unit-tested on its own; what it
@@ -11,8 +11,12 @@
  * lives — which is exactly how a destination gets forgotten.
  *
  * The pathological fixture covers the item and component paths and pins them in a snapshot.
- * These cover the four it does not, and assert on codes rather than on rendered text so
+ * These cover the ones it does not, and assert on codes rather than on rendered text so
  * rewording a message does not fail them.
+ *
+ * Check 3 is here for a second reason: its rescope is mostly a statement about what is
+ * *legal*, and a check that wrongly forbids something has no failing case of its own. The
+ * silent tests are the load-bearing ones.
  */
 
 const os = require('os');
@@ -62,6 +66,8 @@ function run(files) {
 const undeclared = (diags) => diags
   .filter((d) => d.code === CODES.PLACEHOLDER_UNDECLARED)
   .map((d) => d.message);
+
+const byCode = (diags, code) => diags.filter((d) => d.code === code).map((d) => d.message);
 
 const HEAD = [
   'version: 4',
@@ -177,5 +183,65 @@ describe('declared placeholders are silent everywhere', () => {
     }));
     expect(found).toHaveLength(1);
     expect(found[0]).toContain('south');
+  });
+});
+
+describe('§12.3 check 3 — where a placeholder may not go', () => {
+  const DECLARED = ['placeholders:', '  hero: Your name?'];
+
+  test('the Description errors even though the key is declared', () => {
+    // The whole point of separating this from the undeclared check: the Description is
+    // shown before an adventure exists to answer a prompt, so declaring it changes nothing.
+    const diags = run({
+      'compile.cl.yaml': [HEAD, ...DECLARED, 'components:', "  description: './desc.md'", ''].join('\n'),
+      'desc.md': 'You play %hero%.\n',
+    });
+    expect(byCode(diags, CODES.PLACEHOLDER_INVALID_CONTEXT)).toHaveLength(1);
+    expect(undeclared(diags)).toEqual([]);
+  });
+
+  test("a card's type errors, and is reported before the template it also breaks", () => {
+    // `aid.type` picks the template when none is named, so a placeholder there fails to
+    // match one too. If the context check ran after the template ladder, CL0420 would be
+    // the only thing reported — the symptom, with the cause skipped past.
+    const diags = run({
+      'compile.cl.yaml': [HEAD, ...DECLARED, ''].join('\n'),
+      'Codex/items.cl.yaml': [
+        '- id: Bad', '  name: Bad', '  aid:', "    type: 'Character-%hero%'",
+        '    triggers: [Bad]', '  body: {Tagline: x}', '',
+      ].join('\n'),
+    });
+    const codes = diags.map((d) => d.code);
+    expect(codes).toContain(CODES.PLACEHOLDER_INVALID_CONTEXT);
+    expect(codes.indexOf(CODES.PLACEHOLDER_INVALID_CONTEXT))
+      .toBeLessThan(codes.indexOf(CODES.TEMPLATE_NOT_FOUND));
+  });
+
+  test('a branch title warns rather than erroring', () => {
+    const diags = run({
+      'compile.cl.yaml': [
+        HEAD, ...DECLARED, 'branches:', '  north:', '    title: The %hero% Road', '',
+      ].join('\n'),
+    });
+    expect(byCode(diags, CODES.PLACEHOLDER_TITLE_PARTIAL)).toHaveLength(1);
+    expect(byCode(diags, CODES.PLACEHOLDER_INVALID_CONTEXT)).toEqual([]);
+  });
+
+  test('components and card bodies are legal and stay silent', () => {
+    // The half of the rescope that matters most: Velvet Lattice warns on AI Instructions
+    // and Summary, AID added both in March 2026, and adopting VL's list would make Codex
+    // Loom stricter than the tool it compiles for.
+    const diags = run({
+      'compile.cl.yaml': [
+        HEAD, ...DECLARED, 'components:', '  opening: You wake, %hero%.', '',
+      ].join('\n'),
+      'Codex/items.cl.yaml': [
+        '- id: Anchor', '  name: Anchor',
+        '  aid: {type: Character, triggers: [Anchor]}',
+        '  body: {Tagline: "They call you %hero%."}', '',
+      ].join('\n'),
+    });
+    expect(byCode(diags, CODES.PLACEHOLDER_INVALID_CONTEXT)).toEqual([]);
+    expect(byCode(diags, CODES.PLACEHOLDER_TITLE_PARTIAL)).toEqual([]);
   });
 });

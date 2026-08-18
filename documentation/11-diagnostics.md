@@ -241,6 +241,8 @@ that can still see the difference.
 | `CL0530` | WARN | A placeholder is unbound with `~` but was never inherited at that node. |
 | `CL0531` | ERROR | Placeholder questions form a reference cycle; every key in the loop is named. |
 | `CL0532` | ERROR | A `%key%` reaching compiled output is not declared on that branch. |
+| `CL0533` | ERROR | A placeholder reached a destination AID does not fill: the Description, or a card's `type`. |
+| `CL0534` | WARN | A placeholder reached a branch title, where it only half-works. |
 
 `CL0530` takes its own decade because `051x` is variables and `052x` is scoping; placeholders
 are a third thing in the band and will want neighbors as §12's remaining checks land.
@@ -270,6 +272,35 @@ text reaches a write point its source may be a template, a component document or
 `compile.cl.yaml`, so a path alone rarely locates the `%key%`. The declared list rides along
 as a hint, because an undeclared key is usually a typo of a real one and `%heroname%`
 against a declared `heroName` is invisible until the two are printed together.
+
+`CL0533` and `CL0534` are §12.3's context check, rescoped against AID's real behavior
+rather than Velvet Lattice's warnings. VL warns on Label, Description/Prompt, AI
+Instructions and Summary; two of those are stale, since AID's own documentation added AI
+Instructions and Story Summary in March 2026. Placeholders work in every component, and
+in a story card's entry, name, triggers and notes. Adopting VL's list would make Codex
+Loom stricter than the tool it compiles for, on rules that no longer exist.
+
+Three destinations survive:
+
+| Destination | Behavior | Code |
+|---|---|---|
+| The Description | Never filled — it is shown before an adventure exists to answer it | `CL0533` |
+| A card's `type` | Never filled — it is a category, and a path segment in the compiled tree | `CL0533` |
+| A branch title | Prompt fills and the player sees the answer while choosing; the saved adventure keeps the raw text | `CL0534` |
+
+Both check the `${...}` spelling as well as `%key%`, and both ignore whether the key is
+declared: where a placeholder cannot go, declaring it changes nothing.
+
+The check runs per *placement* rather than per file. §7.10 lets an item route into any
+component, so one item body can be legal in one destination and not another on a
+per-branch basis, and only the write point knows where the text landed. The `type` check
+in particular runs *before* template resolution: `aid.type` selects the template when no
+explicit one is named, so a placeholder there also fails to find a template, and CL0420
+would otherwise be the only thing reported — the symptom, with the cause skipped past.
+
+`CL0534` is a WARN because a branch title genuinely half-works and an author may want it
+anyway. The message states the consequence rather than the rule, since the behavior is
+not inferable from anything visible in the source.
 
 It is scoped to placeholders today. §6.4 gives `~` the same meaning for variables, roles,
 scripts and lint packs, none of which implement it yet — a `~` there sets the key to null

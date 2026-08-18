@@ -19,7 +19,8 @@ const path = require('path');
 const fs = require('fs');
 const YAML = require('yaml');
 const {
-  expandQuestions, localKeysOf, writeNodePlaceholders, checkUndeclaredPlaceholders, FILENAME,
+  expandQuestions, localKeysOf, writeNodePlaceholders, checkUndeclaredPlaceholders,
+  checkPlaceholderContext, findAllPlaceholders, findNativePlaceholders, FILENAME,
 } = require('../../src/emit/placeholders');
 const { CODES } = require('../../src/diag');
 
@@ -244,5 +245,83 @@ describe('checkUndeclaredPlaceholders', () => {
       diagnostics, where: 'a card',
     });
     expect(reported).toEqual(['a', 'b']);
+  });
+});
+
+describe('findNativePlaceholders', () => {
+  test('a nested placeholder is one occurrence, not a truncated match plus a tail', () => {
+    // The reason this is brace-balanced rather than a regex: Codex Loom *emits* nesting
+    // (§12.2), so a non-greedy matcher would misread the compiler's own output.
+    expect(findNativePlaceholders('${What is ${Their name?} like?}'))
+      .toEqual(['${What is ${Their name?} like?}']);
+  });
+
+  test('finds several in one text', () => {
+    expect(findNativePlaceholders('${A?} then ${B?}')).toEqual(['${A?}', '${B?}']);
+  });
+
+  test('ignores a bare brace group with no dollar', () => {
+    expect(findNativePlaceholders('{not a placeholder}')).toEqual([]);
+  });
+});
+
+describe('findAllPlaceholders', () => {
+  test('finds both spellings', () => {
+    expect(findAllPlaceholders('%key% and ${Question?}'))
+      .toEqual(['%key%', '${Question?}']);
+  });
+});
+
+describe('checkPlaceholderContext', () => {
+  const bus = () => {
+    const found = [];
+    return {
+      found,
+      diagnostics: {
+        error: (code, message) => found.push({ code, message, severity: 'error' }),
+        warn: (code, message) => found.push({ code, message, severity: 'warn' }),
+      },
+    };
+  };
+
+  test('text with no placeholder is silent', () => {
+    const { found, diagnostics } = bus();
+    checkPlaceholderContext('Ordinary prose.', { diagnostics, where: 'the Description', reason: 'r' });
+    expect(found).toHaveLength(0);
+  });
+
+  test('a declared key is still an error where the destination forbids it', () => {
+    // The context check takes no table. Where a placeholder cannot go, declaring it
+    // changes nothing — which is what separates this from the undeclared check.
+    const { found, diagnostics } = bus();
+    checkPlaceholderContext('You play %heroName%.', {
+      diagnostics, where: 'the Description', reason: 'never filled',
+    });
+    expect(found).toHaveLength(1);
+    expect(found[0].code).toBe(CODES.PLACEHOLDER_INVALID_CONTEXT);
+    expect(found[0].severity).toBe('error');
+  });
+
+  test('catches the native spelling too', () => {
+    const { found, diagnostics } = bus();
+    checkPlaceholderContext('You play ${Your name?}.', {
+      diagnostics, where: 'the Description', reason: 'never filled',
+    });
+    expect(found).toHaveLength(1);
+  });
+
+  test('severity warn uses the half-works code', () => {
+    const { found, diagnostics } = bus();
+    checkPlaceholderContext('The %heroName% Path', {
+      diagnostics, where: 'a branch title', severity: 'warn', reason: 'half-works',
+    });
+    expect(found[0].code).toBe(CODES.PLACEHOLDER_TITLE_PARTIAL);
+    expect(found[0].severity).toBe('warn');
+  });
+
+  test('reports each distinct occurrence once', () => {
+    const { found, diagnostics } = bus();
+    checkPlaceholderContext('%a% %a% %b%', { diagnostics, where: 'x', reason: 'r' });
+    expect(found).toHaveLength(2);
   });
 });

@@ -53,6 +53,79 @@ const PLACEHOLDER_RE = /%(\w+)%/g;
 const FILENAME = 'Placeholders.yaml';
 
 /**
+ * Find AID's native `${...}` form, counting a nested placeholder as one occurrence.
+ *
+ * Brace-balanced rather than a regex, because `${What is ${Their name?} like?}` is one
+ * placeholder and a non-greedy `\\$\\{[^}]*}` reads it as one truncated match plus a stray
+ * tail. Nesting is a documented AID feature and Codex Loom emits it (§12.2), so the
+ * matcher has to survive its own output.
+ */
+function findNativePlaceholders(text) {
+  const found = [];
+  const s = String(text || '');
+  for (let i = 0; i < s.length - 1; i += 1) {
+    if (s[i] !== '$' || s[i + 1] !== '{') continue;
+    let depth = 0;
+    let j = i;
+    for (; j < s.length; j += 1) {
+      if (s[j] === '{') depth += 1;
+      else if (s[j] === '}') {
+        depth -= 1;
+        if (depth === 0) { j += 1; break; }
+      }
+    }
+    found.push(s.slice(i, j));
+    i = j - 1;
+  }
+  return found;
+}
+
+/**
+ * Every placeholder in a text, in either spelling.
+ *
+ * The context check needs both, and the undeclared check needs only `%key%` — because a
+ * native `${...}` carries its question inline and has nothing to be declared. Where a
+ * placeholder may not go, however, it may not go in either spelling.
+ */
+function findAllPlaceholders(text) {
+  const found = [];
+  String(text || '').replace(PLACEHOLDER_RE, (match) => { found.push(match); return match; });
+  return found.concat(findNativePlaceholders(text));
+}
+
+/**
+ * §12.3 check 3, rescoped against AID's real rules rather than Velvet Lattice's warnings.
+ *
+ * VL warns on Label, Description/Prompt, AI Instructions and Summary. Two of those are
+ * stale: AID's own documentation added AI Instructions and Story Summary in March 2026,
+ * and placeholders work in every component and in a story card's entry, name, triggers
+ * and notes. Adopting VL's list would make Codex Loom stricter than the tool it compiles
+ * for, on rules that no longer exist.
+ *
+ * What is left is two destinations where a placeholder does not function at all — the
+ * scenario Description, and a story card's `type` — and one where it half-works.
+ *
+ * The check is per *placement*, not per file: §7.10 lets an item route into any
+ * component, so the same item body is legal in one destination and not another, on a
+ * per-branch basis. Only the caller knows where the text landed.
+ */
+function checkPlaceholderContext(text, { diagnostics, file, where, branch, severity = 'error', reason } = {}) {
+  if (!text || !diagnostics) return [];
+  const found = findAllPlaceholders(text);
+  if (found.length === 0) return [];
+
+  const unique = [...new Set(found)];
+  for (const occurrence of unique) {
+    diagnostics[severity === 'warn' ? 'warn' : 'error'](
+      severity === 'warn' ? CODES.PLACEHOLDER_TITLE_PARTIAL : CODES.PLACEHOLDER_INVALID_CONTEXT,
+      `placeholder "${occurrence}" in ${where}${branch ? ` on branch "${branch}"` : ''} — ${reason}`,
+      { file: file == null ? undefined : String(file) },
+    );
+  }
+  return unique;
+}
+
+/**
  * Expand one table's question text: `{%vars}` first, then nested `%key%` references.
  *
  * Returns a new table; the input is not mutated. Every key in `table` is expanded, because
@@ -275,6 +348,9 @@ module.exports = {
   FILENAME,
   PLACEHOLDER_RE,
   checkUndeclaredPlaceholders,
+  checkPlaceholderContext,
+  findAllPlaceholders,
+  findNativePlaceholders,
   expandQuestions,
   localKeysOf,
   writeNodePlaceholders,

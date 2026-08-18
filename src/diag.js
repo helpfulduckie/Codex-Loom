@@ -56,6 +56,8 @@ const CODES = Object.freeze({
   PLACEHOLDER_UNBIND_UNKNOWN: 'CL0530',
   PLACEHOLDER_CYCLE: 'CL0531',
   PLACEHOLDER_UNDECLARED: 'CL0532',
+  PLACEHOLDER_INVALID_CONTEXT: 'CL0533',
+  PLACEHOLDER_TITLE_PARTIAL: 'CL0534',
 
   // Components (§7.2). Raised by `model/component.js`, which reports through `onWarn`
   // and therefore takes its severity from the table below.
@@ -94,6 +96,8 @@ const SEVERITY_BY_CODE = Object.freeze({
   CL0530: SEVERITY.WARN,
   CL0531: SEVERITY.ERROR,
   CL0532: SEVERITY.ERROR,
+  CL0533: SEVERITY.ERROR,
+  CL0534: SEVERITY.WARN,
   CL0321: SEVERITY.WARN,
   CL0322: SEVERITY.WARN,
   CL0323: SEVERITY.ERROR,

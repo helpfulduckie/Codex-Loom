@@ -31,6 +31,10 @@ ERROR CL0612 Codex/items.cl.yaml
   item "NotASlot" targets "genre" in Plot Essentials, which is a section but not a slot — only a section declaring "slot: true" can hold items.
 ERROR CL0611 Codex/items.cl.yaml
   item "IntoPassthrough" targets slot "rules" in AI Instructions, which is prose copied verbatim and declares no slots. Point the component at a YAML document with "sections:" to route items into it.
+ERROR CL0533 Codex/items.cl.yaml
+  placeholder "%heroName%" in the type of story card "MistypedType" on branch "open" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
+ERROR CL0420 Codex/items.cl.yaml
+  no template found for item "MistypedType" (type: Character-%heroName%)
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "open".
 WARN CL0322 Codex/items.cl.yaml
@@ -50,6 +54,14 @@ ERROR CL0612 Codex/items.cl.yaml
   item "NotASlot" targets "genre" in Plot Essentials, which is a section but not a slot — only a section declaring "slot: true" can hold items.
 ERROR CL0611 Codex/items.cl.yaml
   item "IntoPassthrough" targets slot "rules" in AI Instructions, which is prose copied verbatim and declares no slots. Point the component at a YAML document with "sections:" to route items into it.
+ERROR CL0533 Codex/items.cl.yaml
+  placeholder "%heroName%" in the type of story card "MistypedType" on branch "gated" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
+ERROR CL0420 Codex/items.cl.yaml
+  no template found for item "MistypedType" (type: Character-%heroName%)
 WARN CL0614 components/plot-essentials.cl.yaml
-  slot "party" in Plot Essentials has no items on branch "gated"."
+  slot "party" in Plot Essentials has no items on branch "gated".
+WARN CL0534 compile.cl.yaml
+  placeholder "%heroName%" in the title of branch "gated" — a branch title half-works. AID fills the prompt and shows the answer while the player is choosing, then keeps the raw placeholder text in the saved adventure’s title. Deliberate is possible; usually it is not.
+ERROR CL0533 components/description.md
+  placeholder "%heroName%" in the Description — AID does not fill placeholders in the Description. It is shown before any adventure exists to answer them, so the raw text is what a reader sees."
 `;

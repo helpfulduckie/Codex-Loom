@@ -92,3 +92,14 @@
   render:
     aiInstructions:
       slot: rules
+
+# ── §12.3 check 3: a placeholder in a card's type ─────────────────────────
+# `type` is a category in AID and a folder name in the compiled tree, not a text field
+# AID fills. The key is declared, so what fires is the destination rule alone.
+- id: MistypedType
+  name: MistypedType
+  aid:
+    type: 'Character-%heroName%'
+    triggers: [MistypedType]
+  body:
+    Tagline: Its type carries a placeholder, which is not a thing AID fills.
