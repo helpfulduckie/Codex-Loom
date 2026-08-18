@@ -290,24 +290,45 @@ function cleanBranchOutputDir(dir) {
 }
 
 /**
- * Recursively collect leaf-level branch dirs on disk.
- * A dir is a leaf if it has no Branches/ child (or an empty one).
+ * Every branch *node* dir on disk beneath a `Branches/` container, deepest first.
+ *
+ * Was `findLeafDirsOnDisk`, which stopped at leaves. An interior node is a node: it owns
+ * a `Label.md` and, since Phase 4, a `Placeholders.yaml`, and Velvet Lattice reads both
+ * and inherits them down the subtree. A sweep that only sees leaves cannot clean an
+ * interior node and cannot tell that one has gone stale.
+ *
+ * Deepest first so a caller removing empty directories meets a child before its parent.
  */
-function findLeafDirsOnDisk(dir) {
+function findNodeDirsOnDisk(dir) {
   if (!fs.existsSync(dir)) return [];
-  const leaves = [];
+  const nodes = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const child = path.join(dir, entry.name);
-    const sub = path.join(child, 'Branches');
-    const hasBranchesSub = fs.existsSync(sub) && fs.readdirSync(sub).length > 0;
-    if (hasBranchesSub) {
-      leaves.push(...findLeafDirsOnDisk(sub));
-    } else {
-      leaves.push(child);
-    }
+    nodes.push(...findNodeDirsOnDisk(path.join(child, 'Branches')));
+    nodes.push(child);
   }
-  return leaves;
+  return nodes;
+}
+
+/**
+ * Every node dir from `leafDir` up to and including `baseOutput`.
+ *
+ * The `Branches` containers between them are skipped: they hold nodes and are not nodes,
+ * so they carry no `Label.md` and nothing to clean.
+ */
+function nodeDirsUpTo(leafDir, baseOutput) {
+  const chain = [];
+  let current = path.resolve(leafDir);
+  const stop = path.resolve(baseOutput);
+  while (current.length >= stop.length) {
+    if (path.basename(current) !== 'Branches') chain.push(current);
+    if (current === stop) break;
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return chain;
 }
 
 function isDirEmpty(dir) {
@@ -316,8 +337,22 @@ function isDirEmpty(dir) {
 }
 
 /**
- * Pre-build clean: wipe output-type folders from active branches, then
- * detect and archive (or delete) any stale branch folders on disk.
+ * Pre-build clean: wipe output-type folders from every active branch node, then detect
+ * and archive (or delete) any stale node on disk.
+ *
+ * **Nodes, not leaves.** This swept only leaf directories until Phase 4 raised it: a
+ * declaration deleted from an interior node — its `Placeholders.yaml`, or the `Label.md`
+ * that has the same shape and predates placeholders — survived in the output tree, and
+ * Velvet Lattice went on reading it and inheriting it down the subtree. The compiler
+ * rewrites what it emits, so only a key that stopped being emitted was affected, which is
+ * exactly the edit an author makes when they mean to remove one.
+ *
+ * The root is a node too, and had the same hole: it was added to the expected set only
+ * for a project with no branches at all, so a branched project's root `Label.md` and
+ * `Placeholders.yaml` were never swept either.
+ *
+ * Ancestors of an expected leaf are expected, which gives the stale pass an invariant it
+ * needs: a stale node can never contain a live descendant, so archiving one whole is safe.
  */
 function cleanAndArchive(config, leaves) {
   const baseOutput = config._resolvedOutput;
@@ -325,11 +360,10 @@ function cleanAndArchive(config, leaves) {
   const expectedDirs = new Set();
   for (const branchPath of leaves) {
     const folderPath = resolveBranchFolderPath(config.branches, branchPath);
-    expectedDirs.add(path.resolve(buildBranchOutputDir(baseOutput, folderPath)));
+    const leafDir = buildBranchOutputDir(baseOutput, folderPath);
+    for (const dir of nodeDirsUpTo(leafDir, baseOutput)) expectedDirs.add(dir);
   }
-  if (leaves.length === 1 && leaves[0].length === 0) {
-    expectedDirs.add(path.resolve(baseOutput));
-  }
+  expectedDirs.add(path.resolve(baseOutput));
 
   for (const dir of expectedDirs) {
     cleanBranchOutputDir(dir);
@@ -337,8 +371,8 @@ function cleanAndArchive(config, leaves) {
   }
 
   const branchesRoot = path.join(baseOutput, 'Branches');
-  const diskLeaves = findLeafDirsOnDisk(branchesRoot);
-  const stale = diskLeaves.filter(d => !expectedDirs.has(path.resolve(d)));
+  const diskNodes = findNodeDirsOnDisk(branchesRoot);
+  const stale = diskNodes.filter(d => !expectedDirs.has(path.resolve(d)));
   if (stale.length === 0) return;
 
   const ts = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 15);
@@ -346,6 +380,11 @@ function cleanAndArchive(config, leaves) {
 
   for (const staleDir of stale) {
     cleanBranchOutputDir(staleDir);
+    // `stale` is deepest first, so a stale node's own stale children have already been
+    // dealt with by the time it is reached — leaving behind an empty `Branches` container
+    // that would otherwise read as content and get the node archived as a hollow shell.
+    const container = path.join(staleDir, 'Branches');
+    if (fs.existsSync(container) && isDirEmpty(container)) fs.rmSync(container, { recursive: true });
     if (isDirEmpty(staleDir)) {
       fs.rmSync(staleDir, { recursive: true, force: true });
       console.log(`  Removed empty stale branch: ${path.relative(baseOutput, staleDir)}`);
@@ -1649,6 +1688,7 @@ module.exports = {
   resolveOpeningContent,
   writeOpening,
   writeOpeningsRecursive,
+  cleanAndArchive,
 };
 
 /**

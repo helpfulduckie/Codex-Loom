@@ -7,7 +7,7 @@ const {
   compile,
   getTemplate, validateCardType, writeOpening, resolveOpeningContent, resolveBranchFolderPath,
   buildBranchOutputDir, buildCompileContext, writeOutput, writeOpeningsRecursive,
-  resolveIncludes, resolveNotesTemplateName, resolveBranchItems,
+  resolveIncludes, resolveNotesTemplateName, resolveBranchItems, cleanAndArchive,
 } = require('../../src/compile');
 const { buildRegistry } = require('../../src/loader/registry');
 const { Diagnostics } = require('../../src/diag');
@@ -1018,5 +1018,120 @@ describe('a bare import def carries no id of its own', () => {
       { id: 'aness', name: 'Aness', _source: 'a.cl.yaml' },
       { id: 'aness', name: 'Aness', _source: 'b.cl.yaml' },
     ], 'project')).toThrow(/Duplicate item ID/i);
+  });
+});
+
+/**
+ * The clean sweep visits branch *nodes*, not branch leaves.
+ *
+ * It swept only leaves until Phase 4's `Placeholders.yaml` made the hole visible. An
+ * interior node owns a `Label.md` — and now a `Placeholders.yaml` — and Velvet Lattice
+ * reads both and inherits them down the subtree, so a declaration deleted from an interior
+ * node survived in the output and went on being inherited. The root had the same hole from
+ * the other end: it entered the expected set only when the project had no branches at all.
+ */
+describe('cleanAndArchive sweeps every node, not just leaves', () => {
+  let outDir;
+
+  /** An output tree: root, one interior node, two leaves under it. */
+  function buildTree() {
+    outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-clean-'));
+    const nodes = {
+      root: outDir,
+      interior: path.join(outDir, 'Branches', 'tier'),
+      alpha: path.join(outDir, 'Branches', 'tier', 'Branches', 'alpha'),
+      beta: path.join(outDir, 'Branches', 'tier', 'Branches', 'beta'),
+    };
+    for (const dir of Object.values(nodes)) {
+      fs.mkdirSync(path.join(dir, 'Story Cards'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'Story Cards', 'Character.md'), 'stale card', 'utf8');
+      fs.writeFileSync(path.join(dir, 'Label.md'), 'stale label', 'utf8');
+      fs.writeFileSync(path.join(dir, 'Placeholders.yaml'), 'stale: placeholder\n', 'utf8');
+    }
+    return nodes;
+  }
+
+  const config = (branches) => ({ _resolvedOutput: outDir, branches });
+  const TIER = { tier: { branches: { alpha: {}, beta: {} } } };
+
+  beforeEach(() => { jest.spyOn(console, 'log').mockImplementation(() => {}); });
+  afterEach(() => {
+    console.log.mockRestore();
+    fs.rmSync(outDir, { recursive: true, force: true });
+  });
+
+  test('an interior node is swept — the case Phase 4 raised', () => {
+    const nodes = buildTree();
+    cleanAndArchive(config(TIER), [['tier', 'alpha'], ['tier', 'beta']]);
+
+    expect(fs.existsSync(path.join(nodes.interior, 'Placeholders.yaml'))).toBe(false);
+    expect(fs.existsSync(path.join(nodes.interior, 'Label.md'))).toBe(false);
+    expect(fs.existsSync(path.join(nodes.interior, 'Story Cards'))).toBe(false);
+  });
+
+  test('the root of a branched project is swept too', () => {
+    const nodes = buildTree();
+    cleanAndArchive(config(TIER), [['tier', 'alpha'], ['tier', 'beta']]);
+
+    expect(fs.existsSync(path.join(nodes.root, 'Placeholders.yaml'))).toBe(false);
+    expect(fs.existsSync(path.join(nodes.root, 'Label.md'))).toBe(false);
+  });
+
+  test('leaves are still swept, and the tree itself survives', () => {
+    const nodes = buildTree();
+    cleanAndArchive(config(TIER), [['tier', 'alpha'], ['tier', 'beta']]);
+
+    expect(fs.existsSync(path.join(nodes.alpha, 'Placeholders.yaml'))).toBe(false);
+    expect(fs.existsSync(nodes.alpha)).toBe(true);
+    expect(fs.existsSync(nodes.beta)).toBe(true);
+    expect(fs.existsSync(nodes.interior)).toBe(true);
+  });
+
+  test('a dropped leaf is removed, its siblings untouched', () => {
+    // Nothing but compiler output, so there is nothing to keep. Archiving is for what the
+    // compiler does not own; see the next test.
+    const nodes = buildTree();
+    cleanAndArchive(config({ tier: { branches: { alpha: {} } } }), [['tier', 'alpha']]);
+
+    expect(fs.existsSync(nodes.beta)).toBe(false);
+    expect(fs.existsSync(nodes.alpha)).toBe(true);
+    expect(fs.existsSync(path.join(outDir, 'Archive'))).toBe(false);
+  });
+
+  test('a dropped node holding a hand-added file is archived, not deleted', () => {
+    const nodes = buildTree();
+    fs.writeFileSync(path.join(nodes.beta, 'notes.txt'), 'written by hand', 'utf8');
+
+    cleanAndArchive(config({ tier: { branches: { alpha: {} } } }), [['tier', 'alpha']]);
+
+    const archive = path.join(outDir, 'Archive');
+    const stamp = fs.readdirSync(archive)[0];
+    expect(fs.readFileSync(
+      path.join(archive, stamp, 'Branches', 'tier', 'Branches', 'beta', 'notes.txt'), 'utf8',
+    )).toBe('written by hand');
+  });
+
+  test('a dropped interior node takes its whole subtree with it', () => {
+    // Ancestors of a live leaf are live, so a stale node can never hold one — which is
+    // what makes taking an interior node whole safe rather than destructive.
+    buildTree();
+    cleanAndArchive(config({ other: {} }), [['other']]);
+
+    expect(fs.existsSync(path.join(outDir, 'Branches', 'tier'))).toBe(false);
+  });
+
+  test('an emptied interior node does not survive as a shell around its lost children', () => {
+    // The `Branches` container is what would keep it: its children are gone, so it holds
+    // nothing, but an existing directory reads as content and would get the parent
+    // archived rather than removed.
+    const nodes = buildTree();
+    fs.writeFileSync(path.join(nodes.alpha, 'notes.txt'), 'written by hand', 'utf8');
+
+    cleanAndArchive(config({ other: {} }), [['other']]);
+
+    const archive = path.join(outDir, 'Archive');
+    const stamp = fs.readdirSync(archive)[0];
+    expect(fs.readdirSync(path.join(archive, stamp, 'Branches'))).toEqual(['tier']);
+    expect(fs.existsSync(path.join(outDir, 'Branches', 'tier'))).toBe(false);
   });
 });
