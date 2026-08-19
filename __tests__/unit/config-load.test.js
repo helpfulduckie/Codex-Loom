@@ -194,7 +194,18 @@ describe('resolution behavior carried forward', () => {
     const { diagnostics } = load('structure:\n  output: ./out\n  input:\n    cards: [./Codex]\n');
     const diag = diagnostics.errors.find((d) => d.message.includes('cards'));
     expect(diag.hint).toContain('renamed to "items" in v4');
-    expect(diag.hint).toContain('--migrate');
+  });
+
+  /**
+   * §14.2: `migrateProjectFully()` is a library and its CLI belongs to the migration session.
+   * The hint used to read "Run codex-loom --migrate to convert the project", which exits
+   * "unknown option" — worse than the bare unknown-key it was written to improve on.
+   */
+  test('the rename hint does not instruct a command that does not exist', () => {
+    const { diagnostics } = load('structure:\n  output: ./out\n  input:\n    cards: [./Codex]\n');
+    const diag = diagnostics.errors.find((d) => d.message.includes('cards'));
+    expect(diag.hint).not.toMatch(/Run codex-loom --migrate/);
+    expect(diag.hint).toContain('migrateProjectFully()');
   });
 
   test('{%variables} expand inside structure paths', () => {
@@ -340,6 +351,42 @@ describe('later-phase keys are recognized, not rejected', () => {
    * their declaration will be ignored while the compiler honors it, which is worse than no
    * note at all — the same failure `kitchen-sink.test.js` pins for slotted components.
    */
+  /**
+   * `lint:` has to exist on a branch node because §6 branch-merges `lint.packs`. `level:` is
+   * global-only until a diagnostic knows which branch raised it, so the branch spelling says
+   * so rather than accepting a `level: off` that looks like it works and does nothing.
+   */
+  test('lint.level on a branch node WARNs as unimplemented rather than passing silently', () => {
+    const { diagnostics } = load(
+      'branches:\n  hero:\n    lint:\n      level: off\n');
+    expect(diagnostics.hasErrors()).toBe(false);
+    const warn = diagnostics.warnings.find((d) => d.message.includes('not yet implemented'));
+    expect(warn.message).toContain('"level"');
+    expect(warn.message).toContain('per-branch severity ceiling');
+  });
+
+  test('lint.packs on a branch node stays legal — §6 branch-merges it', () => {
+    const { diagnostics } = load(
+      'branches:\n  hero:\n    lint:\n      packs:\n        discovery-markers: {}\n');
+    expect(diagnostics.hasErrors()).toBe(false);
+  });
+
+  /**
+   * The bug this pins was invisible to every diagnostic-shaped test. `loadCompileConfig`
+   * returns an explicit projection of the config, and a key validated by the schema but
+   * absent from that projection is accepted, documented, and completely inert — which is
+   * what `lint:` was between the schema landing and this line. A key that draws no warning
+   * reads as working.
+   */
+  test('lint reaches the loaded config, not only the schema that validated it', () => {
+    const { config } = load('lint:\n  level: off\n');
+    expect(config.lint).toEqual({ level: 'off' });
+  });
+
+  test('an absent lint block projects as null rather than undefined', () => {
+    expect(load('title: x\n').config.lint).toBeNull();
+  });
+
   test('lint.level is implemented in Phase 5 and no longer warns', () => {
     const { diagnostics } = load('lint:\n  level: warn\n');
     expect(diagnostics.hasErrors()).toBe(false);

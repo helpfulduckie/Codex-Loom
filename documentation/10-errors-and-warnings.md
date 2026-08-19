@@ -112,13 +112,19 @@ choosing it does, and it is the reason to choose it. The three values:
 | `warn` | Everything, and nothing in the layer can fail your build: an opinion-layer error is reported as a warning instead. |
 | *(unset)* | Everything, at the severity each finding was raised with. This is the default. |
 
-`--lint-level=off|error|warn` overrides the config key for one run, and applies to `--lint`
-as well as to a compile. It is deliberately separate from `--verbose`, which is about
-compile progress rather than about which diagnostics you want.
+`--lint-level=off|error|warn` overrides the config key for one run. It is deliberately
+separate from `--verbose`, which is about compile progress rather than about which
+diagnostics you want.
 
-Two limits worth knowing. `lint.level` on a *branch* node is accepted by the schema and not
-yet applied — the project-level key is what governs a compile. And `--lint` run against an
-output tree reads only the CLI flag, since it never opens `compile.cl.yaml`.
+**`--lint` honors `lint.level` too, as long as it can find your `compile.cl.yaml`.** Point it
+at a project directory or a config path and it reads the key; point it at a bare output tree
+and there is no config to read, so only the flag applies. The flag wins over the key either
+way — it is what you typed for this run, the key is what the project says every run.
+
+**`lint.level` written on a *branch* is not applied, and says so.** A per-branch ceiling
+needs a diagnostic to know which branch raised it, which arrives with convention packs; until
+then a branch-level `level:` draws a `CL0204` "not yet implemented" warning rather than
+looking like it worked. `lint.packs` on a branch is fine and merges down the chain normally.
 
 ---
 

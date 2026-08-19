@@ -136,8 +136,15 @@ function buildKeyIndex(schema) {
  *
  * Edit distance cannot help here — `cards` and `items` share one letter — so without
  * this an author hand-migrating a project gets a bare "unknown key" for the change most
- * likely to trip them. §14.1 relies on a missing `version:` to say "run --migrate", which
- * does not fire once they have added it and are fixing the rest by hand.
+ * likely to trip them. §14.1 relies on a missing `version:` to route a v3 project to the
+ * migrator, and that route does not fire once they have added it and are fixing the rest by
+ * hand.
+ *
+ * **The hint names the rename and not a terminal command, because there is no `--migrate`
+ * flag (§14.2).** `migrateProjectFully()` in `src/migrate/index.js` is a library reached from
+ * tests, and building its CLI belongs to the migration session (§15, Phase 8). A hint that
+ * tells an author to run something that exits "unknown option" costs more than the bare
+ * unknown-key it was written to improve on.
  */
 const RENAMED = Object.freeze({
   cards: 'items',
@@ -150,7 +157,9 @@ function suggestFor(key, ownPath, declaredHere, keyIndex) {
   if (renamedTo !== undefined) {
     return {
       code: CODES.UNKNOWN_KEY,
-      hint: `"${key}" was renamed to "${renamedTo}" in v4. Run codex-loom --migrate to convert the project.`,
+      hint: `"${key}" was renamed to "${renamedTo}" in v4. Rename it here, or convert the whole `
+        + `project with migrateProjectFully() in src/migrate/index.js — there is no --migrate `
+        + `flag yet (§14.2).`,
     };
   }
 

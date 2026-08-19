@@ -85,15 +85,45 @@ const RENDER = {
  *
  * `packs:` stays a declared-but-inert key: convention packs (§8.2.2) have no phase yet.
  */
+const LINT_PACKS = {
+  type: TYPES.RECORD,
+  of: { type: [TYPES.MAP, TYPES.ANY] },
+  note: 'convention packs (§8.2.2) are not scheduled into a phase yet',
+};
+
+const LINT_LEVEL = { type: TYPES.STRING, values: ['off', 'error', 'warn'] };
+
 const LINT = {
   type: TYPES.MAP,
   keys: {
-    level: { type: TYPES.STRING, values: ['off', 'error', 'warn'] },
-    packs: {
-      type: TYPES.RECORD,
-      of: { type: [TYPES.MAP, TYPES.ANY] },
-      note: 'convention packs (§8.2.2) are not scheduled into a phase yet',
+    level: LINT_LEVEL,
+    packs: LINT_PACKS,
+  },
+};
+
+/**
+ * The branch-node spelling of `lint:`, and it differs from the root one in exactly one key.
+ *
+ * **`packs:` belongs on a branch and `level:` does not yet.** §6's merge table branch-merges
+ * `lint.packs.*.source` deliberately — which packs validate a branch's `notes:` depends on
+ * which mods that branch ships — so the `lint:` key has to exist at every branch position.
+ * §12.5 names `level:` in the global and per-pack positions and never in a per-branch one.
+ *
+ * **A per-branch ceiling needs a diagnostic to know which branch raised it, which is the same
+ * machinery per-pack ceilings need.** Both arrive with convention packs (§8.2.2), which have no
+ * phase. Until then the key is recognized and reported as unimplemented rather than accepted
+ * silently: a branch-level `level: off` that looks like it works and does nothing is the worse
+ * of the two failures, because nothing ever tells the author which one they got.
+ */
+const BRANCH_LINT = {
+  type: TYPES.MAP,
+  keys: {
+    level: {
+      ...LINT_LEVEL,
+      note: 'a per-branch severity ceiling arrives with convention packs (§8.2.2); '
+        + 'the project-level lint.level governs the whole compile',
     },
+    packs: LINT_PACKS,
   },
 };
 
@@ -112,7 +142,7 @@ const BRANCH_NODE = {
     roles: { type: TYPES.RECORD, of: STRING, note: 'Phase 8' },
     placeholders: STRING_RECORD,
     scripts: SCRIPTS,
-    lint: LINT,
+    lint: BRANCH_LINT,
     components: COMPONENTS,
     render: RENDER,
     // `protagonist:` becomes `roles.protagonist` in Phase 8, not here. §14.2 lists that

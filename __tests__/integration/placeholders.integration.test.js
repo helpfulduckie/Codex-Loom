@@ -391,3 +391,57 @@ describe('duplicate question text, end to end', () => {
     expect(dupes(diags)).toHaveLength(1);
   });
 });
+
+/**
+ * §12.5's ceiling, end to end through a real compile.
+ *
+ * `CL0535` — a placeholder declared and referenced nowhere beneath its declaring node — is
+ * an opinion, and `CL0532` — a `%key%` reaching output undeclared — is a fact. One project
+ * raising both is the shortest proof that `lint.level` reaches one and cannot reach the
+ * other.
+ */
+describe('lint.level reaches the opinion layer and nothing else', () => {
+  const project = (lint) => ({
+    'compile.cl.yaml': [
+      'version: 4',
+      'title: Probe',
+      'structure:',
+      '  input:',
+      "    items: ['./Codex']",
+      "    templates: ['./templates']",
+      "  output: './out'",
+      ...lint,
+      'placeholders:',
+      '  neverUsed: Which house raised you?',
+      'branches:',
+      '  north:',
+      '    title: The %missing% Road',
+      '',
+    ].join('\n'),
+  });
+
+  test('with no lint block, both the opinion and the fact are reported', () => {
+    const codes = run(project([])).map((d) => d.code);
+    expect(codes).toContain(CODES.PLACEHOLDER_UNUSED);
+    expect(codes).toContain(CODES.PLACEHOLDER_UNDECLARED);
+  });
+
+  test('level: off drops the opinion and leaves the fact standing', () => {
+    const codes = run(project(['lint:', '  level: off'])).map((d) => d.code);
+    expect(codes).not.toContain(CODES.PLACEHOLDER_UNUSED);
+    expect(codes).toContain(CODES.PLACEHOLDER_UNDECLARED);
+  });
+
+  test('level: error drops the opinion too, the prose heuristics all being WARNs', () => {
+    const codes = run(project(['lint:', '  level: error'])).map((d) => d.code);
+    expect(codes).not.toContain(CODES.PLACEHOLDER_UNUSED);
+    expect(codes).toContain(CODES.PLACEHOLDER_UNDECLARED);
+  });
+
+  test('level: warn keeps the opinion at WARN', () => {
+    const unused = run(project(['lint:', '  level: warn']))
+      .filter((d) => d.code === CODES.PLACEHOLDER_UNUSED);
+    expect(unused).toHaveLength(1);
+    expect(unused[0].severity).toBe('warn');
+  });
+});

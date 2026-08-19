@@ -445,6 +445,42 @@ describe('CLI --lint-level flag', () => {
     expect(report).toContain('suspect-verb-marker');
   });
 
+  /**
+   * `resolveArgs` already loads the config to find the output and reports directories, so the
+   * level is in hand. Without passing it out, `--lint` answered differently from the compile
+   * that wrote the tree it is reading, on the same project's own setting.
+   */
+  test('--lint reads lint.level from compile.cl.yaml when no flag is given', () => {
+    write(path.join(tmp, 'proj', 'compile.yaml'),
+      MINIMAL_COMPILE_YAML.replace('protagonist: Test', 'lint:\n  level: off\nprotagonist: Test'));
+    write(
+      path.join(tmp, 'proj', 'output', 'Story Cards', 'Char', 'a.md'),
+      ['## Aria', '', '~~~', 'triggers: [Aria]', '~~~', '', 'She caught {$she} hair and love[does] it.', ''].join('\n')
+    );
+
+    const result = run(['-L', path.join(tmp, 'proj')], tmp);
+    expect(result.status).toBe(0);
+    const report = fs.readFileSync(
+      path.join(tmp, 'proj', 'output', 'Overview', 'lint', 'output.lint.md'), 'utf8');
+    expect(report).toContain('unresolved-field-token');
+    expect(report).not.toContain('suspect-verb-marker');
+  });
+
+  test('the flag wins over the config key, being what someone typed for this run', () => {
+    write(path.join(tmp, 'proj', 'compile.yaml'),
+      MINIMAL_COMPILE_YAML.replace('protagonist: Test', 'lint:\n  level: off\nprotagonist: Test'));
+    write(
+      path.join(tmp, 'proj', 'output', 'Story Cards', 'Char', 'a.md'),
+      ['## Aria', '', '~~~', 'triggers: [Aria]', '~~~', '', 'She love[does] it.', ''].join('\n')
+    );
+
+    const result = run(['-L', '--lint-level=warn', path.join(tmp, 'proj')], tmp);
+    expect(result.status).toBe(0);
+    const report = fs.readFileSync(
+      path.join(tmp, 'proj', 'output', 'Overview', 'lint', 'output.lint.md'), 'utf8');
+    expect(report).toContain('suspect-verb-marker');
+  });
+
   test('an unknown level exits nonzero and names the three legal ones', () => {
     writeLintable();
     const result = run(['-L', '--lint-level=loud', path.join(tmp, 'scenario')], tmp);

@@ -285,9 +285,12 @@ full severity and can still fail a build.
 `--verbose`. See [Errors & Warnings](10-errors-and-warnings.md) for the full picture,
 including which checks sit in which layer.
 
-`lint.packs` — convention packs — is recognized and not yet implemented; declaring it
-draws a `CL0204` warning. Writing `lint.level` on a branch node is accepted by the schema
-and not yet applied; the project-level key governs the compile.
+`lint.packs` — convention packs — is recognized and not yet implemented; declaring it draws
+a `CL0204` warning. It is legal on a branch node and merges down the chain, because which
+packs should validate a branch's `notes:` depends on which mods that branch ships.
+
+`lint.level` is project-level. Writing it on a branch draws its own `CL0204`: a per-branch
+ceiling needs a diagnostic to know which branch raised it, and that arrives with packs.
 
 ### `branches`
 

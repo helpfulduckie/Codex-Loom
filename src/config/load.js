@@ -354,6 +354,10 @@ function loadCompileConfig(configPath, options = {}) {
     // Top-level as of §6.3, and branch-addressable, so it travels with the config rather
     // than through `structure.input`.
     scripts: config.scripts !== undefined ? config.scripts : null,
+    // §12.5's opinion-layer ceiling. This projection is the whole of what the compiler can
+    // see — a key validated by the schema and left out here is accepted, documented, and
+    // inert, which is what `lint:` was until this line existed.
+    lint: config.lint || null,
     // Two variable sets, deliberately.
     //
     // `variables` is what the author declared. The canon dependency manifest reports it,

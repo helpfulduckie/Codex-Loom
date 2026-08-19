@@ -1823,11 +1823,19 @@ function resolveArgs(positional) {
       scenarioRoot: cfg._resolvedOutput,
       outputDir:    cfg._resolvedReports || path.join(cfg._resolvedOutput, 'Overview'),
       hasConfig:    true,
+      // The report modes get `lint.level` from here rather than loading the config a second
+      // time. This function already reads it for the output and reports paths, so the value
+      // is in hand; without passing it out, `--lint` would answer differently from the
+      // compile that wrote the tree it is reading, on the same project's own setting.
+      configLintLevel: (cfg.lint && cfg.lint.level) || null,
     };
   }
 
   if (!positional) {
-    return { configPath: null, scenarioRoot: null, outputDir: null, hasConfig: false };
+    return {
+      configPath: null, scenarioRoot: null, outputDir: null, hasConfig: false,
+      configLintLevel: null,
+    };
   }
 
   return {
@@ -1835,6 +1843,9 @@ function resolveArgs(positional) {
     scenarioRoot: path.resolve(positional),
     outputDir:    path.resolve('overview'),
     hasConfig:    false,
+    // No config to read one from. `--lint` on a bare output tree has only the CLI flag,
+    // which is the honest answer rather than a gap.
+    configLintLevel: null,
   };
 }
 
@@ -1916,7 +1927,12 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  const { configPath, scenarioRoot, outputDir, hasConfig } = resolveArgs(positional[0]);
+  const { configPath, scenarioRoot, outputDir, hasConfig, configLintLevel } = resolveArgs(positional[0]);
+
+  // The flag is what someone typed for this run; the config is what the project says every
+  // run. Same precedence the compile applies internally, stated once here so the report
+  // modes and the compile cannot disagree about it.
+  const effectiveLintLevel = lintLevel || configLintLevel;
 
   // ── Compile ──
   if (doCompile) {
@@ -2006,7 +2022,7 @@ if (require.main === module) {
         const { runLintMode } = require('./lint');
         const dir = path.join(outputDir, 'lint');
         fs.mkdirSync(dir, { recursive: true });
-        const result = runLintMode(scenarioRoot, dir, flags.verbose, { lintLevel });
+        const result = runLintMode(scenarioRoot, dir, flags.verbose, { lintLevel: effectiveLintLevel });
         if (result) summaryParts.push(`a lint report (${result.errorCount} error(s), ${result.warnCount} warning(s))`);
       }
 
