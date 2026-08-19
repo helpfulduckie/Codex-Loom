@@ -187,14 +187,14 @@ describe('measurement happens after placeholder substitution', () => {
     'Codex/items.cl.yaml': item('Short.'),
   });
 
-  test('an opening under the cap rendered, over it substituted, is an ERROR', () => {
-    const rendered = 3700 + '%hero%'.length * 20;
-    expect(rendered).toBeLessThan(4000);
+  test('an opening under the cap compiled, over it on upload, is an ERROR', () => {
+    const compiled = 3700 + '%hero%'.length * 20;
+    expect(compiled).toBeLessThan(4000);
 
     const found = codes(run(project(3700, 20)), CODES.OPENING_OVER_LIMIT);
     expect(found).toHaveLength(1);
-    expect(found[0].message).toContain('after placeholder substitution');
-    expect(found[0].message).toContain('Rendered length is');
+    expect(found[0].message).toContain('characters on upload');
+    expect(found[0].message).toContain('Compiled length is');
   });
 
   test('the same opening with the placeholders removed is clean', () => {

@@ -109,8 +109,14 @@ function expandPlaceholders(text, questions) {
  * Measure a string as AID will store it.
  *
  * Returns rendered and expanded lengths separately because the diagnostic shows both when
- * they differ: "4,118 after substitution; 3,902 rendered" tells an author where to cut in
- * a way that either number alone does not.
+ * they differ: "4,118 on upload; 3,902 compiled" tells an author where to cut in a way that
+ * either number alone does not.
+ *
+ * The keys keep this codebase's word — `rendered` is what Codex Loom emitted, the same sense
+ * `compile.js`'s `rendered` and `emit/vl.js`'s "rendered, wrapped body" carry. Author-facing
+ * text says **compiled** and **on upload** instead, because a report reader does not have
+ * that vocabulary and "rendered" reads to them as what AID displays — which is a third
+ * length, after the player answers the prompt, that no cap applies to.
  *
  * `refs` counts only *declared* references, since those are the ones that grow. It is what
  * lets the message say "the 6 placeholder references add 216 characters" rather than
@@ -155,16 +161,15 @@ function checkLimit(text, questions, limit, { diagnostics, loc = {}, label = nul
 
   const subject = label ? `${limit.subject} for ${label}` : limit.subject;
   const detail = result.added > 0
-    ? `\nRendered length is ${n(result.rendered)}; the ${result.refs} placeholder `
-      + `reference${result.refs === 1 ? '' : 's'} add ${n(result.added)} characters when `
-      + 'Velvet Lattice expands them to their question text.'
+    ? `\nCompiled length is ${n(result.rendered)}; ${result.refs} placeholder `
+      + `${result.refs === 1 ? 'reference adds' : 'references add'} ${n(result.added)} `
+      + 'characters when Velvet Lattice expands them to their question text on upload.'
     : '';
 
   if (result.expanded > limit.cap) {
     diagnostics.error(
       limit.over,
-      `${subject} is ${n(result.expanded)} characters`
-      + `${result.added > 0 ? ' after placeholder substitution' : ''} `
+      `${subject} is ${n(result.expanded)} characters on upload `
       + `(limit ${n(limit.cap)}).${detail}`,
       loc,
       {
@@ -175,8 +180,7 @@ function checkLimit(text, questions, limit, { diagnostics, loc = {}, label = nul
   } else if (result.expanded >= limit.warnAt) {
     diagnostics.warn(
       limit.near,
-      `${subject} is ${n(result.expanded)} characters`
-      + `${result.added > 0 ? ' after placeholder substitution' : ''}, `
+      `${subject} is ${n(result.expanded)} characters on upload, `
       + `within ${n(limit.cap - result.expanded)} of the ${n(limit.cap)} limit.${detail}`,
       loc,
     );

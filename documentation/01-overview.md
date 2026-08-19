@@ -91,13 +91,28 @@ Two files are written to the overview folder:
 
 "Seeded By" counts distinct seeder items, not individual trigger matches. Items with a count of 0 are never organically pulled in by another item's body text.
 
-**Item sizes** (`-b`/`--card-sizes`) — Reads compiled output and reports the character count of each item's body text. One CSV is written to the overview folder:
+**Item sizes** (`-b`/`--card-sizes`) — Reads compiled output and measures every item body and every `Opening.md` against AID's field caps: 2,000 characters for a story card body, 4,000 for an Opening. Two files are written to the overview folder:
 
 | File | Contents |
 |---|---|
-| `{name}.bodysize.csv` | `Branch, Title, Body Size` — character count of each compiled item body, sorted by branch |
+| `{name}.bodysize.csv` | `Branch, Target, Title, Kind, Compiled, On Upload, Limit, Remaining, Status` — one row per measured string, tightest first |
+| `{name}.bodysize.md` | A summary table per target, then every item at `NEAR` or `OVER` with how much room it has left |
 
-Sort by **Body Size** ascending to spot items that variants may have gutted, or descending to find items that are likely too large for AID's context window. For single-branch scenarios the `Branch` column is omitted.
+**A card body has three lengths, and the report shows the two that matter for the cap:**
+
+| Length | What it is | In the report |
+|---|---|---|
+| Compiled | What Codex Loom wrote into the `.md` — the body with its fence and `## Title` excluded, `%key%` still literal | `Compiled` |
+| On upload | What Velvet Lattice sends and AID stores as the card's `value`, after each `%key%` expands to its `${question}` text | `On Upload` |
+| In play | What the model actually sees, after the player answers the prompt and `${What is your character's name?}` collapses to their answer | not measured |
+
+**`On Upload` is the only one the cap applies to.** It is the peak: the placeholder question text is longer than the `%key%` that compiled to it, and usually longer than the answer the player eventually gives. So a card at 1,990 compiled characters can be over 2,000 on upload and arrive truncated, even though what the model reads during play would have fitted. Where the two columns agree, the text reaches no declared placeholders.
+
+**"In play" is shown nowhere and is not a gap in the report** — it depends on answers that do not exist until someone plays the scenario, and AID has already truncated by then.
+
+`Status` is `OVER` past the cap, `NEAR` within 10% of it, `OK` below that — the same bands the compiler raises `CL0710`–`CL0713` on, so the report and the build agree. `Target` is `Card` or `Opening`; `Kind` is `story`/`reference` for a card and `leaf`/`framing` for an Opening. Reference items get their own section in the markdown report: soft heuristics skip them, but the caps do not.
+
+Each `Opening.md` is measured as its own file rather than per branch, because Velvet Lattice merges components by filename — a leaf's opening *replaces* an ancestor's rather than adding to it. For single-branch scenarios the `Branch` column is omitted.
 
 **Slot inventory** (`-i`/`--with-inventory`) — Writes `Overview/Inventory.md`, listing every slot a component declares and which items landed in it, per branch. Because an item declares where it renders and a component never learns who filled it, this is the one place the two ends are put back together.
 

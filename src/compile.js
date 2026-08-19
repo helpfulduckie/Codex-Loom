@@ -1959,7 +1959,7 @@ if (require.main === module) {
         const dir = path.join(outputDir, 'card-sizes');
         fs.mkdirSync(dir, { recursive: true });
         const result = runBodySizeMode(scenarioRoot, dir, flags.verbose);
-        if (result) summaryParts.push('a card sizes file');
+        if (result) summaryParts.push('2 card size files');
       }
 
       if (doLint) {

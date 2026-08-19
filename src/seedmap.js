@@ -315,6 +315,6 @@ function runSeedMapMode(scenarioRoot, outputDir, verbose = false) {
 }
 
 module.exports = {
-  runSeedMapMode, parseCardsFromMd, collectLeafCards, collectMdFiles,
+  runSeedMapMode, parseCardsFromMd, collectLeafCards, collectMdFiles, ancestorDirs,
   buildSeedRelations, buildOpeningFlags,
 };

@@ -137,16 +137,33 @@ describe('checkLimit', () => {
     const diagnostics = new Diagnostics();
     checkLimit(body(1900) + '%heroName%', table, LIMITS.cardBody, { diagnostics });
     const { message } = diagnostics.errors[0];
-    expect(message).toContain('after placeholder substitution');
-    expect(message).toContain('Rendered length is');
-    expect(message).toContain('1 placeholder reference add');
+    expect(message).toContain('characters on upload');
+    expect(message).toContain('Compiled length is');
+  });
+
+  test('one reference reads "reference adds", not "reference add"', () => {
+    // The author-facing half of §8.5 is a sentence an author reads under pressure, and the
+    // singular case is the common one — a single placeholder is what tips a card over.
+    const table = { heroName: 'A'.repeat(300) };
+    const diagnostics = new Diagnostics();
+    checkLimit(body(1900) + '%heroName%', table, LIMITS.cardBody, { diagnostics });
+    expect(diagnostics.errors[0].message).toContain('1 placeholder reference adds');
+  });
+
+  test('two references read "references add"', () => {
+    const table = { a: 'A'.repeat(300), b: 'B'.repeat(300) };
+    const diagnostics = new Diagnostics();
+    checkLimit(`${body(1900)}%a%%b%`, table, LIMITS.cardBody, { diagnostics });
+    expect(diagnostics.errors[0].message).toContain('2 placeholder references add');
   });
 
   test('the message shows one number when there was nothing to substitute', () => {
+    // "on upload" stays either way — it is the number the cap applies to whether or not a
+    // placeholder moved it. What is conditional is the second sentence explaining the gap.
     const diagnostics = new Diagnostics();
     checkLimit(body(2001), null, LIMITS.cardBody, { diagnostics });
-    expect(diagnostics.errors[0].message).not.toContain('after placeholder substitution');
-    expect(diagnostics.errors[0].message).not.toContain('Rendered length is');
+    expect(diagnostics.errors[0].message).toContain('characters on upload');
+    expect(diagnostics.errors[0].message).not.toContain('Compiled length is');
   });
 
   test('it returns the measurement even with no bus, so a report need not measure twice', () => {
