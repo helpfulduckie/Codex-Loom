@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadYaml } = require('./loader/yaml');
+const { CODES: DIAG_CODES, severityOf } = require('./diag');
 
 /**
  * Every suffix Codex Loom will read a YAML document from (§4.6).
@@ -263,19 +264,32 @@ function maskFencedRegions(text) {
 }
 
 /**
- * Warn about every distinct match of `re` found in `text`, one line per
- * distinct match (not per occurrence). Resets `re.lastIndex` first since
- * these are shared, stateful `g`-flag RegExp objects.
+ * Report every distinct match of `re` found in `text`, once per distinct match rather than
+ * once per occurrence. Resets `re.lastIndex` first, since these are shared, stateful
+ * `g`-flag RegExp objects.
+ *
+ * **Every match goes onto the diagnostic bus under `code`, and none of them go to the
+ * console.** Until Phase 5 this printed a bare `WARN:` line with no code and gated nothing,
+ * so a leaked `{$she}` in compiled output exited zero while `lint.js` listed the same
+ * pattern as an ERROR — one check, two answers, depending on which of the two ran. §12.5
+ * settles it in favour of the compiler: a leak is a fact about the output, so it is an
+ * ERROR on the bus and it fails the run.
+ *
+ * `sink.diagnostics` is optional so the detectors stay usable as predicates, which is what
+ * their boolean return is for. Every production call site passes one.
  */
-function warnPattern(text, label, re, describe) {
+function reportPattern(text, label, re, code, describe, sink = {}) {
   if (typeof text !== 'string') return false;
+  const { diagnostics, file } = sink;
   const seen = new Set();
   re.lastIndex = 0;
   let m;
   while ((m = re.exec(text)) !== null) {
     if (!seen.has(m[0])) {
       seen.add(m[0]);
-      console.warn(`  WARN: ${describe(m[0])} in ${label}`);
+      if (diagnostics) {
+        diagnostics.add(severityOf(code), code, `${describe(m[0])} in ${label}`, { file });
+      }
     }
     if (m[0].length === 0) re.lastIndex++;
   }
@@ -283,56 +297,63 @@ function warnPattern(text, label, re, describe) {
 }
 
 /**
- * Final safety net: warn about any {$…} field/pronoun/character token left
- * unresolved in rendered output (an item or component). Emits one warning per
- * distinct leftover token.
+ * Final safety net: report any {$…} field/pronoun/character token left unresolved in
+ * rendered output (an item or component). One diagnostic per distinct leftover token.
  *
- * Targets {$…} only — {%…} is handled by warnUnexpandedVariables, and {@…} is
+ * Targets {$…} only — {%…} is handled by checkUnexpandedVariables, and {@…} is
  * intentionally never expanded in item content.
  *
  * @param {string} text   - the fully-rendered output to scan
  * @param {string} label  - human-readable location, e.g. 'item "Aria" (Character)'
+ * @param {object} [sink]  - { diagnostics, file } — where findings are reported
  * @returns {boolean}     - true if any unresolved token was found
  */
-function warnUnresolvedFieldTokens(text, label) {
-  return warnPattern(text, label, FIELD_TOKEN_RE, m => `unresolved token ${m}`);
+function checkUnresolvedFieldTokens(text, label, sink) {
+  return reportPattern(text, label, FIELD_TOKEN_RE, DIAG_CODES.LEAKED_FIELD_TOKEN,
+    m => `unresolved token ${m}`, sink);
 }
 
 /**
- * Final safety net: warn about any {%variable} token left unexpanded in rendered
- * output (an item or component). Emits one warning per distinct leftover token.
+ * Final safety net: report any {%variable} token left unexpanded in rendered output (an
+ * item or component). One diagnostic per distinct leftover token.
  *
  * Targets {%...} only — {@...} is intentionally not expanded in item content, so
  * a literal {@...} here is expected and must not be flagged.
  *
  * @param {string} text   - the fully-rendered output to scan
  * @param {string} label  - human-readable location, e.g. 'item "Aria" (Character)'
+ * @param {object} [sink]  - { diagnostics, file } — where findings are reported
  * @returns {boolean}     - true if any unexpanded variable was found
  */
-function warnUnexpandedVariables(text, label) {
-  return warnPattern(text, label, VAR_TOKEN_RE, m => `unexpanded variable ${m}`);
+function checkUnexpandedVariables(text, label, sink) {
+  return reportPattern(text, label, VAR_TOKEN_RE, DIAG_CODES.LEAKED_VARIABLE,
+    m => `unexpanded variable ${m}`, sink);
 }
 
 /**
- * Final safety net: warn about mechanical compile-time artifacts other than
+ * Final safety net: report mechanical compile-time artifacts other than
  * the {$…}/{%…} tokens above — leaked render functions ({join}/{list}/...),
  * leaked template control tags ({if}/{wrapper}/{preserve}/{include}),
  * unresolved verb-conjugation markers ([s]/[is]/[was]/...), and JS
- * interpolation failures ([object Object], bare undefined/NaN). Emits one
- * warning per distinct leftover match.
+ * interpolation failures ([object Object], bare undefined/NaN). One diagnostic per
+ * distinct leftover match.
  *
  * @param {string} text   - the fully-rendered output to scan
  * @param {string} label  - human-readable location, e.g. 'item "Aria" (Character)'
+ * @param {object} [sink]  - { diagnostics, file } — where findings are reported
  * @returns {boolean}     - true if any artifact was found
  */
-function warnMechanicalArtifacts(text, label) {
+function checkMechanicalArtifacts(text, label, sink) {
+  const C = DIAG_CODES;
   let found = false;
-  found = warnPattern(text, label, TEMPLATE_FN_RE,  m => `leaked render function ${m}`) || found;
-  found = warnPattern(text, label, TEMPLATE_TAG_RE, m => `leaked template tag ${m}`) || found;
-  found = warnPattern(text, label, VERB_MARKER_RE,  m => `unresolved verb-conjugation marker ${m}`) || found;
-  found = warnPattern(maskFencedRegions(text), label, SUSPECT_VERB_MARKER_RE, m => `bracketed "${m}" isn't a recognized verb-conjugation marker ([s]/[es]/[is]/[was]/[has]) or [e] — possible typo`) || found;
-  found = warnPattern(text, label, JS_ARTIFACT_RE,  m => `JS interpolation artifact ${m}`) || found;
-  found = warnPattern(text, label, JS_WORD_RE,      m => `possible JS interpolation artifact "${m}"`) || found;
+  found = reportPattern(text, label, TEMPLATE_FN_RE,  C.LEAKED_RENDER_FUNCTION, m => `leaked render function ${m}`, sink) || found;
+  found = reportPattern(text, label, TEMPLATE_TAG_RE, C.LEAKED_TEMPLATE_TAG,    m => `leaked template tag ${m}`, sink) || found;
+  found = reportPattern(text, label, VERB_MARKER_RE,  C.LEAKED_VERB_MARKER,     m => `unresolved verb-conjugation marker ${m}`, sink) || found;
+  // The two opinions in the sweep (§12.5). Same loop, same text, different claim: these two
+  // judge whether prose was meant, so they stay WARN and `lint.level` can reach them.
+  found = reportPattern(maskFencedRegions(text), label, SUSPECT_VERB_MARKER_RE, C.SUSPECT_VERB_MARKER, m => `bracketed "${m}" isn't a recognized verb-conjugation marker ([s]/[es]/[is]/[was]/[has]) or [e] — possible typo`, sink) || found;
+  found = reportPattern(text, label, JS_ARTIFACT_RE,  C.LEAKED_JS_ARTIFACT,     m => `JS interpolation artifact ${m}`, sink) || found;
+  found = reportPattern(text, label, JS_WORD_RE,      C.SUSPECT_JS_WORD,        m => `possible JS interpolation artifact "${m}"`, sink) || found;
   return found;
 }
 
@@ -340,7 +361,7 @@ module.exports = {
   findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
   ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
   YAML_SUFFIXES, CONFIG_BASENAMES, hasSuffix,
-  resolveVariables, warnUnexpandedVariables, walkItemTextFields, itemContext, warnUnresolvedFieldTokens,
-  warnMechanicalArtifacts, maskFencedRegions,
+  resolveVariables, checkUnexpandedVariables, walkItemTextFields, itemContext, checkUnresolvedFieldTokens,
+  checkMechanicalArtifacts, maskFencedRegions,
   FIELD_TOKEN_RE, VAR_TOKEN_RE, TEMPLATE_FN_RE, TEMPLATE_TAG_RE, VERB_MARKER_RE, SUSPECT_VERB_MARKER_RE, JS_ARTIFACT_RE, JS_WORD_RE,
 };

@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { loadYaml } = require('./loader');
 const { expandTokens } = require('./tokens');
-const { warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts } = require('./util');
+const { checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts } = require('./util');
 
 /**
  * Load a description YAML config file.
@@ -120,13 +120,13 @@ function extractScriptBanner(scriptPath, opts = {}) {
  * Write Description.md directly into outputDir (not into Components/).
  * Returns the written path, or null if content is empty.
  */
-function writeDescription(outputDir, content) {
+function writeDescription(outputDir, content, sink) {
   if (!content) return null;
   fs.mkdirSync(outputDir, { recursive: true });
   const outPath = path.join(outputDir, 'Description.md');
-  warnUnexpandedVariables(content, 'component Description.md');
-  warnUnresolvedFieldTokens(content, 'component Description.md');
-  warnMechanicalArtifacts(content, 'component Description.md');
+  checkUnexpandedVariables(content, 'component Description.md', sink);
+  checkUnresolvedFieldTokens(content, 'component Description.md', sink);
+  checkMechanicalArtifacts(content, 'component Description.md', sink);
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }

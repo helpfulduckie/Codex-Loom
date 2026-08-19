@@ -206,6 +206,74 @@ describe('SEVERITY_BY_CODE agrees with documentation/11-diagnostics.md', () => {
   });
 });
 
+describe('the compiler / lint split (§12.5)', () => {
+  const { isOpinion, OPINION_CODES, applyLintLevel, LINT_LEVELS } = require('../../src/diag');
+
+  test('the opinion layer is exactly the four tagged codes', () => {
+    expect([...OPINION_CODES].sort()).toEqual(['CL0436', 'CL0437', 'CL0535', 'CL0536']);
+  });
+
+  test('a fact is not an opinion, wherever the check that raises it runs', () => {
+    // CL0433 is found by the same sweep as CL0436, and CL0532 by the same pass as CL0535.
+    // Sharing a call site is not sharing a layer.
+    for (const code of ['CL0430', 'CL0433', 'CL0435', 'CL0532', 'CL0710', 'CL0712']) {
+      expect(isOpinion(code)).toBe(false);
+    }
+  });
+
+  test('level names the one severity the opinion layer speaks at', () => {
+    expect(applyLintLevel('error', 'off')).toBeNull();
+    expect(applyLintLevel('warn', 'off')).toBeNull();
+
+    // `error` — validate my mod configs, skip the prose heuristics.
+    expect(applyLintLevel('error', 'error')).toBe('error');
+    expect(applyLintLevel('warn', 'error')).toBeNull();
+
+    // `warn` — hear everything, and let nothing in this layer fail the build.
+    expect(applyLintLevel('error', 'warn')).toBe('warn');
+    expect(applyLintLevel('warn', 'warn')).toBe('warn');
+  });
+
+  test('unset is not a level — an unclamped opinion keeps the severity it was raised with', () => {
+    expect(applyLintLevel('error', null)).toBe('error');
+    expect(applyLintLevel('warn', undefined)).toBe('warn');
+  });
+
+  test('LINT_LEVELS is the closed set the config and the CLI both validate against', () => {
+    expect(LINT_LEVELS).toEqual(['off', 'error', 'warn']);
+  });
+});
+
+describe('Diagnostics applies the ceiling at add time', () => {
+  test('an opinion is demoted on the way in, so hasErrors() sees the demoted severity', () => {
+    const d = new Diagnostics({ lintLevel: 'warn' });
+    d.error(CODES.PLACEHOLDER_UNUSED, 'declared and never used');
+    expect(d.hasErrors()).toBe(false);
+    expect(d.all[0].severity).toBe('warn');
+  });
+
+  test('a fact is untouched by any level — an author cannot silence one', () => {
+    const d = new Diagnostics({ lintLevel: 'off' });
+    d.error(CODES.LEAKED_FIELD_TOKEN, 'unresolved token {$she}');
+    expect(d.all.map((x) => x.code)).toEqual(['CL0430']);
+    expect(d.hasErrors()).toBe(true);
+  });
+
+  test('a dropped opinion is not added at all, and add returns null', () => {
+    const d = new Diagnostics({ lintLevel: 'off' });
+    expect(d.warn(CODES.PLACEHOLDER_DUPLICATE_QUESTION, 'two keys, one question')).toBeNull();
+    expect(d.isEmpty()).toBe(true);
+  });
+
+  test('setLintLevel governs what arrives after it, which is how compile() uses it', () => {
+    const d = new Diagnostics();
+    d.warn(CODES.PLACEHOLDER_UNUSED, 'before');
+    d.setLintLevel('off');
+    d.warn(CODES.PLACEHOLDER_UNUSED, 'after');
+    expect(d.all.map((x) => x.message)).toEqual(['before']);
+  });
+});
+
 describe('module purity', () => {
   test('diag.js requires neither fs nor console — model/ depends on this (§3.3)', () => {
     const source = require('fs').readFileSync(require.resolve('../../src/diag'), 'utf8');
@@ -226,7 +294,10 @@ describe('CODES', () => {
     CL01: ['YAML_PARSE_FAILED', 'YAML_FILE_UNREADABLE', 'YAML_EMPTY_FILE',
       'YAML_NULL_DOCUMENT', 'TOKEN_SWALLOWED_BY_YAML'],
     CL03: ['ITEM_RESOLUTION_FAILED', 'DUPLICATE_RESOLVED_ID'],
-    CL04: ['TEMPLATE_NOT_FOUND', 'RENDER_FAILED'],
+    CL04: ['TEMPLATE_NOT_FOUND', 'RENDER_FAILED',
+      'LEAKED_FIELD_TOKEN', 'LEAKED_VARIABLE', 'LEAKED_RENDER_FUNCTION',
+      'LEAKED_TEMPLATE_TAG', 'LEAKED_VERB_MARKER', 'LEAKED_JS_ARTIFACT',
+      'SUSPECT_VERB_MARKER', 'SUSPECT_JS_WORD'],
     CL05: ['PLACEHOLDER_UNBIND_UNKNOWN', 'PLACEHOLDER_CYCLE', 'PLACEHOLDER_UNDECLARED',
       'PLACEHOLDER_INVALID_CONTEXT', 'PLACEHOLDER_IN_TITLE', 'PLACEHOLDER_UNUSED',
       'PLACEHOLDER_DUPLICATE_QUESTION'],

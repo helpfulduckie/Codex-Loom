@@ -218,6 +218,50 @@ encapsulate: true
     expect(findings).toContainEqual(expect.objectContaining({ category: 'empty-triggers', card: 'NoTriggers' }));
   });
 
+  /**
+   * §4.8's first exemption row, and the reason `kind:` is written into the fence at all.
+   * A mod-control card is trigger-less on purpose; telling its author so on every compile
+   * is the noise the field exists to remove.
+   */
+  test('a kind: reference card is exempt — trigger-less is its intended state', () => {
+    const card = `## WTG Time Config
+
+~~~
+triggers: []
+kind: reference
+encapsulate: false
+~~~
+
+startDate: 06/28/1320
+`;
+    expect(scanStoryCardStructure(card)).toEqual([]);
+  });
+
+  /**
+   * The other half of Decision 2, and the reason the exemption reads the fence rather than
+   * inferring reference-ness from the empty list: a narrative card that *lost* its triggers
+   * is exactly what this check exists to catch, and inference would make it invisible.
+   */
+  test('a trigger-less card that does not declare kind: reference is still flagged', () => {
+    const card = `## Lian Quay
+
+~~~
+triggers: []
+encapsulate: false
+~~~
+
+A harbor town.
+`;
+    expect(scanStoryCardStructure(card))
+      .toContainEqual(expect.objectContaining({ category: 'empty-triggers', card: 'Lian Quay' }));
+  });
+
+  test('empty-triggers is opinion-layer, so lint.level can reach it', () => {
+    const { applyLevel } = require('../../src/lint');
+    const card = '## X\n\n~~~\ntriggers: []\n~~~\n\nbody\n';
+    expect(applyLevel(scanStoryCardStructure(card), 'off')).toEqual([]);
+  });
+
 });
 
 // ── findLintableFiles ─────────────────────────────────────────────────────────
@@ -268,6 +312,46 @@ describe('scanNativePlaceholders — the §12.4 confusability check', () => {
   test('the hint shows the token spelling that was probably meant', () => {
     const [finding] = scanNativePlaceholders('${she}');
     expect(finding.hint).toContain('{$she}');
+  });
+});
+
+describe('the compiler / lint split in the offline scanner (§12.5)', () => {
+  const { applyLevel, CHECKS } = require('../../src/lint');
+
+  test('every check declares which layer it belongs to', () => {
+    for (const c of CHECKS) expect(['compiler', 'opinion']).toContain(c.layer);
+  });
+
+  test('the six ERROR checks are compiler-layer and carry their CL codes', () => {
+    const facts = CHECKS.filter((c) => c.severity === 'ERROR');
+    expect(facts).toHaveLength(6);
+    expect(facts.every((c) => c.layer === 'compiler')).toBe(true);
+    expect(facts.map((c) => c.code).sort())
+      .toEqual(['CL0430', 'CL0431', 'CL0432', 'CL0433', 'CL0434', 'CL0435']);
+  });
+
+  test('the opinion layer is ERROR-free, which is what makes level: off safe', () => {
+    expect(CHECKS.filter((c) => c.layer === 'opinion').every((c) => c.severity === 'WARN')).toBe(true);
+  });
+
+  test('level: off silences the opinions and leaves every fact standing', () => {
+    const findings = scanText('{$she} love[does] it {if $x}{/if} undefined');
+    const kept = applyLevel(findings, 'off').map((f) => f.category);
+    expect(kept).toEqual(expect.arrayContaining(['unresolved-field-token', 'template-tag']));
+    expect(kept).not.toContain('suspect-verb-marker');
+    expect(kept).not.toContain('js-interpolation-word');
+  });
+
+  test('level: warn keeps the opinions at WARN and does not touch the facts', () => {
+    const findings = scanText('{$she} love[does] it');
+    const kept = applyLevel(findings, 'warn');
+    expect(kept.find((f) => f.category === 'unresolved-field-token').severity).toBe('ERROR');
+    expect(kept.find((f) => f.category === 'suspect-verb-marker').severity).toBe('WARN');
+  });
+
+  test('no level leaves the list exactly as scanned', () => {
+    const findings = scanText('{$she} love[does] it');
+    expect(applyLevel(findings, null)).toBe(findings);
   });
 });
 

@@ -3,9 +3,26 @@
 const fs = require('fs');
 const {
   findFiles, loadYaml, deepClone, findKey,
-  getCI, setCI, deleteCI, normalizeVarKey, resolveVariables, warnUnexpandedVariables,
-  walkItemTextFields, warnUnresolvedFieldTokens, warnMechanicalArtifacts, maskFencedRegions,
+  getCI, setCI, deleteCI, normalizeVarKey, resolveVariables, checkUnexpandedVariables,
+  walkItemTextFields, checkUnresolvedFieldTokens, checkMechanicalArtifacts, maskFencedRegions,
 } = require('../../src/util');
+const { Diagnostics } = require('../../src/diag');
+
+/**
+ * The leak detectors report onto the bus rather than to the console (§12.5), so what these
+ * assert on is `{ severity, code, message }` — the three things a caller downstream can act
+ * on. Severity in particular is the point of the change: six of the eight patterns are now
+ * ERRORs that fail the run, where every one of them used to print a flat `WARN:` and gate
+ * nothing.
+ */
+function collect(run) {
+  const diagnostics = new Diagnostics();
+  const found = run({ diagnostics });
+  return {
+    found,
+    rows: diagnostics.all.map((d) => ({ severity: d.severity, code: d.code, message: d.message })),
+  };
+}
 
 // ── deepClone ─────────────────────────────────────────────────────────────────
 
@@ -182,38 +199,43 @@ describe('resolveVariables', () => {
   });
 });
 
-// ── warnUnexpandedVariables ───────────────────────────────────────────────────
+// ── checkUnexpandedVariables ──────────────────────────────────────────────────
 
-describe('warnUnexpandedVariables', () => {
-  test('warns once per distinct {%token} and returns true', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const found = warnUnexpandedVariables('a {%role} b {%role} c {%era}', 'item "X" (Y)');
+describe('checkUnexpandedVariables', () => {
+  test('reports CL0431 once per distinct {%token}, at ERROR, and returns true', () => {
+    const { found, rows } = collect((sink) =>
+      checkUnexpandedVariables('a {%role} b {%role} c {%era}', 'item "X" (Y)', sink));
     expect(found).toBe(true);
-    expect(warn).toHaveBeenCalledTimes(2); // {%role} deduped, {%era}
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('{%role}'));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('{%era}'));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('item "X" (Y)'));
-    warn.mockRestore();
+    expect(rows).toHaveLength(2); // {%role} deduped, {%era}
+    expect(rows.every((r) => r.code === 'CL0431' && r.severity === 'error')).toBe(true);
+    expect(rows[0].message).toContain('{%role}');
+    expect(rows[1].message).toContain('{%era}');
+    expect(rows[0].message).toContain('item "X" (Y)');
   });
 
   test('ignores {@name} references and returns false', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const found = warnUnexpandedVariables('see {@main}/x for details', 'component Opening.md');
+    const { found, rows } = collect((sink) =>
+      checkUnexpandedVariables('see {@main}/x for details', 'component Opening.md', sink));
     expect(found).toBe(false);
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
+    expect(rows).toEqual([]);
   });
 
-  test('clean text returns false and warns nothing', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    expect(warnUnexpandedVariables('fully resolved', 'x')).toBe(false);
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
+  test('clean text returns false and reports nothing', () => {
+    const { found, rows } = collect((sink) => checkUnexpandedVariables('fully resolved', 'x', sink));
+    expect(found).toBe(false);
+    expect(rows).toEqual([]);
   });
 
   test('non-string input returns false', () => {
-    expect(warnUnexpandedVariables(null, 'x')).toBe(false);
-    expect(warnUnexpandedVariables(42, 'x')).toBe(false);
+    expect(checkUnexpandedVariables(null, 'x')).toBe(false);
+    expect(checkUnexpandedVariables(42, 'x')).toBe(false);
+  });
+
+  test('reports nothing and prints nothing when no bus is passed', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    expect(checkUnexpandedVariables('a {%role}', 'x')).toBe(true);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 
@@ -250,69 +272,87 @@ describe('walkItemTextFields', () => {
   });
 });
 
-// ── warnUnresolvedFieldTokens ─────────────────────────────────────────────────
+// ── checkUnresolvedFieldTokens ────────────────────────────────────────────────
 
-describe('warnUnresolvedFieldTokens', () => {
-  test('warns once per distinct {$token} and returns true', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const found = warnUnresolvedFieldTokens('{$she} and {$she} and {$Aria}', 'item "X" (Y)');
+describe('checkUnresolvedFieldTokens', () => {
+  test('reports CL0430 once per distinct {$token}, at ERROR, and returns true', () => {
+    const { found, rows } = collect((sink) =>
+      checkUnresolvedFieldTokens('{$she} and {$she} and {$Aria}', 'item "X" (Y)', sink));
     expect(found).toBe(true);
-    expect(warn).toHaveBeenCalledTimes(2);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('{$she}'));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('{$Aria}'));
-    warn.mockRestore();
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.code === 'CL0430' && r.severity === 'error')).toBe(true);
+    expect(rows[0].message).toContain('{$she}');
+    expect(rows[1].message).toContain('{$Aria}');
   });
 
   test('ignores {%…} and {@…} tokens', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    expect(warnUnresolvedFieldTokens('{%role} {@main}/x', 'x')).toBe(false);
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
+    const { found, rows } = collect((sink) =>
+      checkUnresolvedFieldTokens('{%role} {@main}/x', 'x', sink));
+    expect(found).toBe(false);
+    expect(rows).toEqual([]);
   });
 
   test('clean text and non-string return false', () => {
-    expect(warnUnresolvedFieldTokens('resolved text', 'x')).toBe(false);
-    expect(warnUnresolvedFieldTokens(null, 'x')).toBe(false);
+    expect(checkUnresolvedFieldTokens('resolved text', 'x')).toBe(false);
+    expect(checkUnresolvedFieldTokens(null, 'x')).toBe(false);
   });
 });
 
-describe('warnMechanicalArtifacts', () => {
-  test('flags a guessed verb marker like [does] instead of silently passing it through', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const found = warnMechanicalArtifacts('Aness love[does] magic research', 'item "X" (Y)');
+describe('checkMechanicalArtifacts', () => {
+  test('a guessed verb marker like [does] is CL0436 at WARN — an opinion, not a fact', () => {
+    const { found, rows } = collect((sink) =>
+      checkMechanicalArtifacts('Aness love[does] magic research', 'item "X" (Y)', sink));
     expect(found).toBe(true);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[does]'));
-    warn.mockRestore();
+    const suspect = rows.filter((r) => r.code === 'CL0436');
+    expect(suspect).toHaveLength(1);
+    expect(suspect[0].severity).toBe('warn');
+    expect(suspect[0].message).toContain('[does]');
   });
 
   test('does not flag real verb markers or [e] as suspect', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const found = warnMechanicalArtifacts('[e] Aness love[s] magic', 'item "X" (Y)');
-    // [s] itself is still flagged as an unresolved *real* marker, but not as "suspect"
-    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("isn't a recognized"));
-    warn.mockRestore();
+    const { rows } = collect((sink) =>
+      checkMechanicalArtifacts('[e] Aness love[s] magic', 'item "X" (Y)', sink));
+    // [s] is still an unresolved *real* marker (CL0434, ERROR), but nothing is "suspect".
+    expect(rows.map((r) => r.code)).toContain('CL0434');
+    expect(rows.map((r) => r.code)).not.toContain('CL0436');
   });
 
   test('does not flag a single-word trigger in the fence as a suspect marker', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const rendered = '## Door\n\n~~~\ntriggers: [door]\nencapsulate: true\n~~~\n\n[e] A plain wooden door.';
-    warnMechanicalArtifacts(rendered, 'item "Door" (Location)');
-    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("isn't a recognized"));
-    warn.mockRestore();
+    const rendered = [
+      '## Door', '', '~~~', 'triggers: [door]', 'encapsulate: true', '~~~', '',
+      '[e] A plain wooden door.',
+    ].join('\n');
+    const { rows } = collect((sink) =>
+      checkMechanicalArtifacts(rendered, 'item "Door" (Location)', sink));
+    expect(rows.map((r) => r.code)).not.toContain('CL0436');
   });
 
-  test('flags leaked template functions, tags, and JS artifacts', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    warnMechanicalArtifacts('{join("; ", $body.Tagline)} {if $x}{/if} [object Object] undefined', 'item "X" (Y)');
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('leaked render function'));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('leaked template tag'));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('JS interpolation artifact'));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('possible JS interpolation artifact "undefined"'));
-    warn.mockRestore();
+  test('leaked functions, tags and artifacts are ERRORs; a bare "undefined" is a WARN', () => {
+    const { rows } = collect((sink) => checkMechanicalArtifacts(
+      '{join("; ", $body.Tagline)} {if $x}{/if} [object Object] undefined', 'item "X" (Y)', sink));
+    const by = Object.fromEntries(rows.map((r) => [r.code, r]));
+    expect(by.CL0432.severity).toBe('error');
+    expect(by.CL0432.message).toContain('leaked render function');
+    expect(by.CL0433.severity).toBe('error');
+    expect(by.CL0433.message).toContain('leaked template tag');
+    expect(by.CL0435.severity).toBe('error');
+    expect(by.CL0435.message).toContain('JS interpolation artifact');
+    expect(by.CL0437.severity).toBe('warn');
+    expect(by.CL0437.message).toContain('possible JS interpolation artifact "undefined"');
   });
 
   test('clean text returns false', () => {
-    expect(warnMechanicalArtifacts('Aness loves magic research.', 'x')).toBe(false);
+    expect(checkMechanicalArtifacts('Aness loves magic research.', 'x')).toBe(false);
+  });
+
+  test('lint.level reaches the two opinions and cannot reach the six facts', () => {
+    const diagnostics = new Diagnostics({ lintLevel: 'off' });
+    checkMechanicalArtifacts(
+      'love[does] it {if $x}{/if} undefined', 'item "X" (Y)', { diagnostics });
+    const codes = diagnostics.all.map((d) => d.code);
+    expect(codes).toContain('CL0433');   // fact — survives `level: off`
+    expect(codes).not.toContain('CL0436');
+    expect(codes).not.toContain('CL0437');
   });
 });
 

@@ -327,7 +327,7 @@ describe('every diagnostic the config surface can emit', () => {
 describe('later-phase keys are recognized, not rejected', () => {
   test.each([
     ['roles', 'roles:\n  protagonist: Aness\n'],
-    ['lint', 'lint:\n  level: warn\n'],
+    ['lint.packs', 'lint:\n  packs:\n    discovery-markers: {}\n'],
   ])('%s WARNs as unimplemented rather than erroring', (_name, yaml) => {
     const { diagnostics } = load(yaml);
     expect(diagnostics.hasErrors()).toBe(false);
@@ -340,6 +340,21 @@ describe('later-phase keys are recognized, not rejected', () => {
    * their declaration will be ignored while the compiler honors it, which is worse than no
    * note at all — the same failure `kitchen-sink.test.js` pins for slotted components.
    */
+  test('lint.level is implemented in Phase 5 and no longer warns', () => {
+    const { diagnostics } = load('lint:\n  level: warn\n');
+    expect(diagnostics.hasErrors()).toBe(false);
+    expect(diagnostics.warnings.some((d) => d.message.includes('not yet implemented'))).toBe(false);
+  });
+
+  test('an unknown lint.level value is a CL0206 naming the three legal ones', () => {
+    const { diagnostics } = load('lint:\n  level: loud\n');
+    const bad = diagnostics.errors.find((d) => d.code === 'CL0206');
+    expect(bad).toBeDefined();
+    expect(bad.message).toContain('"off"');
+    expect(bad.message).toContain('"error"');
+    expect(bad.message).toContain('"warn"');
+  });
+
   test('placeholders is implemented and no longer warns', () => {
     const { diagnostics } = load("placeholders:" + String.fromCharCode(10) + "  heroName: Who?" + String.fromCharCode(10));
     expect(diagnostics.hasErrors()).toBe(false);

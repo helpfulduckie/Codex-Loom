@@ -60,12 +60,65 @@ Warnings indicate likely authoring mistakes but do not stop compilation.
 | `WARN: item "<id>" has multiple variable-block aliases (["v", "vars"]). Merging...` | An item definition has more than one of `v`/`var`/`vars`/`variable`/`variables` as sibling top-level keys. | Use a single alias consistently. Subfields are merged and last-writer-wins, but the result may not be what you intended. |
 | `WARN: item "<id>" variant delta contains multiple variable-block aliases (["v", "vars"]). Merging...` | A variant delta has more than one variable-block alias as sibling keys. | Use a single alias in the variant. Subfields are merged last-writer-wins. |
 | `WARN: item "<name>" emits a story card but has neither aid.type nor render.template` | A story card has no type information, so no template can be selected for it. Items routed only into components are exempt — a `template:` on the target specifies them, and `render.storyCard: false` with no target is `CL0610` instead. | Add `aid.type:` or `render.template:`, or set `render.storyCard: false` if it was only ever meant to render into a component. |
-| `WARN: unexpanded variable {%key} in <label>` | A `{%key}` token survived into a rendered story card or component output. Usually the variable was undeclared (you'll also see `not declared`), or it was introduced by a later pass (cross-item ref / render function). Targets `{%}` only. | Declare the variable, fix the typo, or remove the stray token. |
-| `WARN: unresolved token {$key} in <label>` | A `{$…}` field/pronoun/character token survived verbatim into rendered output — e.g. a misspelled pronoun, an unknown character ID, or a cross-item field miss. Targets `{$…}` only. (A field-ref miss in a *template* renders empty rather than surviving, so it is not flagged.) | Fix the field path / character ID, or remove the token. For names in item data use dotted `{$name.full}`/`{$name.display}`. |
 | `WARN: component key "{%name}" not found` | A `{%name}` reference doesn't match any name in `variables`. | Check the component key spelling and configuration. |
 | `WARN: branchFraming on leaf branch "<name>" — ignoring` | `branchFraming:` was declared on a leaf branch (it only applies to non-leaf nodes). | Move it to a non-leaf branch node, or use `opening:` instead. |
 | `WARN: cross-item ref {$Id.body.FieldName} — item not found` | A cross-item body reference references an item ID not found in the compiled output. | Check that the referenced item is included in this branch and has the correct ID. |
 | `WARN: No branch leaves found — nothing to compile.` | The output directory has no branch leaf folders for the overview generator to scan. | Run a full compile first before generating a leaf review. |
+
+---
+
+## Leaked artifacts are errors, and they fail the build
+
+**A token that survives into compiled output means the compiler failed, and the failure is
+sitting in the file it wrote.** An unresolved `{$she}`, an unexpanded `{%era}`, a leaked
+`{join}` or `{if}`, an unresolved `[s]`, an `[object Object]` — each is a fact about the
+output rather than an opinion about it, so each is an ERROR with a code, and a project
+carrying one no longer exits zero. They are `CL0430`–`CL0435` in
+[Diagnostic codes](11-diagnostics.md).
+
+**Before this they printed a bare `WARN:` line and gated nothing**, while `--lint` listed
+the same patterns as errors — one check with two answers, depending on which half of the
+tool you ran. If a project of yours starts failing here, it was shipping a leaked token
+before and the compile was not telling you.
+
+Two checks in the same sweep stay warnings, because both are guesses about prose rather
+than facts about output: a bracketed word that is not one of the five real conjugation
+markers (`CL0436`, e.g. `[does]` for `[s]`), and a bare `undefined`/`NaN` (`CL0437`), which
+is also two ordinary English words. Those two are part of the opinion layer, so
+`lint.level` can turn them down or off.
+
+---
+
+## Turning the opinion layer down — `lint.level`
+
+**`lint.level` decides which of Codex Loom's opinions you hear; it cannot touch the
+facts.** The distinction is the point: an unknown key, an undeclared role, a platform cap,
+a leaked token — those are things the compiler knows are wrong, and no setting silences
+them. What `level` reaches are the quality heuristics: trigger-less cards, prose guesses,
+unused placeholder declarations, and the findings of convention packs.
+
+```yaml
+lint:
+  level: error        # off | error | warn
+```
+
+Read `error` as **"validate my mod configs, skip the prose heuristics"** — that is what
+choosing it does, and it is the reason to choose it. The three values:
+
+| `level` | What you hear from the opinion layer |
+|---|---|
+| `off` | Nothing. |
+| `error` | Only its errors — pack findings about mod config. The prose heuristics are all warnings, so they disappear. |
+| `warn` | Everything, and nothing in the layer can fail your build: an opinion-layer error is reported as a warning instead. |
+| *(unset)* | Everything, at the severity each finding was raised with. This is the default. |
+
+`--lint-level=off|error|warn` overrides the config key for one run, and applies to `--lint`
+as well as to a compile. It is deliberately separate from `--verbose`, which is about
+compile progress rather than about which diagnostics you want.
+
+Two limits worth knowing. `lint.level` on a *branch* node is accepted by the schema and not
+yet applied — the project-level key is what governs a compile. And `--lint` run against an
+output tree reads only the CLI flag, since it never opens `compile.cl.yaml`.
 
 ---
 

@@ -32,7 +32,7 @@ const { sectionsForBranch, WRAP } = require('../model/component');
 const { applyWrapper } = require('../template');
 const { applyTokenPass } = require('../model/pronouns');
 const {
-  resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts,
+  resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts,
 } = require('../util');
 
 /**
@@ -266,15 +266,15 @@ function renderSectionedComponent(component, branchPath, occupants, options = {}
  * report per file, and a `{%var}` that survived is equally wrong wherever in the document
  * it sits.
  */
-function writeSectionedComponent(outputDir, descriptor, content) {
+function writeSectionedComponent(outputDir, descriptor, content, sink) {
   if (!content) return null;
   const dir = path.join(outputDir, 'Components');
   fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, descriptor.file);
   const label = `component ${descriptor.file}`;
-  warnUnexpandedVariables(content, label);
-  warnUnresolvedFieldTokens(content, label);
-  warnMechanicalArtifacts(content, label);
+  checkUnexpandedVariables(content, label, sink);
+  checkUnresolvedFieldTokens(content, label, sink);
+  checkMechanicalArtifacts(content, label, sink);
   fs.writeFileSync(outPath, `${content}\n`, 'utf8');
   return outPath;
 }

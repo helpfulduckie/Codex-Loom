@@ -75,10 +75,36 @@ Both items keep their `CL0610`, which is the ERROR that actually describes `Sile
 | Step | Expected change |
 |---|---|
 | 0 | `CL0325` appears on the bare `import: Anchor`, once per branch — **landed** |
-| 9 | `CL0710`–`CL0713` appear once the fixture gains over-cap and in-band content |
+| 9 | `CL0710`–`CL0713` appear once the fixture gains over-cap and in-band content — **landed** |
 
 Step 1's `kind:` enum (`CL0206`) is deliberately absent from that table: it is an item-level
 schema ERROR, which the editing rules above explain this fixture cannot hold.
+
+**The four limit rows come from four items and two Openings, and the Openings are the reason
+this fixture exists.** `Bloated` is a card body past 2,000 characters with no placeholders in
+it — the plain case, where compiled length and upload length agree. `Ledger` is a
+`kind: reference` card inside the WARN band, which pins §4.8's other half: `reference` exempts
+an item from the soft heuristics and from nothing the platform enforces. The two `Opening.md`
+files are the case no golden project can reach:
+
+| File | Compiled | On upload | Code |
+|---|---|---|---|
+| `opening-open.md` | 3,301 | 3,626 | `CL0711` |
+| `opening-gated.md` | 3,501 | 4,021 | `CL0710` |
+
+**Both are under their thresholds on compiled length and over them on upload length**, which
+is exactly the failure §8.5 names and the reason Phase 5 could not precede Phase 4. A check
+written against `text.length` reports nothing at all on either file. No golden project
+declares a single placeholder, so without these two the expansion arithmetic ships untested
+— which is what the Phase 5 plan's `## Watch` section says in prose and this says in rows.
+
+`longPrompt` exists in `compile.cl.yaml` purely to make that arithmetic visible: at 12
+characters the key expands to a 79-character `${…}`, so a handful of references move a file
+across a cap. Its question text is not a mistake, and it is the fixture's only non-mistake.
+
+**The `kind: reference` fence key is `emit-vl.test.js`'s to pin, not this fixture's.** The
+snapshot holds diagnostics, and a fence key that reaches compiled output correctly raises
+none. `Ledger` proves the source-to-diagnostic path; the source-to-fence path is a unit test.
 
 Phase 4's table, kept for the shape it records: `CL0204` on `placeholders:` disappeared at
 Step 1, undeclared `%ghostName%` in `Greeter` started erroring at Step 3, the invalid-context

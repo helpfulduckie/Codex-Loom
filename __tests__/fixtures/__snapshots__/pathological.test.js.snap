@@ -18,10 +18,10 @@ exports[`pathological fixture placement invariants and latent placeholder conten
   hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
 ERROR CL0532 Codex/items.cl.yaml
   undeclared placeholder "%ghostName%" in item "Greeter" rendering into plotEssential slot "cast" on branch "open" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
-  hint: Declared on this branch: heroName, altName, neverUsed.
+  hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
 ERROR CL0532 Codex/items.cl.yaml
   undeclared placeholder "%ghostName%" in story card "Greeter" on branch "open" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
-  hint: Declared on this branch: heroName, altName, neverUsed.
+  hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
 ERROR CL0610 Codex/items.cl.yaml
   item "Silent" resolves on branch "open" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
 ERROR CL0611 Codex/items.cl.yaml
@@ -34,6 +34,11 @@ ERROR CL0533 Codex/items.cl.yaml
   placeholder "%heroName%" in the type of story card "MistypedType" on branch "open" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
 ERROR CL0420 Codex/items.cl.yaml
   no template found for item "MistypedType" (type: Character-%heroName%)
+ERROR CL0712 Codex/items.cl.yaml
+  Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+WARN CL0713 Codex/items.cl.yaml
+  Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "open".
 ERROR CL0325 Codex/items.cl.yaml
@@ -41,7 +46,7 @@ ERROR CL0325 Codex/items.cl.yaml
   hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
 ERROR CL0532 Codex/items.cl.yaml
   undeclared placeholder "%ghostName%" in story card "Greeter" on branch "gated" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
-  hint: Declared on this branch: heroName, altName, neverUsed.
+  hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
 ERROR CL0610 Codex/items.cl.yaml
   item "Ghost" resolves on branch "gated" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
 ERROR CL0610 Codex/items.cl.yaml
@@ -56,8 +61,18 @@ ERROR CL0533 Codex/items.cl.yaml
   placeholder "%heroName%" in the type of story card "MistypedType" on branch "gated" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
 ERROR CL0420 Codex/items.cl.yaml
   no template found for item "MistypedType" (type: Character-%heroName%)
+ERROR CL0712 Codex/items.cl.yaml
+  Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+WARN CL0713 Codex/items.cl.yaml
+  Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "gated".
+WARN CL0711 opening-open.md
+  Opening for branch "open" is 3,626 characters on upload, within 374 of the 4,000 limit. Compiled length is 3,301; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
+ERROR CL0710 opening-gated.md
+  Opening for branch "gated" is 4,021 characters on upload (limit 4,000). Compiled length is 3,501; 8 placeholder references add 520 characters when Velvet Lattice expands them to their question text on upload.
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
 WARN CL0534 compile.cl.yaml
   placeholder "%heroName%" in the title of branch "gated" — a branch title half-works. AID fills the prompt and shows the answer while the player is choosing, then keeps the raw placeholder text in the saved adventure’s title. Deliberate is possible; usually it is not.
 ERROR CL0533 components/description.md

@@ -51,6 +51,29 @@ const CODES = Object.freeze({
   TEMPLATE_NOT_FOUND: 'CL0420',
   RENDER_FAILED: 'CL0421',
 
+  // Leaked compile-time artifacts, found by sweeping rendered output (§12.5). Every one of
+  // them means the compiler failed and the failure is visible in the file it just wrote,
+  // which is a fact about the output rather than an opinion about it — so they are ERRORs
+  // on the bus, and `lint.level` cannot reach them.
+  //
+  // They share one decade rather than filing `{%key}` under CL05xx with the other variable
+  // diagnostics, because what is reported here is not the token family but the leak: one
+  // detector set, run at one moment, over one finished string. Splitting them by what
+  // leaked would scatter a single check across three bands.
+  LEAKED_FIELD_TOKEN: 'CL0430',
+  LEAKED_VARIABLE: 'CL0431',
+  LEAKED_RENDER_FUNCTION: 'CL0432',
+  LEAKED_TEMPLATE_TAG: 'CL0433',
+  LEAKED_VERB_MARKER: 'CL0434',
+  LEAKED_JS_ARTIFACT: 'CL0435',
+
+  // The two heuristics that run in the same sweep and are *not* facts: both judge whether
+  // ordinary prose was meant, and both can be wrong about it. `[does]` may be an author's
+  // deliberate bracket, and "undefined" is a word. They stay WARN and are tagged opinion-
+  // layer below, which is what `lint.level` reaches.
+  SUSPECT_VERB_MARKER: 'CL0436',
+  SUSPECT_JS_WORD: 'CL0437',
+
   // Tokens (§6.4, §12). `~` unbinds an inherited binding; unbinding something that was
   // never inherited is meaningless as written and reliably means the author meant to
   // include, so it warns rather than passing silently.
@@ -120,11 +143,75 @@ const SEVERITY_BY_CODE = Object.freeze({
   CL0602: SEVERITY.WARN,
   CL0603: SEVERITY.WARN,
   CL0604: SEVERITY.WARN,
+  CL0430: SEVERITY.ERROR,
+  CL0431: SEVERITY.ERROR,
+  CL0432: SEVERITY.ERROR,
+  CL0433: SEVERITY.ERROR,
+  CL0434: SEVERITY.ERROR,
+  CL0435: SEVERITY.ERROR,
+  CL0436: SEVERITY.WARN,
+  CL0437: SEVERITY.WARN,
 });
 
 /** WARN is the default: an unregistered code is still reported, never silently dropped. */
 function severityOf(code) {
   return SEVERITY_BY_CODE[code] || SEVERITY.WARN;
+}
+
+// ── the compiler / lint split (§12.5) ────────────────────────────────────────
+
+/**
+ * The opinion layer, by code.
+ *
+ * §12.5 draws one line: compiler diagnostics are facts about the output, lint findings are
+ * opinions about its quality. The line is about *what a check claims*, not about where the
+ * code that runs it lives — `CL0535` and `CL0536` are opinions computed inside the compile
+ * because they need the branch-merged placeholder table, and `CL0436`/`CL0437` are opinions
+ * found by the same sweep that finds six facts. Both cases are tagged here rather than
+ * relocated, because where a check runs and which layer it belongs to are separate
+ * questions.
+ *
+ * Membership is the whole of what `lint.level` can reach. Everything absent from this set
+ * is a fact, and an author cannot silence a fact — which is what makes `level: off` a safe
+ * thing to write (§12.5).
+ */
+const OPINION_CODES = Object.freeze(new Set([
+  'CL0436', // bracketed word that isn't a real verb-conjugation marker
+  'CL0437', // bare "undefined"/"NaN", which is also two English words
+  'CL0535', // a placeholder declared and never referenced beneath its declaring node
+  'CL0536', // two placeholder keys declaring the same question text
+]));
+
+function isOpinion(code) {
+  return OPINION_CODES.has(code);
+}
+
+/** The three values `lint.level` and `--lint-level` accept, in the order they say less. */
+const LINT_LEVELS = Object.freeze(['off', 'error', 'warn']);
+
+const SEVERITY_RANK = Object.freeze({ [SEVERITY.INFO]: 0, [SEVERITY.WARN]: 1, [SEVERITY.ERROR]: 2 });
+
+/**
+ * Apply a `lint.level` to one opinion-layer diagnostic. Returns the severity it reaches the
+ * author at, or `null` if it does not reach them at all.
+ *
+ * **`level` names the one severity the opinion layer is allowed to speak at.** Clamp the
+ * diagnostic to it, then drop whatever is left below it — one rule, and it is the only rule
+ * that satisfies both things §12.5 asks for. Under `warn` an opinion ERROR demotes to WARN,
+ * so nothing in the opinion layer can fail a build; under `error` the prose heuristics, all
+ * of them WARN, disappear and pack findings about mod config survive at full severity. That
+ * second case is the author-facing meaning the docs lead with: *validate my mod configs,
+ * skip the prose heuristics*.
+ *
+ * Unset is not a level. A project that says nothing gets every opinion at the severity it
+ * was raised with, which is what keeps a pack ERROR able to fail a build by default.
+ */
+function applyLintLevel(severity, level) {
+  if (!level) return severity;
+  if (level === 'off') return null;
+  const ceiling = level === 'error' ? SEVERITY.ERROR : SEVERITY.WARN;
+  const clamped = SEVERITY_RANK[severity] <= SEVERITY_RANK[ceiling] ? severity : ceiling;
+  return SEVERITY_RANK[clamped] < SEVERITY_RANK[ceiling] ? null : clamped;
 }
 
 /**
@@ -186,14 +273,36 @@ class Diagnostic {
 
 /** A collector. Nothing is printed; callers decide what to do with what accumulates. */
 class Diagnostics {
-  constructor() {
+  /**
+   * `lintLevel` is the §12.5 ceiling, and it is applied here — at `add` — rather than at
+   * print time. Everything downstream reads the bus: `hasErrors()` gates the exit code, the
+   * printer walks `all`, and the pathological fixture snapshots it. Filtering in one of
+   * those places and not the others is how a silenced diagnostic still fails a build.
+   */
+  constructor(options = {}) {
     this._items = [];
+    this._lintLevel = options.lintLevel || null;
+  }
+
+  /** Set after construction, for the bus that exists before `compile.cl.yaml` is read. */
+  setLintLevel(level) {
+    this._lintLevel = level || null;
+    return this;
+  }
+
+  get lintLevel() {
+    return this._lintLevel;
   }
 
   add(severity, code, message, loc = {}, opts = {}) {
+    let effective = severity;
+    if (this._lintLevel && isOpinion(code)) {
+      effective = applyLintLevel(severity, this._lintLevel);
+      if (effective === null) return null;
+    }
     const diag = new Diagnostic({
       code,
-      severity,
+      severity: effective,
       message,
       file: loc.file,
       line: loc.line,
@@ -266,4 +375,7 @@ class Diagnostics {
   }
 }
 
-module.exports = { Diagnostic, Diagnostics, SEVERITY, SEVERITY_LABEL, CODES, SEVERITY_BY_CODE, severityOf, busWarner };
+module.exports = {
+  Diagnostic, Diagnostics, SEVERITY, SEVERITY_LABEL, CODES, SEVERITY_BY_CODE, severityOf, busWarner,
+  OPINION_CODES, isOpinion, LINT_LEVELS, applyLintLevel,
+};

@@ -275,6 +275,42 @@ describe('migrateItemDocument', () => {
     return { text: doc.toString({ lineWidth: 0, flowCollectionPadding: false }), ...result };
   };
 
+  /**
+   * §4.8's migration step, and it is deliberately not a transformation. `kind:` is new in
+   * v4 with no v3 predecessor, so there is nothing to convert; what a v3 project offers is
+   * a *candidate list*, and turning a candidate into a declaration is the guess the field
+   * exists to stop the compiler making.
+   */
+  describe('kind: reference candidates (§4.8)', () => {
+    test('a trigger-less card is listed for review and left untouched', () => {
+      const { text, notes, changes } = migrate(
+        '- id: WTG Time Config\n  aid:\n    type: System\n    triggers: []\n');
+      expect(text).not.toContain('kind:');
+      expect(changes.kindCandidates).toBe(1);
+      expect(notes.join('\n')).toContain('"WTG Time Config" has no triggers');
+      expect(notes.join('\n')).toContain('kind: reference');
+    });
+
+    test('a card with no aid.triggers key at all is a candidate too', () => {
+      const { changes } = migrate('- id: Quiet\n  aid:\n    type: Character\n');
+      expect(changes.kindCandidates).toBe(1);
+    });
+
+    test('a card with triggers is not a candidate', () => {
+      const { notes, changes } = migrate(
+        '- id: Aria\n  aid:\n    type: Character\n    triggers: [Aria]\n');
+      expect(changes.kindCandidates).toBe(0);
+      expect(notes).toEqual([]);
+    });
+
+    test('a variant is not listed — the queue names items, and a variant has no id', () => {
+      const { changes } = migrate(
+        '- id: Aria\n  aid:\n    type: Character\n    triggers: [Aria]\n'
+        + '  variants:\n    Ghost:\n      aid:\n        triggers: []\n');
+      expect(changes.kindCandidates).toBe(0);
+    });
+  });
+
   test('aid.known: true becomes a structured top-level notes marker', () => {
     // `notes: {known: true}` rather than the `notes: '[e]'` v3 literally emitted: a
     // convention pack cannot read `[e]` back out of free text, and a branch that does not

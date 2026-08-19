@@ -29,10 +29,15 @@ structure:
 #                        questions, so the player is prompted once and both keys receive
 #                        that answer.
 #   neverUsed          — check 2: declared at root, referenced by no body on any branch.
+#   longPrompt         — §8.5: a question long enough that its expansion moves a file
+#                        across a cap. `%longPrompt%` is 12 characters; the substituted
+#                        `${...}` is 79. Nothing else in either corpus exercises that
+#                        arithmetic — no golden project declares a placeholder at all.
 placeholders:
   heroName: What is your name?
   altName: What is your name?
   neverUsed: Which house raised you?
+  longPrompt: What name did the house that raised you give to the child it did not want?
 
 components:
   plotEssential: '{%here}/components/plot-essentials.cl.yaml'
@@ -47,6 +52,10 @@ components:
 branches:
   open:
     title: The Open Path
+    # §8.5, the WARN band. Compiled length is under 3,600 and upload length is not, so a
+    # check written against `text.length` reports nothing at all here. CL0711.
+    components:
+      opening: '{%here}/components/opening-open.md'
 
   gated:
     # A branch title half-works: the prompt fills and the player sees the answer while
@@ -54,6 +63,10 @@ branches:
     # deliberate use is possible. The key is declared, so this is the context check
     # firing on its own rather than riding on an undeclared one.
     title: The %heroName% Path
+    # §8.5, the cap. Same shape as `open`, eight references instead of five, and the
+    # upload length lands past 4,000. CL0710.
+    components:
+      opening: '{%here}/components/opening-gated.md'
     # The `cast` slot excludes itself on this branch, in the component file. Gating a slot
     # off is legitimate (§7.4) — until it makes an item with no other target vanish
     # entirely, which is what `Ghost` does below.

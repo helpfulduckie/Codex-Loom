@@ -393,3 +393,62 @@ describe('CLI --compile flag', () => {
     expect(result.stderr).toMatch(/compile\.yaml/i);
   });
 });
+
+// ── --lint-level ─────────────────────────────────────────────────────────────
+//
+// The flag exists because §12.5 asks for a runtime control that is not `--verbose`:
+// verbosity is about compile progress, this is about which diagnostics an author wants to
+// hear. It takes a value, so it is parsed apart from the boolean flag table.
+
+describe('CLI --lint-level flag', () => {
+  let tmp;
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cli-lintlevel-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  /** A card with a leaked `{$she}` (a fact) and a `[does]` (an opinion) in one body. */
+  function writeLintable() {
+    write(
+      path.join(tmp, 'scenario', 'Story Cards', 'Char', 'a.md'),
+      ['## Aria', '', '~~~', 'triggers: [Aria]', '~~~', '', 'She caught {$she} hair and love[does] it.', ''].join('\n')
+    );
+  }
+
+  test('--lint-level=off silences the opinions and leaves the facts', () => {
+    writeLintable();
+    const result = run(['-L', '--lint-level=off', path.join(tmp, 'scenario')], tmp);
+    expect(result.status).toBe(0);
+    const report = fs.readFileSync(
+      path.join(tmp, 'overview', 'lint', 'scenario.lint.md'), 'utf8');
+    expect(report).toContain('unresolved-field-token');
+    expect(report).not.toContain('suspect-verb-marker');
+  });
+
+  test('the space-separated spelling works too, and does not eat the path', () => {
+    writeLintable();
+    const result = run(['-L', '--lint-level', 'off', path.join(tmp, 'scenario')], tmp);
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(tmp, 'overview', 'lint'))).toBe(true);
+  });
+
+  test('with no flag the opinions are reported as scanned', () => {
+    writeLintable();
+    const result = run(['-L', path.join(tmp, 'scenario')], tmp);
+    expect(result.status).toBe(0);
+    const report = fs.readFileSync(
+      path.join(tmp, 'overview', 'lint', 'scenario.lint.md'), 'utf8');
+    expect(report).toContain('suspect-verb-marker');
+  });
+
+  test('an unknown level exits nonzero and names the three legal ones', () => {
+    writeLintable();
+    const result = run(['-L', '--lint-level=loud', path.join(tmp, 'scenario')], tmp);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/off, error, warn/);
+  });
+});

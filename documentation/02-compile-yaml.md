@@ -45,6 +45,9 @@ components:                       # root-level component specs (inline or file p
 render:                           # project-wide rendering defaults
   notesTemplate: ProjectNotes     # template that renders every card's notes:
 
+lint:                             # the opinion layer's controls
+  level: warn                     # off | error | warn
+
 branches:
   subject:
     protagonist: Aness
@@ -250,6 +253,41 @@ branches:
 ```
 
 **Use a blank template rather than `~` to turn notes off.** `notesTemplate: ~` unbinds the inherited value, which drops the branch to rung 4 — the built-in rendering of the notes value itself. For a scalar like `'[e]'` that is the same marker again; for a mapping it is `known: true` reaching AID as text. A template that renders nothing emits no `notes:` line at all, which is what "off" should mean.
+
+### `lint`
+
+Controls for Codex Loom's **opinion layer** — the checks that judge quality rather than
+report facts.
+
+```yaml
+lint:
+  level: error        # off | error | warn
+```
+
+**`level` cannot reach anything the compiler knows is wrong.** Unknown keys, undeclared
+roles, platform field caps, a leaked `{$she}` or `{join}` — those are facts about your
+output, they stay errors at every level, and that is what makes `off` a safe thing to
+write. What `level` governs is the other half: trigger-less cards, prose heuristics, unused
+placeholder declarations, and convention-pack findings.
+
+Read `error` as **"validate my mod configs, skip the prose heuristics"**. The prose
+heuristics are all warnings, so they disappear; pack findings about mod config survive at
+full severity and can still fail a build.
+
+| `level` | What you hear from the opinion layer |
+|---|---|
+| `off` | Nothing. |
+| `error` | Its errors only — pack findings about mod config. |
+| `warn` | Everything, demoted so that nothing in the layer fails your build. |
+| *(unset)* | Everything, at the severity each finding was raised with. The default. |
+
+`--lint-level=off|error|warn` overrides the key for one run, and is separate from
+`--verbose`. See [Errors & Warnings](10-errors-and-warnings.md) for the full picture,
+including which checks sit in which layer.
+
+`lint.packs` — convention packs — is recognized and not yet implemented; declaring it
+draws a `CL0204` warning. Writing `lint.level` on a branch node is accepted by the schema
+and not yet applied; the project-level key governs the compile.
 
 ### `branches`
 

@@ -307,7 +307,7 @@ function notesMarkerPair() {
  * Returns `{ changes, notes }` — counts per rule, and the values needing a human look.
  */
 function migrateItemDocument(doc) {
-  const changes = { encapsulate: 0, known: 0, triggers: 0, stripFence: 0, title: 0 };
+  const changes = { encapsulate: 0, known: 0, triggers: 0, stripFence: 0, title: 0, kindCandidates: 0 };
   const notes = [];
 
   YAML.visit(doc, {
@@ -375,6 +375,25 @@ function migrateItemDocument(doc) {
         delete scalar.type;
         changes.triggers++;
       }
+
+      // §4.8: `kind:` is new in v4 and no v3 field maps to it, so the transformation is
+      // nothing and the migrator writes no key. What a v3 project *can* offer is a
+      // candidate list — its trigger-less cards — and a trigger-less card is either a mod
+      // control item that meant it or a narrative card that lost its triggers. Only the
+      // author knows which, and guessing is what `kind:` exists to stop the compiler
+      // doing. So the item is listed for the Phase 8 review queue and left untouched.
+      //
+      // Declarations only. A variant carries `aid:` without an `id:`, and reporting one
+      // would name a row the author cannot find in a review queue that lists items.
+      const id = node.get('id');
+      if (typeof id === 'string' && scalars.length === 0) {
+        notes.push(
+          `item "${id}" has no triggers — review for \`kind: reference\` (§4.8). `
+          + 'The migrator does not set it: trigger-less means either a mod control item '
+          + 'that meant it or a narrative card that lost them, and only you can tell.'
+        );
+        changes.kindCandidates++;
+      }
     },
   });
 
@@ -385,7 +404,7 @@ function migrateItemDocument(doc) {
 function migrateItemFiles(rootDir, options = {}) {
   const touched = [];
   const notes = [];
-  const totals = { encapsulate: 0, known: 0, triggers: 0, stripFence: 0 };
+  const totals = { encapsulate: 0, known: 0, triggers: 0, stripFence: 0, kindCandidates: 0 };
 
   const walk = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

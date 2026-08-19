@@ -3,9 +3,10 @@
 Codex Loom compiles YAML item definitions into Velvet Lattice story card format
 for AI Dungeon scenarios. The released compiler is v3.3.2 (see `package.json`);
 active work is the v4 rebuild on the `v4-phase1` branch — a clean break from v3,
-with Phases 1 through 4 complete — Phase 4 being player placeholders. Phase 5, platform
-limits, is planned and half built: Sessions A and B are in, Session C — the `--card-sizes`
-rework — is next. See the design spec below.
+with Phases 1 through 5 complete — Phase 4 being player placeholders, Phase 5 the
+platform field caps, the `--card-sizes` rework, `kind:` and the compiler/lint split.
+Phase 6 — component `imports:`, description as a component, multi-target render — is
+next and has no plan note yet. See the design spec below.
 
 Run: `npm test` (Jest — `test:unit`, `test:integration`, `test:coverage` also
 available). `npm run compile` compiles `test/compile.yaml` as a smoke check.

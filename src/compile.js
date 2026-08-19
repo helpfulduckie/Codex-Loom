@@ -15,10 +15,10 @@ const { slotsForBranch } = require('./model/component');
 const { loadComponentDocument } = require('./loader/component');
 const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
-const { resolveVariables, warnUnexpandedVariables, warnUnresolvedFieldTokens, warnMechanicalArtifacts, itemContext } = require('./util');
+const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts, itemContext } = require('./util');
 const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
-const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES } = require('./diag');
+const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES, LINT_LEVELS } = require('./diag');
 const { renderCard } = require('./emit/vl');
 const {
   FILENAME: PLACEHOLDERS_FILENAME, writeNodePlaceholders, checkUndeclaredPlaceholders,
@@ -928,9 +928,10 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     }
 
     const type = (item.aid && item.aid.type) || 'Uncategorized';
-    warnUnexpandedVariables(rendered, `item "${itemId}" (${type})`);
-    warnUnresolvedFieldTokens(rendered, `item "${itemId}" (${type})`);
-    warnMechanicalArtifacts(rendered, `item "${itemId}" (${type})`);
+    const leakSink = { diagnostics, file: item._source };
+    checkUnexpandedVariables(rendered, `item "${itemId}" (${type})`, leakSink);
+    checkUnresolvedFieldTokens(rendered, `item "${itemId}" (${type})`, leakSink);
+    checkMechanicalArtifacts(rendered, `item "${itemId}" (${type})`, leakSink);
     // The whole rendered card, so one call covers name, triggers, notes and body — every
     // story-card field AID accepts a placeholder in.
     checkUndeclaredPlaceholders(rendered, placeholders, {
@@ -973,13 +974,13 @@ function copyScripts(srcDir, targetDir) {
 /**
  * Write Opening.md or Opening Choice.md to a branch node's Components folder.
  */
-function writeComponentFile(outputDir, filename, content) {
+function writeComponentFile(outputDir, filename, content, sink) {
   const dir = path.join(outputDir, 'Components');
   fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, filename);
-  warnUnexpandedVariables(content, `component ${filename}`);
-  warnUnresolvedFieldTokens(content, `component ${filename}`);
-  warnMechanicalArtifacts(content, `component ${filename}`);
+  checkUnexpandedVariables(content, `component ${filename}`, sink);
+  checkUnresolvedFieldTokens(content, `component ${filename}`, sink);
+  checkMechanicalArtifacts(content, `component ${filename}`, sink);
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
 }
@@ -1034,7 +1035,7 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
       loc: { file: typeof spec === 'string' ? spec : undefined },
       label: leafPath.length ? `branch "${leafPath[leafPath.length - 1]}"` : 'the project root',
     });
-    const outPath = writeComponentFile(outputDir, 'Opening.md', content);
+    const outPath = writeComponentFile(outputDir, 'Opening.md', content, { diagnostics });
     if (verbose) console.log(`    OK: Opening → ${outPath}`);
     writtenLeaves.add(leafPath.join('/') || '(root)');
   };
@@ -1081,7 +1082,7 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
         checkLimit(framingText, questionsForMeasurement(table, branchVars), LIMITS.opening, {
           diagnostics, label: `branch "${name}" (framing)`,
         });
-        const outPath = writeComponentFile(nodeOutput, 'Opening.md', framingText);
+        const outPath = writeComponentFile(nodeOutput, 'Opening.md', framingText, { diagnostics });
         if (verbose) console.log(`    OK: OpeningChoice → ${outPath}`);
       }
     }
@@ -1292,6 +1293,18 @@ function compileRun(configPath, options, buses) {
   // read canon/item files from disk before the throw was reached.
   let loadCursor = reportLoadDiagnostics(loadDiagnostics);
 
+  // The §12.5 ceiling, set here because this is the first moment both halves of it exist:
+  // `lint.level` has just been read off the config, and `--lint-level` came in with the
+  // options. The CLI flag wins, on the general rule that a flag is what someone typed for
+  // this run and the config is what the project says every run.
+  //
+  // The load bus is deliberately left alone. Nothing it raises is an opinion — it is
+  // schema violations and unreadable files — and it has already been reported by the line
+  // above, so a ceiling applied here could only ever arrive too late to mean anything.
+  compileDiagnostics.setLintLevel(
+    options.lintLevel || (config.lint && config.lint.level) || null,
+  );
+
   fs.mkdirSync(config._resolvedOutput, { recursive: true });
 
   const { templates, partials } = loadTemplates(config._resolvedTemplates, { diagnostics: loadDiagnostics });
@@ -1492,7 +1505,7 @@ function compileRun(configPath, options, buses) {
         usagePath: branchPath.join('/'),
       });
 
-      const outPath = writeSectionedComponent(outputDir, descriptor, text);
+      const outPath = writeSectionedComponent(outputDir, descriptor, text, { diagnostics: compileDiagnostics });
       if (outPath) {
         sectionedWritten[descriptor.key] = true;
         sectionedSegments[descriptor.key] = segments;
@@ -1567,7 +1580,7 @@ function compileRun(configPath, options, buses) {
         LIMITS.opening,
         { diagnostics: compileDiagnostics, loc: { file: configPath }, label: 'the project root (framing)' },
       );
-      const outPath = writeComponentFile(config._resolvedOutput, 'Opening.md', content);
+      const outPath = writeComponentFile(config._resolvedOutput, 'Opening.md', content, { diagnostics: compileDiagnostics });
       if (verbose) console.log(`    OK: Root OpeningChoice → ${outPath}`);
     }
   }
@@ -1653,7 +1666,7 @@ function compileRun(configPath, options, buses) {
       reason: 'AID does not fill placeholders in the Description. It is shown before any '
         + 'adventure exists to answer them, so the raw text is what a reader sees.',
     });
-    const descPath = writeDescription(config._resolvedOutput, combined);
+    const descPath = writeDescription(config._resolvedOutput, combined, { diagnostics: compileDiagnostics });
     if (descPath) { if (verbose) console.log(`  OK: Description → ${descPath}`); }
     else recordGap('(project)', 'Description', descSpec, 'compiled to empty content');
   }
@@ -1852,6 +1865,31 @@ if (require.main === module) {
     if (idx !== -1) flagIdxs.add(idx);
   }
 
+  // `--lint-level` is a value flag, so it is parsed apart from the boolean table above and
+  // in both spellings: `--lint-level=warn` and `--lint-level warn`. It is deliberately not
+  // folded into `--verbose` (§12.5) — verbosity is about compile progress, this is about
+  // which diagnostics an author wants to hear, and the two answer different questions.
+  let lintLevel = null;
+  {
+    const idx = rawArgs.findIndex(a => a === '--lint-level' || a.startsWith('--lint-level='));
+    if (idx !== -1) {
+      const arg = rawArgs[idx];
+      flagIdxs.add(idx);
+      if (arg.includes('=')) {
+        lintLevel = arg.slice(arg.indexOf('=') + 1);
+      } else {
+        lintLevel = rawArgs[idx + 1];
+        if (lintLevel !== undefined) flagIdxs.add(idx + 1);
+      }
+      if (!LINT_LEVELS.includes(lintLevel)) {
+        console.error(
+          `--lint-level takes one of ${LINT_LEVELS.join(', ')}; got ${JSON.stringify(lintLevel || '')}.`
+        );
+        process.exit(1);
+      }
+    }
+  }
+
   const positional = rawArgs.filter((_, i) => !flagIdxs.has(i));
 
   // --with-diff / --with-annotate need data captured during compilation (the on-disk markdown is
@@ -1872,6 +1910,7 @@ if (require.main === module) {
       'Usage: codex-loom [mode flags] [compile options] [<folder | compile.yaml>]\n' +
       '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --card-sizes|-b  --lint|-L\n' +
       '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-inventory|-i  --clean|-c  --verbose|-v\n' +
+      '  Diagnostics:           --lint-level=off|error|warn  (overrides lint.level; reaches the opinion layer only)\n' +
       '  No mode flag compiles. Report modes read the existing output tree; compile options force a compile.'
     );
     process.exit(1);
@@ -1897,6 +1936,7 @@ if (require.main === module) {
         compile(configPath, {
           clean: flags.clean, verbose: flags.verbose,
           diff: flags.diff, annotate: flags.annotate, inventory: flags.inventory,
+          lintLevel,
         });
       } catch (err) {
         console.error(`\nFatal: ${err.message}`);
@@ -1966,7 +2006,7 @@ if (require.main === module) {
         const { runLintMode } = require('./lint');
         const dir = path.join(outputDir, 'lint');
         fs.mkdirSync(dir, { recursive: true });
-        const result = runLintMode(scenarioRoot, dir, flags.verbose);
+        const result = runLintMode(scenarioRoot, dir, flags.verbose, { lintLevel });
         if (result) summaryParts.push(`a lint report (${result.errorCount} error(s), ${result.warnCount} warning(s))`);
       }
 

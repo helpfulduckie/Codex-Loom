@@ -69,12 +69,31 @@ const RENDER = {
   },
 };
 
+/**
+ * `lint:` — the opinion layer's controls (§12.5).
+ *
+ * `level:` is a closed set, so a typo is a `CL0206` naming the three legal values rather
+ * than a silently-ignored string. It names **the one severity the opinion layer is allowed
+ * to speak at**: `off` silences it, `error` keeps opinion ERRORs and drops the prose
+ * heuristics, `warn` demotes opinion ERRORs so nothing in the layer can fail a build.
+ * Absent is not a level — an unset key leaves every opinion at the severity it was raised
+ * with, which is what keeps a pack ERROR able to fail a build by default.
+ *
+ * It reaches only the opinion layer. Facts — unknown keys, undeclared roles, platform caps,
+ * a leaked `{$she}` — are not silenceable at any level, and that is the property that makes
+ * `off` a safe thing for an author to write.
+ *
+ * `packs:` stays a declared-but-inert key: convention packs (§8.2.2) have no phase yet.
+ */
 const LINT = {
   type: TYPES.MAP,
-  note: 'Phase 5',
   keys: {
-    level: STRING,
-    packs: { type: TYPES.RECORD, of: { type: [TYPES.MAP, TYPES.ANY] } },
+    level: { type: TYPES.STRING, values: ['off', 'error', 'warn'] },
+    packs: {
+      type: TYPES.RECORD,
+      of: { type: [TYPES.MAP, TYPES.ANY] },
+      note: 'convention packs (§8.2.2) are not scheduled into a phase yet',
+    },
   },
 };
 

@@ -159,6 +159,14 @@ colliding pair away; a def dispatched off this branch is not a duplicate on it.
 | `CL0412` | ERROR | A `render.notesTemplate` on an item names a template that is not loaded. |
 | `CL0420` | ERROR | No loaded template matches an item's `aid.type` or `render.template`. |
 | `CL0421` | ERROR | A template threw while rendering an item. |
+| `CL0430` | ERROR | A `{$…}` field, pronoun or character token survived into rendered output. |
+| `CL0431` | ERROR | A `{%key}` compile.yaml variable survived into rendered output. |
+| `CL0432` | ERROR | A render function (`{join}`, `{list}`, `{and}`, …) leaked into rendered output. |
+| `CL0433` | ERROR | A template control tag (`{if}`, `{wrapper}`, `{preserve}`, `{include}`) leaked into rendered output. |
+| `CL0434` | ERROR | A verb-conjugation marker (`[s]`/`[es]`/`[is]`/`[was]`/`[has]`) was left unresolved. |
+| `CL0435` | ERROR | A JS interpolation artifact (`[object Object]` and friends) reached rendered output. |
+| `CL0436` | WARN | A bracketed lowercase word is not a recognized verb-conjugation marker — likely a typo. |
+| `CL0437` | WARN | A bare `undefined`/`NaN` appears in rendered output. |
 
 Templates render the card body; the heading and fence are the compiler's (see
 [Templates](07-templates.md)). A template that writes its own fence produces a second
@@ -178,6 +186,27 @@ variable-driven; it reports at render time as `CL0412` and names the item.
 are not the load-time check `CL0411` is. Each drops the one thing it names — the notes
 line, or the whole item — and leaves the rest of the leaf intact, and each fails the run
 once the tree is written.
+
+### CL0430–CL0437 in detail
+
+`CL0430`–`CL0435` are the leaked-artifact sweep, run over every finished string the
+compiler writes: each story card, each assembled component, each `Opening.md`, and the
+Description. Every one of them means **the compiler failed and the failure is visible in
+the file it just wrote** — a fact about the output, not an opinion about it — which is why
+they are ERRORs and why `lint.level` cannot reach them (spec §12.5).
+
+They share the `CL043x` decade rather than filing `{%key}` under `CL05xx` with the other
+variable diagnostics. What is reported here is not the token family but the leak: one
+detector set, run at one moment, over one finished string. Splitting them by what leaked
+would scatter a single check across three bands and make the sweep unsearchable.
+
+**Before Phase 5 these printed a bare `WARN:` line with no code and gated nothing**, while
+`--lint` listed the same patterns as ERRORs. One check gave two answers depending on which
+half of the tool ran it. A project shipping a leaked `{$she}` now fails the compile.
+
+`CL0436` and `CL0437` run in the same sweep and are *not* facts. Both judge whether
+ordinary prose was meant: `[does]` may be a deliberate bracket, and "undefined" is an
+English word. They stay WARN, they are tagged opinion-layer, and `lint.level` reaches them.
 
 ### CL06xx — components
 
@@ -414,5 +443,5 @@ pattern.
 
 Codes for the remaining bands are registered as the phases that mint them land. `CL0310`
 (unresolvable branch dispatch) is named by the spec, not yet implemented, and reserved at
-that number. `CL04xx` currently holds only the template-fence refusal; the render rewrite
-(§13) is what fills the rest of the band.
+that number. `CL04xx` holds the template checks and the leaked-artifact sweep; the render
+rewrite (§13) is what fills the rest of the band.

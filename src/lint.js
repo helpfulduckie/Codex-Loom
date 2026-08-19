@@ -9,6 +9,7 @@ const {
   maskFencedRegions,
 } = require('./util');
 const { parseCards } = require('./emit/vl');
+const { CODES: DIAG_CODES, LINT_LEVELS, applyLintLevel } = require('./diag');
 
 // ── mechanical syntax checks ────────────────────────────────────────────────
 //
@@ -18,53 +19,79 @@ const { parseCards } = require('./emit/vl');
 // catalog the automatic per-write compile-time warnings use, so this offline
 // scanner can never drift out of sync with them (or be guessed independently,
 // which is how the wrong-token-syntax bug happened in the first place).
+//
+// **`layer` is what §12.5's compiler/lint split actually means here, and the six ERROR
+// checks stay in this table rather than leaving it.** The split is about what a check
+// *claims* — a leaked `{$she}` is a fact about the output, `[does]` is a guess about
+// prose — and not about which half of the tool runs it. Deleting the facts from this
+// table would have made `--lint` useless on a tree someone else compiled, which is the
+// one job an offline scanner has. So they are tagged `compiler`, they keep their CL codes
+// from `diag.js`, and `lint.level` cannot reach them; the opinions are tagged `opinion`
+// and it can. That is the same shape as `CL0535`/`CL0536`, which are opinions computed
+// inside the compile because they need the branch-merged placeholder table.
 
 const CHECKS = [
   {
     category: 'unresolved-field-token',
     severity: 'ERROR',
+    layer: 'compiler',
+    code: DIAG_CODES.LEAKED_FIELD_TOKEN,
     re: FIELD_TOKEN_RE,
     hint: 'pronoun/character-ID/field-ref token ({$she}, {$Aria}, {$Aria.she}, {$body.Field}) left unresolved',
   },
   {
     category: 'unexpanded-variable',
     severity: 'ERROR',
+    layer: 'compiler',
+    code: DIAG_CODES.LEAKED_VARIABLE,
     re: VAR_TOKEN_RE,
     hint: 'compile.yaml variable token ({%key}) left unexpanded',
   },
   {
     category: 'template-function',
     severity: 'ERROR',
+    layer: 'compiler',
+    code: DIAG_CODES.LEAKED_RENDER_FUNCTION,
     re: TEMPLATE_FN_RE,
     hint: 'render function ({join}, {list}, {and}, {prose}, {block}, {keys}, {inline}) leaked into output',
   },
   {
     category: 'template-tag',
     severity: 'ERROR',
+    layer: 'compiler',
+    code: DIAG_CODES.LEAKED_TEMPLATE_TAG,
     re: TEMPLATE_TAG_RE,
     hint: 'template control tag ({if}/{/if}, {wrapper}/{/wrapper}, {preserve}/{/preserve}, {include}) leaked into output',
   },
   {
     category: 'verb-conjugation-marker',
     severity: 'ERROR',
+    layer: 'compiler',
+    code: DIAG_CODES.LEAKED_VERB_MARKER,
     re: VERB_MARKER_RE,
     hint: 'verb conjugation marker ([s]/[es]/[is]/[was]/[has]) left unresolved — needs a preceding {$Id} or {$Id.pronoun} scope',
   },
   {
     category: 'suspect-verb-marker',
     severity: 'WARN',
+    layer: 'opinion',
+    code: DIAG_CODES.SUSPECT_VERB_MARKER,
     re: SUSPECT_VERB_MARKER_RE,
     hint: "bracketed lowercase word that isn't a recognized verb-conjugation marker ([s]/[es]/[is]/[was]/[has]) or the [e] marker — likely a typo (e.g. [does] instead of [s]/[is])",
   },
   {
     category: 'js-interpolation-artifact',
     severity: 'ERROR',
+    layer: 'compiler',
+    code: DIAG_CODES.LEAKED_JS_ARTIFACT,
     re: JS_ARTIFACT_RE,
     hint: 'JS interpolation failure artifact',
   },
   {
     category: 'js-interpolation-word',
     severity: 'WARN',
+    layer: 'opinion',
+    code: DIAG_CODES.SUSPECT_JS_WORD,
     re: JS_WORD_RE,
     hint: 'bare "undefined"/"NaN" — usually a JS interpolation failure, but verify it is not intentional prose',
   },
@@ -113,12 +140,12 @@ function lineAt(text, index) {
 /**
  * Run every mechanical CHECKS pattern against text. Occurrences of the same
  * (category, matched string) are grouped, recording every line they appear on.
- * Returns an array of { category, severity, hint, match, lines }.
+ * Returns an array of { category, severity, layer, code, hint, match, lines }.
  */
 function scanText(text) {
   const findings = [];
   const maskedText = maskFencedRegions(text);
-  for (const { category, severity, re, hint } of CHECKS) {
+  for (const { category, severity, layer, code, re, hint } of CHECKS) {
     // suspect-verb-marker ignores the triggers:/encapsulate: fence — a
     // single-word trigger like `triggers: [door]` is a real trigger, not a
     // mistyped conjugation marker.
@@ -134,7 +161,7 @@ function scanText(text) {
       if (m[0].length === 0) re.lastIndex++; // guard against zero-width matches
     }
     for (const [match, lines] of grouped) {
-      findings.push({ category, severity, hint, match, lines });
+      findings.push({ category, severity, layer, code, hint, match, lines });
     }
   }
   return findings;
@@ -207,6 +234,7 @@ function scanNativePlaceholders(text) {
     findings.push({
       category: 'native-placeholder-shape',
       severity: 'WARN',
+      layer: 'opinion',
       match,
       lines,
       hint: `"${match}" reads as an AID placeholder that would prompt the player to type `
@@ -238,15 +266,48 @@ function scanStoryCardStructure(content) {
   // The shared parser (§8.6). Fenceless sections are still skipped: a heading with no
   // fence beneath it is prose in a component file, not a malformed story card, and
   // reporting it would fire this check on every AI Instructions section.
-  for (const { title, triggers } of parseCards(content).filter((c) => c.hasFence)) {
-    if (triggers.length === 0) {
+  //
+  // **`kind: reference` is exempt, and this is the check §4.8 wrote the field for.** A mod
+  // control card or a swappable-instructions card is trigger-less on purpose; flagging it
+  // is telling the author about a decision they made deliberately, every compile, forever.
+  // The exemption reads the fence rather than inferring reference-ness from the empty
+  // trigger list, because inference would disable the check entirely: a narrative card that
+  // *lost* its triggers is the thing this exists to catch, and under inference it looks
+  // identical to a reference card (Phase 5 plan, Decision 2).
+  for (const card of parseCards(content).filter((c) => c.hasFence)) {
+    if (card.kind === 'reference') continue;
+    if (card.triggers.length === 0) {
       findings.push({
-        category: 'empty-triggers', severity: 'WARN', card: title,
+        category: 'empty-triggers', severity: 'WARN', layer: 'opinion', card: card.title,
         hint: 'card has an empty or missing trigger list',
       });
     }
   }
   return findings;
+}
+
+// ── the opinion-layer ceiling (§12.5) ────────────────────────────────────────
+
+/**
+ * Apply a `lint.level` to a finding list, dropping and demoting the opinion layer.
+ *
+ * Delegates the arithmetic to `diag.js` so the offline scanner and the compile bus cannot
+ * answer the same question differently — the same reason `CHECKS` imports its patterns from
+ * `util.js` rather than restating them. The only local work is case: findings carry
+ * `ERROR`/`WARN` because that is what the report prints, and the bus carries `error`/`warn`.
+ *
+ * Compiler-layer findings pass through untouched. An author cannot silence a fact.
+ */
+function applyLevel(findings, level) {
+  if (!level) return findings;
+  const out = [];
+  for (const f of findings) {
+    if (f.layer !== 'opinion') { out.push(f); continue; }
+    const severity = applyLintLevel(f.severity.toLowerCase(), level);
+    if (severity === null) continue;
+    out.push({ ...f, severity: severity.toUpperCase() });
+  }
+  return out;
 }
 
 // ── report formatting ────────────────────────────────────────────────────────
@@ -287,7 +348,8 @@ function formatReport(rootDirName, fileResults) {
  * echoes findings to the console. Returns { reportPath, errorCount, warnCount }
  * or null if no lintable files were found.
  */
-function runLintMode(scenarioRoot, outputDir, verbose = false) {
+function runLintMode(scenarioRoot, outputDir, verbose = false, options = {}) {
+  const level = options.lintLevel || null;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
   const files        = findLintableFiles(rootAbs);
@@ -301,11 +363,12 @@ function runLintMode(scenarioRoot, outputDir, verbose = false) {
   for (const file of files) {
     const content  = fs.readFileSync(file, 'utf8');
     const relPath  = path.relative(rootAbs, file);
-    const findings = scanText(content);
-    findings.push(...scanNativePlaceholders(content));
+    const raw = scanText(content);
+    raw.push(...scanNativePlaceholders(content));
     if (path.dirname(file).split(path.sep).includes('Story Cards')) {
-      findings.push(...scanStoryCardStructure(content));
+      raw.push(...scanStoryCardStructure(content));
     }
+    const findings = applyLevel(raw, level);
     fileResults.push({ relPath, findings });
     if (verbose && findings.length > 0) {
       console.log(`  linted: ${relPath} (${findings.length} finding(s))`);
@@ -330,5 +393,5 @@ function runLintMode(scenarioRoot, outputDir, verbose = false) {
 
 module.exports = {
   runLintMode, findLintableFiles, scanText, scanStoryCardStructure,
-  scanNativePlaceholders, CHECKS,
+  scanNativePlaceholders, applyLevel, CHECKS, LINT_LEVELS,
 };
