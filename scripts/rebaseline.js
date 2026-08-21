@@ -45,11 +45,22 @@ const path = require('path');
 
 const { compile } = require('../src/compile');
 const { classifyDiff, OPAQUE } = require('../__tests__/helpers/diffShape');
+
+const GOLDEN_DIR = path.resolve(__dirname, '..', 'goldenFixtures');
+
+// The fixtures are a separate private repo cloned into the gitignored goldenFixtures/ (see
+// .gitignore). Say so plainly rather than letting the require below throw MODULE_NOT_FOUND,
+// which names a file the reader has no reason to expect is missing.
+if (!fs.existsSync(path.join(GOLDEN_DIR, 'projects.js'))) {
+  console.error('rebaseline: goldenFixtures/ is not present, so there is no baseline to regenerate.');
+  console.error('The fixtures are a separate private repo. Clone it into goldenFixtures/ first:');
+  console.error('  git clone https://github.com/helpfulduckie/Codex-Loom-Fixtures.git goldenFixtures');
+  process.exit(1);
+}
+
 const {
   PROJECTS, OUTPUT_SUBDIR, BASELINE_SUBDIR, SOURCE_SUBDIR, REPORTS_SUBDIR, REPORT_MODES,
 } = require('../goldenFixtures/projects');
-
-const GOLDEN_DIR = path.resolve(__dirname, '..', 'goldenFixtures');
 
 // ── arguments ────────────────────────────────────────────────────────────────
 

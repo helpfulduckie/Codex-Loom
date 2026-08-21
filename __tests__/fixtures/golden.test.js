@@ -31,6 +31,37 @@ const { classifyDiff, OPAQUE } = require('../helpers/diffShape');
 const GOLDEN_DIR = path.resolve(__dirname, '../../goldenFixtures');
 
 /**
+ * The fixtures are three real scenario projects, so they are a separate private repo cloned
+ * into this gitignored directory rather than files in this tree — see `.gitignore` for the
+ * clone command.
+ *
+ * Absent, this file has nothing to compile, and the manifest require below would throw at
+ * load time and fail the run for a reason that says nothing about the compiler. So the whole
+ * suite is registered as skipped instead, against a placeholder project whose name says why.
+ * Nothing else in the suite depends on these fixtures — the pathological fixture
+ * (`__tests__/fixtures/pathological/`) is committed here and still covers the diagnostics.
+ *
+ * A skipped golden suite is silent in a green run, which is exactly the failure mode to
+ * watch for: `npm test` passing does not mean the goldens passed unless they ran.
+ */
+const HAVE_FIXTURES = fs.existsSync(path.join(GOLDEN_DIR, 'projects.js'));
+
+/**
+ * `describe.each` rejects an empty array, so the absent case supplies one placeholder rather
+ * than an empty project list. `reports` is non-empty for the same reason — the nested
+ * `describe.each(project.reports)` is still evaluated to collect test names even when the
+ * enclosing describe is skipped. Neither value is ever read: no hook body runs.
+ */
+const ABSENT = {
+  PROJECTS: [{ name: 'goldenFixtures/ is not cloned — see .gitignore', dir: '', reports: ['none'] }],
+  OUTPUT_SUBDIR: '',
+  BASELINE_SUBDIR: '',
+  SOURCE_SUBDIR: '',
+  REPORTS_SUBDIR: '',
+  REPORT_MODES: {},
+};
+
+/**
  * The line classes the phase in progress is allowed to change (v4 spec §14.3).
  *
  * Empty means "byte-for-byte, any diff is a bug" — the obligation for Phases 1, 4, 5, 7
@@ -70,7 +101,8 @@ const EXPECTED_DIFF_FILES = /(^|\/)Components\/Plot Essentials\.md$/;
 // regenerates what this file checks and the two must not drift apart.
 const {
   PROJECTS, OUTPUT_SUBDIR, BASELINE_SUBDIR, SOURCE_SUBDIR, REPORTS_SUBDIR, REPORT_MODES,
-} = require('../../goldenFixtures/projects');
+// eslint-disable-next-line global-require
+} = HAVE_FIXTURES ? require('../../goldenFixtures/projects') : ABSENT;
 
 /**
  * Two things about that list are worth knowing here.
@@ -138,6 +170,10 @@ function normalizeManifest(raw, rootDir) {
 }
 
 beforeAll(() => {
+  // Jest runs a file's root hooks even when every describe in it is skipped, so this guard
+  // is what actually stops the absent case from compiling a fixture tree that is not there.
+  if (!HAVE_FIXTURES) return;
+
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-golden-'));
 
   // Copy the fixture tree, skipping both committed baselines — they are the comparison
@@ -177,7 +213,7 @@ afterAll(() => {
   if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-describe.each(PROJECTS)('$name', (project) => {
+(HAVE_FIXTURES ? describe : describe.skip).each(PROJECTS)('$name', (project) => {
   let actualDir;
   let expectedDir;
 

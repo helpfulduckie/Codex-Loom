@@ -228,7 +228,7 @@ describe('§12.3 check 3 — where a placeholder may not go', () => {
   });
 
   test('the scenario title warns — it is never filled, only legal', () => {
-    // Confirmed with Beth: AID does not substitute in the listing name, and no author
+    // Confirmed against AID: it does not substitute in the listing name, and no author
     // expects it to. A WARN rather than an ERROR because writing one is legal and can even
     // be the joke — `${Roleplaying A Cool AID Scenario}` works *because* it is never
     // replaced.

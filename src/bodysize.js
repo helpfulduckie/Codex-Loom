@@ -161,7 +161,7 @@ function statusOf(stored, limit) {
  * The report cannot borrow those words, because its reader does not have the codebase to
  * read them against. "Rendered" to an author means what AID displays, and that is a *third*
  * length this report never shows: after the player answers the prompt, `${What is your
- * name?}` collapses to `Beth` and the text gets shorter. No cap applies to that one. The cap
+ * name?}` collapses to `Aness` and the text gets shorter. No cap applies to that one. The cap
  * applies to `onUpload`, which is the peak between Velvet Lattice's substitution and the
  * player answering.
  */

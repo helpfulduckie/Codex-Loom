@@ -1,12 +1,18 @@
 /test/output
 /node_modules
 
-# The golden fixture harness compiles into a temp copy of the tree; these only appear
-# if the CLI is pointed at a fixture directly, and must never be committed — the frozen
-# v3/ trees are the baseline.
-/goldenFixtures/*/*/Velvet Lattice/
-/goldenFixtures/*/*/Loom/Review/
-# Same hazard for the pathological fixture: its harness compiles into a temp copy, so an
+# Machine-local Claude Code permissions. The shared half is .claude/settings.json.
+/.claude/settings.local.json
+
+# The golden fixtures are real scenario projects, so they live in a separate private repo
+# rather than in this tree. Clone it here to run the golden suite; without it,
+# __tests__/fixtures/golden.test.js skips and the rest of the suite is unaffected.
+#
+#   git clone https://github.com/helpfulduckie/Codex-Loom-Fixtures.git goldenFixtures
+#
+/goldenFixtures/
+
+# The pathological fixture's harness compiles into a temp copy, so an
 # out/ tree here only appears if the CLI was pointed at the fixture directly.
 /__tests__/fixtures/pathological/*/out/
 

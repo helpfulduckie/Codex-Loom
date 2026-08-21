@@ -18,6 +18,19 @@ projects. They stay byte-for-byte through every phase unless that phase's plan s
 re-baselines them, and a re-baseline is reviewed as a diff against intent — see §14.3 of
 the design spec. Report the goldens' state when reporting a change as done.
 
+**The goldens are a separate private repo, because this one is public.** They are real
+scenario projects and unpublished worldbuilding, so they are cloned into the gitignored
+`goldenFixtures/` rather than committed here:
+
+```
+git clone https://github.com/helpfulduckie/Codex-Loom-Fixtures.git goldenFixtures
+```
+
+Absent, `golden.test.js` reports one skipped test and the rest of the suite runs normally —
+so a green suite does **not** by itself mean the goldens passed. Check that they ran before
+reporting a change as done; a skipped golden suite is the one failure mode this split
+introduces, and it is silent.
+
 **`__tests__/fixtures/pathological/` freezes the diagnostic stream instead.** Two projects
 that are wrong on purpose, with a committed snapshot of every code, severity, file and
 message they raise. It exists because the goldens are all *correct* projects, so a check
@@ -39,7 +52,7 @@ here.
     the record of how a phase went and why a section says what it says.
   - `Fable's thoughts on Codex Loom v3.md` — review of the v3 codebase done ahead of writing the v4 spec.
   - `VL inheritance and output duplication.md` — Velvet Lattice inherits components and cards down the branch tree by itself; Codex Loom writes them to every leaf instead. Measured, with the VL source that proves it.
-  - `Beth's Walk through Codex Loom.md` — Beth's read-through questions on the Phase 1 codebase, and what they turned up.
+  - `0 System\03 Records\2026-08-08 Post-Phase 1 Walkthrough.md` — read-through questions on the Phase 1 codebase, and what they turned up.
 - **`Vault:4.3.11 AID Tools - Codex Loom\0 System\03 Records`** — session recaps, one per
   working session, named `YYYY-MM-DD Title` and chained `prev`/`next`. Start here for
   "what happened last time".
