@@ -22,6 +22,7 @@ const { ITEM_SCHEMA } = require('./schema');
 const { expandTokens } = require('../tokens');
 const { CODES: DIAG_CODES } = require('../diag');
 const { splitRef, normalizeRef } = require('../model/refs');
+const { collectVariantDeltas, parseVariantsList } = require('../model/item');
 
 const CODES = Object.freeze({
   EMPTY_FILE: 'CL0103',
@@ -311,6 +312,10 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
     seenFiles.set(fullPath, [importerSource]);
 
     const { value: raw } = loadYamlDocument(fullPath);
+    // The items this one directive contributed — the target set its selectors were aimed
+    // at, and therefore the set CL0326 counts against. `included` accumulates across every
+    // directive, so counting there would let one include's matches cover another's typo.
+    const fromThisInclude = [];
     for (const item of (Array.isArray(raw) ? raw : [raw])) {
       const id = ((item.id || (typeof item.name === 'string' ? item.name : '')) || '').toLowerCase();
       if (explicitIds.has(id)) continue; // an explicit import wins
@@ -319,10 +324,49 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
       if (def.importVariants) stamped._include_variants = def.importVariants;
       if (def.branches) stamped._include_branch_spec = def.branches;
       included.push(stamped);
+      fromThisInclude.push(stamped);
     }
+
+    reportUnmatchedSelectors(def, fromThisInclude, includePath, diagnostics);
   }
 
   return included;
+}
+
+/**
+ * CL0326 for an include's `importVariants:` — the guard that makes arity-N silence safe.
+ *
+ * **Here rather than in the per-branch resolve loop, because `importVariants:` does not
+ * depend on the branch.** §7.6.2a's two axes decide where each half of this check lives:
+ * `importVariants:` selects from the imported source unconditionally, so it is asked and
+ * answered once per compile; an include's `branches:` dispatches per leaf and its own
+ * CL0326 belongs in `resolveBranchItems`, where a branch path exists. Asking this half per
+ * leaf as well would repeat one typo warning across all 32 of The Institute's leaves.
+ *
+ * A target counts as matched when `collectVariantDeltas` returns a non-empty list *or*
+ * `null`, because `null` is the `~` exclusion — the variant was found and it said to drop
+ * the item. A partial path counts too: `human/noble` with `noble` missing returns `[human]`,
+ * which is the apply-where-defined rule and a match on the segment that resolved.
+ */
+function reportUnmatchedSelectors(def, items, includePath, diagnostics) {
+  if (!def.importVariants || items.length === 0) return;
+
+  for (const vPath of parseVariantsList(def.importVariants)) {
+    const matched = items.filter((item) => {
+      const deltas = collectVariantDeltas(item, vPath, null);
+      return deltas === null || deltas.length > 0;
+    }).length;
+    if (matched > 0) continue;
+
+    const message = `importVariants selector "${vPath}" matched none of the `
+      + `${items.length} item${items.length === 1 ? '' : 's'} included from `
+      + `${path.basename(includePath)}. `
+      + 'A selector aimed at every item in a file is silent where an item does not define '
+      + 'the name (§7.6.2a), so a misspelling applies to nothing and changes nothing — this '
+      + 'is the only report it produces.';
+    if (diagnostics) diagnostics.warn(DIAG_CODES.SELECTOR_MATCHED_NOTHING, message, { file: def._source });
+    else console.warn(`  WARN: ${message}`);
+  }
 }
 
 /**

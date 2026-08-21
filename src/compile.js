@@ -9,6 +9,7 @@ const {
 } = require('./loader');
 const {
   resolveItem, enumerateLeaves, walkBranchChain, walkBranchTree, mergePlaceholders,
+  resolveBranchSpec, collectVariantDeltas,
 } = require('./resolver');
 const { resolvePlacements } = require('./model/item');
 const { slotsForBranch } = require('./model/component');
@@ -436,6 +437,52 @@ function buildCanonManifest(config) {
 }
 
 /**
+ * CL0326 for an include's `branches:` — the other half of the arity-N guard (§7.6.2a).
+ *
+ * **Per branch, because a branch dispatch has no answer without a branch path.** The
+ * `importVariants:` half of this check runs once per compile inside `resolveIncludes`,
+ * which is where a selector that does not depend on the branch belongs. These two
+ * placements are not an inconsistency: they are the two axes §7.6.2a separates the keys
+ * on — `importVariants:` selects from the imported source unconditionally, `branches:`
+ * dispatches, and each is asked wherever its answer exists.
+ *
+ * A stamped spec is identical across every item from one include, so it resolves once per
+ * group rather than once per item. Matching follows the same rule the other half uses: a
+ * non-empty delta list or a `null` exclusion both count, and a partial path counts on the
+ * segment that resolved.
+ */
+function reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics) {
+  const groups = new Map(); // included file → the items it contributed
+  for (const def of allItemDefs) {
+    if (!def._include_branch_spec) continue;
+    const key = def._source || '(unknown)';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(def);
+  }
+
+  for (const [source, items] of groups) {
+    const names = resolveBranchSpec(items[0]._include_branch_spec, branchPath);
+    if (names === null) continue; // the whole include is excluded from this branch
+    for (const name of names) {
+      const matched = items.filter((def) => {
+        const deltas = collectVariantDeltas(def, name, null);
+        return deltas === null || deltas.length > 0;
+      }).length;
+      if (matched > 0) continue;
+      diagnostics.warn(
+        DIAG_CODES.SELECTOR_MATCHED_NOTHING,
+        `branch dispatch to variant "${name}" on branch "${branchPath.join('/') || '(root)'}" `
+        + `matched none of the ${items.length} items included from ${path.basename(source)}. `
+        + 'A dispatch stamped onto every item in a file is silent where an item does not '
+        + 'define the name (§7.6.2a), so a misspelling applies to nothing and changes '
+        + 'nothing — this is the only report it produces.',
+        { file: source },
+      );
+    }
+  }
+}
+
+/**
  * Compile story cards for a single branch leaf.
  * Returns array of resolved items (after Phase A), in place for Phase B caller.
  *
@@ -461,6 +508,8 @@ function buildCanonManifest(config) {
 function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagnostics = new Diagnostics()) {
   const resolvedItems = [];
   const claimedBy = new Map(); // lowercased resolved id → the source file that claimed it
+
+  reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics);
 
   for (const itemDef of allItemDefs) {
     let item;

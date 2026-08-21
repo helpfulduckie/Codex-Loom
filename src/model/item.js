@@ -65,8 +65,26 @@ function basename(source) {
  *
  * Returns null if any segment of the path resolves to a null variant (~), which
  * signals that the item should be excluded from output entirely.
+ *
+ * ── `options.silent`, and why arity decides it (§7.6.2a) ────────────────────
+ *
+ * A caller passes `silent: true` when the selector it is resolving was aimed at *many*
+ * targets rather than at this one. A name aimed at one item that does not define it is a
+ * typo and warns; the same name stamped onto every item in an included lore file will miss
+ * most of them by construction, because naming the variant on each item is exactly the
+ * repetition the `include:` exists to remove.
+ *
+ * The parameter is what the arity rule costs. Everything else about the walk is unchanged,
+ * including that a partial path applies: `human/noble` with `noble` missing pushes `human`
+ * and stops, which is the apply-where-defined rule read per segment.
+ *
+ * Silence is only safe alongside CL0326, which the arity-N callers raise when a selector
+ * matched no target at all. This function does not raise it — it sees one target and cannot
+ * know how many there were — so a caller that passes `silent` and does not count is
+ * discarding the last report a misspelled name would ever produce.
  */
-function collectVariantDeltas(itemDef, variantPath, onWarn) {
+function collectVariantDeltas(itemDef, variantPath, onWarn, options = {}) {
+  const warn = options.silent ? null : onWarn;
   const deltas = [];
   if (!variantPath) return deltas;
   const parts = variantPath.split('/').map(p => p.trim()).filter(Boolean);
@@ -81,16 +99,16 @@ function collectVariantDeltas(itemDef, variantPath, onWarn) {
   const src = itemDef._source ? ` (${basename(itemDef._source)})` : '';
   for (const part of parts) {
     if (!variantTree || typeof variantTree !== 'object') {
-      if (onWarn) {
-        onWarn(CODES.VARIANT_NOT_FOUND,
+      if (warn) {
+        warn(CODES.VARIANT_NOT_FOUND,
           `variant "${part}" not found in variant tree of "${itemDef.id || itemDef.name}"${src}`);
       }
       break;
     }
     const actualKey = Object.keys(variantTree).find(k => k.toLowerCase() === part.toLowerCase());
     if (!actualKey) {
-      if (onWarn) {
-        onWarn(CODES.VARIANT_NOT_FOUND,
+      if (warn) {
+        warn(CODES.VARIANT_NOT_FOUND,
           `variant "${part}" not found in variant tree of "${itemDef.id || itemDef.name}"${src}`);
       }
       break;
@@ -207,10 +225,15 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     item = deepClone(stripMeta(itemDef));
     sourceItemForVariants = itemDef;
 
-    // Handle included items that carry importVariants from the include directive
+    // Handle included items that carry importVariants from the include directive.
+    //
+    // Silent on a miss (§7.6.2a): `resolveIncludes` stamps one `importVariants:` value onto
+    // every item in the included file, so this is the arity-N position and an item that does
+    // not define the name is the ordinary case. `resolveIncludes` counts the matches across
+    // the whole file and raises CL0326 if there were none.
     if (itemDef._include_variants) {
       for (const vPath of parseVariantsList(itemDef._include_variants)) {
-        const incDeltas = collectVariantDeltas(itemDef, vPath, onWarn);
+        const incDeltas = collectVariantDeltas(itemDef, vPath, onWarn, { silent: true });
         if (incDeltas === null) return null; // null variant = exclude
         for (const delta of incDeltas) {
           applyDelta(item, delta, onWarn);
@@ -218,7 +241,14 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
       }
     }
 
-    // Resolve branch spec → variant names to apply
+    // Resolve branch spec → variant names to apply.
+    //
+    // An include's `branches:` is stamped onto every item in the file the same way its
+    // `importVariants:` is, so it is the second arity-N selector and takes the same silence
+    // (§7.6.2a). The item's own `branches:` names one target and keeps warning — which is
+    // the distinction the stamp already draws, since a stamped spec replaces the item's own
+    // rather than stacking with it.
+    const fannedOut = Boolean(itemDef._include_branch_spec);
     const branchVariantNames = resolveBranchSpec(
       itemDef._include_branch_spec || itemDef.branches,
       branchPath
@@ -227,7 +257,7 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     item._hasVariant = branchVariantNames.length > 0;
 
     for (const vName of branchVariantNames) {
-      const localDeltas = collectVariantDeltas(sourceItemForVariants, vName, onWarn);
+      const localDeltas = collectVariantDeltas(sourceItemForVariants, vName, onWarn, { silent: fannedOut });
       if (localDeltas === null) return null; // null variant = exclude
       for (const delta of localDeltas) {
         applyDelta(item, delta, onWarn);

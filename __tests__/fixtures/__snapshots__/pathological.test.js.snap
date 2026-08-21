@@ -13,19 +13,11 @@ ERROR CL0201 compile.cl.yaml
 `;
 
 exports[`pathological fixture placement invariants and latent placeholder content 1`] = `
-"ERROR CL0325 Codex/items.cl.yaml
+"WARN CL0326 Codex/items.cl.yaml
+  importVariants selector "wrm" matched none of the 3 items included from lore.cl.yaml. A selector aimed at every item in a file is silent where an item does not define the name (§7.6.2a), so a misspelling applies to nothing and changes nothing — this is the only report it produces.
+ERROR CL0325 Codex/items.cl.yaml
   two item definitions resolve to id "anchor" on this branch.
   hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
-WARN CL0321 canon/lore.cl.yaml
-  variant "wrm" not found in variant tree of "Chandler" (lore.cl.yaml)
-WARN CL0321 canon/lore.cl.yaml
-  variant "warm" not found in variant tree of "Doorman" (lore.cl.yaml)
-WARN CL0321 canon/lore.cl.yaml
-  variant "wrm" not found in variant tree of "Doorman" (lore.cl.yaml)
-WARN CL0321 canon/lore.cl.yaml
-  variant "warm" not found in variant tree of "Errand" (lore.cl.yaml)
-WARN CL0321 canon/lore.cl.yaml
-  variant "wrm" not found in variant tree of "Errand" (lore.cl.yaml)
 ERROR CL0532 Codex/items.cl.yaml
   undeclared placeholder "%ghostName%" in item "Greeter" rendering into plotEssential slot "cast" on branch "open" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
@@ -51,29 +43,11 @@ WARN CL0713 Codex/items.cl.yaml
   Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "open".
+WARN CL0326 canon/rumors.cl.yaml
+  branch dispatch to variant "hshed" on branch "gated" matched none of the 3 items included from rumors.cl.yaml. A dispatch stamped onto every item in a file is silent where an item does not define the name (§7.6.2a), so a misspelling applies to nothing and changes nothing — this is the only report it produces.
 ERROR CL0325 Codex/items.cl.yaml
   two item definitions resolve to id "anchor" on this branch.
   hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
-WARN CL0321 canon/lore.cl.yaml
-  variant "wrm" not found in variant tree of "Chandler" (lore.cl.yaml)
-WARN CL0321 canon/lore.cl.yaml
-  variant "warm" not found in variant tree of "Doorman" (lore.cl.yaml)
-WARN CL0321 canon/lore.cl.yaml
-  variant "wrm" not found in variant tree of "Doorman" (lore.cl.yaml)
-WARN CL0321 canon/lore.cl.yaml
-  variant "warm" not found in variant tree of "Errand" (lore.cl.yaml)
-WARN CL0321 canon/lore.cl.yaml
-  variant "wrm" not found in variant tree of "Errand" (lore.cl.yaml)
-WARN CL0321 canon/rumors.cl.yaml
-  variant "hshed" not found in variant tree of "Whisper" (rumors.cl.yaml)
-WARN CL0321 canon/rumors.cl.yaml
-  variant "hushed" not found in variant tree of "Placard" (rumors.cl.yaml)
-WARN CL0321 canon/rumors.cl.yaml
-  variant "hshed" not found in variant tree of "Placard" (rumors.cl.yaml)
-WARN CL0321 canon/rumors.cl.yaml
-  variant "hushed" not found in variant tree of "Bellpull" (rumors.cl.yaml)
-WARN CL0321 canon/rumors.cl.yaml
-  variant "hshed" not found in variant tree of "Bellpull" (rumors.cl.yaml)
 ERROR CL0532 Codex/items.cl.yaml
   undeclared placeholder "%ghostName%" in story card "Greeter" on branch "gated" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.

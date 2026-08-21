@@ -39,15 +39,26 @@ To exclude all items in an included file from specific branches, attach a `branc
     flashback: ~    # exclude all items in this file from the flashback branch
 ```
 
-### `importVariants:` on includes — silent skip
+### Selectors on includes — silent skip, and one check that isn't
 
-You can attach `importVariants:` to an include directive to apply a variant to every item in the file. Items that **do not define** a variant by that name are **silently skipped** (no warning). This differs from a single `import:`, where a missing variant always emits a warning.
+Both `importVariants:` and `branches:` on an include directive name a variant for **every item in the file**. Items that **do not define** a variant by that name are **silently skipped** — no warning. That is the point of an include: naming the variant on each item is the repetition it exists to remove, so most items missing the name is correct authoring, not a mistake.
 
 ```yaml
 - include: "{%main}/Characters/Felicia.yaml"
   importVariants: [human]    # applied to every item that defines a "human" variant;
-                              # items without it are silently unaffected
+                             # items without it are silently unaffected
 ```
+
+This differs from a single `import:` and from an item's own `branches:`. Both of those name **one** item, so a variant it does not define is a typo and raises `CL0321`.
+
+What silence cannot hide is a name that matches **nothing**. A misspelled selector applies to no item, changes no output, and would otherwise say nothing at all — so a selector matching zero targets raises `CL0326`, naming the selector and how many items it was aimed at:
+
+```yaml
+- include: "{%main}/Characters/Guards.yaml"
+  importVariants: [hmuan]    # CL0326: matched none of the 6 items included from Guards.yaml
+```
+
+Three of seven items matched is normal and reports nothing. Zero of seven is the one case worth a word.
 
 ### Include vs explicit import
 

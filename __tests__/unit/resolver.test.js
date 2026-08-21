@@ -191,6 +191,61 @@ describe('collectVariantDeltas', () => {
     };
     expect(collectVariantDeltas(itemWithNullVariant, 'human/ghost')).toBeNull();
   });
+
+  // ── The arity silence rule (§7.6.2a) ───────────────────────────────────────
+
+  describe('options.silent', () => {
+    test('suppresses the warning without changing what is applied', () => {
+      const onWarn = jest.fn();
+      const deltas = collectVariantDeltas(canonItem, 'human/peasant', onWarn, { silent: true });
+      expect(deltas).toHaveLength(1);
+      expect(deltas[0].body.race).toBe('human');
+      expect(onWarn).not.toHaveBeenCalled();
+    });
+
+    test('a name matching nothing still returns an empty list, which is how a caller counts', () => {
+      // The whole of CL0326's detection: an empty list means no target matched, a non-empty
+      // one or a null exclusion means one did. Silence would be unsafe without it.
+      expect(collectVariantDeltas(canonItem, 'orc', jest.fn(), { silent: true })).toEqual([]);
+    });
+
+    test('a ~ exclusion still returns null under silence', () => {
+      const itemWithNullVariant = { id: 'example', variants: { omit: null } };
+      expect(collectVariantDeltas(itemWithNullVariant, 'omit', jest.fn(), { silent: true })).toBeNull();
+    });
+
+    test('omitting the option leaves the arity-1 warning exactly as it was', () => {
+      const onWarn = jest.fn();
+      collectVariantDeltas(canonItem, 'human/peasant', onWarn);
+      expect(onWarn).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * §7.6.2a's partial-path rule, pinned because it is inherited rather than chosen.
+   *
+   * The loop pushes each resolved segment *before* testing the next, so a path that breaks
+   * halfway applies the half that resolved. Beth confirmed this is correct on 2026-08-20;
+   * nothing asserted it, so a refactor to all-or-nothing would have stayed green. Under the
+   * silence rule it matters more, not less: the warning that used to accompany the partial
+   * application is gone on an arity-N selector, so the applied half is the only evidence.
+   */
+  describe('a nested path applies partially rather than all-or-nothing', () => {
+    test('the segments before the unresolvable one are applied, not discarded', () => {
+      expect(collectVariantDeltas(canonItem, 'human/peasant', jest.fn())).toEqual([
+        canonItem.variants.human,
+      ]);
+    });
+
+    test('an unresolvable first segment applies nothing, which is the same rule', () => {
+      expect(collectVariantDeltas(canonItem, 'orc/warlord', jest.fn())).toEqual([]);
+    });
+
+    test('the rule holds under silence too', () => {
+      expect(collectVariantDeltas(canonItem, 'human/peasant', jest.fn(), { silent: true }))
+        .toHaveLength(1);
+    });
+  });
 });
 
 describe('enumerateLeaves', () => {

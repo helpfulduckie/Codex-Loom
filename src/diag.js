@@ -48,6 +48,17 @@ const CODES = Object.freeze({
   // `emit/` raises them too and cannot import from `compile.js` without a cycle.
   ITEM_RESOLUTION_FAILED: 'CL0324',
   DUPLICATE_RESOLVED_ID: 'CL0325',
+  /**
+   * A selector aimed at many targets that matched none of them (§7.6.2a).
+   *
+   * The guard that makes arity-N silence safe. A selector aimed at one target warns per
+   * miss, because one miss is the whole of what it asked for; a selector aimed at every
+   * item in an included file misses most of them by construction, so warning per miss is
+   * noise and Step 0 silences it. What silence costs is the typo: a misspelled name applies
+   * to nothing, alters no output and — without this — raises nothing at all. Three of seven
+   * is normal, zero of seven is a mistake, and only the second is reported.
+   */
+  SELECTOR_MATCHED_NOTHING: 'CL0326',
   TEMPLATE_NOT_FOUND: 'CL0420',
   RENDER_FAILED: 'CL0421',
 

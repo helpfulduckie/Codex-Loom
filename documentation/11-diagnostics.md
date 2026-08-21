@@ -121,6 +121,7 @@ Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein 
 | `CL0323` | ERROR | An item declares both `notes:` and `description:`. |
 | `CL0324` | ERROR | An item could not be resolved — most often a failed `import:`. |
 | `CL0325` | ERROR | Two item definitions resolve to the same id on one branch. |
+| `CL0326` | WARN | A selector aimed at many items matched none of them. |
 | `CL0340` | ERROR | A reference is defined in more than one canon set and is not qualified. |
 | `CL0341` | ERROR | A reference names a canon set not declared in `structure.input.canon`. |
 | `CL0342` | ERROR | A reference names an id that no canon set defines. |
@@ -149,6 +150,22 @@ its duplicate-id check never runs. What ships is two entries in one Plot Essenti
 and two story cards sharing a name and a trigger list, from a compile that reported
 nothing. The check runs per branch, because branch dispatch legitimately sends one of a
 colliding pair away; a def dispatched off this branch is not a duplicate on it.
+
+`CL0326` exists because `CL0321` had to stop firing at two positions. How many targets a
+selector was aimed at decides what a missing variant means. Aimed at one item — an
+`import:`'s `importVariants:`, or an item's own `branches:` — a name the item does not
+define is a typo, and `CL0321` says so. Aimed at every item in an included file, which is
+what an `include:` does with both keys, most items will miss the name by construction:
+naming the variant on each item is exactly the repetition the include removes. `CL0321`
+there was one warning per item per selector per branch — seventeen on a twenty-item lore
+file where three define the name — for authoring that was never wrong.
+
+`CL0326` is what makes that silence safe, and it is the whole of what replaces the
+per-item warning. A misspelled fanned-out name applies to nothing, alters no output, and
+would otherwise raise nothing at all. Three of seven targets matched is normal; zero of
+seven is a mistake, and only the second is reported. The `importVariants:` half is checked
+once per compile, because that selector does not depend on the branch; the `branches:`
+half is checked per branch, because a dispatch has no answer without one.
 
 ### CL04xx — render
 
