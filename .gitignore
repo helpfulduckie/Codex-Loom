@@ -1,3 +1,8 @@
 /test/output
 /node_modules
 CLAUDE.md
+
+# The golden fixtures are a separate private repo, cloned into goldenFixtures/ on the
+# v4-phase1 branch. This branch has no golden harness and never needs them, but the
+# directory persists across a branch switch — so it must not be committed here either.
+/goldenFixtures/
