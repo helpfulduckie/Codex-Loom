@@ -7,3 +7,16 @@
 # separate private repo cloned into the gitignored goldenFixtures/. Nothing here governs
 # them; if a fresh fixtures clone ever comes up with every baseline differing, that file is
 # what to check.
+
+# The committed fixtures are measured, not just parsed. The pathological project's diagnostic
+# snapshot records opening lengths in characters, and CL0710/CL0711 compare those lengths
+# against the platform's 4,000-character cap — so a checkout that turns LF into CRLF adds one
+# byte per line and moves numbers that the snapshot has pinned. Under `text=auto` alone that
+# is exactly what happens on any machine with core.autocrlf=true, which is the Git for Windows
+# default: the fixture is committed LF, checked out CRLF, and the suite fails on a fresh clone
+# for a reason that has nothing to do with the compiler.
+#
+# `eol=lf` keeps normalizing to LF on commit and additionally forces LF on checkout, so the
+# working file matches the blob the snapshot was generated from on every platform.
+/__tests__/fixtures/** text eol=lf
+/test/** text eol=lf
