@@ -48,6 +48,18 @@ function hasVariant(itemDef, variantPath) {
 }
 
 /**
+ * The last segment of a path, either separator.
+ *
+ * Spelled out rather than imported from `path`, so this module's dependency list stays the
+ * three pure ones §3.3 names. Either separator, because a `_source` is built from config
+ * text on Windows and can carry both.
+ */
+function basename(source) {
+  const parts = String(source).split(/[\\/]/);
+  return parts[parts.length - 1] || String(source);
+}
+
+/**
  * Walk a variant path (slash-separated) on an item definition and collect deltas.
  * e.g. "human/noble" → apply 'human' variant delta, then 'noble' child of 'human'.
  *
@@ -60,7 +72,13 @@ function collectVariantDeltas(itemDef, variantPath, onWarn) {
   const parts = variantPath.split('/').map(p => p.trim()).filter(Boolean);
   let variantTree = itemDef.variants;
 
-  const src = itemDef._source ? ` (${itemDef._source})` : '';
+  // The *basename* only. `onWarn` is bound to the importing def's `_source`, so the
+  // diagnostic already carries a location; what this adds is which file the variant tree
+  // was looked for in, which differs from that location on the import arm — the tree is
+  // canon's and the location is the project's. An absolute path in a message body escapes
+  // every normalization a report or a snapshot applies to `file`, which is the same reason
+  // CL0325's hint names a basename (`compile.js`).
+  const src = itemDef._source ? ` (${basename(itemDef._source)})` : '';
   for (const part of parts) {
     if (!variantTree || typeof variantTree !== 'object') {
       if (onWarn) {

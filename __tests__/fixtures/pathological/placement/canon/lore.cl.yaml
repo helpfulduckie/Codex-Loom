@@ -1,0 +1,39 @@
+# An included lore file — the arity-N selector case (§7.6.2a).
+#
+# Three items, exactly one of which defines `warm`. That ratio is the point: an `include:`
+# stamps its `importVariants:` onto every item in the file, so most items missing the name
+# is the *correct* authoring shape, not a mistake. Only `Chandler` is meant to change.
+#
+# This file itself is correct. The mistake it pins lives in the include directive over in
+# ../Codex/items.cl.yaml, and in what the compiler currently says about it.
+#
+# It lives outside `Codex/` on purpose: `structure.input.items` loads that directory
+# wholesale, so a lore file inside it would arrive as items directly and never be included.
+
+- id: Chandler
+  name: Chandler
+  aid:
+    type: Character
+    triggers: [Chandler]
+  body:
+    Tagline: Keeps the ledger and says nothing about it.
+  variants:
+    warm:
+      body:
+        Tagline: '+{ He has started leaving the lamp lit. }'
+
+- id: Doorman
+  name: Doorman
+  aid:
+    type: Character
+    triggers: [Doorman]
+  body:
+    Tagline: Defines no variants at all, which is the ordinary case.
+
+- id: Errand
+  name: Errand
+  aid:
+    type: Character
+    triggers: [Errand]
+  body:
+    Tagline: Defines no variants either, and is owed no warning for it.

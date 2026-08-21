@@ -50,8 +50,21 @@ prove nothing about the checks the fixture was written for.
 
 ## Known-incorrect rows in the snapshot
 
-**None.** Every row the snapshot now holds is a row the fixture means to raise, and there is
-no known-incorrect absence either.
+**The fifteen `CL0321` rows naming items in `canon/lore.cl.yaml` and `canon/rumors.cl.yaml`
+are wrong, and Phase 6 Step 0 deletes them.** Ten come from the `importVariants:` include,
+which resolves on both branches; five from the `branches:` include, which dispatches only on
+`gated`. Both include directives in
+`placement/Codex/items.cl.yaml` are in §7.6.2a's arity-N cell — an `include:` stamps its
+`importVariants:` and its `branches:` onto every item in the file it names — so an item that
+does not define the name is the ordinary case and is owed silence, not a warning. The
+compiler currently applies the arity-1 rule at that position and warns once per item per
+selector per branch. The fixture is authored from the spec, so it pins the disagreement
+rather than being written around it.
+
+**What replaces them is two `CL0326` rows**, one per include directive, naming the
+misspelled selector (`wrm`, `hshed`) that matched none of the three items. That check is
+the whole of what keeps arity-N silence safe: without it a misspelled fanned-out name
+applies to nothing, changes no output, and says nothing at all.
 
 **The bare `import: Anchor` absence was the last entry here, and Phase 5 Step 0 closed it.**
 That def in `placement/Codex/items.cl.yaml` emitted a second `Anchor` — a duplicate entry in

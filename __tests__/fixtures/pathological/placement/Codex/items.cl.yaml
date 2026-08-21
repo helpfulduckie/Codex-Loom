@@ -119,6 +119,26 @@
   body:
     Tagline: A second Anchor, arriving with no id and no complaint.
 
+# ── §7.6.2a: the arity-N selectors, on the one directive that already has them ──
+#
+# `include:` stamps its `importVariants:` and its `branches:` onto every item in the file
+# it names, which puts both in the arity-N cell of §7.6.2a's table: a name aimed at every
+# item in a lore file will miss most of them by construction, because naming it on each
+# item is the repetition the include exists to remove. Both should therefore be **silent**
+# where an item does not define the name.
+#
+# Each list carries one real name and one misspelling of it. The real name matches one
+# item of three, which is the normal case and is owed nothing. The misspelling matches
+# zero, which is the typo — and is the one thing arity-N silence would otherwise hide,
+# because a name that applies to nothing changes no output and, without a check, says
+# nothing either. That is CL0326.
+- include: '{%here}/canon/lore.cl.yaml'
+  importVariants: [warm, wrm]
+
+- include: '{%here}/canon/rumors.cl.yaml'
+  branches:
+    gated: [hushed, hshed]
+
 # ── §8.5: a card body past AID's 2,000-character cap ─────────────────────────
 # AID truncates rather than refusing, so this uploads shortened and the author finds out
 # during play. CL0712, ERROR. No placeholders, so compiled length and upload length agree
