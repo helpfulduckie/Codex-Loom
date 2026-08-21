@@ -259,6 +259,36 @@ sections:
 
 **Gating a slot off is a legitimate way to drop its whole contents from one branch**, and does not require editing every item that targets it. It becomes an ERROR only when it would make an item vanish from *every* output it declared — see `CL0610` in [11-diagnostics.md](11-diagnostics.md).
 
+### `branches:` on the whole component
+
+**A tone shift that affects several sections is written once, at the document level.** `branches:` on the component names *every* section it holds: the variant name is looked up in each section's own `variants:` and applied wherever it is found.
+
+```yaml
+branches:
+  flashback: lighter          # every section defining "lighter" gets it
+  briefing: ~                 # this branch gets no Plot Essentials file at all
+
+sections:
+  genre:
+    text: "Genre: Thriller"
+    variants:
+      lighter: {text: "Genre: Caper"}
+  tone:
+    text: Write with weight.
+    variants:
+      lighter: {text: Write with a light touch.}
+  setting:
+    text: The Royal Academy.   # defines no "lighter" — untouched, and not a mistake
+```
+
+**Sections that do not define the name are silently unaffected**, because most of them will be — that is what fanning out means. A name matching *no* section is `CL0605`, which is the only report a misspelling at this position produces.
+
+**There is no component-level `variants:`.** A component declares no variants of its own, so a name here is always a selector over what its sections declare. A `variants:` block at document level is a v3 file that has not been migrated, and is reported as a misplaced key.
+
+**`~` at this position excludes the whole component from that branch**, and writes no file. This is not the same as every section resolving away, which is `CL0615` and an ERROR — an exclusion is what the author asked for. An item whose only target was a slot in an excluded component is caught by `CL0610` instead, the same way a section-level `~` already behaves.
+
+**Both dispatch positions can fire at once, and they stack.** The component's fan-out applies first, then the section's own `branches:`, so a section that names a variant specifically gets the last word over one that reached it by fan-out. Neither declaration is a denial of the other. The full resolution order for a component is: `imports:` with their `importVariants:`, then local `sections:` layering, then the component dispatch, then the section dispatch — the same order items already resolve in.
+
 ### Sharing a component with `imports:`
 
 Every component can pull in another with `imports:`, so one document can be written once and used by many projects. This is what `imports:` exists for: a single AI Instructions body currently sits in 67 places across the scenario corpus, reached by copy or by absolute path, and neither of those supports a variant, a branch dispatch, or a one-line override.

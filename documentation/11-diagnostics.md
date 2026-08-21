@@ -233,6 +233,7 @@ English word. They stay WARN, they are tagged opinion-layer, and `lint.level` re
 | `CL0602` | WARN | A section has no text, no heading and is not a slot, so it renders nothing. |
 | `CL0603` | WARN | A section's `render.wrap` is neither `each` nor `all`; `each` is used. |
 | `CL0604` | WARN | A section's branch dispatch names a variant the section does not define. |
+| `CL0605` | WARN | A component-level branch dispatch names a variant no section defines. |
 | `CL0606` | ERROR | A component `imports:` entry names a `from:` that does not resolve to a file. |
 | `CL0607` | ERROR | A component import chain loops back on a file already being resolved. |
 | `CL0608` | WARN | A section is deleted with `~` but no import provided it. |
@@ -252,6 +253,13 @@ ambiguity costs an author nothing and keeps the option of allowing it later.
 `CL0602` stays a warning because an empty section is inert rather than wrong — a section
 gated off on every branch by its own dispatch is the ordinary way to park content. The
 error that matters is one level up: a *component* that renders to nothing, `CL0615`.
+
+`CL0605` is `CL0326`'s shape one layer up, and exists for the same reason. `branches:` on a
+section names one target, so a variant it does not define is a typo and `CL0604` says so.
+`branches:` on the component document names *every* section it holds, so missing most of
+them is what fanning out is — warning per section would report the feature working. What
+that silence costs is the typo, and this is what buys it back: a name matching no section at
+all applies to nothing, alters no output, and would otherwise raise nothing.
 
 `CL0606` and `CL0607` are errors because both leave the finished component missing whatever
 the import was carrying, and the file that lands still looks complete — the local sections

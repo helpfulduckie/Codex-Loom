@@ -246,8 +246,16 @@ function sortOccupants(placed) {
 function renderSectionedComponent(component, branchPath, occupants, options = {}) {
   if (!component) return { text: null, segments: [] };
 
+  // A component-level `~` excludes the whole component from this branch (§7.6.2a). It is
+  // reported back rather than collapsed into an empty render, because the caller answers
+  // two different questions with the two: an empty render is CL0615, an ERROR saying every
+  // section resolved away, and an exclusion is the author saying this branch does not get
+  // this component at all.
+  const applicable = sectionsForBranch(component, branchPath, options.onWarn);
+  if (applicable === null) return { text: null, segments: [], excluded: true };
+
   const segments = [];
-  for (const { section } of sectionsForBranch(component, branchPath, options.onWarn)) {
+  for (const { section } of applicable) {
     const placed = section.isSlot ? sortOccupants(occupants.get(section.name.toLowerCase())) : [];
     const text = renderSection(section, placed, options);
     if (text && text.trim()) segments.push({ key: `section:${section.name}`, text });

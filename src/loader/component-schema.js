@@ -87,18 +87,31 @@ const COMPONENT_SCHEMA = {
   keys: {
     sections: { type: TYPES.RECORD, of: SECTION },
 
-    // Document-level `branches:` and `variants:` are deliberately absent, so a v3 AI
-    // Instructions file carrying them reports an unknown key — the same migration signal
-    // `blocks:` gives a v3 Plot Essentials file.
-    //
-    // They were a second branch walker and a second delta vocabulary for what sections now
-    // do themselves. `resolveAINBranches` disagreed with `resolveBranchSpec` on three
-    // points, the sharpest being `~`: on an item it excludes, on a document it meant
-    // "apply no variants". A document variant's `apply:` fanned a section-variant name
-    // across every section defining it, and its `sections: {x: ~}` removed a section —
-    // both reachable from the section's own `branches:` dispatch, from the other end.
-    // The `ain:`/`cards:` split was a render-target concept wearing dispatch clothing and
-    // becomes `render.storyCards` in Phase 6.
+    /**
+     * §7.6.2a — the fan-out. A selector over what the sections declare, never a
+     * declaration site: a component has no variants of its own, so a name here is looked
+     * up in each section's own `variants:` and applied wherever it is found. `~` at this
+     * position excludes the whole component from the branch, which is what `~` means at
+     * every other position in the language.
+     *
+     * An open namespace, like the section-level key, because a branch dispatch tree is the
+     * author's own vocabulary and validating it would report every branch name as unknown.
+     *
+     * This is not v3's document layer returning. That layer brought a fourth branch walker,
+     * `resolveAINBranches`, which disagreed with `resolveBranchSpec` on wildcard stacking,
+     * on descent, and — sharpest — on `~`, where it meant "apply no variants" rather than
+     * "exclude". This key runs on `resolveBranchSpec` like every other dispatch in the
+     * language, so there is no second walker to disagree.
+     */
+    branches: ANY,
+
+    // Document-level `variants:` stays deliberately absent, so a v3 AI Instructions file
+    // carrying one reports a misplaced key — the migration signal `blocks:` gives a v3 Plot
+    // Essentials file. A document variant's `apply:` fanned a section-variant name across
+    // every section defining it, which is exactly what `branches:` above now does, and its
+    // `sections: {x: ~}` removed a section, which the section's own dispatch already does
+    // from the other end. The `ain:`/`cards:` split was a render-target concept wearing
+    // dispatch clothing and becomes `render.storyCards` in Phase 12.
 
     /**
      * §7.6 — an ordered list of components to pull in before the local `sections:` layer.

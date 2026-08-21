@@ -60,11 +60,20 @@ function normalizeComponent(doc, options = {}) {
     if (section.isSlot) slots.set(section.name, section);
   }
 
-  // `card:` is §7.8 and belongs to Phase 6. It is carried through opaque rather than
+  // `card:` is §7.8 and belongs to Phase 12. It is carried through opaque rather than
   // normalized or dropped: dropping it would silently lose an author's declaration, and
   // normalizing it would mean pinning a copy of the story-card key surface here, a second
   // declaration to keep in step with the first.
-  return { sections, slots, card: (doc && doc.card) || null };
+  //
+  // `branches:` is the §7.6.2a fan-out and is carried through unresolved for the same reason
+  // a section's is: dispatch is a per-branch question and this runs once per file. It is
+  // resolved in `sectionsForBranch`, where the branch path exists.
+  return {
+    sections,
+    slots,
+    branches: (doc && doc.branches) || null,
+    card: (doc && doc.card) || null,
+  };
 }
 
 /**
@@ -341,7 +350,27 @@ function applySectionSelector(sections, name) {
 }
 
 /**
+ * Look one variant name up in a section's own `variants:`, case-insensitively.
+ *
+ * One lookup for the two positions a section variant is reached from — the component's
+ * fan-out and the section's own dispatch — so the two cannot come to disagree about which
+ * spelling matches.
+ */
+function findSectionVariant(section, name) {
+  if (!section.variants) return undefined;
+  return Object.keys(section.variants)
+    .find((k) => k.toLowerCase() === String(name).toLowerCase());
+}
+
+/**
  * The sections that apply to one branch, in output order, with their variants applied.
+ *
+ * Returns `null` when a component-level `~` excludes the whole component from this branch,
+ * which is a different fact from "no sections applied" and has to stay distinguishable:
+ * an empty list means every section resolved away and is `CL0615`, an ERROR, while an
+ * exclusion is the author saying this branch does not get this component and is silent.
+ * `null` for exclusion is the convention `resolveBranchSpec`, `collectVariantDeltas` and
+ * `resolveItem` already use.
  *
  * A section excluded by its own `branches:` dispatch is dropped entirely — §7.2's
  * component-level visibility gating, which is how an author drops a whole slot's contents
@@ -352,21 +381,58 @@ function applySectionSelector(sections, name) {
  * how `variants:` came to be a declared key that nothing read, which is the §4.3 defect
  * the schema exists to catch. The names still travel alongside, for the reports.
  *
+ * ── Two dispatch positions, and the order they compose in (§7.6.2a) ─────────
+ *
+ * A component document may carry `branches:` of its own, and it names *every* section it
+ * holds rather than one. Both positions run, component first and section second, which is
+ * the order §7.6.2a states for the whole grammar: selection at import, then local layering,
+ * then component dispatch, then section dispatch. Neither position claims exclusivity — a
+ * component-level name says "apply this wherever it is defined" and a section-level one
+ * says "apply this here" — so when both fire they stack, in that order, the same way
+ * `resolveBranchSpec` already stacks a wildcard under an explicit key. There is no
+ * override rule because neither declaration is a denial of the other.
+ *
+ * Arity decides the reporting, per Step 0. The component's fan-out is silent on a section
+ * that does not define the name, because missing it on most sections is what fanning out
+ * *is*; the section's own dispatch still raises `CL0604`, because it named one target. What
+ * keeps the silence safe is `CL0605`: a component-level name matching no section at all.
+ *
  * Re-sorting after applying is deliberate: a variant may set `render.position`, and a
  * section that moves has to move in the output too. The sort is the same one
  * `normalizeComponent` uses — position, then declaration order.
  */
 function sectionsForBranch(component, branchPath, onWarn = () => {}) {
+  const fanned = resolveBranchSpec(component.branches, branchPath);
+  if (fanned === null) return null; // component-level ~ — excluded from this branch
+
+  for (const name of fanned) {
+    const matched = component.sections.filter((s) => findSectionVariant(s, name) !== undefined);
+    if (matched.length > 0) continue;
+    onWarn(CODES.COMPONENT_DISPATCH_MATCHED_NOTHING,
+      `the component dispatches to variant "${name}" on this branch, and none of its `
+      + `${component.sections.length} sections define it. A component-level dispatch names `
+      + 'every section (§7.6.2a), so it is silent on the ones that do not define the name — '
+      + 'which makes this the only report a misspelling produces.');
+  }
+
   const applicable = [];
   for (const section of component.sections) {
     const variants = section.branches ? resolveBranchSpec(section.branches, branchPath) : [];
     if (variants === null) continue;
 
     let resolved = section;
+
+    // Component-level first, silent on a miss. Applied before the section's own dispatch so
+    // a section that names a variant specifically wins the last word over one that reached
+    // it by fan-out.
+    for (const name of fanned) {
+      const key = findSectionVariant(section, name);
+      if (key === undefined) continue;
+      resolved = applySectionVariant(resolved, section.variants[key]);
+    }
+
     for (const name of variants) {
-      const key = section.variants
-        ? Object.keys(section.variants).find((k) => k.toLowerCase() === String(name).toLowerCase())
-        : undefined;
+      const key = findSectionVariant(section, name);
       if (key === undefined) {
         onWarn(CODES.SECTION_VARIANT_NOT_FOUND,
           `section "${section.name}" dispatches to variant "${name}", which it does not define.`);
@@ -374,17 +440,24 @@ function sectionsForBranch(component, branchPath, onWarn = () => {}) {
       }
       resolved = applySectionVariant(resolved, section.variants[key]);
     }
-    applicable.push({ section: resolved, variants });
+    applicable.push({ section: resolved, variants: [...fanned, ...variants] });
   }
   applicable.sort((a, b) => (a.section.position - b.section.position)
     || (a.section.index - b.section.index));
   return applicable;
 }
 
-/** The slots a branch actually declares — the set a render target may name (§7.4). */
+/**
+ * The slots a branch actually declares — the set a render target may name (§7.4).
+ *
+ * A component excluded from the branch declares no slots. An item targeting one is then
+ * caught by the no-output invariant (`CL0610`) rather than by the undeclared-slot ERROR,
+ * which is §7.4's third row and the same answer a section-level `~` already gives: gating
+ * is legitimate until it makes an item vanish from every output it declared.
+ */
 function slotsForBranch(component, branchPath) {
   const slots = new Map();
-  for (const { section } of sectionsForBranch(component, branchPath)) {
+  for (const { section } of sectionsForBranch(component, branchPath) || []) {
     if (section.isSlot) slots.set(section.name, section);
   }
   return slots;

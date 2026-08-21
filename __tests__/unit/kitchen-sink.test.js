@@ -308,11 +308,15 @@ describe('kitchen-sink component (components/plot-essentials.cl.yaml)', () => {
    * the report says the key exists but not here. The migration is exactly "move it down
    * one level", and that is what the author is told.
    */
-  test('a v3 document-level branches: is reported as misplaced, not merely unknown', () => {
+  test('a document-level branches: is accepted — it is the §7.6.2a fan-out', () => {
+    // It used to be a misplaced key, on the reasoning that v3's document layer was deleted
+    // and everything it did moved onto sections. Phase 6 brought the *selector* half back
+    // and only that half: a name here is looked up in each section's own `variants:`, and
+    // it runs on `resolveBranchSpec` rather than v3's fourth branch walker. The migration
+    // signal a v3 file needs now rests on `variants:` below, which stayed absent.
     const bus = new Diagnostics();
     validate({ sections: {}, branches: { noir: ['terse'] } }, COMPONENT_SCHEMA, { diagnostics: bus });
-    expect(bus.errors.map((d) => d.code)).toEqual([SCHEMA_CODES.MISPLACED_KEY]);
-    expect(bus.errors[0].message).toContain('branches');
+    expect(bus.errors).toEqual([]);
   });
 
   test('a v3 document-level variants: is reported as misplaced too', () => {

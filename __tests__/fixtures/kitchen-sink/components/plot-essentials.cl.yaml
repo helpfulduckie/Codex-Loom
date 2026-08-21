@@ -66,9 +66,16 @@ sections:
       wrap: all
 
 # ── Document level ───────────────────────────────────────────────────────────
-# `branches:` and `variants:` are deliberately absent here, because the surface no longer
-# declares them. A section dispatches its own variants through its own `branches:` — see
-# `rules:` above — and the document layer that used to do it a second way is gone.
+# `variants:` is deliberately absent, because a component declares no variants of its own.
+# `branches:` is present and is a *selector* over what the sections declare (§7.6.2a): the
+# name is looked up in each section's own `variants:` and applied wherever it is found —
+# `terse` here reaches `rules:` above and no other section, which is the ordinary case and
+# is silent. `~` at this position would exclude the whole component from the branch.
+#
+# This is not v3's document layer. That one brought its own branch walker; this runs on
+# `resolveBranchSpec` like every other dispatch in the language.
+branches:
+  flashback: terse
 #
 # §7.6 — one import, exercising all three things a local file does to what it pulls in:
 # `genre` above overrides an imported section by name, `importVariants: [terse]` selects a

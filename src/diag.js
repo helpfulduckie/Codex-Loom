@@ -103,8 +103,17 @@ const CODES = Object.freeze({
   SECTION_WRAP_UNKNOWN: 'CL0603',
   SECTION_VARIANT_NOT_FOUND: 'CL0604',
 
-  // Component imports (§7.6). CL0605 is reserved for the component-level `branches:`
-  // fan-out, which is Phase 6 Step 2.
+  /**
+   * A component-level `branches:` dispatch that matched no section at all (§7.6.2a).
+   *
+   * `CL0326`'s shape one layer up, and it exists for the same reason. A dispatch on the
+   * component names every section it holds, so missing most of them is normal and warning
+   * per section would be noise — but a misspelled name then applies to nothing, changes no
+   * output, and raises nothing. Three of seven sections is normal; zero of seven is a typo.
+   */
+  COMPONENT_DISPATCH_MATCHED_NOTHING: 'CL0605',
+
+  // Component imports (§7.6).
   IMPORT_NOT_FOUND: 'CL0606',
   IMPORT_CYCLE: 'CL0607',
   IMPORT_DELETE_UNKNOWN: 'CL0608',
@@ -160,6 +169,7 @@ const SEVERITY_BY_CODE = Object.freeze({
   CL0602: SEVERITY.WARN,
   CL0603: SEVERITY.WARN,
   CL0604: SEVERITY.WARN,
+  CL0605: SEVERITY.WARN,
   CL0608: SEVERITY.WARN,
   CL0430: SEVERITY.ERROR,
   CL0431: SEVERITY.ERROR,

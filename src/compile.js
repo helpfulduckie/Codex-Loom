@@ -1535,6 +1535,7 @@ function compileRun(configPath, options, buses) {
       const filled = occupants.get(descriptor.key) || new Map();
       let text;
       let segments;
+      let excluded = false;
       if (passthrough !== null && passthrough !== undefined) {
         // Prose has no sections to render, warn about, or report separately. It is one
         // segment keyed by the component so the cross-branch reports still name it.
@@ -1542,7 +1543,7 @@ function compileRun(configPath, options, buses) {
         segments = [{ key: descriptor.label, text: passthrough }];
       } else {
         warnEmptySlots(descriptor, slotIndex, filled, label, compileDiagnostics, spec);
-        ({ text, segments } = renderSectionedComponent(
+        ({ text, segments, excluded = false } = renderSectionedComponent(
           component, branchPath, filled,
           {
             defaultHeadingLevel: descriptor.defaultHeadingLevel,
@@ -1571,11 +1572,15 @@ function compileRun(configPath, options, buses) {
         sectionedSegments[descriptor.key] = segments;
         if (verbose) console.log(`    OK: ${descriptor.verboseLabel} → ${outPath}`);
         totalFiles++;
-      } else {
+      } else if (!excluded) {
         // §7.4: a component that renders to nothing is an ERROR, not a gap. The gap list
         // is for a component that was asked for and could not be found; this one was
         // found, read, and had every section resolve away, which is a statement about
         // the source that no amount of re-reading the path will explain.
+        //
+        // A component-level `~` is exempt because it is not that statement. The author
+        // wrote "not on this branch", and §7.6.2a gives `~` that meaning at this position
+        // exactly as it has it at every other. Writing no file is the whole request.
         compileDiagnostics.error(
           DIAG_CODES.COMPONENT_RENDERS_NOTHING,
           `component "${descriptor.label}" renders to nothing on branch "${label}" — `

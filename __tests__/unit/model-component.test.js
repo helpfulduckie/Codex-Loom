@@ -316,6 +316,65 @@ describe('applySectionVariant text forms', () => {
  * section. The integration suite proves the chain reaches this code with the right record;
  * these prove the record comes out right.
  */
+/**
+ * `sectionsForBranch`'s return contract, which two callers depend on.
+ *
+ * `slotsForBranch` and `renderSectionedComponent` both have to tell a component-level
+ * exclusion from a component whose sections all resolved away, because the second is
+ * `CL0615` — an ERROR — and the first is what the author asked for. The signal is `null`,
+ * matching `resolveBranchSpec`, `collectVariantDeltas` and `resolveItem`.
+ */
+describe('sectionsForBranch and the component-level dispatch', () => {
+  const component = (branches) => normalizeComponent({
+    branches,
+    sections: {
+      genre: { text: 'Thriller', variants: { lighter: { text: 'Caper' } } },
+      setting: { text: 'The Academy.' },
+      cast: { slot: true },
+    },
+  });
+
+  test('a component-level ~ returns null rather than an empty list', () => {
+    expect(sectionsForBranch(component({ flashback: null }), ['flashback'])).toBeNull();
+  });
+
+  test('an empty list still means every section resolved away, which is a different fact', () => {
+    const allGated = normalizeComponent({
+      sections: { genre: { text: 'Thriller', branches: { flashback: null } } },
+    });
+    expect(sectionsForBranch(allGated, ['flashback'])).toEqual([]);
+  });
+
+  test('slotsForBranch reports no slots for an excluded component rather than throwing', () => {
+    expect(slotsForBranch(component({ flashback: null }), ['flashback']).size).toBe(0);
+  });
+
+  test('a fan-out applies to the sections defining the name and no others', () => {
+    const { seen, onWarn } = collector();
+    const resolved = sectionsForBranch(component({ flashback: 'lighter' }), ['flashback'], onWarn);
+    const byName = new Map(resolved.map((r) => [r.section.name, r.section]));
+    expect(byName.get('genre').text).toBe('Caper');
+    expect(byName.get('setting').text).toBe('The Academy.');
+    expect(seen).toEqual([]);
+  });
+
+  test('a fan-out matching no section is CL0605, once', () => {
+    const { codes: seenCodes } = (() => {
+      const c = collector();
+      sectionsForBranch(component({ flashback: 'lightre' }), ['flashback'], c.onWarn);
+      return c;
+    })();
+    expect(seenCodes()).toEqual([CODES.COMPONENT_DISPATCH_MATCHED_NOTHING]);
+  });
+
+  test('an undispatched branch is untouched and silent', () => {
+    const { seen, onWarn } = collector();
+    const resolved = sectionsForBranch(component({ flashback: 'lighter' }), ['plain'], onWarn);
+    expect(resolved.map((r) => r.section.name)).toEqual(['genre', 'setting', 'cast']);
+    expect(seen).toEqual([]);
+  });
+});
+
 describe('layerSectionDef', () => {
   test('a plain string replaces the base text', () => {
     expect(layerSectionDef({ text: 'old' }, { text: 'new' }).text).toBe('new');
