@@ -1,0 +1,43 @@
+# The shared component the kitchen-sink's Plot Essentials imports (§7.6).
+#
+# Stands in for the canonical document §7.6.1 measured — one AI Instructions body present in
+# 67 places across the scenario corpus — at the scale a fixture can hold. Three sections,
+# each covering one thing the importing file has to be able to do to it: override by name,
+# select a variant with `importVariants:`, and delete with `~`.
+#
+# Nothing here is wrong on purpose. This is the kitchen sink, not the pathological fixture.
+
+sections:
+  # Overridden by name in the importing file, which layers a field op over this text.
+  genre:
+    text: |
+      Genre: Unspecified
+    heading: Genre and Setting
+    headingLevel: 0
+    render:
+      position: 1
+
+  # Reached by the import's `importVariants: [terse]` selector, which is silent on every
+  # section that does not define `terse` — every other section here.
+  house:
+    text:
+      standing: The house keeps its own counsel.
+      manners: Address the staff formally.
+    heading: House Style
+    headingLevel: 2
+    render:
+      position: 3
+      bullet: true
+    variants:
+      terse:
+        text:
+          manners: ~
+
+  # Deleted by the importing file with `~`, which is the half of §7.6.3 that makes an
+  # imported component genuinely optional rather than take-it-whole.
+  legalese:
+    text: |
+      This document is provided as is.
+    heading: Notices
+    render:
+      position: 9

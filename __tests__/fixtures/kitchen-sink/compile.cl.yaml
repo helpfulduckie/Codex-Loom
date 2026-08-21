@@ -33,6 +33,10 @@ variables:
   out:          out
   vaultDir:     '{%here}/vault'
   componentDir: '{%here}/components'
+  # §7.6.2's own spelling for the directory a shared component is imported from. A real
+  # project points this at a canon entry, which §6.1 exposes as a variable of the same
+  # shape; the fixture keeps it local so the corpus stays self-contained.
+  components:   '{%here}/components/shared'
   scriptDir:    '{%here}/scripts'
 
 structure:

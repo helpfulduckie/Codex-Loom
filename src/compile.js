@@ -1442,11 +1442,22 @@ function compileRun(configPath, options, buses) {
   // `sectionsForBranch` answers from the normalized document, so nothing is lost — and a
   // schema violation in a component reaches the author once instead of once per leaf,
   // which for The Institute's 32 leaves is the difference between a diagnostic and a wall.
+  //
+  // §7.6's `imports:` resolve inside that one load, which is why cycle detection and the
+  // import diagnostics belong there rather than in the leaf loop: a chain resolved once per
+  // file reports a cycle once, and a chain resolved once per leaf reports it 32 times for
+  // The Institute. `from:` expands against the *root* variable table for the same reason the
+  // cache is keyed by path — a branch-varying `from:` would make one cache key stand for two
+  // documents.
   const sectionedDocs = new Map();
+  const rootVariables = config._variables || config.variables || null;
   const loadSectioned = (spec, descriptor) => {
     if (!sectionedDocs.has(spec)) {
       sectionedDocs.set(spec, loadComponentDocument(spec, {
-        diagnostics: compileDiagnostics, label: descriptor.label,
+        diagnostics: compileDiagnostics,
+        label: descriptor.label,
+        variables: rootVariables,
+        base: config._base,
       }));
     }
     return sectionedDocs.get(spec);

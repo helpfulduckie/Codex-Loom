@@ -233,6 +233,9 @@ English word. They stay WARN, they are tagged opinion-layer, and `lint.level` re
 | `CL0602` | WARN | A section has no text, no heading and is not a slot, so it renders nothing. |
 | `CL0603` | WARN | A section's `render.wrap` is neither `each` nor `all`; `each` is used. |
 | `CL0604` | WARN | A section's branch dispatch names a variant the section does not define. |
+| `CL0606` | ERROR | A component `imports:` entry names a `from:` that does not resolve to a file. |
+| `CL0607` | ERROR | A component import chain loops back on a file already being resolved. |
+| `CL0608` | WARN | A section is deleted with `~` but no import provided it. |
 | `CL0610` | ERROR | An item resolves onto a branch and produces no output there. |
 | `CL0611` | ERROR | A render target names a slot the component does not declare. |
 | `CL0612` | ERROR | A render target names a section that exists but is not a slot. |
@@ -249,6 +252,22 @@ ambiguity costs an author nothing and keeps the option of allowing it later.
 `CL0602` stays a warning because an empty section is inert rather than wrong — a section
 gated off on every branch by its own dispatch is the ordinary way to park content. The
 error that matters is one level up: a *component* that renders to nothing, `CL0615`.
+
+`CL0606` and `CL0607` are errors because both leave the finished component missing whatever
+the import was carrying, and the file that lands still looks complete — the local sections
+render, the slots fill, and the shared half is simply absent. A `from:` resolves against the
+importing file's own directory unless it is absolute or opens with a `{%variable}`, and it
+expands against the *root* variable table rather than a branch's: the document is cached by
+resolved path and shared across every leaf, so a `from:` that varied by branch would make
+one cache key stand for two documents. `CL0607` skips the offending import rather than
+following it, because the alternative is a stack overflow naming neither file.
+
+`CL0608` is `CL0530`'s shape one layer up. `~` on a section name removes a section an import
+provided; removing one nothing provided is meaningless as written and reliably means the
+author expected an import to supply it — a renamed section upstream, or a misspelling. It
+stays a warning because the result is what the author asked for either way: no section of
+that name. A document with no `imports:` at all never raises it, because there `~` is the
+plain "omit this" it has always been.
 
 `CL0610` is the no-output invariant (§7.4), and it replaces v3's suppression checks rather
 than reimplementing them. It fires on *consequence*, not on mechanism: an item that

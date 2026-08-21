@@ -144,9 +144,18 @@ function normalizeSection(name, def, index, onWarn) {
  *
  * `text:` takes three forms, which is where the shape earns its complexity:
  *   null      drop the section's text entirely
- *   string    replace it
+ *   string    a field op against the section's text — a plain string replaces it
  *   mapping   treat the section's text as a keyed collection and apply a field op per key,
  *             so a variant can add, replace or delete one line without restating the rest
+ *
+ * The string arm goes through `applyFieldOp` rather than assigning, which is what makes
+ * `dark: {text: '+{ Do not soften outcomes. }'}` — §7.6.2's own worked example — append
+ * rather than replace the section with the literal characters `+{ … }`. A string that is
+ * not an operation still replaces, because that is what `applyFieldOp` does with one: the
+ * op vocabulary is a superset of assignment, not a separate mode. Routing it here is also
+ * what keeps one vocabulary across the two positions a section variant is reached from —
+ * a branch dispatch through this function, and an import selector through
+ * `applySectionSelector` — rather than two that agree on plain strings and diverge on ops.
  */
 function applySectionVariant(section, delta) {
   if (!delta || typeof delta !== 'object' || Array.isArray(delta)) return section;
@@ -156,7 +165,8 @@ function applySectionVariant(section, delta) {
     if (delta.text === null) {
       result.text = null;
     } else if (typeof delta.text === 'string') {
-      result.text = delta.text;
+      const next = applyFieldOp(result.text, delta.text);
+      result.text = next === '__DELETE__' ? null : next;
     } else if (typeof delta.text === 'object') {
       const base = (result.text && typeof result.text === 'object' && !Array.isArray(result.text))
         ? { ...result.text } : {};
@@ -182,6 +192,138 @@ function applySectionVariant(section, delta) {
   }
 
   return result;
+}
+
+// ── Component imports (§7.6) ─────────────────────────────────────────────────
+//
+// Everything below layers *raw section definitions*, before normalization, and that choice
+// is the whole design of `imports:`.
+//
+// A component may import a house-style base, then a world layer, then declare its own
+// deltas — three sources for one section, each written as ordinary section syntax. Merging
+// them raw means one layering rule applied three times and `normalizeSection` running once,
+// at the end, on the finished section. Merging them normalized would mean a second layering
+// rule for the normalized shape (`isSlot` where the author wrote `slot:`, render options
+// flattened onto the section), and it would run `normalizeSection`'s checks on each partial
+// override — reporting "renders nothing" for a project delta that supplies only a
+// `branches:` dispatch, which §7.6.2's own worked example does.
+//
+// Two layering vocabularies for one grammar is the disagreement §7.1 names as this
+// project's largest bug category, and this is the position where it would reappear.
+
+/**
+ * Layer one raw section definition over another (§7.6.3).
+ *
+ * `text:` goes through `applyFieldOp`, which is what makes `+{}`, `-{}` and `/{}/{}` mean
+ * the same thing here as anywhere else — including the mapping form, where AI Instructions'
+ * named lines let an override edit one rule without restating the block. A plain string
+ * replaces, because `applyFieldOp` on a non-op string replaces; the op vocabulary is a
+ * superset of assignment rather than a separate mode.
+ *
+ * `render:` merges key by key so an override can move a section without restating its
+ * wrapper. `variants:` merges by name, and `branches:` replaces. That asymmetry is what
+ * §7.6.2's worked example needs: a project overrides `narrativeTone` with nothing but a
+ * `branches:` dispatch to `lighthearted`, and `lighthearted` is defined in the *imported*
+ * section — a replacing `variants:` would delete the variant the dispatch just named.
+ */
+function layerSectionDef(base, over) {
+  const from = (base && typeof base === 'object' && !Array.isArray(base)) ? base : {};
+  const raw = (over && typeof over === 'object' && !Array.isArray(over)) ? over : {};
+  const result = { ...from };
+
+  for (const [key, value] of Object.entries(raw)) {
+    if (key === 'text') {
+      if (value === null) { result.text = null; continue; }
+      const next = applyFieldOp(from.text, value);
+      result.text = next === '__DELETE__' ? null : next;
+    } else if (key === 'render') {
+      result.render = Object.assign({}, from.render || {}, value || {});
+    } else if (key === 'variants') {
+      result.variants = Object.assign({}, from.variants || {}, value || {});
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
+ * Merge one raw `sections:` record over another (§7.6.3).
+ *
+ * Three cases, and the third is the one with a diagnostic. A name the base provided is
+ * layered. A name it did not is appended, in declaration order after everything inherited.
+ * A name mapped to `~` deletes the inherited section — and deleting one nothing provided is
+ * CL0608, on the same reasoning as CL0530: `~` removing something that was never there is
+ * meaningless as written and reliably means the author expected an import to supply it.
+ *
+ * Key matching is case-insensitive and the *base's* spelling wins, matching how every other
+ * name in this language resolves. The returned record is a fresh object; neither input is
+ * mutated, because a cached imported document is shared by every project that imports it.
+ */
+function mergeSectionRecords(base, over, onWarn = () => {}) {
+  const merged = {};
+  const keyOf = new Map();
+  for (const [name, def] of Object.entries(base || {})) {
+    merged[name] = def;
+    keyOf.set(name.toLowerCase(), name);
+  }
+
+  for (const [name, def] of Object.entries(over || {})) {
+    const existing = keyOf.get(name.toLowerCase());
+
+    if (def === null || def === undefined) {
+      if (existing === undefined) {
+        onWarn(CODES.IMPORT_DELETE_UNKNOWN,
+          `section "${name}" is deleted with ~ but no import provided it — nothing was `
+          + `removed. A bare "${name}:" with no body also parses as ~, which is usually `
+          + 'the cause.');
+      } else {
+        delete merged[existing];
+        keyOf.delete(name.toLowerCase());
+      }
+      continue;
+    }
+
+    if (existing !== undefined) {
+      merged[existing] = layerSectionDef(merged[existing], def);
+    } else {
+      merged[name] = def;
+      keyOf.set(name.toLowerCase(), name);
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Apply one import selector across every section that defines it (§7.6.2a).
+ *
+ * Returns the layered record and how many sections matched. Silent where a section does not
+ * define the name, because an import's `importVariants:` names every section it pulled in —
+ * the arity-N rule, the same one an `include:` over a lore file follows. The count is what
+ * the caller needs for CL0326, which is the whole of what keeps that silence safe.
+ *
+ * The lookup is flat rather than slash-nested, matching `sectionsForBranch`: a component's
+ * variants are one level deep, and nesting them here would be a second variant grammar.
+ */
+function applySectionSelector(sections, name) {
+  const result = {};
+  let matched = 0;
+
+  for (const [sectionName, def] of Object.entries(sections || {})) {
+    const variants = def && typeof def === 'object' ? def.variants : null;
+    const key = variants
+      ? Object.keys(variants).find((k) => k.toLowerCase() === String(name).toLowerCase())
+      : undefined;
+    if (key === undefined) {
+      result[sectionName] = def;
+      continue;
+    }
+    matched += 1;
+    result[sectionName] = layerSectionDef(def, variants[key]);
+  }
+
+  return { sections: result, matched };
 }
 
 /**
@@ -237,6 +379,9 @@ function slotsForBranch(component, branchPath) {
 module.exports = {
   normalizeComponent,
   applySectionVariant,
+  layerSectionDef,
+  mergeSectionRecords,
+  applySectionSelector,
   sectionsForBranch,
   slotsForBranch,
   WRAP,

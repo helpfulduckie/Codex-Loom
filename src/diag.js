@@ -103,6 +103,12 @@ const CODES = Object.freeze({
   SECTION_WRAP_UNKNOWN: 'CL0603',
   SECTION_VARIANT_NOT_FOUND: 'CL0604',
 
+  // Component imports (§7.6). CL0605 is reserved for the component-level `branches:`
+  // fan-out, which is Phase 6 Step 2.
+  IMPORT_NOT_FOUND: 'CL0606',
+  IMPORT_CYCLE: 'CL0607',
+  IMPORT_DELETE_UNKNOWN: 'CL0608',
+
   // Placement (§7.4). Raised in `compile.js`, which is the only place that holds an item's
   // targets and the branch's slot set at the same time, so these carry their severity at
   // the call site and stay out of the table below.
@@ -154,6 +160,7 @@ const SEVERITY_BY_CODE = Object.freeze({
   CL0602: SEVERITY.WARN,
   CL0603: SEVERITY.WARN,
   CL0604: SEVERITY.WARN,
+  CL0608: SEVERITY.WARN,
   CL0430: SEVERITY.ERROR,
   CL0431: SEVERITY.ERROR,
   CL0432: SEVERITY.ERROR,

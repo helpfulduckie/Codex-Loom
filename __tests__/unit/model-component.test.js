@@ -12,6 +12,7 @@
 
 const {
   normalizeComponent, applySectionVariant, sectionsForBranch, slotsForBranch, WRAP, DEFAULT_POSITION,
+  layerSectionDef, mergeSectionRecords, applySectionSelector,
 } = require('../../src/model/component');
 const { CODES } = require('../../src/diag');
 
@@ -252,5 +253,170 @@ describe('applySectionVariant text forms', () => {
     const section = base();
     expect(applySectionVariant(section, 'nonsense')).toBe(section);
     expect(applySectionVariant(section, null)).toBe(section);
+  });
+
+  test('a string text is a field op, so §7.6.2\'s appending variant appends', () => {
+    // `dark: {text: '+{ … }'}` is the spec's own worked example and used to install the
+    // literal characters `+{ … }` as the section's whole text. One vocabulary across both
+    // positions a section variant is reached from: branch dispatch here, import selector
+    // through `applySectionSelector`.
+    const section = { ...base(), text: 'Write with weight.' };
+    expect(applySectionVariant(section, { text: '+{Do not soften outcomes.}' }).text)
+      .toEqual(['Write with weight.', 'Do not soften outcomes.']);
+  });
+
+  test('a plain string still replaces, because that is what a non-op string does', () => {
+    const section = { ...base(), text: 'Thriller' };
+    expect(applySectionVariant(section, { text: 'Noir' }).text).toBe('Noir');
+  });
+});
+
+/**
+ * The `imports:` merge (§7.6.3), tested on raw section definitions.
+ *
+ * Raw, because that is the level the merge runs at and the reason it does is the design:
+ * one layering vocabulary applied per import, then `normalizeSection` once on the finished
+ * section. The integration suite proves the chain reaches this code with the right record;
+ * these prove the record comes out right.
+ */
+describe('layerSectionDef', () => {
+  test('a plain string replaces the base text', () => {
+    expect(layerSectionDef({ text: 'old' }, { text: 'new' }).text).toBe('new');
+  });
+
+  test('a field op edits the base text instead of replacing it', () => {
+    // The whole reason the merge is raw: `+{}` has to mean here what it means in a variant
+    // delta, and after normalization the op string is indistinguishable from literal text.
+    // An append yields the two parts, which the emitter joins with a newline — the same
+    // shape `applyFieldOp` produces on an item field, rather than a component-only rule.
+    expect(layerSectionDef({ text: 'A' }, { text: '+{B}' }).text).toEqual(['A', 'B']);
+    expect(layerSectionDef({ text: 'A B' }, { text: '/{B}/{C}' }).text).toBe('A C');
+  });
+
+  test('a mapping text edits one named line and leaves the rest', () => {
+    const merged = layerSectionDef(
+      { text: { pov: 'second person', tone: 'clinical' } },
+      { text: { pov: '+{ always' + ' }', extra: 'new line' } },
+    );
+    expect(merged.text.tone).toBe('clinical');
+    expect(merged.text.pov).toContain('second person');
+    expect(merged.text.extra).toBe('new line');
+  });
+
+  test('a null text drops it', () => {
+    expect(layerSectionDef({ text: 'A' }, { text: null }).text).toBeNull();
+  });
+
+  test('render: merges key by key, so a move keeps the wrapper', () => {
+    const merged = layerSectionDef(
+      { render: { position: 1, wrapper: 'square' } },
+      { render: { position: 4 } },
+    );
+    expect(merged.render).toEqual({ position: 4, wrapper: 'square' });
+  });
+
+  test('variants: merge by name, so a local branches: can reach an imported variant', () => {
+    // §7.6.2's worked example: the project supplies only a dispatch, and the variant it
+    // names lives in the imported section. A replacing `variants:` would delete it.
+    const merged = layerSectionDef(
+      { variants: { dark: { text: 'noir' } } },
+      { branches: { flashback: 'dark' }, variants: { warm: { text: 'gentle' } } },
+    );
+    expect(Object.keys(merged.variants).sort()).toEqual(['dark', 'warm']);
+    expect(merged.branches).toEqual({ flashback: 'dark' });
+  });
+
+  test('a dispatch alone keeps the imported variants untouched', () => {
+    const merged = layerSectionDef(
+      { text: 'weighty', variants: { light: { text: 'airy' } } },
+      { branches: { flashback: 'light' } },
+    );
+    expect(merged.variants.light).toEqual({ text: 'airy' });
+    expect(merged.text).toBe('weighty');
+  });
+
+  test('branches: replaces rather than merging', () => {
+    const merged = layerSectionDef({ branches: { a: 'x' } }, { branches: { b: 'y' } });
+    expect(merged.branches).toEqual({ b: 'y' });
+  });
+
+  test('neither input is mutated, because an imported document is shared', () => {
+    const base = { text: 'A', render: { position: 1 } };
+    layerSectionDef(base, { text: '+{B}', render: { position: 9 } });
+    expect(base).toEqual({ text: 'A', render: { position: 1 } });
+  });
+});
+
+describe('mergeSectionRecords', () => {
+  const base = () => ({
+    genre: { text: 'Thriller' },
+    cast: { slot: true },
+  });
+
+  test('an unmatched local name is appended after everything inherited', () => {
+    const merged = mergeSectionRecords(base(), { institute: { text: 'Clinical.' } });
+    expect(Object.keys(merged)).toEqual(['genre', 'cast', 'institute']);
+  });
+
+  test('a matched local name layers onto the inherited definition', () => {
+    const merged = mergeSectionRecords(base(), { genre: { text: '+{Noir}' } });
+    expect(merged.genre.text).toEqual(['Thriller', 'Noir']);
+    expect(Object.keys(merged)).toEqual(['genre', 'cast']);
+  });
+
+  test('the base spelling wins on a case-insensitive match', () => {
+    const merged = mergeSectionRecords(base(), { Genre: { text: 'Noir' } });
+    expect(Object.keys(merged)).toEqual(['genre', 'cast']);
+    expect(merged.genre.text).toBe('Noir');
+  });
+
+  test('~ deletes an inherited section and says nothing', () => {
+    const { seen, onWarn } = collector();
+    const merged = mergeSectionRecords(base(), { cast: null }, onWarn);
+    expect(Object.keys(merged)).toEqual(['genre']);
+    expect(seen).toEqual([]);
+  });
+
+  test('~ on a name nothing provided is CL0608', () => {
+    const { codes: seenCodes, onWarn } = collector();
+    mergeSectionRecords(base(), { nosuch: null }, onWarn);
+    expect(seenCodes()).toEqual([CODES.IMPORT_DELETE_UNKNOWN]);
+  });
+
+  test('the base record is not mutated', () => {
+    const original = base();
+    mergeSectionRecords(original, { genre: { text: 'Noir' }, cast: null });
+    expect(Object.keys(original)).toEqual(['genre', 'cast']);
+    expect(original.genre.text).toBe('Thriller');
+  });
+});
+
+describe('applySectionSelector', () => {
+  const sections = () => ({
+    genre: { text: 'Thriller', variants: { dark: { text: 'Noir' } } },
+    house: { text: 'Quiet.' },
+    cast: { slot: true },
+  });
+
+  test('applies to every section defining the name and counts them', () => {
+    const applied = applySectionSelector(sections(), 'dark');
+    expect(applied.matched).toBe(1);
+    expect(applied.sections.genre.text).toBe('Noir');
+  });
+
+  test('leaves the sections that do not define it exactly as they were', () => {
+    const applied = applySectionSelector(sections(), 'dark');
+    expect(applied.sections.house).toEqual({ text: 'Quiet.' });
+    expect(applied.sections.cast).toEqual({ slot: true });
+  });
+
+  test('matched is zero when no section defines the name, which is what CL0326 reads', () => {
+    // The count is the entire safety mechanism behind arity-N silence: without it a
+    // misspelled selector applies to nothing and reports nothing.
+    expect(applySectionSelector(sections(), 'drak').matched).toBe(0);
+  });
+
+  test('the lookup is case-insensitive, like every other name in the language', () => {
+    expect(applySectionSelector(sections(), 'DARK').matched).toBe(1);
   });
 });

@@ -100,17 +100,31 @@ const COMPONENT_SCHEMA = {
     // The `ain:`/`cards:` split was a render-target concept wearing dispatch clothing and
     // becomes `render.storyCards` in Phase 6.
 
-    // §7.6 and §7.8, both Phase 6. Declared so writing one is a clear "not yet" rather
-    // than a confusing unknown-key ERROR — the same courtesy the item surface extends to
-    // the render targets.
-    imports: { type: TYPES.SEQ, of: ANY, note: 'Phase 6' },
-    render: { type: TYPES.MAP, keys: { component: ANY, storyCards: ANY }, note: 'Phase 6' },
+    /**
+     * §7.6 — an ordered list of components to pull in before the local `sections:` layer.
+     *
+     * `importVariants:` is an open namespace because it is a *selector*, not a declaration:
+     * the names are looked up in each imported section's own `variants:`, so validating
+     * them here would report every variant name an author chose as an unknown key. The
+     * spelling matches items exactly, and it means the same thing in both places — select
+     * from the thing being pulled in, unconditionally, before any branch dispatch (§7.6.2).
+     */
+    imports: {
+      type: TYPES.SEQ,
+      of: { type: TYPES.MAP, keys: { from: STRING, importVariants: ANY } },
+    },
+
+    // §7.8, moved to Phase 12 on 2026-08-20 with the `--profile` build profile: two of its
+    // three use cases are verbosity tiers, and a verbosity tier is undefined until something
+    // says what one is. Declared so writing one is a clear "not yet" rather than a confusing
+    // unknown-key ERROR — the same courtesy the item surface extends to the render targets.
+    render: { type: TYPES.MAP, keys: { component: ANY, storyCards: ANY }, note: 'Phase 12' },
 
     // v3's AI Instructions story card (§7.8). Superseded by `render.storyCards` when
-    // Phase 6 lands; declared as an open namespace until then, because its key surface is
+    // Phase 12 lands; declared as an open namespace until then, because its key surface is
     // the story-card surface and pinning a copy of it here would be a second declaration
     // to keep in step with the first.
-    card: { type: TYPES.ANY, note: 'Phase 6' },
+    card: { type: TYPES.ANY, note: 'Phase 12' },
   },
 };
 

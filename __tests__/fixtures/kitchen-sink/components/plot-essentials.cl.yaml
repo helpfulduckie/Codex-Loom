@@ -53,6 +53,10 @@ sections:
     branches:
       flashback: ~
 
+  # ── `~` deleting a section an import provided (§7.6.3) ─────────────────────
+  # `legalese` exists only in the imported base. Deleting one no import provided is CL0608.
+  legalese: ~
+
   # ── A slot that wraps its occupants as one collection ──────────────────────
   party:
     slot: true
@@ -66,10 +70,17 @@ sections:
 # declares them. A section dispatches its own variants through its own `branches:` — see
 # `rules:` above — and the document layer that used to do it a second way is gone.
 #
-# §7.6 and §7.8 — declared, noted, not yet read.
+# §7.6 — one import, exercising all three things a local file does to what it pulls in:
+# `genre` above overrides an imported section by name, `importVariants: [terse]` selects a
+# variant from every imported section that defines one, and `legalese: ~` deletes an
+# inherited section outright. The selector is silent on the sections that do not define
+# `terse`, which is most of them and is the point (§7.6.2a).
 imports:
-  - from: '{%components}/plot-essentials.cl.yaml'
+  - from: '{%components}/base-plot-essentials.cl.yaml'
+    importVariants: [terse]
 
+# §7.8 — declared, noted, and Phase 12 rather than Phase 6: two of its three use cases are
+# verbosity tiers, and a verbosity tier is undefined until something says what one is.
 render:
   component:
     variant: terse

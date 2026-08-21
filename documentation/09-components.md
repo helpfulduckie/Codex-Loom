@@ -259,6 +259,55 @@ sections:
 
 **Gating a slot off is a legitimate way to drop its whole contents from one branch**, and does not require editing every item that targets it. It becomes an ERROR only when it would make an item vanish from *every* output it declared — see `CL0610` in [11-diagnostics.md](11-diagnostics.md).
 
+### Sharing a component with `imports:`
+
+Every component can pull in another with `imports:`, so one document can be written once and used by many projects. This is what `imports:` exists for: a single AI Instructions body currently sits in 67 places across the scenario corpus, reached by copy or by absolute path, and neither of those supports a variant, a branch dispatch, or a one-line override.
+
+```yaml
+# shared/ai-instructions.cl.yaml — the canonical document
+sections:
+  narrativeTone:
+    heading: Narrative Tone
+    text: Write with psychological weight.
+    render: {position: 1}
+    variants:
+      dark: {text: '+{ Do not soften outcomes. }'}
+
+  writingRules:
+    heading: Writing Rules
+    render: {position: 2, bullet: true}
+    text:
+      pov: Second person, present tense.
+      tone: Clinical observation.
+```
+
+```yaml
+# the project's own ai-instructions.cl.yaml
+imports:
+  - from: '{%components}/ai-instructions.cl.yaml'
+    importVariants: [dark]
+
+sections:
+  writingRules:                       # override by name — one line, not the block
+    text:
+      pov: '+{ Never break the second person. }'
+  institute:                          # a section the import does not provide
+    heading: The Institute
+    text: Conditioning scenes are clinical.
+    render: {position: 5}
+  legalese: ~                         # delete an inherited section
+```
+
+**`imports:` is a list, applied in order**, so components compose: a house-style base, then a world layer, then the project's own deltas. A later import wins over an earlier one on the same section name, and the local `sections:` win over all of them.
+
+**Local sections layer rather than replace.** A name the import provided is merged field by field with the full operation vocabulary — `+{}`, `-{}`, `/{}/{}` — so an override can edit one named line of `text:` without restating the block, move a section with `render.position` while keeping its wrapper, or add a `branches:` dispatch to a variant the *imported* section defines. A name no import provided is appended as a new section. `~` deletes an inherited one; deleting a name nothing provided is `CL0608`.
+
+**Slots merge by name.** An imported component contributes its slots, wrappers, headings and positions, and the local file may add slots, override a wrapper or position, or delete an inherited slot with `~`. Because membership lives on items rather than in the component, an imported component describes shape only and is genuinely project-independent — an item routes into `cast` without the shared file knowing anything about that item.
+
+**`importVariants:` is a selector, not a declaration.** The name is looked up in each imported section's own `variants:`, and applied to every section that defines it. Sections that do not are silently unaffected — most of them will be, which is the point. A selector matching *no* section at all is `CL0326`, because a misspelling would otherwise apply to nothing and say nothing.
+
+**Paths resolve against the project base**, the same base `include:` and every `components:` entry use, and `{%variables}` expand first — including canon names, which are variables. A `from:` naming no file is `CL0606`; an import chain that loops is `CL0607` and the offending import is skipped rather than followed.
+
 ### Full example
 
 ```yaml
@@ -410,7 +459,7 @@ sections:
 |---|---|
 | `branches: {subject: intimate}` with `variants: {intimate: {apply: [close]}}` | `branches: {subject: close}` on each section that defines a `close` variant |
 | `variants: {detached: {sections: {rules: ~}}}` | `branches: {detached: ~}` on the `rules` section |
-| `branches: {x: {ain: …, cards: …}}` | `render.storyCards` (§7.8, Phase 6) |
+| `branches: {x: {ain: …, cards: …}}` | `render.storyCards` (§7.8, Phase 12) |
 
 The two dispatches disagreed, which is the other half of why only one survives: `~` on an item or a section excludes it, while `~` on an AI Instructions document meant "apply no variants".
 
@@ -431,7 +480,7 @@ sections:
         text: Stay inside the subject's head; report sensation before thought.
 ```
 
-A `card:` block is carried through but not yet read — §7.8, Phase 6. Author's Note produces no story card.
+A `card:` block is carried through but not yet read — §7.8, Phase 12. Author's Note produces no story card.
 
 ---
 
