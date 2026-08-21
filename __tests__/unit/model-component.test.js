@@ -269,6 +269,43 @@ describe('applySectionVariant text forms', () => {
     const section = { ...base(), text: 'Thriller' };
     expect(applySectionVariant(section, { text: 'Noir' }).text).toBe('Noir');
   });
+
+  /**
+   * Where literal text stops and an operation starts.
+   *
+   * Routing a string `text:` through `applyFieldOp` is the one place Phase 6 Step 1 changed
+   * behavior that already shipped, and the input it changes is a variant whose text is
+   * *entirely* `+{…}`, `-{…}` or `/{…}/{…}`. An author who meant those characters literally
+   * now gets an append. Nothing can distinguish the two intents, so what is pinned here is
+   * the boundary rather than the intent: the pattern is anchored at both ends, so anything
+   * with content outside the braces is text and stays text.
+   *
+   * The unpinnable case is a whole-string `+{…}` meant literally. It has no test because it
+   * has no distinguishing feature — it is recorded in the Phase 6 notes as the thing to look
+   * for if a converted component's bytes move during Step 5.
+   */
+  describe('the operation boundary on a string text', () => {
+    const withText = (text) => ({ ...base(), text });
+
+    test('a leading +{ that does not close at the end is literal text', () => {
+      expect(applySectionVariant(withText('A'), { text: '+{B} and more' }).text)
+        .toBe('+{B} and more');
+    });
+
+    test('braces that do not open the string are literal text', () => {
+      expect(applySectionVariant(withText('A'), { text: 'Rule: +{B}' }).text)
+        .toBe('Rule: +{B}');
+    });
+
+    test('a bare brace pair with no operator is literal text', () => {
+      expect(applySectionVariant(withText('A'), { text: '{B}' }).text).toBe('{B}');
+    });
+
+    test('a whole-string +{...} is an append, and this is the case with no escape', () => {
+      // Anchored at both ends, so this is the exact shape an author cannot write literally.
+      expect(applySectionVariant(withText('A'), { text: '+{B}' }).text).toEqual(['A', 'B']);
+    });
+  });
 });
 
 /**
@@ -313,6 +350,19 @@ describe('layerSectionDef', () => {
       { render: { position: 4 } },
     );
     expect(merged.render).toEqual({ position: 4, wrapper: 'square' });
+  });
+
+  test('variants: merge case-insensitively, base spelling winning', () => {
+    // `variants:` is an open namespace, so `Dark` and `dark` both pass validation. Merging
+    // by exact key leaves two entries, and `sectionsForBranch` resolves a dispatch with a
+    // case-insensitive `find` that takes the first — the imported one. The project's
+    // override would be discarded silently, which is the failure this pins.
+    const merged = layerSectionDef(
+      { variants: { Dark: { text: 'noir' } } },
+      { variants: { dark: { text: 'darker' } } },
+    );
+    expect(Object.keys(merged.variants)).toEqual(['Dark']);
+    expect(merged.variants.Dark).toEqual({ text: 'darker' });
   });
 
   test('variants: merge by name, so a local branches: can reach an imported variant', () => {

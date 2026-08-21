@@ -23,6 +23,7 @@
 
 const { resolveBranchSpec } = require('./branches');
 const { applyFieldOp } = require('./fieldops');
+const { findKey, setCI } = require('../util');
 const { CODES } = require('../diag');
 
 /** How a slot's `wrapper:` applies to what lands in it. */
@@ -225,6 +226,14 @@ function applySectionVariant(section, delta) {
  * §7.6.2's worked example needs: a project overrides `narrativeTone` with nothing but a
  * `branches:` dispatch to `lighthearted`, and `lighthearted` is defined in the *imported*
  * section — a replacing `variants:` would delete the variant the dispatch just named.
+ *
+ * **The `variants:` merge is case-insensitive with the base spelling winning**, which every
+ * other name in this language already is and which a plain `Object.assign` is not.
+ * `variants:` is an open namespace — the schema cannot validate names an author invents —
+ * so an imported `Dark:` and a local `dark:` both pass validation, and merging them by
+ * exact key would leave two entries. `sectionsForBranch` then resolves the dispatch with a
+ * case-insensitive `find`, taking whichever comes first in key order: the imported one. The
+ * project's override would be discarded with nothing reported.
  */
 function layerSectionDef(base, over) {
   const from = (base && typeof base === 'object' && !Array.isArray(base)) ? base : {};
@@ -239,7 +248,12 @@ function layerSectionDef(base, over) {
     } else if (key === 'render') {
       result.render = Object.assign({}, from.render || {}, value || {});
     } else if (key === 'variants') {
-      result.variants = Object.assign({}, from.variants || {}, value || {});
+      const merged = { ...(from.variants || {}) };
+      for (const [name, delta] of Object.entries(value || {})) {
+        const existing = findKey(merged, name);
+        if (existing !== null) merged[existing] = delta; else setCI(merged, name, delta);
+      }
+      result.variants = merged;
     } else {
       result[key] = value;
     }
