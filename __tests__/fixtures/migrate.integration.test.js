@@ -31,9 +31,20 @@ const YAML = require('yaml');
 
 const { compile } = require('../../src/compile');
 const { migrateProjectFully, migratePlaceholders } = require('../../src/migrate');
-const { PROJECTS, OUTPUT_SUBDIR, BASELINE_SUBDIR } = require('../../goldenFixtures/projects');
 
 const GOLDEN_DIR = path.resolve(__dirname, '..', '..', 'goldenFixtures');
+
+/**
+ * The fixtures are a separate private repo cloned into the gitignored `goldenFixtures/` —
+ * see `.gitignore`. This file migrates the real v3 sources, so it has nothing to do without
+ * them; the same guard and reasoning as `golden.test.js`, which carries the long version.
+ */
+const HAVE_FIXTURES = fs.existsSync(path.join(GOLDEN_DIR, 'projects.js'));
+
+const { PROJECTS, OUTPUT_SUBDIR, BASELINE_SUBDIR } = HAVE_FIXTURES
+  // eslint-disable-next-line global-require
+  ? require('../../goldenFixtures/projects')
+  : { PROJECTS: [{ name: 'goldenFixtures/ is not cloned — see .gitignore', dir: '' }], OUTPUT_SUBDIR: '', BASELINE_SUBDIR: '' };
 const LOOM_SUBDIR = 'Loom';
 
 /** Every markdown file under `dir`, as forward-slashed relative paths. */
@@ -70,7 +81,7 @@ function migrateAndCompile(tmpDir, project) {
   return { outputDir: path.join(tmpDir, project.dir, OUTPUT_SUBDIR), notes };
 }
 
-describe('migrating a real v3 project reproduces the hand conversion\'s output', () => {
+(HAVE_FIXTURES ? describe : describe.skip)('migrating a real v3 project reproduces the hand conversion\'s output', () => {
   let tmpDir;
   const results = new Map();
 

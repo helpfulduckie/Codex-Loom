@@ -380,12 +380,17 @@ describe('maskFences', () => {
   });
 });
 
-describe('against real compiled fixture output', () => {
-  const FIXTURE = path.resolve(
-    __dirname,
-    '../../goldenFixtures/Esudia/The Institute/v3/Branches/Alpha-Omega/Branches/Aness'
-      + '/Branches/Malcolm/Branches/hatesYou/Story Cards/Character/Character.md',
-  );
+// This is the one place a unit test reads a real compiled fixture rather than a literal
+// built in the test. The fixtures are a separate private repo cloned into the gitignored
+// goldenFixtures/ (see .gitignore), so these two skip when it is absent — the parser's
+// behavior against hand-built input is covered by the describes above.
+const FIXTURE = path.resolve(
+  __dirname,
+  '../../goldenFixtures/Esudia/The Institute/v3/Branches/Alpha-Omega/Branches/Aness'
+    + '/Branches/Malcolm/Branches/hatesYou/Story Cards/Character/Character.md',
+);
+
+(fs.existsSync(FIXTURE) ? describe : describe.skip)('against real compiled fixture output', () => {
 
   test('parses a real v3 story-card file', () => {
     const cards = parseCards(fs.readFileSync(FIXTURE, 'utf8'), { type: 'Character' });
