@@ -103,4 +103,26 @@ describe('pathological fixture', () => {
   test('config schema violations abort the load', () => {
     expect(diagnoseProject('schema')).toMatchSnapshot();
   });
+
+  /**
+   * The snapshot-mismatch project (Phase 7 Step 4): load-clean, like placement/, so both
+   * WARNs fire in the same compile. `alpha` has no section in the committed manifest at
+   * all (CL0113); `beta`'s recorded file matches what's frozen, but the frozen copy also
+   * carries a file the manifest never recorded (CL0114). A "stale manifest" project was
+   * tried first and dropped — drift is console-only and never reaches the diagnostics bus,
+   * so it would have contributed nothing here. See ../README.md.
+   */
+  test('a committed manifest that disagrees with the config and the disk', () => {
+    expect(diagnoseProject('snapshot-mismatch')).toMatchSnapshot();
+  });
+
+  /**
+   * The snapshot-corrupt project: a frozen file hand-edited since the manifest was
+   * written. CL0115 is the one snapshot code that is an ERROR, and checkDrift runs before
+   * reportLoadDiagnostics throws — so, like schema/, this project aborts before anything
+   * downstream runs.
+   */
+  test('a hand-edited snapshot file aborts the load', () => {
+    expect(diagnoseProject('snapshot-corrupt')).toMatchSnapshot();
+  });
 });

@@ -70,6 +70,11 @@ guard still recognizes the sigil so a half-migrated project fails clearly.)
 | Code | Severity | Meaning |
 |---|---|---|
 | `CL0110` | ERROR | `compile.yaml` is not a mapping of configuration keys. |
+| `CL0111` | WARN | `structure.input.snapshot` names a directory `--snapshot` never populated. |
+| `CL0112` | WARN | `snapshot/manifest.json` exists but is not valid JSON, or not the expected shape. |
+| `CL0113` | WARN | A `structure.input.library`/`templates` entry the config declares has no section in an otherwise-valid manifest. |
+| `CL0114` | WARN | A file under `snapshot/<name>/` on disk has no entry in the manifest. |
+| `CL0115` | ERROR | A file under `snapshot/<name>/` no longer matches its own manifest-recorded hash. |
 | `CL0120` | WARN | A declared input path does not exist on disk. |
 | `CL0130` | WARN | An `include:` path does not exist. |
 | `CL0131` | ERROR | The same file was included more than once. |
@@ -77,6 +82,26 @@ guard still recognizes the sigil so a half-migrated project fails clearly.)
 | `CL0141` | ERROR | Duplicate item id. |
 | `CL0142` | WARN | An item declares more than one `v:` alias; they are merged. |
 | `CL0143` | WARN | Duplicate Codex overlay for one import target; the first is kept. |
+
+### CL0111–CL0115 in detail
+
+Five conditions from `--snapshot`'s freeze (§11.2), raised by `checkDrift` on every compile
+that has `structure.input.snapshot` set — never by a project that leaves the key unset,
+which is every project until it opts in. All five read `snapshot/manifest.json`; none of
+them read the live library, because the *drift* line — a library file that changed since
+the last sync — is deliberately informational only and never reaches this bus (§Decision 4
+of the Phase 7 plan: a freeze whose drift blocks a build is a dependency lock with worse
+ergonomics, not a freeze).
+
+`CL0115` is the one ERROR in the band, because it is not drift — it is the *frozen copy
+itself* disagreeing with what was recorded about it, which only a hand edit after
+`--snapshot` produces. A stale snapshot is expected and comfortable; a corrupted one means
+the freeze can no longer answer the question it exists to answer.
+
+`CL0113` and `CL0114` are mutually exclusive per entry: a config-declared name with no
+manifest section (`CL0113`) is checked, and skipped, before the file-level comparison that
+would raise `CL0114` ever runs for that same entry — there is nothing to compare a missing
+section against.
 
 ### CL02xx — schema
 
@@ -400,7 +425,8 @@ exactly at the cap warns rather than erroring — the cap is inclusive.
 | `CL0510` | ERROR | A referenced variable is not declared anywhere. |
 | `CL0511` | ERROR | Variables form a reference cycle; every key in the loop is named. |
 | `CL0520` | ERROR | A branch-scoped variable was used where only root variables resolve. |
-| `CL0521` | ERROR | A canon name collides with a declared variable. |
+| `CL0521` | ERROR | A library name collides with a declared variable. |
+| `CL0522` | WARN | A component reads from outside the project, and no `structure.input.library` entry covers it. |
 | `CL0530` | WARN | A placeholder is unbound with `~` but was never inherited at that node. |
 | `CL0531` | ERROR | Placeholder questions form a reference cycle; every key in the loop is named. |
 | `CL0532` | ERROR | A `%key%` reaching compiled output is not declared on that branch. |
@@ -511,9 +537,18 @@ It is scoped to placeholders today. §6.4 gives `~` the same meaning for variabl
 scripts and lint packs, none of which implement it yet — a `~` there sets the key to null
 instead of removing it, so there is nothing for this check to say about them.
 
-`CL0521` exists because canon names are auto-exposed as variables (§6.1), so the two share
+`CL0521` exists because library names are auto-exposed as variables (§6.1), so the two share
 one namespace. A collision is an ERROR rather than a silent precedence rule: there is no
 answer to "which one wins" that an author could predict.
+
+`CL0522` exists because `--snapshot` freezes declared library entries, not resolved
+dependencies (Phase 7 §11.2 Watch). A shared component reached through a plain `variables:`
+entry rather than a library entry compiles and renders correctly and freezes not at all —
+nothing else notices, because the file never appears anywhere `--snapshot` looks. It fires
+once a compile has actually read the file (component `imports:` chains included, not only a
+project's top-level `components:` specs) and the file resolves outside the project base
+without a covering entry; a component the project authors itself is never in scope for this
+check, however it is written.
 
 ### CL0520 in detail
 

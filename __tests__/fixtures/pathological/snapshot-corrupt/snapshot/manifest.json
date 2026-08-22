@@ -1,0 +1,12 @@
+{
+  "manifestVersion": 1,
+  "syncedAt": "2026-08-01T00:00:00.000Z",
+  "library": {
+    "main": {
+      "source": "(committed fixture manifest — source is never compared, only hashes are)",
+      "files": {
+        "thing.yaml": "sha256:310872349b2b05dd5e1fff9c228bbcf4d3adfec24717b567b5dcec148fab1443"
+      }
+    }
+  }
+}

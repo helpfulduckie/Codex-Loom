@@ -32,6 +32,7 @@ const {
   renderSectionedComponent, writeSectionedComponent,
 } = require('./emit/components');
 const { syncLibrary, checkDrift } = require('./snapshot');
+const { CODES: LOAD_CODES, isOutOfBase, normalize } = require('./config/load');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1450,6 +1451,13 @@ function compileRun(configPath, options, buses) {
   // cache is keyed by path — a branch-varying `from:` would make one cache key stand for two
   // documents.
   const sectionedDocs = new Map();
+  // Every resolved path any `loadSectioned` call reads, *including* what its `imports:`
+  // chain pulls in — unlike `sectionedDocs`, which is keyed by top-level spec only and
+  // says nothing about a file reached solely through `imports:`. This is the ledger the
+  // dependency-coverage check (below) actually needs: the gap it exists to catch is a
+  // shared component reached through a plain variable rather than a `components:` spec,
+  // which by definition never appears as a `sectionedDocs` key.
+  const dependencyLedger = new Set();
   const rootVariables = config._variables || config.variables || null;
   const loadSectioned = (spec, descriptor) => {
     if (!sectionedDocs.has(spec)) {
@@ -1458,6 +1466,7 @@ function compileRun(configPath, options, buses) {
         label: descriptor.label,
         variables: rootVariables,
         base: config._base,
+        dependencyLedger,
       });
       // §7.7's `metadata:` is declared on every component and emitted by the ones whose
       // output has somewhere to put frontmatter — Description today. Reported on the cache
@@ -1859,6 +1868,34 @@ function compileRun(configPath, options, buses) {
     };
     fs.writeFileSync(manifestPath, JSON.stringify(manifestData, null, 2), 'utf8');
     if (verbose) console.log(`  OK: Library manifest → ${manifestPath}`);
+  }
+
+  // Dependency-coverage check (Phase 7 Step 4, floated out of Step 0): `dependencyLedger` is
+  // every resolved component path this compile actually read, `imports:` chains included
+  // (built above, in `loadSectioned`/`loadComponentDocument`). A component that lives
+  // outside the project but under no `structure.input.library` entry compiles and renders
+  // correctly today and is invisible to `--snapshot` — the freeze walks declared entries,
+  // not resolved dependencies, so nothing else notices the gap. Checked once, here, rather
+  // than per leaf: the ledger is already deduplicated by resolved path.
+  const libraryDirs = [...config._resolvedLibrarySource.values()];
+  for (const specPath of dependencyLedger) {
+    if (!isOutOfBase(specPath, config._base)) continue;
+    const norm = normalize(specPath);
+    const covered = libraryDirs.some((dir) => {
+      const normDir = normalize(dir);
+      return norm === normDir || norm.startsWith(`${normDir}/`);
+    });
+    if (!covered) {
+      compileDiagnostics.warn(
+        LOAD_CODES.LIBRARY_DEPENDENCY_UNCOVERED,
+        `This component is read from outside the project (${specPath}), and no `
+        + 'structure.input.library entry covers it — --snapshot will not freeze it, and '
+        + 'a live edit to this file changes every project that reaches it. Declare its '
+        + 'directory as a library entry so the freeze and the {%name} it is reached '
+        + 'through are the same thing.',
+        { file: specPath },
+      );
+    }
   }
 
   // Cross-branch review reports — emitted from the per-leaf data captured above.

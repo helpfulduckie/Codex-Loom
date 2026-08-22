@@ -1,0 +1,9 @@
+# The live source. Not read by checkDrift's corruption check at all — that check only
+# compares snapshot/main/thing.yaml against its own manifest-recorded hash.
+- id: Main Thing
+  name: Main Thing
+  aid:
+    type: Character
+    triggers: [MainThing]
+  body:
+    Tagline: The live copy — irrelevant to CL0115, which never reads it.

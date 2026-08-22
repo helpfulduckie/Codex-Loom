@@ -1,0 +1,9 @@
+# Never reached — CL0115 is an ERROR and aborts the compile before item loading runs.
+# Kept valid anyway so the project would still compile cleanly if that ever changed.
+- id: Placeholder Item
+  name: Placeholder Item
+  aid:
+    type: Character
+    triggers: [Placeholder]
+  body:
+    Tagline: Exists so the items path resolves.

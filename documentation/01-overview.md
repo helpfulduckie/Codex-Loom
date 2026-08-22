@@ -259,3 +259,4 @@ Each is covered in its own reference document.
 - [Pronoun System](08-pronouns.md)
 - [Components (PE, AIN, AN, Opening)](09-components.md)
 - [Errors & Warnings](10-errors-and-warnings.md)
+- [The Library Snapshot](12-snapshot.md)

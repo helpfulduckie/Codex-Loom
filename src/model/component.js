@@ -121,8 +121,17 @@ function normalizeSection(name, def, index, onWarn) {
   // Nothing to render and nothing to fill: the section is a no-op the author did not mean
   // to write. A heading alone still renders, so it does not count as empty.
   if (!isSlot && !hasText && !hasHeading) {
+    // `__importedFrom` is set by `resolveImports` (loader/component.js) on a section
+    // contributed by `imports:` that no local override has touched — see that module for
+    // why. Its presence here means this is the *second* of Decision 5's two reports: the
+    // first already fired against the imported file itself, when it was normalized alone.
+    const importedFrom = typeof raw.__importedFrom === 'string' ? raw.__importedFrom : null;
     onWarn(CODES.SECTION_RENDERS_NOTHING,
-      `section "${name}" has no text, no heading and is not a slot, so it renders nothing.`);
+      `section "${name}" has no text, no heading and is not a slot, so it renders nothing.`
+      + (importedFrom
+        ? ` (inherited from ${importedFrom}, which already reports this for its own copy of `
+          + 'the section — fix it there; this is the same section, merged.)'
+        : ''));
   }
 
   let wrap = render.wrap === undefined ? WRAP.EACH : String(render.wrap).toLowerCase();

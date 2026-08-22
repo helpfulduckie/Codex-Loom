@@ -1,5 +1,17 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`pathological fixture a committed manifest that disagrees with the config and the disk 1`] = `
+"WARN CL0113
+  Library "alpha" has no entry in manifest.json.
+WARN CL0114
+  Library "beta": snapshot/beta/extra.yaml has no entry in the manifest."
+`;
+
+exports[`pathological fixture a hand-edited snapshot file aborts the load 1`] = `
+"ERROR CL0115
+  Library "main": snapshot/main/thing.yaml does not match its manifest hash — it was hand-edited since the last --snapshot."
+`;
+
 exports[`pathological fixture config schema violations abort the load 1`] = `
 "ERROR CL0201 compile.cl.yaml
   Unknown key "report" under "structure".

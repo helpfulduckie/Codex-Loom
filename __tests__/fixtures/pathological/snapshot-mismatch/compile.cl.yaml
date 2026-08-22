@@ -1,0 +1,35 @@
+# The pathological fixture, snapshot layer — a project whose committed manifest disagrees
+# with its committed snapshot, in the two ways a manifest can disagree (§11.2, Phase 7).
+#
+# Split from placement/ and schema/ for the same reason they split from each other: this
+# project's mistakes live in `snapshot/manifest.json`, not in items or in the config
+# itself, and compile-clean the way placement/ does — checkDrift's WARNs don't abort a
+# compile. A "stale manifest" project was tried first and dropped: drift (a live library
+# file changed since the last sync) is console-only and never reaches the diagnostics bus
+# (src/snapshot.js), so a pathological project built around it would contribute zero rows
+# to this snapshot. CL0113 and CL0114 are real diagnostics about a manifest that disagrees
+# with the config or the disk, and both are exercised here instead.
+#
+# Every mistake here is deliberate. Nothing in this project should be copied as an example.
+
+version: 4
+title: Pathological — Snapshot (manifest mismatch)
+
+variables:
+  here: .
+
+structure:
+  input:
+    items:
+      - '{%here}/Codex'
+    templates:
+      - '{%here}/templates'
+    library:
+      # `alpha` has no section at all in the committed manifest.json — CL0113.
+      alpha: '{%here}/canon/alpha'
+      # `beta` has a section, and its recorded file matches what's on disk — no drift, no
+      # corruption — but `snapshot/beta/` also carries `extra.yaml`, which the manifest
+      # never recorded. CL0114.
+      beta: '{%here}/canon/beta'
+    snapshot: '{%here}/snapshot'
+  output: './out'

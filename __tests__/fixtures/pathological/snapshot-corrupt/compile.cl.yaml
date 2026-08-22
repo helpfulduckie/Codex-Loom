@@ -1,0 +1,26 @@
+# The pathological fixture, snapshot-corruption layer — a project whose committed frozen
+# copy no longer matches its own committed manifest (§11.2, Phase 7).
+#
+# Split from snapshot-mismatch/ for the same reason schema/ splits from placement/: the
+# layers abort differently. CL0115 is the one snapshot code that is an ERROR — a
+# hand-edited file under snapshot/<name>/ since the last --snapshot — and checkDrift runs
+# before reportLoadDiagnostics throws, so this project's compile aborts before anything is
+# written. Putting this in the same project as snapshot-mismatch/'s WARNs would mean the
+# ERROR fired first and neither CL0113 nor CL0114 was ever reached.
+#
+# Every mistake here is deliberate. Nothing in this project should be copied as an example.
+
+version: 4
+title: Pathological — Snapshot (corrupted)
+
+variables:
+  here: .
+
+structure:
+  input:
+    items:
+      - '{%here}/Codex'
+    library:
+      main: '{%here}/canon/main'
+    snapshot: '{%here}/snapshot'
+  output: './out'

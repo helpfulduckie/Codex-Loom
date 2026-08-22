@@ -43,7 +43,16 @@ const { CODES, busWarner } = require('../diag');
  * someone holding a file that worked yesterday.
  */
 function loadComponentDocument(spec, options = {}) {
-  const { diagnostics, label = 'component', variables = null, base = null, stack = [] } = options;
+  const {
+    diagnostics, label = 'component', variables = null, base = null, stack = [],
+    // Every resolved path this call (and everything it recurses into via `imports:`)
+    // actually reads, for a caller that needs the *full* dependency set rather than just
+    // the top-level spec — e.g. the dependency-coverage check (§11.2 Watch, Phase 7 Step
+    // 4), which cannot tell a shared component reached through a plain variable from one
+    // reached through a library entry by looking at `components:` alone, because the gap
+    // it exists to catch is precisely a file `imports:` pulls in from outside both.
+    dependencyLedger = null,
+  } = options;
 
   if (!spec || typeof spec !== 'string') return null;
   if (!fs.existsSync(spec)) {
@@ -52,6 +61,8 @@ function loadComponentDocument(spec, options = {}) {
     else console.warn(`  WARN: ${message}`);
     return null;
   }
+
+  if (dependencyLedger) dependencyLedger.add(path.resolve(spec));
 
   const { value: doc, sourceMap } = loadYamlDocument(spec);
   if (doc === null || doc === undefined) return null;
@@ -88,7 +99,7 @@ function loadComponentDocument(spec, options = {}) {
   // `normalizeComponent` is one finished record and its checks run once on the merged
   // result rather than once per partial override.
   const inherited = resolveImports(doc, spec, {
-    diagnostics, label, variables, base, stack, onWarn,
+    diagnostics, label, variables, base, stack, onWarn, dependencyLedger,
   });
   const sections = inherited === null
     ? (doc.sections || {})
@@ -148,7 +159,7 @@ function loadComponentDocument(spec, options = {}) {
  * whose message names neither file.
  */
 function resolveImports(doc, spec, options) {
-  const { diagnostics, label, variables, base, stack, onWarn } = options;
+  const { diagnostics, label, variables, base, stack, onWarn, dependencyLedger } = options;
   const entries = Array.isArray(doc.imports) ? doc.imports : [];
   if (entries.length === 0) return null;
 
@@ -182,11 +193,11 @@ function resolveImports(doc, spec, options) {
     }
 
     const imported = loadComponentDocument(resolved, {
-      diagnostics, label, variables, base, stack: chain,
+      diagnostics, label, variables, base, stack: chain, dependencyLedger,
     });
     if (!imported) continue;
 
-    let contributed = imported.rawSections;
+    let contributed = tagSectionOrigins(imported.rawSections, path.basename(resolved));
     for (const name of parseSelectorList(entry.importVariants)) {
       const applied = applySectionSelector(contributed, name);
       contributed = applied.sections;
@@ -206,6 +217,32 @@ function resolveImports(doc, spec, options) {
   }
 
   return sections;
+}
+
+/**
+ * Mark every raw section def with the basename of the file it was imported from, unless a
+ * closer import already tagged it (Decision 5, Phase 7 Step 4).
+ *
+ * `normalizeSection` fires `CL0602` twice for one broken imported section — once here, when
+ * `imported`'s own `normalizeComponent` call runs on it alone, and once more in the importer,
+ * when the merged document is normalized. The first report already names the right file (it
+ * *is* that file's own load); the second, without this tag, repeats the identical message
+ * against the importer instead, which reads as a duplicate rather than as "this is inherited,
+ * go fix it over there." The tag rides through `layerSectionDef`'s `{...from}` copy and
+ * `resolveSectionSources`' `{...def}` copies untouched, because neither ever assigns this key
+ * — it only stops surviving where a local override actually replaces the section's content,
+ * which is exactly when the second report would no longer be about the imported copy anyway.
+ */
+function tagSectionOrigins(sections, fileBasename) {
+  const out = {};
+  for (const [name, def] of Object.entries(sections || {})) {
+    if (def && typeof def === 'object' && !Array.isArray(def) && !('__importedFrom' in def)) {
+      out[name] = { ...def, __importedFrom: fileBasename };
+    } else {
+      out[name] = def;
+    }
+  }
+  return out;
 }
 
 // ── Section sources (§7.7) ───────────────────────────────────────────────────

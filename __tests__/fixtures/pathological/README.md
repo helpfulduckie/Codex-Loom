@@ -21,17 +21,27 @@ A golden fixture freezes v3-compiled output and asserts byte identity. A project
 wrong on purpose has no v3 baseline worth freezing — v3 would refuse it or compile it
 wrongly, and either way the bytes are not the thing under test.
 
-## Why it is two projects
+## Why it is four projects
 
-**The layers abort differently (§4.3).** A schema violation is an ERROR that stops the
-compile before anything is written: `reportLoadDiagnostics` throws as soon as the config is
-validated. Putting a bad config in the placement project would mean the load errors fired
-and every placement diagnostic silently vanished — the suite would still be red, and would
-prove nothing about the checks the fixture was written for.
+**The layers abort differently (§4.3), and Phase 7 added a second axis that aborts the
+same way.** A schema violation is an ERROR that stops the compile before anything is
+written: `reportLoadDiagnostics` throws as soon as the config is validated. Putting a bad
+config in the placement project would mean the load errors fired and every placement
+diagnostic silently vanished — the suite would still be red, and would prove nothing about
+the checks the fixture was written for. `checkDrift` (Phase 7) runs at the same point in
+`compileRun`, before that same throw, so its one ERROR code (`CL0115`) aborts a compile
+exactly like a schema violation does — which is why `snapshot-corrupt/` is its own project
+rather than a fourth mistake folded into `snapshot-mismatch/`.
 
 - `placement/` — load-clean on purpose, so the compile phase runs in full. Carries §7.4's
   placement invariants and the §12 placeholder content that is still inert.
 - `schema/` — three unknown-key shapes, asserted for their hints as much as their codes.
+- `snapshot-mismatch/` — load-clean, like `placement/`: a committed `snapshot/manifest.json`
+  that disagrees with the config (`CL0113`, a declared library entry with no manifest
+  section) and with the disk (`CL0114`, a frozen file the manifest never recorded).
+- `snapshot-corrupt/` — a frozen file hand-edited since the manifest was written. `CL0115`
+  is the one snapshot code that is an ERROR, so — like `schema/` — this project aborts
+  before anything downstream runs.
 
 ## Editing rules
 

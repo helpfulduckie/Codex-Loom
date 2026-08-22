@@ -179,6 +179,34 @@ function migrateAndCompile(tmpDir, project) {
     });
   });
 
+  describe('Phase 7 — the snapshot key has no v3 spelling to migrate, proven rather than assumed', () => {
+    // §14.2: a phase that changes syntax and does not name its migration step has not
+    // finished planning. Phase 7 adds `structure.input.snapshot`, and the reason
+    // `migrate/v3.js` gains no stage for it is that `structure.input.vault` — its
+    // pre-rename name — never shipped, so no v3 project can hold it in any form. That
+    // claim is checked against the real corpus here rather than assumed from the changelog.
+
+    test('no v3 project declares a vault: or snapshot: key under structure.input', () => {
+      for (const project of PROJECTS) {
+        const configPath = path.join(GOLDEN_DIR, project.dir, LOOM_SUBDIR, 'compile.yaml');
+        const config = YAML.parse(fs.readFileSync(configPath, 'utf8'));
+        const input = (config && config.structure && config.structure.input) || {};
+        expect([project.name, 'vault' in input, 'snapshot' in input]).toEqual([project.name, false, false]);
+      }
+    });
+
+    test('migrating a v3 project introduces no structure.input.snapshot key', () => {
+      // The inverse of the pairing, which a stale no-op would also pass: assert the
+      // migrator does not *introduce* the new key, not merely that it left it alone.
+      for (const project of PROJECTS) {
+        const configPath = path.join(tmpDir, project.dir, LOOM_SUBDIR, 'compile.yaml');
+        const config = YAML.parse(fs.readFileSync(configPath, 'utf8'));
+        const input = (config && config.structure && config.structure.input) || {};
+        expect([project.name, input.snapshot]).toEqual([project.name, undefined]);
+      }
+    });
+  });
+
   test('the migration reports what it guessed, so nothing lands unreviewed', () => {
     // Slot names have no source in v3 — blocks are anonymous — so every one is a guess, and
     // a migration that made them silently would be one nobody knows to check.

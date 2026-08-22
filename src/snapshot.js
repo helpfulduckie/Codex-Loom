@@ -185,7 +185,7 @@ function checkDrift(config, diagnostics) {
     if (!section) {
       diagnostics.warn(
         CODES.SNAPSHOT_MISSING_ENTRY,
-        `${entryLabel(entry)} has no entry in the snapshot manifest at ${manifestPath}.`,
+        `${entryLabel(entry)} has no entry in ${path.basename(manifestPath)}.`,
         {}
       );
       continue;
@@ -212,7 +212,7 @@ function checkDrift(config, diagnostics) {
     if (!fs.existsSync(snapEntryDir)) {
       diagnostics.warn(
         CODES.SNAPSHOT_DIR_MISSING,
-        `Snapshot directory for ${entryLabel(entry)} is missing: ${snapEntryDir}`,
+        `Snapshot directory for ${entryLabel(entry)} is missing: snapshot/${entry.name}`,
         {}
       );
       continue;

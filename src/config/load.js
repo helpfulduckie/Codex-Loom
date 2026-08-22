@@ -43,6 +43,14 @@ const CODES = Object.freeze({
   VARIABLE_PRE_BRANCH: 'CL0520',
   /** A library name and a declared variable share one namespace as of §6.1. */
   LIBRARY_NAME_COLLIDES: 'CL0521',
+  /**
+   * A compiled component reads from outside the project base, but no `structure.input.library`
+   * entry covers the directory it lives in (§11.2, Phase 7 Step 4 — floated out of Step 0's
+   * freeze-unit work). A shared component reached through a plain `variables:` entry rather
+   * than a library entry compiles and renders correctly and freezes not at all, silently —
+   * this is the check that catches the gap recurring.
+   */
+  LIBRARY_DEPENDENCY_UNCOVERED: 'CL0522',
 });
 
 /**
@@ -239,7 +247,7 @@ function loadManifest(manifestPath, diagnostics) {
     if (diagnostics) {
       diagnostics.warn(
         CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
-        `Snapshot manifest at ${manifestPath} is not valid JSON.`,
+        `Snapshot manifest ${path.basename(manifestPath)} is not valid JSON.`,
         {}
       );
     }
@@ -249,7 +257,7 @@ function loadManifest(manifestPath, diagnostics) {
     if (diagnostics) {
       diagnostics.warn(
         CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
-        `Snapshot manifest at ${manifestPath} does not match the expected shape.`,
+        `Snapshot manifest ${path.basename(manifestPath)} does not match the expected shape.`,
         {}
       );
     }

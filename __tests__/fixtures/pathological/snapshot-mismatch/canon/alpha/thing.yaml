@@ -1,0 +1,8 @@
+# Deliberately absent from snapshot/manifest.json's "library" section — CL0113.
+- id: Alpha Thing
+  name: Alpha Thing
+  aid:
+    type: Character
+    triggers: [AlphaThing]
+  body:
+    Tagline: Exists so the library path resolves.

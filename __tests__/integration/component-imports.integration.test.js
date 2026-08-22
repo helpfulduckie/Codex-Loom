@@ -229,6 +229,68 @@ describe('a component imports another and layers over it', () => {
   });
 });
 
+// ── Decision 5: one broken section, two CL0602 reports ──────────────────────
+
+describe('a renders-nothing section imported unchanged reports twice, distinguishably', () => {
+  // §7.6's own multiplying case: an imported file that is fine alone and broken once
+  // merged reports once against itself (loading the import) and once against the
+  // importer (normalizing the merge) — and only the second names where it came from.
+  const EMPTY_SECTION = [
+    'sections:',
+    '  aside:',
+    '    render: {position: 8}',
+  ].join('\n');
+
+  test('the imported file reports CL0602 against itself, unqualified', () => {
+    const { diagnostics } = compileProject({
+      ...BASE,
+      'shared/base.cl.yaml': EMPTY_SECTION,
+      'components/pe.cl.yaml': [
+        'imports:',
+        "  - from: '{%shared}/base.cl.yaml'",
+      ].join('\n'),
+    });
+    const found = codes(diagnostics, 'CL0602');
+    expect(found).toHaveLength(2);
+    const own = found.find((d) => !d.message.includes('inherited from'));
+    expect(own).toBeDefined();
+    expect(own.message).toContain('"aside"');
+  });
+
+  test('the importer\'s copy names the file the section came from', () => {
+    const { diagnostics } = compileProject({
+      ...BASE,
+      'shared/base.cl.yaml': EMPTY_SECTION,
+      'components/pe.cl.yaml': [
+        'imports:',
+        "  - from: '{%shared}/base.cl.yaml'",
+      ].join('\n'),
+    });
+    const found = codes(diagnostics, 'CL0602');
+    expect(found).toHaveLength(2);
+    const merged = found.find((d) => d.message.includes('inherited from'));
+    expect(merged).toBeDefined();
+    expect(merged.message).toContain('base.cl.yaml');
+  });
+
+  test('a local override of the section reports only the import\'s own copy', () => {
+    // The override supplies a heading, so the merged copy renders something and stops
+    // being the same fact the imported file reported — one report, not a stale second.
+    const { diagnostics } = compileProject({
+      ...BASE,
+      'shared/base.cl.yaml': EMPTY_SECTION,
+      'components/pe.cl.yaml': [
+        'imports:',
+        "  - from: '{%shared}/base.cl.yaml'",
+        'sections:',
+        '  aside:',
+        '    heading: Aside',
+      ].join('\n'),
+    });
+    expect(codes(diagnostics, 'CL0602')).toHaveLength(1);
+  });
+});
+
 // ── Order, and depth ─────────────────────────────────────────────────────────
 
 describe('imports: is an ordered list that composes', () => {
@@ -383,5 +445,92 @@ describe('an import chain resolves once per file, not once per leaf', () => {
       ].join('\n'),
     });
     expect(codes(diagnostics, 'CL0607')).toHaveLength(1);
+  });
+});
+
+// ── Decision 1 / Step 4 piece 5: does a library entry cover what was read? ───
+
+describe('the dependency-coverage check (CL0522)', () => {
+  // The gap Phase 6 left and Phase 7's `## Watch` names: a shared component reached
+  // through a plain `variables:` entry compiles and renders fine, and freezes not at
+  // all — nothing else notices, because `--snapshot` walks declared library entries
+  // rather than resolved dependencies. This is the check that catches it recurring.
+  //
+  // The shared file has to sit genuinely outside the project's own tmp directory —
+  // `BASE`'s own `shared/` lives inside it, which is the in-project case this check
+  // must *not* flag, so it is no good for proving the out-of-base case fires.
+
+  function makeOutsideShared() {
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-outside-'));
+    dirs.push(outsideDir);
+    fs.writeFileSync(path.join(outsideDir, 'base.cl.yaml'), SHARED, 'utf8');
+    return outsideDir.replace(/\\/g, '/');
+  }
+
+  test('a shared component reached through a plain variable, not a library entry, is CL0522', () => {
+    const sharedDir = makeOutsideShared();
+    const { diagnostics } = compileProject({
+      'templates/Character.template': '{$body.Tagline}',
+      'Codex/items.yaml': BASE['Codex/items.yaml'],
+      'compile.yaml': [
+        'version: 4',
+        'variables:',
+        `  outside: '${sharedDir}'`,
+        'structure:',
+        '  input:',
+        '    items: [%TMP%/Codex]',
+        '    templates: [%TMP%/templates]',
+        '  output: %TMP%/output',
+        'components:',
+        '  plotEssential: ./components/pe.cl.yaml',
+        'branches:',
+        '  plain: {}',
+      ].join('\n'),
+      'components/pe.cl.yaml': [
+        'imports:',
+        "  - from: '{%outside}/base.cl.yaml'",
+      ].join('\n'),
+    });
+    const found = codes(diagnostics, 'CL0522');
+    expect(found).toHaveLength(1);
+    expect(found[0].severity).toBe('warn');
+    expect(found[0].message).toContain('structure.input.library');
+  });
+
+  test('the same shared component reached through a library entry is silent', () => {
+    const sharedDir = makeOutsideShared();
+    const { diagnostics } = compileProject({
+      'templates/Character.template': '{$body.Tagline}',
+      'Codex/items.yaml': BASE['Codex/items.yaml'],
+      'compile.yaml': [
+        'version: 4',
+        'structure:',
+        '  input:',
+        '    items: [%TMP%/Codex]',
+        '    templates: [%TMP%/templates]',
+        '    library:',
+        `      outside: '${sharedDir}'`,
+        '  output: %TMP%/output',
+        'components:',
+        '  plotEssential: ./components/pe.cl.yaml',
+        'branches:',
+        '  plain: {}',
+      ].join('\n'),
+      'components/pe.cl.yaml': [
+        'imports:',
+        "  - from: '{%outside}/base.cl.yaml'",
+      ].join('\n'),
+    });
+    expect(codes(diagnostics, 'CL0522')).toHaveLength(0);
+  });
+
+  test('a component read from inside the project base is never flagged', () => {
+    // The ordinary case — a project's own `./components/` — must stay silent, or every
+    // project without a shared library would warn on itself.
+    const { diagnostics } = compileProject({
+      ...BASE,
+      'components/pe.cl.yaml': SHARED,
+    });
+    expect(codes(diagnostics, 'CL0522')).toHaveLength(0);
   });
 });

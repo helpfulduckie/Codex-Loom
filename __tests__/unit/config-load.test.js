@@ -353,10 +353,15 @@ describe('every diagnostic the config surface can emit', () => {
     // but they're raised by src/snapshot.js's syncLibrary/checkDrift, not by loadCompileConfig
     // itself — covered by __tests__/unit/snapshot.test.js and the --snapshot integration test
     // instead.
+    // One more: CL0522 (LIBRARY_DEPENDENCY_UNCOVERED) needs a resolved component
+    // dependency, which exists only after components load — `compile.js`'s leaf loop, not
+    // `loadCompileConfig`'s single pass over `structure:`. Covered by
+    // __tests__/integration/component-imports.integration.test.js instead.
     const unreachable = new Set([
       SCHEMA_CODES.SUPERSEDED_KEY, SCHEMA_CODES.VALUE_NOT_ALLOWED,
       CODES.SNAPSHOT_DIR_MISSING, CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
       CODES.SNAPSHOT_MISSING_ENTRY, CODES.SNAPSHOT_FILE_UNTRACKED, CODES.SNAPSHOT_HASH_MISMATCH,
+      CODES.LIBRARY_DEPENDENCY_UNCOVERED,
     ]);
     const reachable = [...Object.values(CODES), ...Object.values(SCHEMA_CODES)]
       .filter((c) => !unreachable.has(c));
