@@ -3,10 +3,13 @@
 Codex Loom compiles YAML item definitions into Velvet Lattice story card format
 for AI Dungeon scenarios. The released compiler is v3.3.2 (see `package.json`);
 active work is the v4 rebuild on the `v4-phase1` branch — a clean break from v3,
-with Phases 1 through 6 complete — Phase 5 being the platform field caps, the
-`--card-sizes` rework, `kind:` and the compiler/lint split, and Phase 6 component
+with Phases 1 through 7 complete — Phase 5 being the platform field caps, the
+`--card-sizes` rework, `kind:` and the compiler/lint split, Phase 6 component
 `imports:`, the section fan-out, description as a component, and openings joining
-the sections grammar. Phase 7 — the canon vault — is next.
+the sections grammar, and Phase 7 the library snapshot: `structure.input.canon`
+becomes `library:`, `--snapshot` freezes it into a committed `snapshot/` tree with
+a hashed manifest, and library-name `{%name}` tokens redirect to the snapshot
+unless `--live` is passed. Phase 8 is next.
 
 **`sections:` is the only component grammar.** v3's four syntaxes are gone:
 `src/pe.js`, `src/description.js` and `src/opening.js` no longer exist. A
@@ -20,7 +23,7 @@ available). `npm run compile` compiles `test/compile.yaml` as a smoke check.
 
 ## Fixtures — two kinds, and they fail differently
 
-**`__tests__/fixtures/pathological/` freezes the diagnostic stream.** Two projects that are
+**`__tests__/fixtures/pathological/` freezes the diagnostic stream.** Four projects that are
 wrong on purpose, with a committed snapshot of every code, severity, file and message they
 raise. It exists because the other fixtures are all *correct* projects, so a check that never
 fired would pass the whole suite. Its own `README.md` carries the editing rules; the important
@@ -33,7 +36,7 @@ writing, so they live in a separate private repo cloned into the gitignored `gol
 
 **If that directory is absent, this is all working as intended.** `golden.test.js` and
 `migrate.integration.test.js` register their suites as skipped, one `describe` in
-`emit-vl.test.js` skips, and everything else runs — roughly 1,596 passing with 13 skipped.
+`emit-vl.test.js` skips, and everything else runs — roughly 1,727 passing with 15 skipped.
 **Do not try to repair this.** There is no missing dependency to install and no path to fix;
 the tests are skipping because the data they compare against is private. Treat that as green.
 
