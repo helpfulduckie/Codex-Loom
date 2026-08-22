@@ -247,9 +247,8 @@ function renderCard({ item, bodyText = '', notesText, diagnostics, loc = {}, que
 
   // `description:` never reaches here — `model/item.js` collapses it into `notes:` at
   // resolution (§4.5), so the emitter knows exactly one spelling.
-  const notes = notesLines(
-    notesText !== undefined ? notesText : defaultNotesText(item && item.notes),
-  );
+  const notesText_ = notesText !== undefined ? notesText : defaultNotesText(item && item.notes);
+  const notes = notesLines(notesText_);
   if (notes) lines.push(...notes);
 
   lines.push(FENCE);
@@ -261,6 +260,14 @@ function renderCard({ item, bodyText = '', notesText, diagnostics, loc = {}, que
   // `encapsulate: false` means AID's `value` is exactly that. Applies to `kind: reference`
   // items like any other: a field cap is a platform constraint, not an opinion (§4.8).
   checkLimit(body, questions, LIMITS.cardBody, {
+    diagnostics: diags, loc, label: `"${cardTitle(item) || (item && item.id) || '?'}"`,
+  });
+
+  // `notes:` is assigned straight to AID's `description` (`scenario.py:124`), which caps at
+  // 10,000 characters after the same placeholder substitution as everywhere else in §8.5.
+  // Measured against the pre-fence string rather than the YAML-escaped `notesLines()` output,
+  // since escaping is a formatting concern and not part of what AID stores.
+  checkLimit(notesText_, questions, LIMITS.notes, {
     diagnostics: diags, loc, label: `"${cardTitle(item) || (item && item.id) || '?'}"`,
   });
 

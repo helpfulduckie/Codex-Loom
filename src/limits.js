@@ -40,6 +40,10 @@
  *     replaces an ancestor's rather than extending it. §8.5's "including `branchFraming`"
  *     means the framing file is subject to the same cap, not that framing adds to a leaf's
  *     total.
+ *   - **`notes:`** is typed `str` and assigned straight to AID's `description`
+ *     (`scenario.py:124` runs `process_placeholders` over it first), so the same
+ *     substitute-then-measure rule applies as everywhere else — it is checked against the
+ *     string `emit/vl.js` renders into the fence, before the `notes:` key wraps it.
  *
  * ## Why a WARN band exists
  *
@@ -56,10 +60,10 @@
 const { CODES } = require('./diag');
 
 /**
- * The confirmed caps. Only these two — §8.5 lists no guessed limits, and adding one when
- * it is confirmed is a row here plus a call site, not a redesign.
+ * The confirmed caps. §8.5 lists no guessed limits, and adding one when it is confirmed is
+ * a row here plus a call site, not a redesign.
  *
- * `warnAt` is 90% of `cap` in both rows, written out rather than computed so the table
+ * `warnAt` is 90% of `cap` in every row, written out rather than computed so the table
  * reads as data and a future cap with a different band needs no new mechanism.
  */
 const LIMITS = Object.freeze({
@@ -76,6 +80,13 @@ const LIMITS = Object.freeze({
     subject: 'Opening',
     over: CODES.OPENING_OVER_LIMIT,
     near: CODES.OPENING_NEAR_LIMIT,
+  }),
+  notes: Object.freeze({
+    cap: 10000,
+    warnAt: 9000,
+    subject: 'Notes',
+    over: CODES.NOTES_OVER_LIMIT,
+    near: CODES.NOTES_NEAR_LIMIT,
   }),
 });
 

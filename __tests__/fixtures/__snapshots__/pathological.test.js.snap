@@ -41,6 +41,11 @@ ERROR CL0712 Codex/items.cl.yaml
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
 WARN CL0713 Codex/items.cl.yaml
   Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
+ERROR CL0714 Codex/items.cl.yaml
+  Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+WARN CL0715 Codex/items.cl.yaml
+  Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "open".
 WARN CL0711 components/opening-open.md
@@ -72,6 +77,11 @@ ERROR CL0712 Codex/items.cl.yaml
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
 WARN CL0713 Codex/items.cl.yaml
   Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
+ERROR CL0714 Codex/items.cl.yaml
+  Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+WARN CL0715 Codex/items.cl.yaml
+  Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "gated".
 ERROR CL0710 components/opening-gated.md
@@ -103,6 +113,11 @@ ERROR CL0712 Codex/items.cl.yaml
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
 WARN CL0713 Codex/items.cl.yaml
   Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
+ERROR CL0714 Codex/items.cl.yaml
+  Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+WARN CL0715 Codex/items.cl.yaml
+  Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "silent".
 WARN CL0534 compile.cl.yaml

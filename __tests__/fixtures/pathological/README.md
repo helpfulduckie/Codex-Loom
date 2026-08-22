@@ -130,6 +130,23 @@ declares a single placeholder, so without these two the expansion arithmetic shi
 characters the key expands to a 79-character `${…}`, so a handful of references move a file
 across a cap. Its question text is not a mistake, and it is the fixture's only non-mistake.
 
+## What the snapshot gains in Phase 6
+
+**Step 4 adds a third field cap: `notes:`, capped at 10,000 characters and measured the same
+way as the other two** — `Verbose` and `Chatty`, both in `Codex/items.cl.yaml`, carry the
+`notes:` case the way `Bloated`/`Ledger` carry the card-body case and the two Openings carry
+theirs. Both are under 10,000 compiled and diverge only after `%longPrompt%` substitution,
+which is the case the other two field caps exist to test and this one needed of its own:
+
+| Item | Compiled | On upload | Code |
+|---|---|---|---|
+| `Verbose` | 9,466 | 10,051 | `CL0714` |
+| `Chatty` | 8,864 | 9,189 | `CL0715` |
+
+Both items are branch-unrestricted like the rest of `Codex/`, so each row appears once per
+leaf — three times in the snapshot, per the `silent`-branch cost the README already names
+above.
+
 **The `kind: reference` fence key is `emit-vl.test.js`'s to pin, not this fixture's.** The
 snapshot holds diagnostics, and a fence key that reaches compiled output correctly raises
 none. `Ledger` proves the source-to-diagnostic path; the source-to-fence path is a unit test.

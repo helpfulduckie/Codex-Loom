@@ -348,6 +348,8 @@ because which of the two the author meant is not recoverable from the file that 
 | `CL0711` | WARN | An `Opening.md` is within 10% of the 4,000-character limit. |
 | `CL0712` | ERROR | A story card body exceeds AID's 2,000-character limit. |
 | `CL0713` | WARN | A story card body is within 10% of the 2,000-character limit. |
+| `CL0714` | ERROR | An item's `notes:` exceeds AID's 10,000-character `description` limit. |
+| `CL0715` | WARN | An item's `notes:` is within 10% of the 10,000-character limit. |
 
 Both trigger codes are facts about what Velvet Lattice can carry to AID rather than
 opinions about content, which is why they live in the compiler and not in lint. `CL0701` is
@@ -357,7 +359,7 @@ last stage that can still see the difference.
 
 ### The platform caps in detail
 
-`CL0710`–`CL0713` are §8.5's field limits. AID truncates rather than refusing, so exceeding
+`CL0710`–`CL0715` are §8.5's field limits. AID truncates rather than refusing, so exceeding
 one does not fail the upload — the content arrives shortened and the loss surfaces during
 play. A `kind: reference` item is **not** exempt: soft heuristics skip reference items and
 hard limits do not, because the platform does not care why an item exists (§4.8).
@@ -366,10 +368,12 @@ hard limits do not, because the platform does not care why an item exists (§4.8
 
 - A **card body** is Velvet Lattice's `entry` — the section with its `~~~` fence removed
   and trimmed — which becomes AID's `value`. The `## Title` line, the fence and `notes:`
-  are all outside the cap. `notes:` has no documented limit of its own.
+  are all outside this particular cap; `notes:` is checked separately, against its own.
 - An **`Opening.md`** is capped per file, not per branch chain. VL merges components keyed
   by filename, so a leaf's opening *replaces* an ancestor's rather than extending it. The
   interior-node framing file and the root framing file are each capped the same way.
+- **`notes:`** is typed `str` and assigned straight to AID's `description`, which caps at
+  10,000 characters — the same post-substitution measurement as the other two.
 
 **The length measured is the one after placeholder substitution, and that is the whole
 point of the check.** VL replaces `%key%` with `${question}`, and a question is longer than
