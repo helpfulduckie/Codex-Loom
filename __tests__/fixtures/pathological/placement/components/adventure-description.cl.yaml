@@ -1,0 +1,21 @@
+# The adventure description for the `silent` branch — deliberately paired with no opening,
+# which is CL0616. Nothing here is wrong on its own; the fault is the pairing, and that is
+# the point: v3 could not express it, because a description was only ever written at the
+# output root where there is no opening to be confused with.
+#
+# `file:` and `from:` are §7.7's two new section sources. Both are exercised here so a
+# regression in either shows up in the diagnostic stream rather than only in the unit tests.
+
+sections:
+  pitch:
+    text: |
+      You wake in a corridor that does not answer.
+    render:
+      position: 1
+
+  # Read verbatim from a file beside this one. The path resolves against the project base,
+  # the same base `imports:` and every `components:` entry use.
+  body:
+    file: '{%here}/components/description.md'
+    render:
+      position: 2

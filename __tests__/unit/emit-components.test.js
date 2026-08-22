@@ -4,8 +4,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
-  DECLARATION, SLOTTED_COMPONENTS, OTHER_COMPONENTS, isPassthrough, readPassthrough,
-  renderSectionedComponent, writeSectionedComponent,
+  DECLARATION, SLOTTED_COMPONENTS, OTHER_COMPONENTS, DESCRIPTION_DESCRIPTOR,
+  isPassthrough, readPassthrough,
+  renderSectionedComponent, writeSectionedComponent, renderFrontmatter,
 } = require('../../src/emit/components');
 const { normalizeComponent } = require('../../src/model/component');
 
@@ -22,12 +23,13 @@ function write(name, content) {
 }
 
 describe('the descriptor table', () => {
-  test('all four sectioned components are rows, not bespoke blocks', () => {
+  test('all five sectioned components are rows, not bespoke blocks', () => {
     // AI Instructions and Author's Note arrived here by having their document layer
     // deleted rather than ported — it was a second branch walker and a second delta
-    // vocabulary for what a section's own branches: and variants: already do.
+    // vocabulary for what a section's own branches: and variants: already do. The
+    // adventure description arrived by having its two-field file format deleted (§7.7).
     expect(SLOTTED_COMPONENTS.map((d) => d.key))
-      .toEqual(['plotEssential', 'summary', 'aiInstructions', 'authorsNote']);
+      .toEqual(['plotEssential', 'summary', 'aiInstructions', 'authorsNote', 'adventureDescription']);
   });
 
   test('every row declares the fields the emitter needs', () => {
@@ -48,7 +50,26 @@ describe('the descriptor table', () => {
       aiInstructions: 'AI Instructions.md',
       // Deliberately not "Author's Note.md" — Velvet Lattice requires this spelling.
       authorsNote: 'Author Notes.md',
+      // Shares its filename with the scenario blurb, at a different level and from a
+      // different key — the arrangement opening: and branchFraming: already have.
+      adventureDescription: 'Description.md',
     });
+  });
+
+  test('the description keys are two rows sharing one filename at two levels', () => {
+    const adventure = SLOTTED_COMPONENTS.find((d) => d.key === 'adventureDescription');
+    expect([adventure.file, DESCRIPTION_DESCRIPTOR.file]).toEqual(['Description.md', 'Description.md']);
+    // `dir: null` is the node root; every other sectioned row writes into Components/.
+    expect([adventure.dir, DESCRIPTION_DESCRIPTOR.dir]).toEqual([null, null]);
+    // The split exists because inheriting the scenario blurb would copy it into every leaf.
+    expect(adventure.declaration).toBe(DECLARATION.INHERITED);
+    expect(DESCRIPTION_DESCRIPTOR.declaration).toBe(DECLARATION.PROJECT);
+  });
+
+  test('frontmatter is a column, and only the two description rows carry it', () => {
+    const withFrontmatter = [...SLOTTED_COMPONENTS, DESCRIPTION_DESCRIPTOR]
+      .filter((d) => d.frontmatter).map((d) => d.key);
+    expect(withFrontmatter).toEqual(['adventureDescription', 'description']);
   });
 
   test('the two heading defaults survive the merge, because v3 formats disagree', () => {
@@ -70,7 +91,7 @@ describe('the descriptor table', () => {
   test('the two tables together cover the §7.3 component set', () => {
     const covered = [...SLOTTED_COMPONENTS, ...OTHER_COMPONENTS].map((d) => d.key).sort();
     expect(covered).toEqual([
-      'aiInstructions', 'authorsNote', 'branchFraming', 'description',
+      'adventureDescription', 'aiInstructions', 'authorsNote', 'branchFraming', 'description',
       'opening', 'plotEssential', 'scripts', 'summary',
     ]);
   });

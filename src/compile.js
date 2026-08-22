@@ -27,10 +27,9 @@ const {
   expandQuestions,
 } = require('./emit/placeholders');
 const { LIMITS, checkLimit } = require('./limits');
-const { loadDescConfig, extractScriptBanner, writeDescription } = require('./description');
 const { loadOpeningConfig, compileOpening } = require('./opening');
 const {
-  SLOTTED_COMPONENTS, isPassthrough, readPassthrough,
+  SLOTTED_COMPONENTS, DESCRIPTION_DESCRIPTOR, isPassthrough, readPassthrough,
   renderSectionedComponent, writeSectionedComponent,
 } = require('./emit/components');
 
@@ -252,7 +251,15 @@ function buildCompileContext(config, branchPath, options = {}) {
   if (scripts !== undefined) components.scripts = scripts;
 
   // Resolve component specs to file paths
-  const componentTypes = ['aiInstructions', 'opening', 'branchFraming', 'plotEssential', 'summary', 'authorsNote', 'scripts'];
+  // `adventureDescription` merges down the chain like the other sectioned components, which
+  // is what makes §7.7's per-node description an ordinary row rather than a second writer:
+  // a value declared at an interior node reaches the leaves beneath it here. `description`
+  // is resolved here too — it is read at the root rather than per branch, but the migrator
+  // and the root write both want the same expansion the other components get.
+  const componentTypes = [
+    'aiInstructions', 'opening', 'branchFraming', 'plotEssential', 'summary', 'authorsNote',
+    'description', 'adventureDescription', 'scripts',
+  ];
   const componentRefs = {};
   for (const type of componentTypes) {
     const spec = components[type] !== undefined ? components[type] : null;
@@ -1453,15 +1460,31 @@ function compileRun(configPath, options, buses) {
   const rootVariables = config._variables || config.variables || null;
   const loadSectioned = (spec, descriptor) => {
     if (!sectionedDocs.has(spec)) {
-      sectionedDocs.set(spec, loadComponentDocument(spec, {
+      const loaded = loadComponentDocument(spec, {
         diagnostics: compileDiagnostics,
         label: descriptor.label,
         variables: rootVariables,
         base: config._base,
-      }));
+      });
+      // §7.7's `metadata:` is declared on every component and emitted by the ones whose
+      // output has somewhere to put frontmatter — Description today. Reported on the cache
+      // miss so the author hears it once, rather than once per leaf.
+      if (loaded && loaded.metadata && !descriptor.frontmatter) {
+        compileDiagnostics.warn(
+          DIAG_CODES.COMPONENT_METADATA_UNSUPPORTED,
+          `"${descriptor.label}" declares metadata:, which is written as frontmatter and `
+          + `only ${DESCRIPTION_DESCRIPTOR.file} carries any — Velvet Lattice reads scenario `
+          + 'tags from there. The metadata is ignored here.',
+          { file: String(spec) },
+        );
+      }
+      sectionedDocs.set(spec, loaded);
     }
     return sectionedDocs.get(spec);
   };
+
+  // Which leaves wrote a Description.md, for §7.7's opening guard after the openings land.
+  const descriptionLeaves = new Set();
 
   for (const branchPath of leaves) {
     const label = branchPath.length > 0 ? branchPath.join('/') : '(root)';
@@ -1566,10 +1589,14 @@ function compileRun(configPath, options, buses) {
         usagePath: branchPath.join('/'),
       });
 
-      const outPath = writeSectionedComponent(outputDir, descriptor, text, { diagnostics: compileDiagnostics });
+      const outPath = writeSectionedComponent(
+        outputDir, descriptor, text, { diagnostics: compileDiagnostics },
+        component ? component.metadata : null,
+      );
       if (outPath) {
         sectionedWritten[descriptor.key] = true;
         sectionedSegments[descriptor.key] = segments;
+        if (descriptor.key === 'adventureDescription') descriptionLeaves.add(label);
         if (verbose) console.log(`    OK: ${descriptor.verboseLabel} → ${outPath}`);
         totalFiles++;
       } else if (!excluded) {
@@ -1693,7 +1720,17 @@ function compileRun(configPath, options, buses) {
     if (verbose) console.log(`  OK: Label → ${labelPath}`);
   }
 
-  // Description (project-level, written once to output root alongside Branches/)
+  // The scenario blurb (§7.7), written once to the output root alongside Branches/.
+  //
+  // An ordinary component document since Phase 6, rather than the two-field `description.yaml`
+  // v3 gave it a loader of its own for. `body:` is now a section with `file:` and `script:`
+  // is one with `from: {script:, extract: scriptBanner}`, which is what made the third file
+  // format deletable — and what makes more than one banner expressible, where v3 allowed
+  // exactly one.
+  //
+  // It renders through `renderSectionedComponent` with an empty occupant map, which is not a
+  // second render path but the same one called with nothing to place: a scenario has one
+  // blurb and items are branch-scoped, so there is no branch whose cast could route into it.
   const descRequested = config.components && config.components.description != null;
   const descSpec = descRequested
     ? resolveComponentSpec(config.components.description, config._base, config._variables || config.variables || null)
@@ -1701,25 +1738,30 @@ function compileRun(configPath, options, buses) {
   if (descRequested && !(descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec))) {
     recordGap('(project)', 'Description', descSpec, 'source not found');
   } else if (descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec)) {
-    const ext = path.extname(descSpec).toLowerCase();
-    let bodyContent = null;
-    let bannerContent = null;
+    let combined = null;
+    let descMetadata = null;
 
-    if (ext === '.md' || ext === '.txt') {
-      bodyContent = fs.readFileSync(descSpec, 'utf8').trimEnd() || null;
-    } else if (ext === '.js') {
-      bannerContent = extractScriptBanner(descSpec, {});
+    if (isPassthrough(descSpec)) {
+      combined = readPassthrough(descSpec);
     } else {
-      const descCfg = loadDescConfig(descSpec, config._base, config._variables || config.variables || {});
-      if (descCfg.bodyPath && fs.existsSync(descCfg.bodyPath))
-        bodyContent = fs.readFileSync(descCfg.bodyPath, 'utf8').trimEnd() || null;
-      if (descCfg.scriptPath && fs.existsSync(descCfg.scriptPath))
-        bannerContent = extractScriptBanner(descCfg.scriptPath, { stripTrailingInstructions: descCfg.stripTrailingInstructions });
+      const descComponent = loadSectioned(descSpec, DESCRIPTION_DESCRIPTOR);
+      if (descComponent) {
+        descMetadata = descComponent.metadata;
+        ({ text: combined } = renderSectionedComponent(
+          descComponent, [], new Map(),
+          {
+            defaultHeadingLevel: DESCRIPTION_DESCRIPTOR.defaultHeadingLevel,
+            variables: rootVariables || {}, registry, branchProtagonist: null,
+            onWarn: busWarner(compileDiagnostics, { file: String(descSpec) }),
+          },
+        ));
+      }
     }
 
-    const combined = [bodyContent, bannerContent].filter(Boolean).join('\n');
-    // Description is project-level, so it is checked against the root table — there is
-    // no branch whose declarations could apply to it.
+    // Checked against the root table, and that stays correct where the plan warned it might
+    // not: the blurb belongs to the project, and it is `adventureDescription:` — a different
+    // key, resolved inside the leaf loop against the branch-merged table — that carries the
+    // per-node case §7.7 asked for.
     checkUndeclaredPlaceholders(combined, config.placeholders, {
       diagnostics: compileDiagnostics, file: descSpec, where: 'the Description',
       usage: placeholderUsage, usagePath: '',
@@ -1731,10 +1773,46 @@ function compileRun(configPath, options, buses) {
       reason: 'AID does not fill placeholders in the Description. It is shown before any '
         + 'adventure exists to answer them, so the raw text is what a reader sees.',
     });
-    const descPath = writeDescription(config._resolvedOutput, combined, { diagnostics: compileDiagnostics });
-    if (descPath) { if (verbose) console.log(`  OK: Description → ${descPath}`); }
-    else recordGap('(project)', 'Description', descSpec, 'compiled to empty content');
+    const descPath = writeSectionedComponent(
+      config._resolvedOutput, DESCRIPTION_DESCRIPTOR, combined,
+      { diagnostics: compileDiagnostics }, descMetadata,
+    );
+    if (descPath) {
+      if (verbose) console.log(`  OK: Description → ${descPath}`);
+      // Both description keys write `Description.md`, and at an unbranched root they write
+      // the same one — the root is its own leaf there, so the leaf loop has already been
+      // through. Reported rather than silently resolved, because which of the two an author
+      // meant to survive is not recoverable from the file that is left.
+      if (descriptionLeaves.has('(root)')) {
+        compileDiagnostics.warn(
+          DIAG_CODES.DESCRIPTION_KEYS_COLLIDE,
+          'this project declares both description: and adventureDescription: and has no '
+          + 'branches, so the root is its own leaf and both write the same Description.md. '
+          + 'The scenario blurb is what survives. Drop one, or add the branch the '
+          + 'adventure description was written for.',
+          { file: configPath },
+        );
+      }
+    } else recordGap('(project)', 'Description', descSpec, 'compiled to empty content');
   }
+
+  // §7.7's one guard. Velvet Lattice sets a node's prompt to
+  // `components["Opening"] or node.description`, so a leaf carrying a description and no
+  // Opening.md does not produce an empty prompt — it produces the blurb as the opening
+  // scene. v3 could not reach this, because descriptions were written only at the output
+  // root; `adventureDescription:` is what makes the pairing possible, and this is its price.
+  for (const leafLabel of descriptionLeaves) {
+    if (leafOpeningKeys.has(leafLabel)) continue;
+    compileDiagnostics.error(
+      DIAG_CODES.LEAF_DESCRIPTION_NO_OPENING,
+      `branch "${leafLabel}" has an adventure description and no Opening.md. Velvet Lattice `
+      + 'reads a node\'s prompt as its Opening or, failing that, its description — so this '
+      + 'leaf would open the adventure with its own blurb rather than a scene. Give the '
+      + 'branch an opening:, or drop the adventureDescription: it inherits.',
+      { file: configPath },
+    );
+  }
+  reportCompileDiagnostics();
 
   // Per-leaf summary table (printed after all component writes so Opening status is known)
   for (const s of leafSummaries) {

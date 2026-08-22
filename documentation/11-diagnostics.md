@@ -243,6 +243,12 @@ English word. They stay WARN, they are tagged opinion-layer, and `lint.level` re
 | `CL0613` | ERROR | A render target names no slot at all. |
 | `CL0614` | WARN | A declared slot has no items on a branch. |
 | `CL0615` | ERROR | A component renders to nothing on a branch. |
+| `CL0616` | ERROR | A leaf carries an adventure description and declares no `Opening.md`. |
+| `CL0617` | ERROR | A section's `file:` or `from.script:` does not resolve to a file. |
+| `CL0618` | ERROR | A section's `extract:` names no known transform. |
+| `CL0619` | ERROR | A section declares more than one of `text:`, `file:` and `from:`. |
+| `CL0620` | WARN | `metadata:` on a component whose output has no place for frontmatter. |
+| `CL0621` | WARN | Both description keys aimed at one file — an unbranched project. |
 
 `CL0601` is an error rather than a resolved precedence because the two readings differ in
 output and neither is obviously right: text inside a slot could sit before or after the
@@ -264,7 +270,10 @@ all applies to nothing, alters no output, and would otherwise raise nothing.
 `CL0606` and `CL0607` are errors because both leave the finished component missing whatever
 the import was carrying, and the file that lands still looks complete — the local sections
 render, the slots fill, and the shared half is simply absent. A `from:` resolves against the
-importing file's own directory unless it is absolute or opens with a `{%variable}`, and it
+*project base* unless it is absolute — the same base `include:` and every `components:` entry
+use, chosen over the importing file's own directory because a `{%variable}` is written
+relative to the project and a bare path would not be, which would give one key two bases
+depending on whether the string happened to contain a token. It
 expands against the *root* variable table rather than a branch's: the document is cached by
 resolved path and shared across every leaf, so a `from:` that varied by branch would make
 one cache key stand for two documents. `CL0607` skips the offending import rather than
@@ -299,6 +308,35 @@ empty slot and a slot whose occupants all mis-typed their `slot:` produce the sa
 file, and no corpus will fire it on its own — every slot in every shipped project is
 filled on every leaf, which is exactly why the silent version of this check would look
 correct.
+
+`CL0616` is the price of per-node descriptions. Velvet Lattice sets a node's prompt to
+`components["Opening"] or node.description`, so a leaf carrying a description and no
+`Opening.md` does not open on an empty prompt — it opens on the blurb, as though the store
+listing were the first scene. It is an ERROR rather than a warning because the output is
+wrong in a way that reads as deliberate: the file is present, well-formed, and shows a
+paragraph the author wrote. In v3 the pairing could not be constructed at all, since a
+description was only ever written at the output root where there is no opening to be
+confused with, so this check arrived with `adventureDescription:` and is inseparable from it.
+
+`CL0617`, `CL0618` and `CL0619` are the three ways a section's source fails, and all three
+are errors because each ends with a section that renders nothing while looking authored.
+They are raised once per component file rather than once per branch: sources resolve inside
+the load that caches by resolved path, which for a component reaching thirty-two leaves is
+the difference between a diagnostic and a wall. `CL0619` refuses a precedence rule for the
+same reason `CL0601` does — a file could reasonably replace the text, precede it or follow
+it, and every answer is a convention an author would have to look up. The `text:` is kept
+and the source ignored, which at least leaves the more explicit half standing.
+
+`CL0620` is a warning because the component is otherwise fine and its output is unaffected.
+`metadata:` is declared on every component rather than on Description alone, since the key
+describes a document's own metadata and nothing about it is description-shaped — but only a
+component that writes a file with a place for frontmatter can emit it, which today is
+Description. Declaring it elsewhere is an author expecting an effect there is nowhere to put.
+
+`CL0621` fires only on an unbranched project, where the root is its own leaf and both
+description keys write the same `Description.md`. The scenario blurb survives, because it is
+the half with a native AID field behind it. It is reported rather than silently resolved
+because which of the two the author meant is not recoverable from the file that is left.
 
 ### CL07xx — emit
 

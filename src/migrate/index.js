@@ -23,6 +23,7 @@ const YAML = require('yaml');
 
 const v3 = require('./v3');
 const { migratePlotEssentialsFiles } = require('./plot-essentials-apply');
+const { migrateDescriptionFiles } = require('./description');
 
 /**
  * Point `render.notesTemplate` at a notes template, once `aid.known` has become `notes:`.
@@ -206,6 +207,12 @@ function migrateProjectFully(configPath, options = {}) {
   const pe = migratePlotEssentialsFiles(configPath, options);
   notes.push(...pe.notes);
   touched.push(...pe.touched);
+
+  // §7.7. After the config stage, because the description's path is read through
+  // `buildCompileContext` and that needs a v4-valid config to resolve an alias.
+  const desc = migrateDescriptionFiles(configPath, options);
+  notes.push(...desc.notes);
+  touched.push(...desc.touched);
 
   // Phase 4. Deliberately last and deliberately empty — see migratePlaceholders.
   const placeholders = migratePlaceholders();

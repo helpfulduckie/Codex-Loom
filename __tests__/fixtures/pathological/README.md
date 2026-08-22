@@ -48,6 +48,21 @@ prove nothing about the checks the fixture was written for.
   schema violations are `schema.test.js`'s to cover, and the fixture's own scope is the
   diagnostic stream of a project that *compiles*.
 
+## Why `placement/` has a third leaf that raises almost nothing new
+
+**The `silent` branch exists for one row — `CL0616` — and pays for it with twenty-nine
+repeats of the per-leaf checks.** §7.7's guard fires on a leaf that carries an adventure
+description and declares no opening, and neither `open` nor `gated` could host it: both
+declare openings that the §8.5 cap rows depend on, so removing one to make room would trade
+a cap case for a description case. The items in `placement/Codex/` are branch-unrestricted,
+so any third leaf re-raises every placement and placeholder ERROR they already produce.
+
+**That repetition is a cost, not a feature, and it is worth knowing before reading a diff.**
+A future row added to any per-leaf check will now appear three times rather than twice. The
+duplication does prove one thing worth having — that each report names the branch it belongs
+to — but that is a side effect. If the fixture ever grows a fourth leaf for a fourth reason,
+branch-scoping the item set is the change to make first.
+
 ## Known-incorrect rows in the snapshot
 
 **The fifteen `CL0321` rows naming items in `canon/lore.cl.yaml` and `canon/rumors.cl.yaml`

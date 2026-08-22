@@ -70,3 +70,16 @@ branches:
     # The `cast` slot excludes itself on this branch, in the component file. Gating a slot
     # off is legitimate (§7.4) — until it makes an item with no other target vanish
     # entirely, which is what `Ghost` does below.
+
+  # §7.7's one ERROR. This leaf carries an adventure description and declares no opening,
+  # and Velvet Lattice reads a node's prompt as `components["Opening"] or node.description`
+  # — so the adventure would open on the blurb rather than on a scene. The sibling branches
+  # above declare openings and inherit nothing here, which is what makes CL0616 a report
+  # about this leaf rather than about the project. Note the description is declared *on the
+  # branch*: `adventureDescription:` inherits like any other component, so declaring it at
+  # the root would have put a Description.md on all three leaves and told us nothing about
+  # whether the guard discriminates.
+  silent:
+    title: The Silent Path
+    components:
+      adventureDescription: '{%here}/components/adventure-description.cl.yaml'

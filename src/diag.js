@@ -128,6 +128,29 @@ const CODES = Object.freeze({
   SLOT_EMPTY: 'CL0614',
   COMPONENT_RENDERS_NOTHING: 'CL0615',
 
+  /**
+   * A leaf carrying a description and no `Opening.md` (§7.7).
+   *
+   * Velvet Lattice sets a node's prompt to `components["Opening"] or node.description`, so
+   * a leaf with one and not the other does not produce an empty prompt — it produces the
+   * store blurb as the opening scene. In v3 this could not happen, because descriptions
+   * were written only at the output root; `adventureDescription:` is what makes the pairing
+   * reachable, and the ERROR is the price of reaching it.
+   */
+  LEAF_DESCRIPTION_NO_OPENING: 'CL0616',
+
+  // Section sources (§7.7). Resolved once per component file, where `imports:` are — a
+  // `file:` read per leaf would report a missing path 32 times for The Institute.
+  SECTION_SOURCE_NOT_FOUND: 'CL0617',
+  SECTION_EXTRACT_UNKNOWN: 'CL0618',
+  SECTION_TEXT_AND_SOURCE: 'CL0619',
+
+  /** `metadata:` on a component whose output has nowhere to put frontmatter (§7.7). */
+  COMPONENT_METADATA_UNSUPPORTED: 'CL0620',
+
+  /** Both description keys aimed at one `Description.md` — an unbranched root (§7.7). */
+  DESCRIPTION_KEYS_COLLIDE: 'CL0621',
+
   // Emit (§8). Both are facts about what Velvet Lattice can carry to AID, not opinions
   // about content — which is why they live in the compiler rather than in lint (§12.5).
   TRIGGER_CONTAINS_COMMA: 'CL0701',

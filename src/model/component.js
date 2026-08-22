@@ -73,6 +73,10 @@ function normalizeComponent(doc, options = {}) {
     slots,
     branches: (doc && doc.branches) || null,
     card: (doc && doc.card) || null,
+    // §7.7's frontmatter. Carried through opaque for the same reason `card:` is: the keys
+    // belong to Velvet Lattice and AID, and normalizing them here would pin a copy of a
+    // surface this project does not own.
+    metadata: (doc && doc.metadata) || null,
   };
 }
 
@@ -95,7 +99,13 @@ function normalizeSection(name, def, index, onWarn) {
   const render = (raw.render && typeof raw.render === 'object') ? raw.render : {};
 
   const isSlot = raw.slot === true;
-  const hasText = raw.text !== undefined && raw.text !== null && raw.text !== '';
+  // `file:` and `from:` are resolved into `text:` by the loader before this runs, so they
+  // are counted here only for a caller that normalizes an unresolved document — a unit test,
+  // or a future caller. Counting them costs one clause and stops CL0602 firing on a section
+  // whose content is real and simply has not been read yet.
+  const hasSource = (typeof raw.file === 'string' && raw.file !== '')
+    || (raw.from && typeof raw.from === 'object' && !Array.isArray(raw.from));
+  const hasText = (raw.text !== undefined && raw.text !== null && raw.text !== '') || hasSource;
   const hasHeading = typeof raw.heading === 'string' && raw.heading !== '';
 
   // A section is text or a slot, never both. The ambiguity is real — where would the text
@@ -244,10 +254,23 @@ function applySectionVariant(section, delta) {
  * case-insensitive `find`, taking whichever comes first in key order: the imported one. The
  * project's override would be discarded with nothing reported.
  */
+const CONTENT_KEYS = ['text', 'file', 'from'];
+
 function layerSectionDef(base, over) {
   const from = (base && typeof base === 'object' && !Array.isArray(base)) ? base : {};
   const raw = (over && typeof over === 'object' && !Array.isArray(over)) ? over : {};
   const result = { ...from };
+
+  // A section takes its text from one source (§7.7), so an override naming a different one
+  // replaces rather than joins it. Without this an imported `file:` and a local `text:`
+  // would both survive the merge and the result would be CL0619 — an author reporting for
+  // an override that is the ordinary way to replace inherited content.
+  const overridesContent = CONTENT_KEYS.filter((k) => k in raw);
+  if (overridesContent.length > 0) {
+    for (const key of CONTENT_KEYS) {
+      if (!overridesContent.includes(key)) delete result[key];
+    }
+  }
 
   for (const [key, value] of Object.entries(raw)) {
     if (key === 'text') {

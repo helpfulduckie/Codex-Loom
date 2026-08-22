@@ -113,7 +113,7 @@
     summary: true
     aiInstructions: false
     authorsNote: false
-    description: false
+    adventureDescription: false
     opening: false
     branchFraming: false
   variable:
@@ -125,6 +125,6 @@
     summary: {slot: history, order: 1, template: Unstructured}
     aiInstructions: {slot: rules, order: 3, template: Notes}
     authorsNote: {slot: tone, order: 4, template: Notes}
-    description: {slot: blurb, order: 5, template: Unstructured}
+    adventureDescription: {slot: blurb, order: 5, template: Unstructured}
     opening: {slot: scene, order: 6, template: Unstructured}
     branchFraming: {slot: question, order: 7, template: Unstructured}

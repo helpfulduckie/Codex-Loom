@@ -65,6 +65,23 @@ sections:
       wrapper: curly
       wrap: all
 
+  # ── §7.7's two sources besides `text:` ─────────────────────────────────────
+  # `file:` includes a file verbatim; `from:` reads one through a named transform. Both
+  # resolve to `text:` in the loader, once per component file rather than once per leaf,
+  # so nothing downstream has to know a section had a source. Between them they replace
+  # v3's `description.yaml` — `body:` was the first and `script:` was the second.
+  houseStyle:
+    file: '{%components}/house-style.md'
+    render:
+      position: 8
+
+  modBanner:
+    from:
+      script: '{%scriptDir}/library.js'
+      extract: scriptBanner
+    render:
+      position: 9
+
 # ── Document level ───────────────────────────────────────────────────────────
 # `variants:` is deliberately absent, because a component declares no variants of its own.
 # `branches:` is present and is a *selector* over what the sections declare (§7.6.2a): the
@@ -98,3 +115,10 @@ render:
 card:
   title: Plot Essentials (reference copy)
   triggers: []
+
+# §7.7 — frontmatter for the component's output file. Declared on every component because
+# the key is about a document's own metadata, and emitted by the rows whose output has
+# somewhere to put it: Description alone today, which is where Velvet Lattice reads
+# scenario tags from (`scenario.py:193`). On this file it is CL0620 rather than silence.
+metadata:
+  tags: [thriller, dark]

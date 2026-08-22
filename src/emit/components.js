@@ -27,6 +27,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const YAML = require('yaml');
 
 const { sectionsForBranch, WRAP } = require('../model/component');
 const { applyWrapper } = require('../template');
@@ -69,6 +70,7 @@ const SLOTTED_COMPONENTS = Object.freeze([
     key: 'plotEssential',
     label: 'Plot Essentials',
     file: 'Plot Essentials.md',
+    dir: 'Components',
     declaration: DECLARATION.INHERITED,
     verboseLabel: 'PlotEssentials',
     defaultHeadingLevel: 0,
@@ -81,6 +83,7 @@ const SLOTTED_COMPONENTS = Object.freeze([
     key: 'summary',
     label: 'Summary',
     file: 'Summary.md',
+    dir: 'Components',
     declaration: DECLARATION.INHERITED,
     verboseLabel: 'Summary',
     defaultHeadingLevel: 0,
@@ -89,6 +92,7 @@ const SLOTTED_COMPONENTS = Object.freeze([
     key: 'aiInstructions',
     label: 'AI Instructions',
     file: 'AI Instructions.md',
+    dir: 'Components',
     declaration: DECLARATION.INHERITED,
     verboseLabel: 'AIInstructions',
     // v3's AI Instructions format reads a bare `heading:` as level 2, and every shipped
@@ -101,15 +105,64 @@ const SLOTTED_COMPONENTS = Object.freeze([
     key: 'authorsNote',
     label: "Author's Note",
     file: 'Author Notes.md',
+    dir: 'Components',
     declaration: DECLARATION.INHERITED,
     verboseLabel: 'AuthorsNote',
     defaultHeadingLevel: 2,
   },
+  {
+    /**
+     * §7.7 — the description a leaf carries, which AID applies to the adventure started
+     * from it. The scenario's own blurb is `description:`, a separate key written once at
+     * the output root; the two share `Description.md` at different levels exactly as
+     * `opening:` and `branchFraming:` share `Opening.md`.
+     *
+     * INHERITED rather than node-local, which is what makes it an ordinary row here: a
+     * value declared at an interior node flows down to the leaves beneath it and is written
+     * there, so there is no interior-node render path and no half-routed component. The
+     * scenario description cannot work this way — inheriting it would copy one blurb into
+     * every leaf — which is the whole reason the two are separate keys.
+     *
+     * `dir: null` puts the file at the node root rather than in `Components/`, because that
+     * is where Velvet Lattice reads a node's description from.
+     */
+    key: 'adventureDescription',
+    label: 'Adventure Description',
+    file: 'Description.md',
+    dir: null,
+    declaration: DECLARATION.INHERITED,
+    verboseLabel: 'AdventureDescription',
+    // v3's descriptions carry no headings at all, so neither reading is established by the
+    // corpus. Level 0 is Plot Essentials' — a bare heading is a plain line — which is the
+    // safer default for prose a store listing renders without markdown.
+    defaultHeadingLevel: 0,
+    frontmatter: true,
+  },
 ]);
+
+/**
+ * The scenario blurb (§7.7) — a full descriptor, because it is rendered by the same
+ * `renderSectionedComponent` the routable components use and written by the same writer.
+ *
+ * It sits outside `SLOTTED_COMPONENTS` for one reason: items are branch-scoped and a
+ * scenario has one blurb, so there is no branch whose cast could route into it. It renders
+ * with an empty occupant map at the root, which is not a second render path — it is the
+ * same one, called with nothing to place.
+ */
+const DESCRIPTION_DESCRIPTOR = Object.freeze({
+  key: 'description',
+  label: 'Description',
+  file: 'Description.md',
+  dir: null,
+  declaration: DECLARATION.PROJECT,
+  verboseLabel: 'Description',
+  defaultHeadingLevel: 0,
+  frontmatter: true,
+});
 
 /** Components handled by their own pipelines, listed so the table is the whole picture. */
 const OTHER_COMPONENTS = Object.freeze([
-  { key: 'description', label: 'Description', declaration: DECLARATION.PROJECT, note: 'own pipeline — project-level, three source shapes' },
+  { ...DESCRIPTION_DESCRIPTOR, note: 'sections, not routable — the scenario blurb, written once at the output root' },
   { key: 'opening', label: 'Opening', declaration: DECLARATION.INHERITED, note: 'written at leaves; inherits down the tree' },
   { key: 'branchFraming', label: 'Branch framing', declaration: DECLARATION.NODE, note: 'written at non-leaf nodes; v3 spelling openingChoice' },
   { key: 'scripts', label: 'Scripts', declaration: DECLARATION.INHERITED, note: 'file copy, not a rendered document (§6.3)' },
@@ -274,27 +327,47 @@ function renderSectionedComponent(component, branchPath, occupants, options = {}
  * report per file, and a `{%var}` that survived is equally wrong wherever in the document
  * it sits.
  */
-function writeSectionedComponent(outputDir, descriptor, content, sink) {
+function writeSectionedComponent(outputDir, descriptor, content, sink, metadata = null) {
   if (!content) return null;
-  const dir = path.join(outputDir, 'Components');
+  const dir = descriptor.dir ? path.join(outputDir, descriptor.dir) : outputDir;
   fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, descriptor.file);
   const label = `component ${descriptor.file}`;
+  // The three checks run on the body alone. Frontmatter is structured data an author wrote
+  // as YAML, not prose the compiler substituted into, so a `{%var}` there would be a
+  // different fault with a different fix — and reporting it as an unexpanded variable in
+  // the rendered document would name the wrong half of the file.
   checkUnexpandedVariables(content, label, sink);
   checkUnresolvedFieldTokens(content, label, sink);
   checkMechanicalArtifacts(content, label, sink);
-  fs.writeFileSync(outPath, `${content}\n`, 'utf8');
+  fs.writeFileSync(outPath, `${renderFrontmatter(metadata)}${content}\n`, 'utf8');
   return outPath;
+}
+
+/**
+ * `metadata:` as a YAML frontmatter block, or '' when there is none (§7.7).
+ *
+ * Stringified by the same library that parsed it, so a value round-trips rather than being
+ * re-quoted by a hand-rolled writer — which matters because Velvet Lattice parses this back
+ * out (`scenario.py:193` reads scenario tags from it) and a list that arrives as a string
+ * is a silent failure at the far end.
+ */
+function renderFrontmatter(metadata) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return '';
+  if (Object.keys(metadata).length === 0) return '';
+  return `---\n${YAML.stringify(metadata).trimEnd()}\n---\n\n`;
 }
 
 module.exports = {
   DECLARATION,
   SLOTTED_COMPONENTS,
   OTHER_COMPONENTS,
+  DESCRIPTION_DESCRIPTOR,
   isPassthrough,
   readPassthrough,
   renderSection,
   sortOccupants,
   renderSectionedComponent,
   writeSectionedComponent,
+  renderFrontmatter,
 };

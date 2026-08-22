@@ -44,7 +44,14 @@ const COMPONENTS = {
   keys: {
     aiInstructions: STRING,
     authorsNote: STRING,
+    /** The scenario blurb. Root only, written once to the output root (§7.7). */
     description: STRING,
+    /**
+     * The description a leaf carries, which AID applies to the adventure started there.
+     * Inherited down the tree like any other component, and separate from `description:`
+     * because inheriting the scenario blurb would copy it into every leaf.
+     */
+    adventureDescription: STRING,
     plotEssential: STRING,
     opening: STRING,
     branchFraming: STRING,

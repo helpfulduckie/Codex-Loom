@@ -39,7 +39,7 @@ These abort compilation entirely.
 
 These skip the affected item but allow compilation to continue.
 
-**Component and placement problems are coded diagnostics, not free-text messages.** The `[PE]`, `[AIN]` and `[AN]` messages that used to appear here belonged to the separate resolvers Plot Essentials, AI Instructions and Author's Note each ran, and those are gone — every component now takes one path. A slot named by no component, a section that is not a slot, an empty slot, and an item that produces no output on a branch are `CL0610`–`CL0615` in [11-diagnostics.md](11-diagnostics.md). A component whose file is missing or empty is reported at the end of the compile as a requested component that produced no output.
+**Component and placement problems are coded diagnostics, not free-text messages.** The `[PE]`, `[AIN]` and `[AN]` messages that used to appear here belonged to the separate resolvers Plot Essentials, AI Instructions and Author's Note each ran, and those are gone — every component now takes one path. A slot named by no component, a section that is not a slot, an empty slot, and an item that produces no output on a branch are `CL0610`–`CL0615` in [11-diagnostics.md](11-diagnostics.md). A component whose file is missing or empty is reported at the end of the compile as a requested component that produced no output. The description codes `CL0616`–`CL0621` are in the same table.
 
 | Message | Cause | Fix |
 |---|---|---|

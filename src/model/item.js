@@ -26,12 +26,17 @@ const CODES = Object.freeze({
 /**
  * The components an item may route into (§7.3), in the order targets are reported.
  *
- * `description`, `opening` and `branchFraming` are absent because they keep their own
- * pipelines until Phase 6 — the schema declares them so an author can write ahead of the
- * implementation, and this list is what the implementation actually reads.
+ * `opening` and `branchFraming` are absent because they keep their own pipelines — the
+ * schema declares them so an author can write ahead of the implementation, and this list is
+ * what the implementation actually reads.
+ *
+ * `adventureDescription` joined in Phase 6 (§7.7) and the scenario blurb did not. Both are
+ * descriptions and only one is routable, because routing needs a branch: an adventure
+ * description is written per leaf and can take that leaf's cast, while the blurb is written
+ * once at the root, where there is no branch whose items could fill it.
  */
 const PLACEABLE_COMPONENTS = Object.freeze([
-  'plotEssential', 'summary', 'aiInstructions', 'authorsNote',
+  'plotEssential', 'summary', 'aiInstructions', 'authorsNote', 'adventureDescription',
 ]);
 
 /** §7.4: items within a slot sort by `order:`, and 5 is the middle of the road. */

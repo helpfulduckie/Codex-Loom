@@ -26,6 +26,7 @@ const { validate } = require('../schema');
 const { COMPONENT_SCHEMA } = require('./component-schema');
 const { normalizeComponent, mergeSectionRecords, applySectionSelector } = require('../model/component');
 const { expandTokens } = require('../tokens');
+const { runExtractor, readSource } = require('../extract');
 const { CODES, busWarner } = require('../diag');
 
 /**
@@ -85,13 +86,26 @@ function loadComponentDocument(spec, options = {}) {
     ? (doc.sections || {})
     : mergeSectionRecords(inherited, doc.sections || {}, onWarn);
 
-  const component = normalizeComponent({ ...doc, sections }, { onWarn });
+  // §7.7's `file:` and `from:` become `text:` here — after the merge, so an override that
+  // replaces an imported section's source wins, and before normalization, so everything
+  // downstream sees one kind of section content. Reading them here rather than at render
+  // time is the same decision `imports:` made for the same reason: this runs once per
+  // component file, and a missing path reported per leaf is 32 reports for The Institute.
+  const sourced = resolveSectionSources(sections, {
+    spec, base, variables, diagnostics,
+  });
+
+  const component = normalizeComponent({ ...doc, sections: sourced }, { onWarn });
   // `rawSections` is what a *further* import layers over, and it has to be the merged
   // record rather than this file's own `sections:` — a three-deep chain (house style, world
   // layer, project) would otherwise see only the middle layer's own declarations and drop
   // everything the house style contributed.
+  // `rawSections` is the *source-resolved* record, which is what a further import layers
+  // over. Handing back the unresolved one would mean an importing project's `+{…}` against
+  // an inherited `file:` section applied to nothing, because the file's contents would not
+  // be known yet at the moment the field op ran. Resolving first makes the op see the text.
   return component.sections.length > 0
-    ? { ...component, rawSections: sections, source: spec }
+    ? { ...component, rawSections: sourced, source: spec }
     : null;
 }
 
@@ -184,6 +198,122 @@ function resolveImports(doc, spec, options) {
   }
 
   return sections;
+}
+
+// ── Section sources (§7.7) ───────────────────────────────────────────────────
+
+/**
+ * Turn every `file:` and `from:` in a section record into plain `text:`.
+ *
+ * Variant deltas are resolved too, one level down, and they have to be: a delta is applied
+ * by `applySectionVariant` *after* normalization, so a `file:` left unresolved inside one
+ * would reach the emitter as an unread key and produce nothing. One walk covers both
+ * positions, which is also what keeps a source meaning the same thing in a variant as in
+ * the section it varies.
+ *
+ * Paths resolve against the project base with the *root* variable table — the rule `from:`
+ * and `include:` already follow, and for the same reason: this document is cached by
+ * resolved path and shared by every leaf, so a per-branch source would make one cache key
+ * stand for two documents. A section that needs to vary by branch varies through
+ * `branches:`, which is what that key is for.
+ */
+function resolveSectionSources(sections, options) {
+  const out = {};
+  for (const [name, def] of Object.entries(sections || {})) {
+    if (!def || typeof def !== 'object' || Array.isArray(def)) { out[name] = def; continue; }
+
+    const resolved = resolveOneSource(def, name, options);
+
+    if (resolved.variants && typeof resolved.variants === 'object' && !Array.isArray(resolved.variants)) {
+      const variants = {};
+      for (const [variantName, delta] of Object.entries(resolved.variants)) {
+        variants[variantName] = (delta && typeof delta === 'object' && !Array.isArray(delta))
+          ? resolveOneSource(delta, `${name}/${variantName}`, options)
+          : delta;
+      }
+      resolved.variants = variants;
+    }
+
+    out[name] = resolved;
+  }
+  return out;
+}
+
+/**
+ * Read one section definition's source, or hand it back untouched when it declares none.
+ *
+ * A section declares at most one source. `text:` alongside `file:` is CL0619 rather than a
+ * precedence rule, on the same reasoning as CL0601's text-and-slot: the ambiguity is real —
+ * does the file replace the text, precede it, or follow it? — and every answer is a
+ * convention the author would have to look up. Refusing it keeps the option of defining one
+ * later; picking silently would not.
+ */
+function resolveOneSource(def, label, options) {
+  const { spec, base, variables, diagnostics } = options;
+  const hasFile = typeof def.file === 'string' && def.file !== '';
+  const hasFrom = def.from && typeof def.from === 'object' && !Array.isArray(def.from);
+  if (!hasFile && !hasFrom) return def;
+
+  const result = { ...def };
+  delete result.file;
+  delete result.from;
+
+  if (hasFile && hasFrom) {
+    report(diagnostics, 'error', CODES.SECTION_TEXT_AND_SOURCE,
+      `section "${label}" declares both "file:" and "from:" — a section takes its text from `
+      + 'one source. Split the two into their own sections, which is also what lets each '
+      + 'carry its own heading and position.',
+      spec);
+    return result;
+  }
+
+  if (def.text !== undefined && def.text !== null && def.text !== '') {
+    report(diagnostics, 'error', CODES.SECTION_TEXT_AND_SOURCE,
+      `section "${label}" declares "text:" and ${hasFile ? '"file:"' : '"from:"'} — a section `
+      + 'takes its text from one source. The text is kept and the file is ignored; move the '
+      + 'file into its own section if both were meant to appear.',
+      spec);
+    return result;
+  }
+
+  const rawPath = hasFile ? def.file : def.from.script;
+  if (typeof rawPath !== 'string' || rawPath === '') {
+    report(diagnostics, 'error', CODES.SECTION_SOURCE_NOT_FOUND,
+      `section "${label}" has a "from:" with no "script:" naming a file to read.`,
+      spec);
+    return result;
+  }
+
+  const expanded = expandTokens(rawPath, { variables });
+  const resolved = path.isAbsolute(expanded)
+    ? path.normalize(expanded)
+    : path.resolve(base || path.dirname(spec), expanded);
+
+  if (!fs.existsSync(resolved)) {
+    report(diagnostics, 'error', CODES.SECTION_SOURCE_NOT_FOUND,
+      `section "${label}" reads from "${rawPath}"`
+      + `${expanded === rawPath ? '' : ` (expanded to ${expanded})`}, which does not exist. `
+      + 'The path resolves against the project base unless it is absolute — the same base '
+      + '`imports:`, `include:` and every `components:` entry use.',
+      spec);
+    return result;
+  }
+
+  const source = readSource(resolved);
+
+  if (hasFile) {
+    result.text = source.trimEnd();
+    return result;
+  }
+
+  const { text, error } = runExtractor(def.from.extract, source);
+  if (error) {
+    report(diagnostics, 'error', CODES.SECTION_EXTRACT_UNKNOWN,
+      `section "${label}": ${error}`, spec);
+    return result;
+  }
+  result.text = text;
+  return result;
 }
 
 /** `importVariants:` accepts a scalar or a list, exactly as it does on an item. */

@@ -280,7 +280,12 @@ describe('kitchen-sink component (components/plot-essentials.cl.yaml)', () => {
     const seen = [];
     const component = normalizeComponent(doc, { onWarn: (code, message) => seen.push(`${code} ${message}`) });
     expect(seen).toEqual([]);
-    expect(component.sections.map((s) => s.name)).toEqual(['genre', 'rules', 'cast', 'party']);
+    // `houseStyle` and `modBanner` normalize without a CL0602 even though neither declares
+    // `text:` — a section with a source has content, it simply has not been read yet. The
+    // loader resolves both into `text:` before this runs in a real compile; this fixture is
+    // validated rather than compiled, so it reaches the model still carrying them.
+    expect(component.sections.map((s) => s.name))
+      .toEqual(['genre', 'rules', 'cast', 'party', 'houseStyle', 'modBanner']);
     expect([...component.slots.keys()]).toEqual(['cast', 'party']);
   });
 

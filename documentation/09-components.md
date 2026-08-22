@@ -229,6 +229,8 @@ An item may name several targets: `storyCard: true` alongside a `plotEssential:`
 |---|---|---|
 | `slot` | `false` | `true` marks a section items can route into. A slot section takes no `text:`. |
 | `text` | — | A string, or a mapping of named lines. With a mapping only the values render; the names exist so a variant can edit one line without restating the block. |
+| `file` | — | A path whose contents become the section's text, included verbatim. |
+| `from` | — | `{script:, extract:}` — a path read through a named transform. `extract: scriptBanner` reads a JavaScript file's leading comment block. |
 | `heading` | — | Placed before the content, inside the wrapper. Omit to suppress entirely. |
 | `headingLevel` | `0` here | `1`–`6` adds a Markdown `#` prefix; `0` renders plain text. AI Instructions and Author's Note default to `2` instead. |
 | `render.position` | `5` | Sort key among sections; lower is earlier. |
@@ -238,6 +240,10 @@ An item may name several targets: `storyCard: true` alongside a `plotEssential:`
 | `render.bullet` | `false` | Prefix each `text:` line with `- `. |
 | `branches` | — | Branch dispatch for the section, using the same `resolveBranchSpec` as items. `~` drops the section on that branch. |
 | `variants` | — | Named deltas this section's `branches:` can select. |
+
+**A section takes its text from one of `text:`, `file:` and `from:`.** Declaring two is `CL0619`. `file:` and `from:` paths resolve against the project base with `{%variable}` expansion, and are read once per component file rather than once per branch. The Description section below has the full account of both, including the `extract:` roster.
+
+**Document-level keys.** Besides `sections:`, a component document may declare `imports:` (see [Sharing a component with `imports:`](#sharing-a-component-with-imports)), `branches:` (the fan-out over every section), and `metadata:` — frontmatter for the output file, emitted only by the components that write one with a place for it, which today is Description alone.
 
 `only:` and `except:` are not supported; use `branches:` with `~`.
 
@@ -530,52 +536,102 @@ No processing is applied — files are copied as-is.
 
 ## Description
 
-`Description.md` is a **project-level** file written once to the output root, at the same level as the `Branches/` folder. Unlike other components it is not written per-branch.
-
-Its content can come from a plain body file, from a cleaned-up banner extracted from a JavaScript script file, or both.
-
-### Declaration modes
-
-`components.description` accepts three formats based on file extension:
+A description is an ordinary component built from `sections:`, and there are **two keys** for it. `description:` is the scenario blurb AID shows in listings; `adventureDescription:` is the description a leaf carries, which AID applies to the adventure started from that leaf. Both write `Description.md`, at different levels — the same arrangement `opening:` and `branchFraming:` have with `Opening.md`.
 
 ```yaml
 components:
-  description: ./description.md        # .md or .txt → body content only
-  description: ./scripts/library.js    # .js → script banner only
-  description: ./description.yaml      # .yaml → full config (body + script)
+  description: ./components/description.cl.yaml           # the store listing, root only
+  adventureDescription: ./components/adventure.cl.yaml    # per-leaf, inherits down the tree
 ```
 
-### Description config file (`.yaml`)
+### Which key to use
 
-When pointing to a YAML file, the following keys are supported:
+| | `description:` | `adventureDescription:` |
+|---|---|---|
+| What AID does with it | Shows it on the scenario's listing page | Becomes the adventure's description |
+| Where it is declared | The project root only | Anywhere in the tree |
+| Inherits down the tree | No | Yes, like every other component |
+| Where the file lands | `{output}/Description.md` | `{output}/Branches/…/Description.md`, at each leaf |
+| Items can route into its slots | No | Yes |
+
+**The scenario blurb does not inherit, and that is deliberate.** A scenario has one listing, so copying it into every leaf would write the same paragraph thirty times and say nothing new. `adventureDescription:` is the one that inherits, because a description that varies by branch is a per-adventure thing.
+
+**Items route into an adventure description, not into the scenario blurb.** A `render.adventureDescription` target places an item in a slot exactly as `render.plotEssential` does. The blurb has no branch, so there is no cast to place into it.
+
+### Per-node descriptions depend on an AID oversight
+
+There is no field in the AID editor for a per-node description. Velvet Lattice writes one at every node, and AID *does* apply it to the resulting adventure — verified by uploading one. This works because reaching it requires a tool like VL, so nothing on AID's side has had reason to close it. It is harmless and unlikely to change soon, but it is an oversight rather than a feature: if it is ever closed, `adventureDescription:` stops having an effect and `description:` is unaffected.
+
+### A leaf with a description and no opening is an ERROR
+
+Velvet Lattice sets a node's prompt to `components["Opening"] or node.description`. A leaf carrying a description and no `Opening.md` therefore does not open on an empty prompt — it opens on the blurb, as though the store listing were the first scene. That is `CL0616`, and it is an ERROR rather than a warning because the output is wrong in a way that reads as intentional.
+
+Give the branch an `opening:`, or drop the `adventureDescription:` it inherits:
 
 ```yaml
-# description.yaml
-body:   ./components/description.md   # optional: path to body text file
-script: ./scripts/library.js          # optional: path to JS file to extract banner from
-stripTrailingInstructions: true        # optional; default false
+branches:
+  silent:
+    components:
+      adventureDescription: ./components/adventure.cl.yaml
+      opening: ./openings/silent.md      # without this, CL0616
 ```
 
-All path values in the config file support `{%variable}` and `{%Key}` token expansion, resolved the same way as `include:` paths — relative to `compile.yaml`.
+### Sections take their text from three places
+
+Besides `text:`, a section may read a file (`file:`) or read one through a named transform (`from:`). These are ordinary section keys and work in any component, not only a description.
 
 ```yaml
-# description.yaml with token expansion
-body:   '{%bodyKey}'                   # {%Key} resolved from variables
-script: '{%scripts}/library.js'        # a directory variable + path suffix
+sections:
+  pitch:
+    text: |
+      A psychological thriller set in {%setting}.
+    render: {position: 1}
+
+  body:
+    file: './components/blurb.md'        # included verbatim
+    render: {position: 2}
+
+  modBanner:
+    from:
+      script: '{%scripts}/library.js'    # read through a transform
+      extract: scriptBanner
+    render: {position: 9}
 ```
 
-### Script banner extraction
+**A section takes its text from one source.** Declaring `text:` alongside `file:` or `from:` is `CL0619`; the `text:` is kept and the file is ignored. Split them into two sections if both were meant to appear — which also lets each carry its own heading and position.
 
-When a `.js` file is specified (via `script:` or directly), the compiler reads the top contiguous `//` comment block and transforms it:
+**Paths resolve against the project base**, the same base `imports:`, `include:` and every `components:` entry use, and `{%variable}` tokens expand first. They are read once per component file rather than once per branch, so a missing path is reported once (`CL0617`) however many leaves the component reaches.
+
+**An override replaces the source rather than joining it.** A project importing a component whose section uses `file:` can replace it with its own `text:`, or append to the file's contents with a field operation, and neither is an error:
+
+```yaml
+imports:
+  - from: '{%components}/house-blurb.cl.yaml'
+sections:
+  body:
+    text: '+{And this project in particular.}'   # appends to the imported file's text
+```
+
+### `extract:` — the transform roster
+
+| Name | What it reads |
+|---|---|
+| `scriptBanner` | The leading `//` comment block of a JavaScript file, cleaned up for prose |
+
+An unrecognized name is `CL0618` and names the roster. Adding a transform is a row here and a function in `src/extract.js`.
+
+#### `scriptBanner`
+
+Reads the top contiguous `//` comment block and transforms it line by line:
 
 | Line (after stripping `//`) | Treatment |
 |---|---|
-| All `=` characters | Skipped (pure separator) |
+| All `=` characters | Group boundary |
 | Text padded with `=` on both sides | Condensed to `=== text ===` |
-| Empty | Skipped |
-| Anything else | Kept as-is |
+| Empty | Dropped |
+| Anything else | Kept as written |
 
-Example — this comment block:
+This comment block:
 
 ```js
 // ============================================================
@@ -588,38 +644,84 @@ Example — this comment block:
 // ============================================================
 ```
 
-Becomes:
+becomes:
 
 ```
 === Standard Build - 26.9.6 - library ===
 - UnifiedSettings@1.1.2
 - DuckieDebug@1.0.3
-Paste this ONLY into the library tab in AI Dungeon scripting
 ```
 
-#### `stripTrailingInstructions`
+**The trailing group is dropped when it reads as an install note.** If the final group has no list items and an earlier group does, it is removed — which is how "Paste this ONLY into…" stays out of a store listing without hardcoding the text. The rule needs both halves, so a banner that is entirely prose keeps all of it, and a banner whose last group is itself a list keeps that too.
 
-When `true`, the compiler checks whether the final group of lines (content between the last separator block and end of the comment) contains no list items (lines starting with `-` or `*`), while at least one earlier group did. If so, that final group is dropped.
+There is no way to turn this off. v3 had a `stripTrailingInstructions:` flag; §7.7 deleted it and the extractor picked the stripping behavior, which is what every project that used the flag had set.
 
-This automatically removes footer instructions like "Paste this into…" without hardcoding any text.
+### `metadata:` becomes frontmatter
 
-### Combined output
+A component document may declare `metadata:`, which is written as a YAML frontmatter block above the body. Velvet Lattice reads scenario tags from `Description.md`'s frontmatter, which is what this is for.
 
-When both `body:` and `script:` are set, the body content comes first, followed by a blank line, then the extracted banner:
+```yaml
+# components/description.cl.yaml
+metadata:
+  tags: [thriller, dark]
+sections:
+  pitch:
+    text: A psychological thriller.
+```
+
+produces:
 
 ```
-[body content]
-
-=== Standard Build - 26.9.6 - library ===
-- UnifiedSettings@1.1.2
-...
-```
-
-### Output path
-
-`{output}/Description.md` — written once after all branches compile, alongside `Branches/` and `Overview/`. It is not written per-branch and cannot be declared at branch level.
-
 ---
+tags:
+  - thriller
+  - dark
+---
+
+A psychological thriller.
+```
+
+The key is declared on every component, but only the two description components emit it — nothing else writes a file with a place to put frontmatter. Declaring it elsewhere is `CL0620` and the metadata is ignored.
+
+### Prose descriptions still work
+
+A `.md` or `.txt` path is copied verbatim, exactly as it is for every other component:
+
+```yaml
+components:
+  description: ./components/description.md
+```
+
+### Migrating a v3 `description.yaml`
+
+v3's two-field format becomes two sections. `migrateProjectFully()` in `src/migrate/index.js` does this conversion; by hand it is:
+
+```yaml
+# before — v3
+body:   './components/blurb.md'
+script: '{%scripts}/library.js'
+stripTrailingInstructions: true
+
+# after — v4
+sections:
+  body:
+    file: './components/blurb.md'
+  modBanner:
+    from:
+      script: '{%scripts}/library.js'
+      extract: scriptBanner
+```
+
+`stripTrailingInstructions: true` needs no replacement — it is now the only behavior. If a project had it `false`, the trailing comment group it was keeping will stop appearing; move that line into a `text:` section of its own.
+
+The `.js` shorthand — `description: ./scripts/library.js`, pointing the key straight at a script — is gone. Write it as a component with a `from:` section instead.
+
+### Output paths
+
+- `description:` → `{output}/Description.md`, written once after all branches compile, alongside `Branches/` and `Overview/`.
+- `adventureDescription:` → `Description.md` at each leaf's output directory, beside that leaf's `Opening.md`.
+
+An unbranched project is its own leaf, so both keys aim at the same file there. Declaring both is `CL0621`; the scenario blurb is what survives.
 
 ## Label
 

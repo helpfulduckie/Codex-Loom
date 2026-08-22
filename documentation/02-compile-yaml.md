@@ -155,6 +155,7 @@ Named directory (or file) mappings for each component type. These are referenced
 | `branchFraming` | `Components/Opening.md` (branch-point nodes only) |
 | `scripts` | `Scripts/` (directory copy) |
 | `description` | `Description.md` (output root, written once — not per-branch) |
+| `adventureDescription` | `Description.md` at each leaf (inherits down the tree) |
 
 ```yaml
 components:
@@ -219,14 +220,19 @@ components:
   aiInstructions: "{%default}"                # component key reference
   authorsNote: ./authors-note.yaml
   scripts: ./scripts
-  description: ./description.yaml             # project-level description
+  description: ./description.cl.yaml           # the scenario blurb, root only
+  adventureDescription: ./adventure.cl.yaml    # per-leaf, inherits down the tree
 ```
 
 **`opening:`** — Written to `{output}/Components/Opening.md`. Inherits down to leaf branches unless overridden.
 
 **`branchFraming:`** — Written to branch-point nodes' `Components/Opening.md`. Does **not** inherit; ignored on leaf nodes with a warning.
 
-**`description:`** — Written once to `{output}/Description.md` after all branches compile. Accepts a `.md`/`.txt` file (body only), a `.js` file (script banner only), or a `.yaml` config combining both. Not per-branch; branch-level overrides are ignored. See [Components → Description](09-components.md#description) for full details.
+**`description:`** — The scenario blurb AID shows on the listing page. Written once to `{output}/Description.md` after all branches compile. Accepts a `.md`/`.txt` file copied verbatim, or a component document with `sections:`. Not per-branch; branch-level declarations are ignored.
+
+**`adventureDescription:`** — The description a leaf carries, which AID applies to the adventure started from that leaf. An ordinary component: declared anywhere in the tree, inherited down it, written to each leaf's `Description.md`, and items may route into its slots. A leaf that has one and no `Opening.md` is `CL0616`, because Velvet Lattice would open the adventure on the blurb.
+
+See [Components → Description](09-components.md#description) for both keys, the `file:`/`from:` section sources, and `metadata:` frontmatter.
 
 ### `render`
 

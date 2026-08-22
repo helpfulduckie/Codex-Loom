@@ -99,18 +99,21 @@ const RENDER = {
 
     // Per-component render targets (§7.4), one key per row of §7.3's component table.
     // The `note` stays until the phase that reads the key, and its WARN says the key will
-    // be ignored — so it has to go the moment that stops being true. All four sectioned
-    // components resolve targets now (step 8 put AI Instructions and Author's Note on the
-    // sections grammar), which is why only the three below still carry one. §7.7's
-    // description-as-a-component and the opening pair keep their own pipelines until
-    // Phase 6.
+    // be ignored — so it has to go the moment that stops being true.
+    //
+    // `description` is gone as a target and `adventureDescription` replaces it (§7.7). The
+    // split is which of the two descriptions has a branch: the scenario blurb is written
+    // once at the root and there is no cast to place into it, while an adventure
+    // description is an ordinary per-leaf component that routes like the rest. The old
+    // spelling is in `RENAMED`, so writing it gets the rename rather than a bare
+    // unknown-key — it was never functional, so nothing is being broken, only redirected.
     plotEssential: target(),
     summary: target(),
     aiInstructions: target(),
     authorsNote: target(),
-    description: target('Phase 6'),
-    opening: target('Phase 6'),
-    branchFraming: target('Phase 6'),
+    adventureDescription: target(),
+    opening: target('not yet scheduled'),
+    branchFraming: target('not yet scheduled'),
   },
 };
 

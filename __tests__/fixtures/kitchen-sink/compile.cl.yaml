@@ -88,7 +88,12 @@ scripts:
 components:
   aiInstructions: '{%componentDir}/ai-instructions.cl.yaml'
   authorsNote:    '{%componentDir}/authors-note.cl.yaml'
+  # Two description keys, and the split is §7.7's: `description:` is the scenario blurb
+  # AID shows in listings, declared once at the root and never inherited, while
+  # `adventureDescription:` is an ordinary inherited component that lands at each leaf and
+  # becomes the description of the adventure started there.
   description:    '{%componentDir}/description.cl.yaml'
+  adventureDescription: '{%componentDir}/adventure-description.cl.yaml'
   plotEssential:  '{%componentDir}/plot-essentials.cl.yaml'
   summary:        '{%componentDir}/summary.cl.yaml'
   opening:        '{%componentDir}/openings/root.md'
@@ -121,6 +126,7 @@ branches:
       aiInstructions: '{%componentDir}/subject.ai-instructions.cl.yaml'
       authorsNote:    '{%componentDir}/subject.authors-note.cl.yaml'
       description:    '{%componentDir}/subject.description.cl.yaml'
+      adventureDescription: '{%componentDir}/subject.adventure-description.cl.yaml'
       plotEssential:  '{%componentDir}/subject.plot-essentials.cl.yaml'
       opening:        '{%componentDir}/openings/subject.md'
     # `~` unbinds the project's notes template for this branch, leaving §4.5's default

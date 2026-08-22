@@ -284,7 +284,7 @@ All `{%variable}` expansion routes through `expandTokens()` in `src/tokens.js`, 
 
 v3 had a second family, `{@name}`, resolving against components then canon with a path/content mode distinction. It is removed in §6.1: the per-type component grouping never affected resolution, its one behavioral difference was already applied downstream, and the declaration subtree duplicated `variables:`. Canon names are exposed as variables instead, which is why one expander now suffices.
 
-Call sites are thin wrappers: `config.expandPathTokens` (config paths), `compile.resolveComponentSpec`, the `include:`-path block in `loader/registry.resolveIncludes`, and `description.loadDescConfig`. When adding a context that needs tokens, call `expandTokens` rather than re-deriving the regex.
+Call sites are thin wrappers: `config.expandPathTokens` (config paths), `compile.resolveComponentSpec`, the `include:`-path block in `loader/registry.resolveIncludes`, and `loader/component.js` for both `imports:` `from:` and a section's `file:`/`from:` sources. When adding a context that needs tokens, call `expandTokens` rather than re-deriving the regex.
 
 Coverage notes:
 - `{%}` is expanded in item bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and config paths. In `include:`/`import:` paths it uses **root** `config.variables` only, because `resolveIncludes` runs once before branch enumeration — branch-merged variables do not exist yet.

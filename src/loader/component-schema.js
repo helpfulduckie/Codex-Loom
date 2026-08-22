@@ -64,12 +64,38 @@ const SECTION_RENDER = {
  * shape — the names are what let a variant replace or delete one rule without restating
  * the block.
  */
+const SECTION_FROM = {
+  type: TYPES.MAP,
+  keys: {
+    script: STRING,
+    /** Which named transform in `src/extract.js` reads the source. */
+    extract: STRING,
+  },
+};
+
 const SECTION = {
   type: TYPES.MAP,
   keys: {
     /** `true` marks a section items can route into (§7.2). */
     slot: BOOLEAN,
     text: { type: [TYPES.STRING, TYPES.RECORD], of: STRING },
+
+    /**
+     * §7.7's two sources besides `text:` — a file included verbatim, and a file read
+     * through a named transform.
+     *
+     * They exist because v3's description had a two-field format of its own for exactly
+     * this: `body:` was `file:` and `script:` was `from: {script:, extract: scriptBanner}`.
+     * Making them section keys is what lets the description be an ordinary component, and
+     * it generalizes for free — any component may now pull a section's text from a file,
+     * and more than one script banner becomes expressible where v3 allowed exactly one.
+     *
+     * Both resolve once per component file rather than once per leaf; see
+     * `loader/component.js`. A section declares at most one source, `text:` included.
+     */
+    file: STRING,
+    from: SECTION_FROM,
+
     heading: STRING,
     headingLevel: NUMBER,
     render: SECTION_RENDER,
@@ -104,6 +130,21 @@ const COMPONENT_SCHEMA = {
      * language, so there is no second walker to disagree.
      */
     branches: ANY,
+
+    /**
+     * §7.7 — frontmatter for the component's output file.
+     *
+     * Declared on every component rather than on Description alone, because the key is
+     * about a document's own metadata and nothing about it is description-shaped. Which
+     * components can *emit* it is the emitter's business: `emit/components.js` carries a
+     * `frontmatter` column, Description is the one row that sets it today because that is
+     * where Velvet Lattice reads scenario tags (`scenario.py:193`), and declaring it on a
+     * component with no place to put it is CL0620 rather than silence.
+     *
+     * An open namespace: the keys are VL's and AID's, not ours, and pinning a copy of
+     * their surface here would be a second declaration to keep in step with the first.
+     */
+    metadata: ANY,
 
     // Document-level `variants:` stays deliberately absent, so a v3 AI Instructions file
     // carrying one reports a misplaced key — the migration signal `blocks:` gives a v3 Plot
@@ -141,4 +182,4 @@ const COMPONENT_SCHEMA = {
   },
 };
 
-module.exports = { COMPONENT_SCHEMA, SECTION, SECTION_RENDER };
+module.exports = { COMPONENT_SCHEMA, SECTION, SECTION_RENDER, SECTION_FROM };

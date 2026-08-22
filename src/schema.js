@@ -150,6 +150,10 @@ const RENAMED = Object.freeze({
   cards: 'items',
   overview: 'reports',
   openingChoice: 'branchFraming',
+  // §7.7 split one description key into two, and only one of them is a render target: an
+  // item routes into `adventureDescription`, the per-leaf component, never into the
+  // scenario blurb, which has no branch and therefore no cast.
+  description: 'adventureDescription',
 });
 
 function suggestFor(key, ownPath, declaredHere, keyIndex) {

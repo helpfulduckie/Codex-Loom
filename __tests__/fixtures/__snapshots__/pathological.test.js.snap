@@ -72,6 +72,34 @@ WARN CL0713 Codex/items.cl.yaml
   Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "gated".
+ERROR CL0325 Codex/items.cl.yaml
+  two item definitions resolve to id "anchor" on this branch.
+  hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
+ERROR CL0532 Codex/items.cl.yaml
+  undeclared placeholder "%ghostName%" in item "Greeter" rendering into plotEssential slot "cast" on branch "silent" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
+  hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
+ERROR CL0532 Codex/items.cl.yaml
+  undeclared placeholder "%ghostName%" in story card "Greeter" on branch "silent" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
+  hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
+ERROR CL0610 Codex/items.cl.yaml
+  item "Silent" resolves on branch "silent" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
+ERROR CL0611 Codex/items.cl.yaml
+  item "Typo" targets slot "casst" in Plot Essentials on branch "silent", which declares no such slot. Declared here: cast, party.
+ERROR CL0612 Codex/items.cl.yaml
+  item "NotASlot" targets "genre" in Plot Essentials, which is a section but not a slot — only a section declaring "slot: true" can hold items.
+ERROR CL0611 Codex/items.cl.yaml
+  item "IntoPassthrough" targets slot "rules" in AI Instructions, which is prose copied verbatim and declares no slots. Point the component at a YAML document with "sections:" to route items into it.
+ERROR CL0533 Codex/items.cl.yaml
+  placeholder "%heroName%" in the type of story card "MistypedType" on branch "silent" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
+ERROR CL0420 Codex/items.cl.yaml
+  no template found for item "MistypedType" (type: Character-%heroName%)
+ERROR CL0712 Codex/items.cl.yaml
+  Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+WARN CL0713 Codex/items.cl.yaml
+  Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
+WARN CL0614 components/plot-essentials.cl.yaml
+  slot "party" in Plot Essentials has no items on branch "silent".
 WARN CL0711 opening-open.md
   Opening for branch "open" is 3,626 characters on upload, within 374 of the 4,000 limit. Compiled length is 3,301; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
 ERROR CL0710 opening-gated.md
@@ -81,6 +109,8 @@ WARN CL0534 compile.cl.yaml
   placeholder "%heroName%" in the title of branch "gated" — a branch title half-works. AID fills the prompt and shows the answer while the player is choosing, then keeps the raw placeholder text in the saved adventure’s title. Deliberate is possible; usually it is not.
 ERROR CL0533 components/description.md
   placeholder "%heroName%" in the Description — AID does not fill placeholders in the Description. It is shown before any adventure exists to answer them, so the raw text is what a reader sees.
+ERROR CL0616 compile.cl.yaml
+  branch "silent" has an adventure description and no Opening.md. Velvet Lattice reads a node's prompt as its Opening or, failing that, its description — so this leaf would open the adventure with its own blurb rather than a scene. Give the branch an opening:, or drop the adventureDescription: it inherits.
 WARN CL0535 compile.cl.yaml
   placeholder "altName" is declared at the project root but no text beneath it references "%altName%" — the player is asked the question and the answer goes nowhere.
   hint: Declared at the project root, so this counts every branch.
