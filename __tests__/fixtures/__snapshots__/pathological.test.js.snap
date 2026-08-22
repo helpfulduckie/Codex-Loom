@@ -43,6 +43,8 @@ WARN CL0713 Codex/items.cl.yaml
   Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "open".
+WARN CL0711 components/opening-open.md
+  Opening for branch "open" is 3,626 characters on upload, within 374 of the 4,000 limit. Compiled length is 3,301; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
 WARN CL0326 canon/rumors.cl.yaml
   branch dispatch to variant "hshed" on branch "gated" matched none of the 3 items included from rumors.cl.yaml. A dispatch stamped onto every item in a file is silent where an item does not define the name (§7.6.2a), so a misspelling applies to nothing and changes nothing — this is the only report it produces.
 ERROR CL0325 Codex/items.cl.yaml
@@ -72,6 +74,9 @@ WARN CL0713 Codex/items.cl.yaml
   Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "gated".
+ERROR CL0710 components/opening-gated.md
+  Opening for branch "gated" is 4,021 characters on upload (limit 4,000). Compiled length is 3,501; 8 placeholder references add 520 characters when Velvet Lattice expands them to their question text on upload.
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
 ERROR CL0325 Codex/items.cl.yaml
   two item definitions resolve to id "anchor" on this branch.
   hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
@@ -100,11 +105,6 @@ WARN CL0713 Codex/items.cl.yaml
   Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "silent".
-WARN CL0711 opening-open.md
-  Opening for branch "open" is 3,626 characters on upload, within 374 of the 4,000 limit. Compiled length is 3,301; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
-ERROR CL0710 opening-gated.md
-  Opening for branch "gated" is 4,021 characters on upload (limit 4,000). Compiled length is 3,501; 8 placeholder references add 520 characters when Velvet Lattice expands them to their question text on upload.
-  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
 WARN CL0534 compile.cl.yaml
   placeholder "%heroName%" in the title of branch "gated" — a branch title half-works. AID fills the prompt and shows the answer while the player is choosing, then keeps the raw placeholder text in the saved adventure’s title. Deliberate is possible; usually it is not.
 ERROR CL0533 components/description.md

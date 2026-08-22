@@ -151,8 +151,8 @@ Named directory (or file) mappings for each component type. These are referenced
 | `aiInstructions` | `Components/AI Instructions.md` |
 | `plotEssential` | `Components/Plot Essentials.md` |
 | `authorsNote` | `Components/Author's Note.md` |
-| `opening` | `Components/Opening.md` |
-| `branchFraming` | `Components/Opening.md` (branch-point nodes only) |
+| `opening` | `Components/Opening.md` at each leaf (inherits down the tree) |
+| `branchFraming` | `Components/Opening.md` at branch-point nodes only (never inherited) |
 | `scripts` | `Scripts/` (directory copy) |
 | `description` | `Description.md` (output root, written once — not per-branch) |
 | `adventureDescription` | `Description.md` at each leaf (inherits down the tree) |
@@ -224,9 +224,9 @@ components:
   adventureDescription: ./adventure.cl.yaml    # per-leaf, inherits down the tree
 ```
 
-**`opening:`** — Written to `{output}/Components/Opening.md`. Inherits down to leaf branches unless overridden.
+**`opening:`** — Written to each leaf's `Components/Opening.md`. An ordinary component: it inherits down the tree, may be a `sections:` document, and items may route into its slots. A `.md` file is copied verbatim and a spec naming no file is used as literal text, which is what most openings are. Capped at 4,000 characters (`CL0710`/`CL0711`).
 
-**`branchFraming:`** — Written to branch-point nodes' `Components/Opening.md`. Does **not** inherit; ignored on leaf nodes with a warning.
+**`branchFraming:`** — Written to branch-point nodes' `Components/Opening.md`. Does **not** inherit; ignored on leaf nodes with a warning. Takes the same three shapes `opening:` does, but items cannot route into it — framing sits at an interior node, where no items are resolved.
 
 **`description:`** — The scenario blurb AID shows on the listing page. Written once to `{output}/Description.md` after all branches compile. Accepts a `.md`/`.txt` file copied verbatim, or a component document with `sections:`. Not per-branch; branch-level declarations are ignored.
 

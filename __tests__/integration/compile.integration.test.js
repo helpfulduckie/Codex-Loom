@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { compile } = require('../../src/compile');
+const { migrateOpeningFiles } = require('../../src/migrate/opening');
 
 const FIXTURE_DIR = path.resolve(__dirname, '../../test');
 
@@ -465,9 +466,9 @@ describe('cross-item refs inside body field render functions', () => {
   });
 });
 
-// ── opening {%Key} token resolving to a .yaml block file ─────────────────────
+// ── opening {%Key} token resolving to a block file the migrator converted ────
 
-describe('opening {%Key} resolving to YAML block file', () => {
+describe('opening {%Key} resolving to a migrated block file', () => {
   let opKeyTmpDir;
 
   beforeAll(() => {
@@ -510,6 +511,7 @@ describe('opening {%Key} resolving to YAML block file', () => {
       '  beta: {}',
     ].join('\n'), 'utf8');
 
+    migrateOpeningFiles(path.join(opKeyTmpDir, 'compile.yaml'));
     compile(path.join(opKeyTmpDir, 'compile.yaml'));
   });
 
@@ -530,9 +532,15 @@ describe('opening {%Key} resolving to YAML block file', () => {
   });
 });
 
-// ── YAML block-opening (opening.yaml) integration ─────────────────────────────
+// ── v3 block opening → sections, migrated then compiled ─────────────────────
+//
+// The block list below is written exactly as a v3 project holds it, then run through
+// `migrateOpeningFiles` before the compile. Every assertion is the one this suite made when
+// `src/opening.js` rendered the blocks directly, which is the point: the conversion is
+// faithful, or one of them goes red. It covers universal blocks, single and nested branch
+// dispatch, a variant, a file-path `text:`, and variable expansion in one project.
 
-describe('YAML block opening (opening.yaml)', () => {
+describe('v3 block opening, migrated to sections and compiled', () => {
   let blkTmpDir;
 
   beforeAll(() => {
@@ -635,6 +643,7 @@ describe('YAML block opening (opening.yaml)', () => {
       '      knight: {}',
     ].join('\n'), 'utf8');
 
+    migrateOpeningFiles(path.join(blkTmpDir, 'compile.yaml'));
     compile(path.join(blkTmpDir, 'compile.yaml'));
   });
 

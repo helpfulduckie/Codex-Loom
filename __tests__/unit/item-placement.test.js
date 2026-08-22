@@ -39,11 +39,12 @@ describe('storyCard', () => {
 
 describe('targets', () => {
   test('every §7.3 component that takes sections is placeable', () => {
-    // The scenario blurb is deliberately not here: routing needs a branch, and the blurb is
-    // written once at the root where there is no cast to place. `adventureDescription` is
-    // the per-leaf half and routes like the rest (§7.7).
+    // Two components are deliberately not here, for one reason: routing needs a branch with
+    // items resolved on it. The scenario blurb is written once at the root, and branch
+    // framing sits at an interior node — neither has a cast to place.
     expect([...PLACEABLE_COMPONENTS]).toEqual([
       'plotEssential', 'summary', 'aiInstructions', 'authorsNote', 'adventureDescription',
+      'opening',
     ]);
   });
 

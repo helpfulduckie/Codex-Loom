@@ -112,8 +112,11 @@ const RENDER = {
     aiInstructions: target(),
     authorsNote: target(),
     adventureDescription: target(),
-    opening: target('not yet scheduled'),
-    branchFraming: target('not yet scheduled'),
+    opening: target(),
+    // Declared but never read, and it is not a scheduling note: branch framing sits at an
+    // interior node and items are resolved per leaf, so there is no cast at that node to
+    // route into it. Same reason the scenario blurb is not a target.
+    branchFraming: target('branch framing sits at an interior node, where no items resolve'),
   },
 };
 

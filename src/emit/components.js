@@ -132,11 +132,42 @@ const SLOTTED_COMPONENTS = Object.freeze([
     dir: null,
     declaration: DECLARATION.INHERITED,
     verboseLabel: 'AdventureDescription',
+    inlineProse: false,
     // v3's descriptions carry no headings at all, so neither reading is established by the
     // corpus. Level 0 is Plot Essentials' — a bare heading is a plain line — which is the
     // safer default for prose a store listing renders without markdown.
     defaultHeadingLevel: 0,
     frontmatter: true,
+  },
+  {
+    /**
+     * §7.1's fourth syntax, retired. `src/opening.js` was an anonymous ordered block list
+     * with a `branches:` dispatch and a `variants:` vocabulary of its own — a block's
+     * variant was `{text:}` and nothing else, dispatch took the *first* name and discarded
+     * the rest where `sectionsForBranch` stacks them all, and a missing one was a bare
+     * `console.warn` with no code. Nothing in the corpus used that half, so the
+     * disagreement was dead code rather than a feature, and openings join the grammar the
+     * other components already share.
+     *
+     * Prose is the common case and stays free: an opening spec that names a `.md` file is
+     * copied verbatim, and one that resolves to no file at all is the literal text. That
+     * is what every opening in all three golden corpora is.
+     */
+    key: 'opening',
+    label: 'Opening',
+    file: 'Opening.md',
+    dir: 'Components',
+    declaration: DECLARATION.INHERITED,
+    verboseLabel: 'Opening',
+    // An opening is the story's first message, so a bare `heading:` is a plain line rather
+    // than a Markdown heading — Plot Essentials' reading, for the same reason.
+    defaultHeadingLevel: 0,
+    // The one component whose spec is routinely a sentence rather than a path.
+    inlineProse: true,
+    // §8.5's tightest cap, and the reason this row carries a `limit` column at all: VL
+    // writes an opening to a field AID caps at 4,000 characters, measured after placeholder
+    // substitution. Branch framing lands in the same filename and is capped with it.
+    limitKey: 'opening',
   },
 ]);
 
@@ -160,11 +191,35 @@ const DESCRIPTION_DESCRIPTOR = Object.freeze({
   frontmatter: true,
 });
 
+/**
+ * Branch framing (§7.3) — a full descriptor, and outside `SLOTTED_COMPONENTS` for the same
+ * reason the scenario blurb is: routing needs items, and items are resolved per leaf.
+ *
+ * Framing is the one component that belongs to a *non-leaf* node, which is where the leaf
+ * loop cannot reach it. It renders through `renderSectionedComponent` with an empty
+ * occupant map at the interior node's own branch path — the same call the blurb makes at
+ * the root — so it is on the sections grammar without a render path of its own.
+ *
+ * It writes `Opening.md`, the filename `opening:` uses at leaves, because Velvet Lattice
+ * reads a node's prompt from that name at every level. That is also why it shares the
+ * opening's cap: AID measures the field, not the chain.
+ */
+const FRAMING_DESCRIPTOR = Object.freeze({
+  key: 'branchFraming',
+  label: 'Branch framing',
+  file: 'Opening.md',
+  dir: 'Components',
+  declaration: DECLARATION.NODE,
+  verboseLabel: 'BranchFraming',
+  defaultHeadingLevel: 0,
+  inlineProse: true,
+  limitKey: 'opening',
+});
+
 /** Components handled by their own pipelines, listed so the table is the whole picture. */
 const OTHER_COMPONENTS = Object.freeze([
   { ...DESCRIPTION_DESCRIPTOR, note: 'sections, not routable — the scenario blurb, written once at the output root' },
-  { key: 'opening', label: 'Opening', declaration: DECLARATION.INHERITED, note: 'written at leaves; inherits down the tree' },
-  { key: 'branchFraming', label: 'Branch framing', declaration: DECLARATION.NODE, note: 'written at non-leaf nodes; v3 spelling openingChoice' },
+  { ...FRAMING_DESCRIPTOR, note: 'sections, not routable — written at non-leaf nodes; v3 spelling openingChoice' },
   { key: 'scripts', label: 'Scripts', declaration: DECLARATION.INHERITED, note: 'file copy, not a rendered document (§6.3)' },
 ]);
 
@@ -363,6 +418,7 @@ module.exports = {
   SLOTTED_COMPONENTS,
   OTHER_COMPONENTS,
   DESCRIPTION_DESCRIPTOR,
+  FRAMING_DESCRIPTOR,
   isPassthrough,
   readPassthrough,
   renderSection,

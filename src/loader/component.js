@@ -57,10 +57,18 @@ function loadComponentDocument(spec, options = {}) {
   if (doc === null || doc === undefined) return null;
 
   if (Array.isArray(doc)) {
+    // v3 had two anonymous ordered block lists — Plot Essentials' and the Opening's — and
+    // both become named sections, because §7.2 makes a name the thing that lets a section be
+    // overridden, repositioned or deleted by an importing project. What each block *becomes*
+    // differs: a Plot Essentials block was usually content and becomes an item with a render
+    // target, while an Opening block was always prose and becomes a text section. Naming both
+    // paths here rather than one keeps the message true for whichever file arrived.
     throw new Error(
       `${label} file "${spec}" is a YAML sequence. A component is a mapping with a `
-      + '`sections:` record (§7.2); v3\'s ordered block list has no equivalent here, '
-      + 'because the items that used to be blocks now declare their own placement.'
+      + '`sections:` record (§7.2), and v3\'s ordered block lists have no equivalent — a '
+      + 'block had no name, so nothing could override or reposition it. An Opening block '
+      + 'becomes a named text section; a Plot Essentials block becomes an item declaring its '
+      + 'own placement. `migrateProjectFully()` in `src/migrate/index.js` converts both.'
     );
   }
   if (typeof doc !== 'object') {

@@ -24,6 +24,7 @@ const YAML = require('yaml');
 const v3 = require('./v3');
 const { migratePlotEssentialsFiles } = require('./plot-essentials-apply');
 const { migrateDescriptionFiles } = require('./description');
+const { migrateOpeningFiles } = require('./opening');
 
 /**
  * Point `render.notesTemplate` at a notes template, once `aid.known` has become `notes:`.
@@ -213,6 +214,12 @@ function migrateProjectFully(configPath, options = {}) {
   const desc = migrateDescriptionFiles(configPath, options);
   notes.push(...desc.notes);
   touched.push(...desc.touched);
+
+  // §7.1's fourth syntax. Same position as the description stage and for the same reason:
+  // the opening's path is read through `buildCompileContext`, which needs a v4-valid config.
+  const opening = migrateOpeningFiles(configPath, options);
+  notes.push(...opening.notes);
+  touched.push(...opening.touched);
 
   // Phase 4. Deliberately last and deliberately empty — see migratePlaceholders.
   const placeholders = migratePlaceholders();

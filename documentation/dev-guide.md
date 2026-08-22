@@ -33,12 +33,13 @@ Phase 1 split the three files that had accreted several concerns each — `loade
 | `src/emit/vl.js` | The Velvet Lattice format — the only place that knows the envelope (§8) |
 | `src/emit/components.js` | The component descriptor table; sectioned rendering and passthrough (§7.2, §7.3) |
 | `src/model/component.js` | Component documents: sections, slots, section variants, branch gating (§7.2) |
-| `src/description.js`, `src/opening.js` | Description and Opening component compilation |
+| `src/extract.js` | Named transforms for a section's `from:` source — `scriptBanner` (§7.7) |
 | `src/overview.js` | Leaf-review and whole-tree overview file generation |
 | `src/diff.js` | Cross-branch `--with-diff` (Shared/delta) and `--with-annotate` report generation |
 | `src/inventory.js` | `--with-inventory`: slot × branch × occupants report (§7.9) |
 | `src/seedmap.js`, `src/bodysize.js`, `src/lint.js` | Post-compile report modes, read from the written tree |
 | `src/migrate/v3.js` | One-time v3 → v4 conversion (§14.2) |
+| `src/migrate/description.js`, `src/migrate/opening.js` | The two v3 file formats §7.1 counted, converted to `sections:` |
 | `src/util.js` | File enumeration, YAML loading, deep clone, case-insensitive object utilities |
 
 `model/` is pure by contract (§3.3): no `fs`, no `console`. Warnings go to a caller-supplied `onWarn`, and failed lookups come back described rather than thrown, so the caller decides what reaches a terminal. A test enforces both the purity and the roster.
@@ -75,9 +76,10 @@ FOR EACH LEAF:
       validateCardType()         → abort if resolved aid.type is not a legal path segment
       render()                   → markdown string
     writeOutput()                → Story Cards/{type}/{type}.md
-  renderSectionedComponent()     → Components/{Plot Essentials,Summary,AI Instructions,Author Notes}.md
+  renderSectionedComponent()     → Components/{Plot Essentials,Summary,AI Instructions,
+                                    Author Notes,Opening}.md + Description.md
   copyScripts()
-writeOpeningsRecursive()         → Components/Opening.md at leaf/node levels
+writeFramingRecursive()          → Components/Opening.md at interior nodes only
 runLeafReviewMode()              → Overview/*.leaf.md
 (if --with-inventory) runInventoryMode() → Overview/Inventory.md
 (if --with-diff)      runDiffMode()      → Overview/Shared.md + Overview/*.delta.md
@@ -309,4 +311,4 @@ Per leaf, per item, field-level diff of `resolveItem(itemDef, registry, branchPa
 **`--with-inventory` → `Overview/Inventory.md`** (`runInventoryMode` in `inventory.js`).
 Per leaf, `captureLeafInventory` walks the slot index and the occupant map into `{slot, gated, occupants}` records. Rendering compresses twice: branches are grouped by occupancy so a uniformly-filled slot is one row, and a row's branch set is written as a path pattern when one selects exactly that set. `branchPattern` verifies each candidate against the leaves it matches and returns null on an over-match, because a pattern claiming a placement that never happened would be indistinguishable from a correct one. Occupant order comes from `sortOccupants`, exported from `emit/components.js` so §7.4's `order:`-then-id rule stays stated in one place.
 
-**Scope / current limitations.** Every sectioned component — Plot Essentials, Summary, AI Instructions and Author's Note — diffs per section, keyed `section:<name>` by `renderSectionedComponent`. A `.md` passthrough has no sections and reports as one segment keyed by the component. Opening is resolved post-loop (`writeOpeningsRecursive`) and is not yet captured. The annotate `base`/`leaf` values are the pre-render resolved field structures, so `+{}` appends show as two-element arrays.
+**Scope / current limitations.** Every sectioned component — Plot Essentials, Summary, AI Instructions and Author's Note — diffs per section, keyed `section:<name>` by `renderSectionedComponent`. A `.md` passthrough has no sections and reports as one segment keyed by the component. Opening and the two descriptions render through the same path as of Phase 6 and their segments are available, but `diff.js` does not read them yet — capturing them is a report change rather than a compiler one. The annotate `base`/`leaf` values are the pre-render resolved field structures, so `+{}` appends show as two-element arrays.

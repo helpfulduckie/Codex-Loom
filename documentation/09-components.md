@@ -10,18 +10,41 @@ Components are declared in `compile.yaml` under the root-level `components:` key
 
 `Opening.md` is written to a branch leaf's `Components/` folder. AID uses it to prompt the player to select a branch — typically a question or a brief description.
 
-### Declaring an opening
+### An opening is an ordinary component
 
-In `compile.yaml`:
+An `opening:` is built from `sections:` like Plot Essentials or AI Instructions, and everything the sections grammar offers applies: per-section branch dispatch and variants, `file:` and `from:` sources, `imports:`, and items routing into slots.
+
+```yaml
+# components/opening.cl.yaml
+sections:
+  scene:
+    text: |
+      The harbor is still. Nothing has happened yet, and that is the problem.
+    render: {position: 1}
+  company:
+    slot: true                      # items with render.opening land here
+    render: {position: 2}
+  oath:
+    file: './openings/knight-oath.md'
+    branches:
+      knight: []
+      _: ~
+```
+
+Sections join with a blank line between them, which is what a paragraph break is in an opening.
+
+**Prose is still the common case and costs nothing.** Most openings are a file or a sentence, and neither needs a document:
 
 ```yaml
 components:
-  opening: "Who are you?"                    # inline text
-  opening: ./openings/root.md                # file path (read and written as-is)
-  opening: "{%opening}/subject.md"           # component key reference
+  opening: ./openings/root.md                # a file, copied verbatim
+  opening: "Who are you, really?"            # a sentence, used as written
+  opening: "{%openings}/{%role}.md"          # a path built from variables
 ```
 
-Per branch:
+A spec that names a file on disk is read; one that names nothing is the text itself. `{%variable}` tokens expand against the branch's merged table either way, so an inline opening may differ per branch without a document.
+
+### Declaring an opening per branch
 
 ```yaml
 branches:
@@ -35,11 +58,13 @@ branches:
       opening: ./openings/researcher.md
 ```
 
-**Inheritance:** `opening:` inherits down to leaf nodes. A branch that doesn't declare its own `opening:` uses the nearest ancestor's value. Only leaf nodes receive an `Opening.md` file.
+**`opening:` inherits down the tree**, like every other component: a branch that declares none uses the nearest ancestor's. Only leaves receive an `Opening.md` from it — an interior node's declaration flows down rather than being written where it was declared.
+
+**A leaf with an adventure description and no opening is `CL0616`.** Velvet Lattice reads a node's prompt as its Opening or, failing that, its description, so the pairing produces the blurb as the first scene. See [Description](#description).
 
 ### `branchFraming:` for branch-point nodes
 
-`branchFraming:` is written to a non-leaf branch node's `Components/Opening.md`. Unlike `opening:`, it does **not** inherit — it belongs to the node where it is declared.
+`branchFraming:` writes to a **non-leaf** node's `Components/Opening.md` — what AID shows while the player is choosing among the children below it. Unlike `opening:` it does **not** inherit: it belongs to the node where it is declared.
 
 ```yaml
 branches:
@@ -51,102 +76,61 @@ branches:
       beta: {}
 ```
 
-If `branchFraming:` is declared on a leaf node, it is ignored with a warning.
+It takes the same three shapes an opening does — a sentence, a file, or a `sections:` document — but **items cannot route into it**. Framing sits at an interior node and items are resolved per leaf, so there is no cast at that node to place. `render.branchFraming` on an item is declared and reports that nothing reads it, rather than being a bare unknown key.
 
-### YAML block openings
+Declared on a leaf, `branchFraming:` is ignored with a warning: a leaf has no children to frame.
 
-When `components.opening` points to a `.yaml` (or `.yml`) file, the compiler treats it as a **sequence of paragraph blocks** rather than a single text file. Each block can carry its own branch dispatch and variant, allowing paragraphs to be shared across non-sibling branches, interleaved conditionally, or varied by branch — without duplicating text.
+### Migrating a v3 block-list opening
 
-```yaml
-# compile.yaml
-components:
-  opening: ./opening.yaml
-```
+v3 pointed `opening:` at a YAML **sequence of paragraph blocks**, each with its own `branches:` and `variants:`. That format is gone — it was the fourth of four syntaxes for one idea, and its variant rules disagreed with every other dispatch in the language. `migrateProjectFully()` in `src/migrate/index.js` converts it; a block-list opening reaching the compiler is an error naming what it should become.
 
 ```yaml
-# opening.yaml
-# Universal block — no branches: key → appears in every leaf
+# before — v3
 - text: "A world of magic and intrigue awaits."
-
-# Role paragraph — included only for subject/* leaves
-- text: "You serve the empire as its subject."
-  branches:
-    subject: []   # [] = include with no variant
-    _: ~          # _: ~ = exclude from all unmatched branches
-
-# Role paragraph — included only for researcher/* leaves
-- text: "You investigate ancient mysteries as a researcher."
-  branches:
-    researcher: []
-    _: ~
-
-# Mage specialization — shared across subject/mage and researcher/mage,
-# with a variant for the researcher path
 - text: "You have mastered the arcane arts."
   variants:
     researcher-mage:
       text: "You have mastered the arcane arts, informed by archival research."
   branches:
-    subject:
-      branches:
-        mage: []
-        _: ~
     researcher:
-      branches:
-        mage: researcher-mage
-        _: ~
+      branches: {mage: researcher-mage, _: ~}
     _: ~
-
-# Knight oath from an external file — included for */knight leaves
 - text: ./paragraphs/knight-oath.md
-  branches:
-    '*':
-      branches:
-        knight: []
-        _: ~
 
-# Variable expansion works in block text
-- text: "Your role as a {%role} defines your approach."
+# after — v4
+sections:
+  block1:
+    text: "A world of magic and intrigue awaits."
+  block2:
+    text: "You have mastered the arcane arts."
+    variants:
+      researcher-mage:
+        text: "You have mastered the arcane arts, informed by archival research."
+    branches:
+      researcher:
+        branches: {mage: researcher-mage, _: ~}
+      _: ~
+  block3:
+    file: ./paragraphs/knight-oath.md
 ```
 
-Included blocks are resolved in order and joined with `\n\n` to form the leaf's `Opening.md` content.
+Three things change, and only one of them can alter output:
 
-#### Block schema
-
-| Key | Required | Description |
-|---|---|---|
-| `text` | yes | Inline string or path to a `.md`/`.txt` file. `{%variable}` tokens expanded. |
-| `branches` | no | Branch dispatch map — same syntax as PE/item dispatch. Absent = include in all leaves. |
-| `variants` | no | Named text deltas: `variantName: { text: "..." }` |
-
-#### Branch dispatch for opening blocks
-
-| `branches:` pattern | Effect |
-|---|---|
-| Absent | Block appears in all leaves |
-| `branchName: []` | Include with base text for that branch (no variant) |
-| `branchName: variantName` | Include with variant text for that branch |
-| `branchName: ~` | Exclude from that branch |
-| `_: ~` | Exclude from any branch not explicitly listed above |
-| `'*': { branches: { mage: '*', _: ~ } }` | Wildcard at top level; nested rule selects mage only |
-
-Dispatch uses the same `resolveBranchSpec` logic as Plot Essentials blocks and story card branch dispatch. See `documentation/02-compile-yaml.md` for the full dispatch syntax.
-
-#### Text file paths
-
-`text:` values that resolve to an existing file are read at compile time. Paths are relative to the directory of `compile.yaml` (same as all other file references). Variable tokens in the path are expanded before resolution, so `text: ./paragraphs/{%role}.md` works.
-
-#### Existing opening behavior is unchanged
-
-A `components.opening` pointing to a `.md`, `.txt`, or inline string continues to work exactly as before. YAML block mode activates only when the path ends with `.yaml` or `.yml`.
+- **Blocks get names.** A name is what lets an importing project override, reposition or delete a section (§7.2), which an anonymous block could never allow. The migrator takes names from the comment above each block where the author left one and generates `blockN` otherwise — rename them before sharing the file.
+- **`text:` stops being overloaded.** v3 decided whether a block's `text:` was prose or a path by testing the string against the filesystem on every compile, so prose that looked like a path was silently read as one. `text:` and `file:` are separate keys, and the migrator answers the question once.
+- **A dispatch naming two variants now applies both.** v3 applied the first and silently discarded the rest. This is the one difference that can move output, and the migrator emits a note for any block carrying more than one variant.
 
 ### Output paths
 
 | Declaration | Output path |
 |---|---|
-| Root `components.opening` | `{output}/Components/Opening.md` |
+| Root `components.opening` | `{output}/Components/Opening.md` (an unbranched project is its own leaf) |
 | Leaf branch `components.opening` | `{output}/Branches/…/leaf/Components/Opening.md` |
 | Branch-point `components.branchFraming` | `{output}/Branches/…/node/Components/Opening.md` |
+
+Both keys write the same filename at different levels, because Velvet Lattice reads a node's prompt from `Components/Opening.md` wherever that node sits. `description:` and `adventureDescription:` share `Description.md` the same way.
+
+`Opening.md` is capped at **4,000 characters** by AID, measured after placeholder substitution — the tightest cap in the platform and the one placeholders concentrate in. Over it is `CL0710`; from 3,600 it is `CL0711`. Branch framing lands in the same filename and is capped with it.
 
 ---
 

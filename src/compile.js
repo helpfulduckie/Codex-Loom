@@ -27,9 +27,8 @@ const {
   expandQuestions,
 } = require('./emit/placeholders');
 const { LIMITS, checkLimit } = require('./limits');
-const { loadOpeningConfig, compileOpening } = require('./opening');
 const {
-  SLOTTED_COMPONENTS, DESCRIPTION_DESCRIPTOR, isPassthrough, readPassthrough,
+  SLOTTED_COMPONENTS, DESCRIPTION_DESCRIPTOR, FRAMING_DESCRIPTOR, isPassthrough, readPassthrough,
   renderSectionedComponent, writeSectionedComponent,
 } = require('./emit/components');
 
@@ -214,8 +213,16 @@ function resolveOpeningContent(opening, base, variables) {
  * Resolve a component spec (a file path, or literal text) against branch-merged variables.
  *
  * Returns null for an absent spec, an absolute path when the spec names a file that
- * exists, and otherwise the literal string — `branchFraming` is often a question rather
- * than a path, and that fallback is what lets one key carry both.
+ * exists, and otherwise the literal string — `opening:` and `branchFraming:` are often a
+ * sentence rather than a path, and that fallback is what lets one key carry both.
+ *
+ * **The literal arm returns the *expanded* string, not the raw one.** An inline spec is
+ * content, and content has its variables expanded like any other text — returning the raw
+ * spec left `opening: 'You wake in {%place}.'` carrying a live token past this point, where
+ * the caller's unresolved-reference check reads any surviving `{` as a path that failed to
+ * expand and records a component gap. A token that genuinely does not resolve still survives
+ * `expandTokens` and still reaches that check, so the reporting is unchanged for the case it
+ * was written for.
  */
 function resolveComponentSpec(spec, base, variables) {
   if (spec == null) return null;
@@ -226,8 +233,7 @@ function resolveComponentSpec(spec, base, variables) {
   // Try resolving as file or directory path
   const filePath = path.resolve(base, String(resolved));
   if (fs.existsSync(filePath)) return filePath;
-  // Otherwise return the raw value (inline string)
-  return spec;
+  return resolved;
 }
 
 /**
@@ -628,6 +634,22 @@ function resolveSectionedComponents(compileContext, label, { loadSectioned, reco
     if (!spec) continue;
     if (typeof spec === 'string' && spec.includes('{')) {
       recordGap(label, descriptor.label, spec, 'unresolved reference — token did not expand to a path');
+      continue;
+    }
+
+    // An opening is routinely a sentence rather than a path — `opening: "Who are you?"` —
+    // and `resolveComponentSpec` hands back the raw string when nothing on disk matches.
+    // Only the rows that declare `inlineProse` take that reading: for every other component
+    // a spec naming no file is a broken path, and treating it as content would write the
+    // path into the output instead of reporting it.
+    if (descriptor.inlineProse && !(typeof spec === 'string' && fs.existsSync(spec))) {
+      // Already variable-expanded by `resolveComponentSpec`; only trimmed here.
+      const text = String(spec).trimEnd();
+      if (!text) {
+        recordGap(label, descriptor.label, spec, 'inline text is empty');
+        continue;
+      }
+      resolved.push({ descriptor, spec, component: null, passthrough: text });
       continue;
     }
 
@@ -1042,80 +1064,54 @@ function writeComponentFile(outputDir, filename, content, sink) {
 }
 
 /**
- * Detect whether a raw opening spec resolves to a .yaml/.yml file.
- * Returns the absolute path if it is a YAML file, otherwise null.
- */
-function resolveYamlOpeningPath(spec, base, variables) {
-  if (spec == null || typeof spec !== 'string') return null;
-  const expanded = variables ? resolveVariables(spec, variables) : spec;
-  const absPath = path.resolve(base, expanded);
-  if (fs.existsSync(absPath) && fs.statSync(absPath).isFile() && /\.ya?ml$/i.test(absPath)) {
-    return absPath;
-  }
-  return null;
-}
-
-/**
- * Write Opening.md across the branch tree.
+ * Write branch framing across the branch tree (§7.3).
  *
- * Two components share one output file, and the difference is where they land in AID,
- * not how they are written (§7.3). `opening` inherits down and is written at a leaf,
- * where AID reads it as the first move. `openingChoice` — `branchFraming` in v4 — is
- * written at a non-leaf, where AID reads it as the framing shown while the player
- * chooses among the children below it. The inheritance asymmetry follows from that:
- * an opening is shared across branches because straight VL cannot share one, while
- * framing belongs to the node whose children it frames.
+ * Framing is the only component that belongs to a *non-leaf* node — AID reads it as what
+ * is shown while the player chooses among the children below it — which is why this uses
+ * the tree visitor while every other component is written by the leaf loop. It lands in
+ * `Opening.md`, the name a leaf's `opening:` uses, because Velvet Lattice reads a node's
+ * prompt from that filename at every level.
  *
- * Node-level writes are why this uses the tree visitor rather than the leaf loop.
+ * **The opening half of this walker moved into the leaf loop in Phase 6 Step 6.** An
+ * `opening:` is an ordinary inherited component now, so the chain-merge this function used
+ * to do by hand — `declaredOpening !== undefined ? … : state.inheritedOpening` — is what
+ * `buildCompileContext` already does for every component. What is left here is the node
+ * write the leaf loop genuinely cannot reach.
  */
-function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpening, variables, currentPath = [], verbose = false, rootPlaceholders = null, diagnostics = null, usage = null) {
-  const writtenLeaves = new Set();
+function writeFramingRecursive(branches, outputBase, configBase, variables, currentPath = [], verbose = false, rootPlaceholders = null, diagnostics = null, usage = null, loadSectioned = null, registry = null) {
+  // An unbranched project has no interior nodes, so there is no framing to write.
+  if (!branches || typeof branches !== 'object') return;
 
-  const emitOpening = (spec, outputDir, leafPath, vars, table, where, usagePath) => {
-    // {@Key} expands in path mode here — the result is a path, not file contents.
-    const expanded = spec;
-    const yamlPath = resolveYamlOpeningPath(expanded, configBase, vars);
-    const content = yamlPath
-      ? compileOpening(loadOpeningConfig(yamlPath), leafPath, vars, configBase)
-      : resolveOpeningContent(expanded, configBase, vars);
-    if (!content) return;
-    checkUndeclaredPlaceholders(content, table, {
-      diagnostics, file: typeof spec === 'string' ? spec : undefined, where,
-      usage, usagePath,
-    });
-    // §8.5's 4,000-character cap, per file. This is the target with the least headroom in
-    // the real corpus and the one placeholders concentrate in, which is why §15 refused to
-    // let limits ship before the placeholder table existed.
-    checkLimit(content, questionsForMeasurement(table, vars), LIMITS.opening, {
-      diagnostics,
-      loc: { file: typeof spec === 'string' ? spec : undefined },
-      label: leafPath.length ? `branch "${leafPath[leafPath.length - 1]}"` : 'the project root',
-    });
-    const outPath = writeComponentFile(outputDir, 'Opening.md', content, { diagnostics });
-    if (verbose) console.log(`    OK: Opening → ${outPath}`);
-    writtenLeaves.add(leafPath.join('/') || '(root)');
-  };
+  const renderFraming = (spec, nodePath, vars, table, name) => {
+    const resolvedSpec = resolveComponentSpec(spec, configBase, vars);
+    const isFile = typeof resolvedSpec === 'string' && fs.existsSync(resolvedSpec)
+      && fs.statSync(resolvedSpec).isFile();
 
-  // An unbranched project: the root is itself the only leaf.
-  const rootTable = Object.assign({}, rootPlaceholders || {});
-  if (!branches || typeof branches !== 'object') {
-    if (inheritedOpening != null) {
-      emitOpening(inheritedOpening, outputBase, currentPath, variables, rootTable, 'the Opening', '');
+    // Three shapes, the same three an opening has: a component document, a prose file, and
+    // a literal sentence. Framing is a question far more often than it is a path, which is
+    // why the literal arm is the common one here.
+    if (isFile && !isPassthrough(resolvedSpec)) {
+      const component = loadSectioned
+        ? loadSectioned(resolvedSpec, FRAMING_DESCRIPTOR)
+        : null;
+      if (!component) return null;
+      // An empty occupant map: framing sits at an interior node, and items are resolved per
+      // leaf, so there is no cast here to route into it. Same call the scenario blurb makes.
+      const { text } = renderSectionedComponent(component, nodePath, new Map(), {
+        defaultHeadingLevel: FRAMING_DESCRIPTOR.defaultHeadingLevel,
+        variables: vars, registry, branchProtagonist: null,
+        onWarn: busWarner(diagnostics, { file: String(resolvedSpec) }),
+      });
+      return text;
     }
-    return writtenLeaves;
-  }
+    return resolveOpeningContent(spec, configBase, vars);
+  };
 
   walkBranchTree(branches, ({ name, node, path: nodePath, isLeaf, state }) => {
     const nodeOutput = path.join(state.outputBase, 'Branches', name);
     const branchVars = (node && node.variables)
       ? Object.assign({}, state.variables, node.variables)
       : state.variables;
-
-    // v3 accepted these both under components: and directly on the branch node.
-    const declaredOpening = node && node.components && node.components.opening !== undefined
-      ? node.components.opening
-      : undefined;
-    const effectiveOpening = declaredOpening !== undefined ? declaredOpening : state.inheritedOpening;
 
     const framing = node && node.components && node.components.branchFraming !== undefined
       ? node.components.branchFraming
@@ -1127,35 +1123,26 @@ function writeOpeningsRecursive(branches, outputBase, configBase, inheritedOpeni
       if (isLeaf) {
         console.warn(`  WARN: branchFraming on leaf branch "${name}" — ignoring`);
       } else {
-        const framingText = resolveOpeningContent(framing, configBase, branchVars);
-        checkUndeclaredPlaceholders(framingText, table, {
-          diagnostics, where: `the branch framing on "${name}"`,
-          usage, usagePath: nodePath.join('/'),
-        });
-        // Framing lands in the same `Opening.md` filename at an interior node, and VL caps
-        // the file rather than the chain — components merge per filename, so a leaf's
-        // opening replaces this rather than adding to it (§8.5).
-        checkLimit(framingText, questionsForMeasurement(table, branchVars), LIMITS.opening, {
-          diagnostics, label: `branch "${name}" (framing)`,
-        });
-        const outPath = writeComponentFile(nodeOutput, 'Opening.md', framingText, { diagnostics });
-        if (verbose) console.log(`    OK: OpeningChoice → ${outPath}`);
+        const framingText = renderFraming(framing, nodePath, branchVars, table, name);
+        if (framingText) {
+          checkUndeclaredPlaceholders(framingText, table, {
+            diagnostics, where: `the branch framing on "${name}"`,
+            usage, usagePath: nodePath.join('/'),
+          });
+          // Framing lands in the same `Opening.md` filename at an interior node, and VL caps
+          // the file rather than the chain — components merge per filename, so a leaf's
+          // opening replaces this rather than adding to it (§8.5).
+          checkLimit(framingText, questionsForMeasurement(table, branchVars), LIMITS.opening, {
+            diagnostics, label: `branch "${name}" (framing)`,
+          });
+          const outPath = writeComponentFile(nodeOutput, 'Opening.md', framingText, { diagnostics });
+          if (verbose) console.log(`    OK: BranchFraming → ${outPath}`);
+        }
       }
     }
 
-    if (isLeaf && effectiveOpening != null) {
-      emitOpening(
-        effectiveOpening, nodeOutput, [...currentPath, ...nodePath], branchVars, table,
-        `the Opening on branch "${name}"`, nodePath.join('/'),
-      );
-    }
-
-    return {
-      outputBase: nodeOutput, inheritedOpening: effectiveOpening, variables: branchVars, table,
-    };
-  }, { outputBase, inheritedOpening, variables, table: rootTable });
-
-  return writtenLeaves;
+    return { outputBase: nodeOutput, variables: branchVars, table };
+  }, { outputBase, variables, table: Object.assign({}, rootPlaceholders || {}) });
 }
 
 /**
@@ -1483,8 +1470,10 @@ function compileRun(configPath, options, buses) {
     return sectionedDocs.get(spec);
   };
 
-  // Which leaves wrote a Description.md, for §7.7's opening guard after the openings land.
+  // The two sets §7.7's guard compares. Both are filled by the leaf loop below, which is
+  // what makes CL0616 a comparison of two facts rather than of two passes.
   const descriptionLeaves = new Set();
+  const openingLeaves = new Set();
 
   for (const branchPath of leaves) {
     const label = branchPath.length > 0 ? branchPath.join('/') : '(root)';
@@ -1589,6 +1578,23 @@ function compileRun(configPath, options, buses) {
         usagePath: branchPath.join('/'),
       });
 
+      // §8.5's platform caps, table-driven rather than per-component. Only `opening:`
+      // carries a `limitKey` today; the point of the column is that Step 4's `notes:` cap
+      // is a row rather than another bespoke call site. Measured post-substitution because
+      // Velvet Lattice expands `%key%` to its question text on the way to AID.
+      if (descriptor.limitKey && text) {
+        checkLimit(
+          text,
+          questionsForMeasurement(ctx.placeholders, ctx.variables),
+          LIMITS[descriptor.limitKey],
+          {
+            diagnostics: compileDiagnostics,
+            loc: { file: String(spec) },
+            label: branchPath.length ? `branch "${branchPath[branchPath.length - 1]}"` : 'the project root',
+          },
+        );
+      }
+
       const outPath = writeSectionedComponent(
         outputDir, descriptor, text, { diagnostics: compileDiagnostics },
         component ? component.metadata : null,
@@ -1597,6 +1603,10 @@ function compileRun(configPath, options, buses) {
         sectionedWritten[descriptor.key] = true;
         sectionedSegments[descriptor.key] = segments;
         if (descriptor.key === 'adventureDescription') descriptionLeaves.add(label);
+        // §7.7's guard used to read this from `writeOpeningsRecursive`'s return value.
+        // Openings are written here now, so the set is built here — the two facts CL0616
+        // compares are produced by one loop rather than by two passes that had to agree.
+        if (descriptor.key === 'opening') openingLeaves.add(label);
         if (verbose) console.log(`    OK: ${descriptor.verboseLabel} → ${outPath}`);
         totalFiles++;
       } else if (!excluded) {
@@ -1677,13 +1687,14 @@ function compileRun(configPath, options, buses) {
     }
   }
 
-  const rootOpening = config.components && config.components.opening != null
-    ? config.components.opening
-    : null;
-  const leafOpeningKeys = writeOpeningsRecursive(
+  // `opening:` is written by the leaf loop above, as an ordinary inherited component. What
+  // is left for the tree visitor is framing, which belongs to a node the leaf loop never
+  // visits.
+  writeFramingRecursive(
     config.branches, config._resolvedOutput, config._base,
-    rootOpening, config._variables || config.variables || {},
-    [], verbose, config.placeholders, compileDiagnostics, placeholderUsage
+    config._variables || config.variables || {},
+    [], verbose, config.placeholders, compileDiagnostics, placeholderUsage,
+    loadSectioned, registry,
   );
 
   writeLabelsRecursive(
@@ -1802,7 +1813,7 @@ function compileRun(configPath, options, buses) {
   // scene. v3 could not reach this, because descriptions were written only at the output
   // root; `adventureDescription:` is what makes the pairing possible, and this is its price.
   for (const leafLabel of descriptionLeaves) {
-    if (leafOpeningKeys.has(leafLabel)) continue;
+    if (openingLeaves.has(leafLabel)) continue;
     compileDiagnostics.error(
       DIAG_CODES.LEAF_DESCRIPTION_NO_OPENING,
       `branch "${leafLabel}" has an adventure description and no Opening.md. Velvet Lattice `
@@ -1816,7 +1827,7 @@ function compileRun(configPath, options, buses) {
 
   // Per-leaf summary table (printed after all component writes so Opening status is known)
   for (const s of leafSummaries) {
-    s.hasOpening = leafOpeningKeys.has(s.label);
+    s.hasOpening = openingLeaves.has(s.label);
   }
   const maxLabelLen = Math.max(...leafSummaries.map(s => s.label.length), 'Branch'.length);
   const lp = maxLabelLen + 2;
@@ -1933,7 +1944,7 @@ module.exports = {
   resolveBranchFolderPath,
   resolveOpeningContent,
   writeOpening,
-  writeOpeningsRecursive,
+  writeFramingRecursive,
   cleanAndArchive,
 };
 

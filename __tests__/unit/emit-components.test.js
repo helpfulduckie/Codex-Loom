@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
-  DECLARATION, SLOTTED_COMPONENTS, OTHER_COMPONENTS, DESCRIPTION_DESCRIPTOR,
+  DECLARATION, SLOTTED_COMPONENTS, OTHER_COMPONENTS, DESCRIPTION_DESCRIPTOR, FRAMING_DESCRIPTOR,
   isPassthrough, readPassthrough,
   renderSectionedComponent, writeSectionedComponent, renderFrontmatter,
 } = require('../../src/emit/components');
@@ -23,13 +23,15 @@ function write(name, content) {
 }
 
 describe('the descriptor table', () => {
-  test('all five sectioned components are rows, not bespoke blocks', () => {
+  test('all six sectioned components are rows, not bespoke blocks', () => {
     // AI Instructions and Author's Note arrived here by having their document layer
     // deleted rather than ported — it was a second branch walker and a second delta
     // vocabulary for what a section's own branches: and variants: already do. The
-    // adventure description arrived by having its two-field file format deleted (§7.7).
+    // adventure description arrived by having its two-field file format deleted (§7.7), and
+    // the opening by having the fourth and last of §7.1's four syntaxes deleted.
     expect(SLOTTED_COMPONENTS.map((d) => d.key))
-      .toEqual(['plotEssential', 'summary', 'aiInstructions', 'authorsNote', 'adventureDescription']);
+      .toEqual(['plotEssential', 'summary', 'aiInstructions', 'authorsNote',
+        'adventureDescription', 'opening']);
   });
 
   test('every row declares the fields the emitter needs', () => {
@@ -53,7 +55,31 @@ describe('the descriptor table', () => {
       // Shares its filename with the scenario blurb, at a different level and from a
       // different key — the arrangement opening: and branchFraming: already have.
       adventureDescription: 'Description.md',
+      opening: 'Opening.md',
     });
+  });
+
+  test('opening and branch framing share Opening.md at two levels', () => {
+    const opening = SLOTTED_COMPONENTS.find((d) => d.key === 'opening');
+    expect([opening.file, FRAMING_DESCRIPTOR.file]).toEqual(['Opening.md', 'Opening.md']);
+    // The same split the two description keys have, and for the same reason: one is written
+    // where items resolve and the other is not.
+    expect(opening.declaration).toBe(DECLARATION.INHERITED);
+    expect(FRAMING_DESCRIPTOR.declaration).toBe(DECLARATION.NODE);
+  });
+
+  test('the caps are a column, so a new one is a row rather than a call site', () => {
+    const capped = [...SLOTTED_COMPONENTS, FRAMING_DESCRIPTOR]
+      .filter((d) => d.limitKey).map((d) => [d.key, d.limitKey]);
+    expect(capped).toEqual([['opening', 'opening'], ['branchFraming', 'opening']]);
+  });
+
+  test('inline prose is a column, and only the two Opening.md rows take it', () => {
+    // `opening: "Who are you?"` is a sentence, not a path. For every other component a spec
+    // naming no file is a broken path, and reading it as content would write the path out.
+    const inline = [...SLOTTED_COMPONENTS, DESCRIPTION_DESCRIPTOR, FRAMING_DESCRIPTOR]
+      .filter((d) => d.inlineProse).map((d) => d.key);
+    expect(inline).toEqual(['opening', 'branchFraming']);
   });
 
   test('the description keys are two rows sharing one filename at two levels', () => {

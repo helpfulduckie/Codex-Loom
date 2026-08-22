@@ -6,7 +6,7 @@ const fs = require('fs');
 const {
   compile,
   getTemplate, validateCardType, writeOpening, resolveOpeningContent, resolveBranchFolderPath,
-  buildBranchOutputDir, buildCompileContext, writeOutput, writeOpeningsRecursive,
+  buildBranchOutputDir, buildCompileContext, writeOutput,
   resolveIncludes, resolveNotesTemplateName, resolveBranchItems, cleanAndArchive,
 } = require('../../src/compile');
 const { buildRegistry } = require('../../src/loader/registry');
@@ -305,88 +305,86 @@ describe('writeOutput', () => {
   });
 });
 
-// ── writeOpeningsRecursive — branch variable merging ─────────────────────────
+// ── opening paths and branch variables ───────────────────────────────────────
+//
+// These used to call `writeOpeningsRecursive` directly. `opening:` is an ordinary inherited
+// component since Phase 6 Step 6, so the branch-variable merge is `buildCompileContext`'s
+// rather than a hand-rolled walk — which is the point of the move, and is why the property
+// is now asserted through a whole compile instead of through a private writer.
 
-describe('writeOpeningsRecursive — branch variable merging', () => {
+describe('opening paths resolve against branch variables', () => {
+  const NL = String.fromCharCode(10);
   let tmpDir;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-wor-'));
+  beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-wor-')); });
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+
+  const project = (lines) => {
+    fs.mkdirSync(path.join(tmpDir, 'items'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'templates', 'Item.template'), '{$body.Desc}', 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'items', 'i.yaml'), [
+      '- id: W', '  name: W', '  aid: {type: Item, title: W}',
+      '  render: {template: Item}', '  body: {Desc: w}',
+    ].join(NL), 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'compile.yaml'), [
+      'version: 4',
+      'structure:',
+      '  input:',
+      `    items: [${tmpDir.split(String.fromCharCode(92)).join('/')}/items]`,
+      `    templates: [${tmpDir.split(String.fromCharCode(92)).join('/')}/templates]`,
+      `  output: ${tmpDir.split(String.fromCharCode(92)).join('/')}/output`,
+      ...lines,
+    ].join(NL), 'utf8');
+    const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
+    try { compile(path.join(tmpDir, 'compile.yaml')); } finally { spies.forEach((x) => x.mockRestore()); }
+  };
+
+  const opening = (...segments) => {
+    let p = path.join(tmpDir, 'output');
+    for (const s of segments) p = path.join(p, 'Branches', s);
+    return fs.readFileSync(path.join(p, 'Components', 'Opening.md'), 'utf8').trim();
+  };
+
+  test('a branch variable override is used when resolving the opening path', () => {
+    const dir = path.join(tmpDir, 'openings');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'E-Kaiden.md'), 'Kaiden opening content', 'utf8');
+    fs.writeFileSync(path.join(dir, 'E-Zephon.md'), 'Zephon opening content', 'utf8');
+    const spec = `${dir.split(String.fromCharCode(92)).join('/')}/E-{%pcName}.md`;
+
+    // The root table has no pcName at all — each branch has to supply its own.
+    project([
+      'branches:',
+      '  Kaiden:',
+      '    variables: {pcName: Kaiden}',
+      `    components: {opening: '${spec}'}`,
+      '  Zephon:',
+      '    variables: {pcName: Zephon}',
+      `    components: {opening: '${spec}'}`,
+    ]);
+
+    expect(opening('Kaiden')).toBe('Kaiden opening content');
+    expect(opening('Zephon')).toBe('Zephon opening content');
   });
 
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
+  test('nested branch variables accumulate', () => {
+    const dir = path.join(tmpDir, 'openings');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'PM-Felix-Pet.md'), 'Felix pet opening', 'utf8');
 
-  test('branch variable overrides are used when resolving opening path', () => {
-    // Setup: two opening files, one per branch
-    const openingsDir = path.join(tmpDir, 'openings');
-    fs.mkdirSync(openingsDir, { recursive: true });
-    fs.writeFileSync(path.join(openingsDir, 'E-Kaiden.md'), 'Kaiden opening content', 'utf8');
-    fs.writeFileSync(path.join(openingsDir, 'E-Zephon.md'), 'Zephon opening content', 'utf8');
+    project([
+      'branches:',
+      '  personalMage:',
+      '    branches:',
+      '      felix:',
+      '        variables: {employerName: Felix}',
+      '        branches:',
+      '          pet:',
+      `            components: {opening: '${dir.split(String.fromCharCode(92)).join('/')}/PM-{%employerName}-Pet.md'}`,
+    ]);
 
-    const outputDir = path.join(tmpDir, 'output');
-    fs.mkdirSync(outputDir, { recursive: true });
-
-    // opening spec uses {%opening} (dir) and {%pcName} (per-branch)
-    const openingSpec = path.join(openingsDir, 'E-{%pcName}.md');
-
-    const branches = {
-      kaiden: {
-        title: 'Kaiden',
-        variables: { pcName: 'Kaiden' },
-        components: { opening: openingSpec },
-      },
-      zephon: {
-        title: 'Zephon',
-        variables: { pcName: 'Zephon' },
-        components: { opening: openingSpec },
-      },
-    };
-
-    // Root variables have no pcName — each branch must supply its own
-    writeOpeningsRecursive(branches, outputDir, tmpDir, null, {});
-
-    const kaidenOut = path.join(outputDir, 'Branches', 'Kaiden', 'Components', 'Opening.md');
-    const zephonOut = path.join(outputDir, 'Branches', 'Zephon', 'Components', 'Opening.md');
-
-    expect(fs.readFileSync(kaidenOut, 'utf8').trim()).toBe('Kaiden opening content');
-    expect(fs.readFileSync(zephonOut, 'utf8').trim()).toBe('Zephon opening content');
-  });
-
-  test('nested branch variables accumulate correctly', () => {
-    const openingsDir = path.join(tmpDir, 'openings');
-    fs.mkdirSync(openingsDir, { recursive: true });
-    fs.writeFileSync(path.join(openingsDir, 'PM-Felix-Pet.md'), 'Felix pet opening', 'utf8');
-
-    const outputDir = path.join(tmpDir, 'output');
-    fs.mkdirSync(outputDir, { recursive: true });
-
-    const branches = {
-      personalMage: {
-        title: 'Personal Mage',
-        branches: {
-          felix: {
-            title: 'Felix',
-            variables: { employerName: 'Felix' },
-            branches: {
-              pet: {
-                title: 'Pet',
-                components: { opening: path.join(openingsDir, 'PM-{%employerName}-Pet.md') },
-              },
-            },
-          },
-        },
-      },
-    };
-
-    writeOpeningsRecursive(branches, outputDir, tmpDir, null, {});
-
-    const petOut = path.join(
-      outputDir, 'Branches', 'personalMage', 'Branches', 'felix', 'Branches', 'pet',
-      'Components', 'Opening.md'
-    );
-    expect(fs.readFileSync(petOut, 'utf8').trim()).toBe('Felix pet opening');
+    expect(opening('personalMage', 'felix', 'pet')).toBe('Felix pet opening');
   });
 });
 
