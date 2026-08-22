@@ -26,6 +26,16 @@ const { CONFIG_SCHEMA } = require('./schema');
 
 const CODES = Object.freeze({
   CONFIG_NOT_A_MAPPING: 'CL0110',
+  /** `structure.input.snapshot` names a directory that isn't there when something needs it populated (§14, Phase 7). */
+  SNAPSHOT_DIR_MISSING: 'CL0111',
+  /** `snapshot/manifest.json` exists but doesn't parse as the expected shape. */
+  SNAPSHOT_MANIFEST_UNPARSEABLE: 'CL0112',
+  /** A config-declared library/template entry has no section in an otherwise-valid manifest. */
+  SNAPSHOT_MISSING_ENTRY: 'CL0113',
+  /** A file under `snapshot/<name>/` on disk has no corresponding entry in the manifest. */
+  SNAPSHOT_FILE_UNTRACKED: 'CL0114',
+  /** A file under `snapshot/<name>/` doesn't match its own manifest-recorded hash — corruption, not drift. */
+  SNAPSHOT_HASH_MISMATCH: 'CL0115',
   PATH_NOT_FOUND: 'CL0120',
   VARIABLE_UNDECLARED: 'CL0510',
   VARIABLE_CYCLE: 'CL0511',
@@ -298,6 +308,17 @@ function loadCompileConfig(configPath, options = {}) {
       ))
     : null;
 
+  // `structure.input.snapshot` names where a Phase 7 freeze lives. No existence check at
+  // load time — the directory won't exist before the first `--snapshot` run, which is
+  // normal, not an error. (Missing-when-required is CL0111, raised by whatever actually
+  // needs the directory populated, not here.)
+  const resolvedSnapshot = input.snapshot
+    ? path.resolve(base, expandPathTokens(
+        String(input.snapshot), variables, diagnostics,
+        at('structure', 'input', 'snapshot'), variableNames.branchOnly
+      ))
+    : null;
+
   // Library entries may reference variables, including other library names, so they
   // resolve through the same expander as everything else rather than a bespoke two-pass.
   const resolvedLibrary = new Map();
@@ -344,6 +365,7 @@ function loadCompileConfig(configPath, options = {}) {
     _base: base,
     _resolvedOutput: resolvedOutput,
     _resolvedReports: resolvedReports,
+    _resolvedSnapshot: resolvedSnapshot,
     _resolvedItems: resolvedItems,
     _resolvedLibrary: resolvedLibrary,
     _resolvedTemplates: resolvedTemplates,

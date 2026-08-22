@@ -246,6 +246,27 @@ describe('resolution behavior carried forward', () => {
     const { codes } = load('structure:\n  output: "./{%typo}"\n');
     expect(codes).toContain(CODES.VARIABLE_UNDECLARED);
   });
+
+  test('structure.input.snapshot resolves relative to the config directory, like output/reports', () => {
+    const { config } = load('structure:\n  input:\n    snapshot: ./snapshot\n');
+    expect(config._resolvedSnapshot).toBe(path.join(tmpDir, 'snapshot'));
+  });
+
+  test('_resolvedSnapshot is null when structure.input.snapshot is unset', () => {
+    const { config } = load('structure:\n  output: ./out\n');
+    expect(config._resolvedSnapshot).toBeNull();
+  });
+
+  test('structure.input.snapshot does not need to exist at load time (it is created by --snapshot)', () => {
+    const { config, diagnostics } = load('structure:\n  input:\n    snapshot: ./not-there-yet\n');
+    expect(config._resolvedSnapshot).toBe(path.join(tmpDir, 'not-there-yet'));
+    expect(diagnostics.errors.length).toBe(0);
+  });
+
+  test('{%variables} expand inside structure.input.snapshot', () => {
+    const { config } = load('variables:\n  root: frozen\nstructure:\n  input:\n    snapshot: "./{%root}"\n');
+    expect(config._resolvedSnapshot).toBe(path.join(tmpDir, 'frozen'));
+  });
 });
 
 describe('malformed configuration', () => {
@@ -327,7 +348,16 @@ describe('every diagnostic the config surface can emit', () => {
     // aliases (§14.1). CL0206 (VALUE_NOT_ALLOWED): no key in CONFIG_SCHEMA declares a
     // `values:` set. The item schema does, for `kind:` (§4.8), and `schema.test.js`
     // covers it there.
-    const unreachable = new Set([SCHEMA_CODES.SUPERSEDED_KEY, SCHEMA_CODES.VALUE_NOT_ALLOWED]);
+    // Five more: CL0111-CL0115 (SNAPSHOT_*) are declared in config/load.js's CODES block
+    // because they're in the same "structure.input.* path problem" family as PATH_NOT_FOUND,
+    // but they're raised by src/snapshot.js's syncLibrary/checkDrift, not by loadCompileConfig
+    // itself — covered by __tests__/unit/snapshot.test.js and the --snapshot integration test
+    // instead.
+    const unreachable = new Set([
+      SCHEMA_CODES.SUPERSEDED_KEY, SCHEMA_CODES.VALUE_NOT_ALLOWED,
+      CODES.SNAPSHOT_DIR_MISSING, CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
+      CODES.SNAPSHOT_MISSING_ENTRY, CODES.SNAPSHOT_FILE_UNTRACKED, CODES.SNAPSHOT_HASH_MISMATCH,
+    ]);
     const reachable = [...Object.values(CODES), ...Object.values(SCHEMA_CODES)]
       .filter((c) => !unreachable.has(c));
     const exercised = new Set(CASES.map(([, code]) => code));

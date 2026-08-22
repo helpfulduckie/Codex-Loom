@@ -31,6 +31,7 @@ const {
   SLOTTED_COMPONENTS, DESCRIPTION_DESCRIPTOR, FRAMING_DESCRIPTOR, isPassthrough, readPassthrough,
   renderSectionedComponent, writeSectionedComponent,
 } = require('./emit/components');
+const { syncLibrary, checkDrift } = require('./snapshot');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1329,6 +1330,11 @@ function compileRun(configPath, options, buses) {
 
   const config = loadCompileConfig(configPath, { diagnostics: loadDiagnostics });
 
+  // Phase 7's drift notice: a complete no-op unless the project has opted into a snapshot
+  // (§Decision 4 — drift is informational, never a warning, never a non-zero exit; the one
+  // exception is CL0115, corruption of the frozen copy itself, which is an ERROR).
+  if (config) checkDrift(config, loadDiagnostics);
+
   // Checked immediately, before any filesystem work — an unknown key, a missing required
   // field, or a bad path token in compile.yaml itself must stop the compile before
   // mkdirSync ever runs, not merely before the compiled tree is written. Folding this into
@@ -2015,11 +2021,13 @@ if (require.main === module) {
     ['seedMap',    ['--seed-map',   '-s']],
     ['cardSizes',  ['--card-sizes', '-b']],
     ['lint',       ['--lint',       '-L']],
+    ['snapshot',   ['--snapshot']],
     ['diff',       ['--with-diff',     '--diff',     '-d']],
     ['annotate',   ['--with-annotate', '--annotate', '-a']],
     ['inventory',  ['--with-inventory', '--inventory', '-i']],
     ['clean',      ['--clean',      '-c']],
     ['verbose',    ['--verbose',    '-v']],
+    ['live',       ['--live']],
   ];
 
   const flags = {};
@@ -2061,20 +2069,22 @@ if (require.main === module) {
   // lossy), so they are compile *options* — they force a compile rather than reading the
   // output dir like the post-hoc report modes (--leafReview/--overview/--seed-map/--card-sizes).
   const doCompile    = flags.compile || flags.diff || flags.annotate || flags.inventory ||
-    (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint);
+    (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint && !flags.snapshot);
   const doLeafReview = flags.leafReview;
   const doOverview   = flags.overview;
   const doSeedMap    = flags.seedMap;
   const doCardSizes  = flags.cardSizes;
   const doLint       = flags.lint;
+  const doSnapshot   = flags.snapshot;
 
   if (positional.length === 0 && !flags.compile && !flags.diff && !flags.annotate &&
       !flags.inventory &&
-      !flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint) {
+      !flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint &&
+      !flags.snapshot) {
     console.error(
       'Usage: codex-loom [mode flags] [compile options] [<folder | compile.yaml>]\n' +
-      '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --card-sizes|-b  --lint|-L\n' +
-      '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-inventory|-i  --clean|-c  --verbose|-v\n' +
+      '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --card-sizes|-b  --lint|-L  --snapshot\n' +
+      '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-inventory|-i  --clean|-c  --verbose|-v  --live\n' +
       '  Diagnostics:           --lint-level=off|error|warn  (overrides lint.level; reaches the opinion layer only)\n' +
       '  No mode flag compiles. Report modes read the existing output tree; compile options force a compile.'
     );
@@ -2108,6 +2118,36 @@ if (require.main === module) {
           diff: flags.diff, annotate: flags.annotate, inventory: flags.inventory,
           lintLevel,
         });
+      } catch (err) {
+        console.error(`\nFatal: ${err.message}`);
+        process.exit(1);
+      }
+    }
+  }
+
+  // ── Snapshot (Phase 7's freeze: sync structure.input.library + out-of-base templates) ──
+  if (doSnapshot) {
+    if (!hasConfig) {
+      console.error(`No compile.yaml found at ${path.resolve(positional[0] || '.')}.`);
+      process.exit(1);
+    } else {
+      try {
+        const snapshotDiagnostics = new Diagnostics();
+        const config = loadCompileConfig(configPath, { diagnostics: snapshotDiagnostics });
+        if (!config._resolvedSnapshot) {
+          console.error('structure.input.snapshot is not set in compile.yaml; nothing to sync.');
+          process.exit(1);
+        }
+        const result = syncLibrary(config, { verbose: flags.verbose, diagnostics: snapshotDiagnostics });
+        for (const diag of snapshotDiagnostics.all) {
+          if (diag.severity === 'error') console.error(diag.format());
+          else console.warn(diag.format());
+        }
+        console.log(
+          `\nSynced ${result.entries.length} entr${result.entries.length === 1 ? 'y' : 'ies'} `
+          + `(${result.filesWritten} file(s)) to:\n  ${config._resolvedSnapshot}\n`
+          + `Manifest: ${result.manifestPath}\n`
+        );
       } catch (err) {
         console.error(`\nFatal: ${err.message}`);
         process.exit(1);
