@@ -31,8 +31,8 @@ const CODES = Object.freeze({
   VARIABLE_CYCLE: 'CL0511',
   /** A branch-scoped variable used where only root variables resolve (§5.1). */
   VARIABLE_PRE_BRANCH: 'CL0520',
-  /** A canon name and a declared variable share one namespace as of §6.1. */
-  CANON_NAME_COLLIDES: 'CL0521',
+  /** A library name and a declared variable share one namespace as of §6.1. */
+  LIBRARY_NAME_COLLIDES: 'CL0521',
 });
 
 /**
@@ -41,7 +41,7 @@ const CODES = Object.freeze({
  * §6.2 proposed building a dependency graph and topologically sorting it, on the premise
  * that v3 resolved variables in declaration order. That premise is not correct: v3
  * already resolves recursively by key lookup, so ordering is already irrelevant and the
- * golden fixtures depend on it (`canon: '{%loom}/Canon'` with `loom` declared above).
+ * golden fixtures depend on it (`library: '{%loom}/Canon'` with `loom` declared above).
  * What was genuinely missing is the diagnostic quality §6.2 asks for — naming every key
  * in a cycle rather than only the one where it was detected — so that is what changed.
  */
@@ -199,8 +199,8 @@ function checkVariableGraph(config, diagnostics, sourceMap, names) {
 /**
  * Expand tokens in a path string.
  *
- * There is one family left: `{%variable}`. Canon names are exposed as variables (§6.1),
- * so a canon reference resolves through exactly the same lookup as anything else.
+ * There is one family left: `{%variable}`. Library names are exposed as variables (§6.1),
+ * so a library reference resolves through exactly the same lookup as anything else.
  */
 function expandPathTokens(str, variables, diagnostics, location, branchOnly) {
   return expandVariables(String(str), variables, { diagnostics, location, branchOnly });
@@ -252,32 +252,32 @@ function loadCompileConfig(configPath, options = {}) {
 
   const at = (...parts) => (sourceMap ? sourceMap.nearest(parts) : {});
 
-  const canonRaw = (input.canon && typeof input.canon === 'object' && !Array.isArray(input.canon))
-    ? input.canon
+  const libraryRaw = (input.library && typeof input.library === 'object' && !Array.isArray(input.library))
+    ? input.library
     : {};
 
   /**
-   * Canon names are auto-exposed as variables (§6.1), which is what replaces `{@}`.
+   * Library names are auto-exposed as variables (§6.1), which is what replaces `{@}`.
    * `{%characters}/Aness.yaml` now works in an include path exactly as
    * `{@characters}/Aness.yaml` used to, leaving one naming system instead of two.
    *
-   * A canon name colliding with a declared variable is an ERROR rather than a silent
+   * A library name colliding with a declared variable is an ERROR rather than a silent
    * precedence rule, because there is no answer to "which one wins" that an author could
    * predict.
    */
   const variables = Object.assign({}, config.variables || {});
-  for (const name of Object.keys(canonRaw)) {
+  for (const name of Object.keys(libraryRaw)) {
     const clash = Object.keys(variables).find((k) => k.toLowerCase() === name.toLowerCase());
     if (clash !== undefined) {
       diagnostics.error(
-        CODES.CANON_NAME_COLLIDES,
-        `Canon name "${name}" collides with the variable "${clash}".`,
-        at('structure', 'input', 'canon', name),
-        { hint: 'Canon names are exposed as variables, so the two share one namespace. Rename one.' }
+        CODES.LIBRARY_NAME_COLLIDES,
+        `Library name "${name}" collides with the variable "${clash}".`,
+        at('structure', 'input', 'library', name),
+        { hint: 'Library names are exposed as variables, so the two share one namespace. Rename one.' }
       );
       continue;
     }
-    variables[name] = String(canonRaw[name]);
+    variables[name] = String(libraryRaw[name]);
   }
 
   // §5.1 / §6: every string value in compile.cl.yaml passes through the same expander.
@@ -298,18 +298,18 @@ function loadCompileConfig(configPath, options = {}) {
       ))
     : null;
 
-  // Canon entries may reference variables, including other canon names, so they resolve
-  // through the same expander as everything else rather than a bespoke two-pass.
-  const resolvedCanon = new Map();
-  for (const [name, spec] of Object.entries(canonRaw)) {
+  // Library entries may reference variables, including other library names, so they
+  // resolve through the same expander as everything else rather than a bespoke two-pass.
+  const resolvedLibrary = new Map();
+  for (const [name, spec] of Object.entries(libraryRaw)) {
     const expanded = expandPathTokens(
       String(spec), variables, diagnostics,
-      at('structure', 'input', 'canon', name), variableNames.branchOnly
+      at('structure', 'input', 'library', name), variableNames.branchOnly
     );
-    resolvedCanon.set(name, path.resolve(base, expanded));
+    resolvedLibrary.set(name, path.resolve(base, expanded));
   }
 
-  config._canonRaw = canonRaw;
+  config._libraryRaw = libraryRaw;
 
   const resolveList = (raw, key) => {
     const list = raw ? (Array.isArray(raw) ? raw : [raw]) : [];
@@ -327,9 +327,9 @@ function loadCompileConfig(configPath, options = {}) {
       diagnostics.warn(CODES.PATH_NOT_FOUND, `Items path not found: ${p}`, at('structure', 'input', 'items', String(i)));
     }
   }
-  for (const [name, p] of resolvedCanon) {
+  for (const [name, p] of resolvedLibrary) {
     if (!fs.existsSync(p)) {
-      diagnostics.warn(CODES.PATH_NOT_FOUND, `Canon "${name}" path not found: ${p}`, at('structure', 'input', 'canon', name));
+      diagnostics.warn(CODES.PATH_NOT_FOUND, `Library "${name}" path not found: ${p}`, at('structure', 'input', 'library', name));
     }
   }
   for (const [i, p] of resolvedTemplates.entries()) {
@@ -345,7 +345,7 @@ function loadCompileConfig(configPath, options = {}) {
     _resolvedOutput: resolvedOutput,
     _resolvedReports: resolvedReports,
     _resolvedItems: resolvedItems,
-    _resolvedCanon: resolvedCanon,
+    _resolvedLibrary: resolvedLibrary,
     _resolvedTemplates: resolvedTemplates,
     _sourceMap: sourceMap,
     protagonist: config.protagonist || null,
@@ -360,13 +360,13 @@ function loadCompileConfig(configPath, options = {}) {
     lint: config.lint || null,
     // Two variable sets, deliberately.
     //
-    // `variables` is what the author declared. The canon dependency manifest reports it,
-    // and it should stay the author's own list — auto-exposed canon names are derived,
+    // `variables` is what the author declared. The library dependency manifest reports it,
+    // and it should stay the author's own list — auto-exposed library names are derived,
     // and recording them as declarations would make the manifest describe the compiler
     // rather than the project.
     //
     // `_variables` is the effective set that token expansion resolves against, with the
-    // canon names folded in (§6.1). Everything that expands a token uses this one.
+    // library names folded in (§6.1). Everything that expands a token uses this one.
     variables: config.variables || null,
     _variables: variables,
     // Rendering defaults (§4.5). Branch-addressable like `components:` and `scripts:`,

@@ -73,7 +73,7 @@ beforeAll(() => {
     '  input:',
     '    items:',
     `      - ${cards}`,
-    '    canon:',
+    '    library:',
     `      alpha: ${canonA}`,
     `      beta: ${canonB}`,
     '    templates:',

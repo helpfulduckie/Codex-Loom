@@ -61,7 +61,7 @@ function wireNotesTemplate(configPath, options = {}) {
     // does, because a mapping is a field set that something has to lay out.
     const isMarker = (item) => item && item.notes && typeof item.notes === 'object'
       && !Array.isArray(item.notes);
-    const canon = buildCanonRegistry(config._resolvedCanon);
+    const canon = buildCanonRegistry(config._resolvedLibrary);
     for (const [, item] of canon) if (isMarker(item)) { needsOne = true; break; }
     if (!needsOne) {
       for (const item of loadItemsFromDir(config._resolvedItems)) {

@@ -216,9 +216,9 @@ describe('resolution behavior carried forward', () => {
     expect(config._resolvedItems).toEqual([path.join(tmpDir, 'Codex')]);
   });
 
-  test('canon entries resolve to absolute paths', () => {
-    const { config } = load('structure:\n  input:\n    canon:\n      main: ./canon\n', { dirs: ['canon'] });
-    expect(config._resolvedCanon.get('main')).toBe(path.join(tmpDir, 'canon'));
+  test('library entries resolve to absolute paths', () => {
+    const { config } = load('structure:\n  input:\n    library:\n      main: ./canon\n', { dirs: ['canon'] });
+    expect(config._resolvedLibrary.get('main')).toBe(path.join(tmpDir, 'canon'));
   });
 
   // §5.1 / §6.1: every string value in compile.cl.yaml passes through the same expander.
@@ -234,9 +234,9 @@ describe('resolution behavior carried forward', () => {
     expect(config._resolvedReports).toBe(path.join(tmpDir, 'reviews'));
   });
 
-  test('canon names are available to structure.output, since canon auto-exposes as variables', () => {
+  test('library names are available to structure.output, since library auto-exposes as variables', () => {
     const { config } = load(
-      'structure:\n  input:\n    canon:\n      main: ./canon\n  output: "{%main}/out"\n',
+      'structure:\n  input:\n    library:\n      main: ./canon\n  output: "{%main}/out"\n',
       { dirs: ['canon'] }
     );
     expect(config._resolvedOutput).toBe(path.join(tmpDir, 'canon', 'out'));
@@ -312,8 +312,8 @@ describe('every diagnostic the config surface can emit', () => {
     ['a variable cycle', CODES.VARIABLE_CYCLE, 'variables:\n  a: "{%b}"\n  b: "{%a}"\n', {}],
     ['a branch-scoped variable used pre-branch', CODES.VARIABLE_PRE_BRANCH,
       'structure:\n  input:\n    items: ["./{%r}"]\nbranches:\n  s:\n    variables:\n      r: x\n', {}],
-    ['a canon name colliding with a variable', CODES.CANON_NAME_COLLIDES,
-      'variables:\n  main: x\nstructure:\n  input:\n    canon:\n      main: ./canon\n', {}],
+    ['a library name colliding with a variable', CODES.LIBRARY_NAME_COLLIDES,
+      'variables:\n  main: x\nstructure:\n  input:\n    library:\n      main: ./canon\n', {}],
   ];
 
   test.each(CASES)('%s → %s', (_name, code, yaml, options) => {

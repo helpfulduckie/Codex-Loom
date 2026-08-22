@@ -257,7 +257,7 @@ afterAll(() => {
       const expectedPath = path.join(expectedDir, ...rel.split('/'));
       if (!fs.existsSync(actualPath)) continue; // reported by the file-set test
 
-      if (path.basename(rel) === 'canon-dependencies.json') {
+      if (path.basename(rel) === 'library-dependencies.json') {
         const actual = normalizeManifest(fs.readFileSync(actualPath, 'utf8'), path.join(tmpDir));
         const expected = normalizeManifest(fs.readFileSync(expectedPath, 'utf8'), GOLDEN_DIR);
         if (JSON.stringify(actual) !== JSON.stringify(expected)) {

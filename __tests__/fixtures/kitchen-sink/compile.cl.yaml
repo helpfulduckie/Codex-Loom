@@ -6,7 +6,7 @@
 #
 # The gap it closes: the three golden fixture projects pin compiled output well, but they
 # only use the keys those projects happen to need. None of them declares roles:,
-# placeholders:, lint:, structure.input.vault, components.summary, a `~` unbind, or the
+# placeholders:, lint:, structure.input.snapshot, components.summary, a `~` unbind, or the
 # mapping form of scripts: — and none puts a {%token} in output: or reports:, which is
 # exactly where the Phase 1 audit found a bug that every test missed.
 #
@@ -34,7 +34,7 @@ variables:
   vaultDir:     '{%here}/vault'
   componentDir: '{%here}/components'
   # §7.6.2's own spelling for the directory a shared component is imported from. A real
-  # project points this at a canon entry, which §6.1 exposes as a variable of the same
+  # project points this at a library entry, which §6.1 exposes as a variable of the same
   # shape; the fixture keeps it local so the corpus stays self-contained.
   components:   '{%here}/components/shared'
   scriptDir:    '{%here}/scripts'
@@ -45,12 +45,12 @@ structure:
       - '{%codex}'
     templates:
       - '{%tpl}'
-    canon:
+    library:
       main:    '{%canonRoot}/main'
       general: '{%canonRoot}/general'
-    vault: '{%vaultDir}'
+    snapshot: '{%vaultDir}'
   output: './{%out}'
-  # Reached through a canon name rather than a declared variable: canon auto-exposes as a
+  # Reached through a library name rather than a declared variable: library auto-exposes as a
   # variable (§6.1), which is what replaced {@}. Resolves to ./Review.
   reports: '{%main}/../../Review'
 

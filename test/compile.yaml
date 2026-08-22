@@ -1,7 +1,7 @@
 version: 4
 structure:
   input:
-    canon:
+    library:
       main: ./canon
     templates:
       - ./templates

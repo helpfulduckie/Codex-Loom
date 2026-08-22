@@ -23,7 +23,7 @@ beforeAll(() => {
     `    items:`,
     // The key is the v4 spelling; the directory on disk is still test/cards.
     `      - ${FIXTURE_DIR}/cards`,
-    `    canon:`,
+    `    library:`,
     `      main: ${FIXTURE_DIR}/canon`,
     `    templates:`,
     `      - ${FIXTURE_DIR}/templates`,
@@ -118,7 +118,7 @@ describe('protagonist inherited from parent branch node', () => {
       `    items:`,
       // The key is the v4 spelling; the directory on disk is still test/cards.
       `      - ${FIXTURE_DIR}/cards`,
-      `    canon:`,
+      `    library:`,
       `      main: ${FIXTURE_DIR}/canon`,
       `    templates:`,
       `      - ${FIXTURE_DIR}/templates`,

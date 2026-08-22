@@ -283,7 +283,7 @@ function migratePlotEssentialsFiles(configPath, options = {}) {
   try {
     console.log = () => {}; console.warn = () => {}; console.error = () => {};
     config = loadCompileConfig(configPath);
-    const canon = buildCanonRegistry(config._resolvedCanon);
+    const canon = buildCanonRegistry(config._resolvedLibrary);
     registry = buildItemLookup(canon, loadItemsFromDir(config._resolvedItems));
     const { templates } = loadTemplates(config._resolvedTemplates);
     templateNames = new Set([...templates.keys()].map((k) => String(k).toLowerCase()));

@@ -435,13 +435,13 @@ function resolveBranchFolderPath(branches, idPath) {
 }
 
 /**
- * Build a canon dependency manifest for the output JSON file.
+ * Build a library dependency manifest for the output JSON file.
  */
-function buildCanonManifest(config) {
+function buildLibraryManifest(config) {
   const { findFiles } = require('./loader');
   const manifest = {};
-  for (const [name, resolvedPath] of config._resolvedCanon) {
-    const expression = config._canonRaw ? String(config._canonRaw[name] ?? resolvedPath) : resolvedPath;
+  for (const [name, resolvedPath] of config._resolvedLibrary) {
+    const expression = config._libraryRaw ? String(config._libraryRaw[name] ?? resolvedPath) : resolvedPath;
     const missing = !fs.existsSync(resolvedPath);
     const files = missing ? [] : findFiles(resolvedPath, '.yaml');
     manifest[name] = { expression, resolvedPath, files, ...(missing ? { missing: true } : {}) };
@@ -1359,7 +1359,7 @@ function compileRun(configPath, options, buses) {
   console.log(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
   // Build canon registry
-  const canonRegistry = buildCanonRegistry(config._resolvedCanon, { diagnostics: loadDiagnostics });
+  const canonRegistry = buildCanonRegistry(config._resolvedLibrary, { diagnostics: loadDiagnostics });
   // itemCount, not size: an id two canon sets both define holds no plain key (§17.3), and
   // "loaded 40 items" would otherwise quietly drop the very items worth mentioning.
   if (canonRegistry.itemCount > 0) {
@@ -1841,18 +1841,18 @@ function compileRun(configPath, options, buses) {
   }
   console.log(`\n${allItemIds.size} unique items across project. Wrote ${totalFiles} file(s).`);
 
-  // Canon dependency manifest
-  const canonManifest = buildCanonManifest(config);
-  if (Object.keys(canonManifest).length > 0) {
-    const manifestPath = path.join(config._resolvedOutput, 'canon-dependencies.json');
+  // Library dependency manifest
+  const libraryManifest = buildLibraryManifest(config);
+  if (Object.keys(libraryManifest).length > 0) {
+    const manifestPath = path.join(config._resolvedOutput, 'library-dependencies.json');
     const manifestData = {
       generatedAt: new Date().toISOString(),
       compileYaml: path.resolve(configPath),
       variables: config.variables || {},
-      canon: canonManifest,
+      library: libraryManifest,
     };
     fs.writeFileSync(manifestPath, JSON.stringify(manifestData, null, 2), 'utf8');
-    if (verbose) console.log(`  OK: Canon manifest → ${manifestPath}`);
+    if (verbose) console.log(`  OK: Library manifest → ${manifestPath}`);
   }
 
   // Cross-branch review reports — emitted from the per-leaf data captured above.

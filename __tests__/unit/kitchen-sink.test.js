@@ -102,7 +102,7 @@ describe('kitchen-sink config (compile.cl.yaml)', () => {
         config._resolvedReports,
         ...config._resolvedItems,
         ...config._resolvedTemplates,
-        ...config._resolvedCanon.values(),
+        ...config._resolvedLibrary.values(),
       ];
       for (const p of resolved) {
         expect(path.isAbsolute(p)).toBe(true);
@@ -110,7 +110,7 @@ describe('kitchen-sink config (compile.cl.yaml)', () => {
       }
     });
 
-    test('a canon name reaches structure.reports, since canon auto-exposes as a variable', () => {
+    test('a library name reaches structure.reports, since library auto-exposes as a variable', () => {
       expect(config._resolvedReports).toBe(path.join(FIXTURE_DIR, 'Review'));
     });
 
@@ -127,7 +127,7 @@ describe('kitchen-sink config (compile.cl.yaml)', () => {
       expect(config.components.plotEssential).toMatch(/\{%componentDir\}/);
     });
 
-    test('the author\'s variables are reported without the derived canon names', () => {
+    test('the author\'s variables are reported without the derived library names', () => {
       expect(Object.keys(config.variables)).not.toContain('main');
       expect(config._variables.main).toBeDefined();
     });

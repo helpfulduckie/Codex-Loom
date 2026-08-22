@@ -179,8 +179,8 @@ const CONFIG_SCHEMA = {
           keys: {
             items: STRING_SEQ,
             templates: STRING_SEQ,
-            canon: STRING_RECORD,
-            vault: { type: TYPES.STRING, note: 'Phase 7' },
+            library: STRING_RECORD,
+            snapshot: STRING,
 
           },
         },

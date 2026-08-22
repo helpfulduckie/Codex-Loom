@@ -203,7 +203,7 @@ describe('the arity-1 positions still warn per miss', () => {
         'structure:',
         '  input:',
         '    items: [%TMP%/Codex]',
-        '    canon: {general: %TMP%/canon}',
+        '    library: {general: %TMP%/canon}',
         '    templates: [%TMP%/templates]',
         '  output: %TMP%/output',
         'branches:',

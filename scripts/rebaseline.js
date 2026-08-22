@@ -28,7 +28,7 @@
  *
  * Three things this deliberately does not do:
  *
- *   - It never copies `canon-dependencies.json`. The manifest stamps the compile root, so
+ *   - It never copies `library-dependencies.json`. The manifest stamps the compile root, so
  *     a baseline written from a temp directory bakes that path in and defeats the
  *     harness's normalization on every later run.
  *   - It copies markdown only. Everything else under `v3/` — the scripts a project ships
@@ -178,7 +178,7 @@ function diffTree(actualDir, expectedDir, { markdownOnly }) {
 
   for (const rel of [...actual].sort()) {
     if (!expected.has(rel)) continue;
-    if (path.basename(rel) === 'canon-dependencies.json') continue; // never re-baselined
+    if (path.basename(rel) === 'library-dependencies.json') continue; // never re-baselined
 
     const actualPath = path.join(actualDir, ...rel.split('/'));
     const expectedPath = path.join(expectedDir, ...rel.split('/'));

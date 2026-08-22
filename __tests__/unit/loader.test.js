@@ -332,8 +332,8 @@ describe('loadCompileConfig', () => {
       .toEqual([path.resolve(tmpDir, 'items')]);
   });
 
-  test('expands {%variable} and canon names in items paths', () => {
-    // Canon names are auto-exposed as variables (§6.1), so `{%Base}` does what `{@Base}`
+  test('expands {%variable} and library names in items paths', () => {
+    // Library names are auto-exposed as variables (§6.1), so `{%Base}` does what `{@Base}`
     // used to — one naming system instead of two.
     const cfgPath = writeConfig([
       'variables:',
@@ -341,7 +341,7 @@ describe('loadCompileConfig', () => {
       'structure:',
       '  output: ./out',
       '  input:',
-      '    canon:',
+      '    library:',
       '      Base: ./base',
       '    items:',
       '      - "{%root}/Canon"',
@@ -352,30 +352,30 @@ describe('loadCompileConfig', () => {
     expect(_resolvedItems[1]).toBe(path.resolve(tmpDir, 'base/extra'));
   });
 
-  test('resolves canon mapping entries to absolute paths', () => {
-    const cfgPath = writeConfig('structure:\n  input:\n    canon:\n      Core: ./canon/core\n');
-    const { _resolvedCanon } = loadCompileConfig(cfgPath);
-    expect(_resolvedCanon.get('Core')).toBe(path.resolve(tmpDir, 'canon/core'));
+  test('resolves library mapping entries to absolute paths', () => {
+    const cfgPath = writeConfig('structure:\n  input:\n    library:\n      Core: ./canon/core\n');
+    const { _resolvedLibrary } = loadCompileConfig(cfgPath);
+    expect(_resolvedLibrary.get('Core')).toBe(path.resolve(tmpDir, 'canon/core'));
   });
 
-  test('a canon entry may reference a sibling canon name', () => {
-    // v3 needed a bespoke two-pass resolver for this. Canon names are variables now, so
+  test('a library entry may reference a sibling library name', () => {
+    // v3 needed a bespoke two-pass resolver for this. Library names are variables now, so
     // it falls out of ordinary variable resolution.
     const cfgPath = writeConfig([
       'structure:',
       '  output: ./out',
       '  input:',
-      '    canon:',
+      '    library:',
       '      Base: ./base',
       '      Ext: "{%Base}/ext"',
     ].join('\n') + '\n');
-    const { _resolvedCanon } = loadCompileConfig(cfgPath);
-    const ext = _resolvedCanon.get('Ext');
+    const { _resolvedLibrary } = loadCompileConfig(cfgPath);
+    const ext = _resolvedLibrary.get('Ext');
     expect(ext).toContain('base');
     expect(ext).toContain('ext');
   });
 
-  test('a canon name colliding with a declared variable is an ERROR', () => {
+  test('a library name colliding with a declared variable is an ERROR', () => {
     const p = path.join(tmpDir, 'compile.yaml');
     fs.writeFileSync(p, [
       'version: 4',
@@ -384,7 +384,7 @@ describe('loadCompileConfig', () => {
       'structure:',
       '  output: ./out',
       '  input:',
-      '    canon:',
+      '    library:',
       '      Base: ./base',
     ].join('\n') + '\n', 'utf8');
     const spy = jest.spyOn(console, 'error').mockImplementation(() => {});

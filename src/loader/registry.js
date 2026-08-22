@@ -133,6 +133,21 @@ function loadItemsFromDir(dirs, options = {}) {
           return;
         }
 
+        // A library entry may point at a mixed-purpose directory — §11.1's own example
+        // pairs an item source with a `components:` one. A component document (top-level
+        // `sections:`, no `id`/`name`) is expected content there, not an authoring mistake,
+        // so it is skipped silently rather than warned or made to crash in `buildRegistry`.
+        // Narrow on purpose: a genuinely broken item file (wrong shape, still missing
+        // identity, no `sections:`) still falls through to the hard error below.
+        if (
+          !Array.isArray(entry) && typeof entry === 'object'
+          && entry.sections && typeof entry.sections === 'object'
+          && entry.id === undefined
+          && (entry.name === undefined || typeof entry.name !== 'string')
+        ) {
+          return;
+        }
+
         // Validate before normalization and before `_source` is stamped, so positions
         // address the document as written.
         if (diagnostics) {

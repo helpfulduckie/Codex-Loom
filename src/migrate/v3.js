@@ -125,6 +125,13 @@ function migrateConfigDocument(doc) {
     changes.push('structure.input.cards → items');
   }
 
+  // structure.input.canon → library.
+  if (doc.hasIn(['structure', 'input', 'canon'])) {
+    doc.setIn(['structure', 'input', 'library'], doc.getIn(['structure', 'input', 'canon'], true));
+    doc.deleteIn(['structure', 'input', 'canon']);
+    changes.push('structure.input.canon → library');
+  }
+
   // structure.input.components is deleted outright (§6.1).
   if (doc.hasIn(['structure', 'input', 'components'])) {
     doc.deleteIn(['structure', 'input', 'components']);
