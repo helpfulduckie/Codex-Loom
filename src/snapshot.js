@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const { CODES } = require('./config/load');
+const { CODES, loadManifest, isOutOfBase } = require('./config/load');
 
 /** Every file under `dir`, relative paths, sorted — not suffix-filtered (companion `.md`
  * files beside a `.yaml` component must survive a freeze same as the component itself). */
@@ -44,25 +44,20 @@ function hashTree(dir) {
   return out;
 }
 
-/** Same normalization `golden.test.js`'s `normalizeManifest` uses, for consistency. */
-function normalize(p) {
-  return String(p).replace(/\\/g, '/').toLowerCase();
-}
-
-function isOutOfBase(resolvedPath, base) {
-  return !normalize(resolvedPath).startsWith(normalize(base));
-}
-
 /**
  * Every `structure.input.library` entry (all of them) plus every out-of-base
  * `structure.input.templates` entry (Decision 2's template-only in-base/out-of-base rule).
+ *
+ * Reads the `*Source` fields — the always-live maps — so sync and drift keep hashing live
+ * files regardless of whatever a given run's snapshot redirection (Phase 7 Session B)
+ * decided for `_resolvedLibrary`/`_resolvedTemplates` themselves.
  */
 function collectEntries(config) {
   const entries = [];
-  for (const [name, resolvedPath] of config._resolvedLibrary) {
+  for (const [name, resolvedPath] of config._resolvedLibrarySource) {
     entries.push({ name, sourcePath: resolvedPath, kind: 'library' });
   }
-  const templates = config._resolvedTemplates || [];
+  const templates = config._resolvedTemplatesSource || [];
   templates.forEach((resolvedPath, i) => {
     if (isOutOfBase(resolvedPath, config._base)) {
       entries.push({ name: String(i), sourcePath: resolvedPath, kind: 'template' });
@@ -73,39 +68,6 @@ function collectEntries(config) {
 
 function entryLabel(entry) {
   return `${entry.kind === 'library' ? 'Library' : 'Template'} "${entry.name}"`;
-}
-
-/**
- * Read `manifest.json`. Returns `null` for "no previous manifest" (the normal first-sync
- * state) and also `null` (after raising CL0112, if a bus was given) for "present but
- * unparseable" — both cases mean "nothing to compare against" to the caller.
- */
-function loadManifest(manifestPath, diagnostics) {
-  if (!fs.existsSync(manifestPath)) return null;
-  let parsed;
-  try {
-    parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  } catch (_) {
-    if (diagnostics) {
-      diagnostics.warn(
-        CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
-        `Snapshot manifest at ${manifestPath} is not valid JSON.`,
-        {}
-      );
-    }
-    return null;
-  }
-  if (!parsed || typeof parsed !== 'object' || typeof parsed.manifestVersion !== 'number') {
-    if (diagnostics) {
-      diagnostics.warn(
-        CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
-        `Snapshot manifest at ${manifestPath} does not match the expected shape.`,
-        {}
-      );
-    }
-    return null;
-  }
-  return parsed;
 }
 
 /** File-level change summary for one entry: added / removed / changed-by-hash. */

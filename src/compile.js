@@ -1328,7 +1328,7 @@ function compileRun(configPath, options, buses) {
     compileCursor = compileDiagnostics.length;
   };
 
-  const config = loadCompileConfig(configPath, { diagnostics: loadDiagnostics });
+  const config = loadCompileConfig(configPath, { diagnostics: loadDiagnostics, live: options.live });
 
   // Phase 7's drift notice: a complete no-op unless the project has opted into a snapshot
   // (§Decision 4 — drift is informational, never a warning, never a non-zero exit; the one
@@ -2116,7 +2116,7 @@ if (require.main === module) {
         compile(configPath, {
           clean: flags.clean, verbose: flags.verbose,
           diff: flags.diff, annotate: flags.annotate, inventory: flags.inventory,
-          lintLevel,
+          lintLevel, live: flags.live,
         });
       } catch (err) {
         console.error(`\nFatal: ${err.message}`);
@@ -2133,7 +2133,7 @@ if (require.main === module) {
     } else {
       try {
         const snapshotDiagnostics = new Diagnostics();
-        const config = loadCompileConfig(configPath, { diagnostics: snapshotDiagnostics });
+        const config = loadCompileConfig(configPath, { diagnostics: snapshotDiagnostics, live: true });
         if (!config._resolvedSnapshot) {
           console.error('structure.input.snapshot is not set in compile.yaml; nothing to sync.');
           process.exit(1);

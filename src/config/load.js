@@ -216,6 +216,48 @@ function expandPathTokens(str, variables, diagnostics, location, branchOnly) {
   return expandVariables(String(str), variables, { diagnostics, location, branchOnly });
 }
 
+/** Same normalization `golden.test.js`'s `normalizeManifest` uses, for consistency. */
+function normalize(p) {
+  return String(p).replace(/\\/g, '/').toLowerCase();
+}
+
+function isOutOfBase(resolvedPath, base) {
+  return !normalize(resolvedPath).startsWith(normalize(base));
+}
+
+/**
+ * Read `manifest.json`. Returns `null` for "no previous manifest" (the normal first-sync
+ * state) and also `null` (after raising CL0112, if a bus was given) for "present but
+ * unparseable" — both cases mean "nothing to compare against" to the caller.
+ */
+function loadManifest(manifestPath, diagnostics) {
+  if (!fs.existsSync(manifestPath)) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  } catch (_) {
+    if (diagnostics) {
+      diagnostics.warn(
+        CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
+        `Snapshot manifest at ${manifestPath} is not valid JSON.`,
+        {}
+      );
+    }
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || typeof parsed.manifestVersion !== 'number') {
+    if (diagnostics) {
+      diagnostics.warn(
+        CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
+        `Snapshot manifest at ${manifestPath} does not match the expected shape.`,
+        {}
+      );
+    }
+    return null;
+  }
+  return parsed;
+}
+
 /** Print collected diagnostics and abort if any of them are errors. */
 function flush(diagnostics) {
   for (const diag of diagnostics.all) {
@@ -321,13 +363,17 @@ function loadCompileConfig(configPath, options = {}) {
 
   // Library entries may reference variables, including other library names, so they
   // resolve through the same expander as everything else rather than a bespoke two-pass.
-  const resolvedLibrary = new Map();
+  //
+  // This is the always-live map. `resolvedLibrary` (the "active" map, below) is what every
+  // consumer actually reads; the two differ only once a snapshot exists and this run isn't
+  // `--live` (Phase 7 Session B).
+  const resolvedLibrarySource = new Map();
   for (const [name, spec] of Object.entries(libraryRaw)) {
     const expanded = expandPathTokens(
       String(spec), variables, diagnostics,
       at('structure', 'input', 'library', name), variableNames.branchOnly
     );
-    resolvedLibrary.set(name, path.resolve(base, expanded));
+    resolvedLibrarySource.set(name, path.resolve(base, expanded));
   }
 
   config._libraryRaw = libraryRaw;
@@ -340,20 +386,58 @@ function loadCompileConfig(configPath, options = {}) {
     });
   };
 
-  const resolvedTemplates = resolveList(input.templates, 'templates');
+  const resolvedTemplatesSource = resolveList(input.templates, 'templates');
   const resolvedItems = resolveList(input.items, 'items');
+
+  // Snapshot redirection (Phase 7 Session B): "the live library" and "what this compile
+  // reads" are different questions once a snapshot exists. `options.live` is the escape
+  // hatch back to the source; otherwise, an entry whose name is recorded in
+  // `snapshot/manifest.json` reads from the snapshot copy instead. The manifest read here
+  // is silent — `checkDrift` (called unconditionally elsewhere) stays the sole source of
+  // CL0111–CL0115, and anything this can't confirm just falls back to live.
+  let manifest = null;
+  if (!options.live && resolvedSnapshot) {
+    manifest = loadManifest(path.join(resolvedSnapshot, 'manifest.json'), null);
+  }
+
+  const resolvedLibrary = new Map();
+  for (const [name, sourcePath] of resolvedLibrarySource) {
+    if (manifest && manifest.library && Object.prototype.hasOwnProperty.call(manifest.library, name)) {
+      resolvedLibrary.set(name, path.join(resolvedSnapshot, name));
+    } else {
+      resolvedLibrary.set(name, sourcePath);
+    }
+  }
+
+  const resolvedTemplates = resolvedTemplatesSource.map((sourcePath, i) => {
+    if (
+      manifest && manifest.templates && isOutOfBase(sourcePath, base)
+      && Object.prototype.hasOwnProperty.call(manifest.templates, String(i))
+    ) {
+      return path.join(resolvedSnapshot, String(i));
+    }
+    return sourcePath;
+  });
+
+  // §6.1's library-names-as-variables now redirect too: `{%name}` in every
+  // include/from/imports resolves through whichever path is active for this run.
+  // `path.resolve(base, ...)` on an already-absolute path is a no-op, so nothing
+  // downstream needs to change to accept it.
+  for (const [name, activePath] of resolvedLibrary) {
+    variables[name] = activePath;
+  }
 
   for (const [i, p] of resolvedItems.entries()) {
     if (!fs.existsSync(p)) {
       diagnostics.warn(CODES.PATH_NOT_FOUND, `Items path not found: ${p}`, at('structure', 'input', 'items', String(i)));
     }
   }
-  for (const [name, p] of resolvedLibrary) {
+  for (const [name, p] of resolvedLibrarySource) {
     if (!fs.existsSync(p)) {
       diagnostics.warn(CODES.PATH_NOT_FOUND, `Library "${name}" path not found: ${p}`, at('structure', 'input', 'library', name));
     }
   }
-  for (const [i, p] of resolvedTemplates.entries()) {
+  for (const [i, p] of resolvedTemplatesSource.entries()) {
     if (!fs.existsSync(p)) {
       diagnostics.warn(CODES.PATH_NOT_FOUND, `Templates path not found: ${p}`, at('structure', 'input', 'templates', String(i)));
     }
@@ -369,6 +453,8 @@ function loadCompileConfig(configPath, options = {}) {
     _resolvedItems: resolvedItems,
     _resolvedLibrary: resolvedLibrary,
     _resolvedTemplates: resolvedTemplates,
+    _resolvedLibrarySource: resolvedLibrarySource,
+    _resolvedTemplatesSource: resolvedTemplatesSource,
     _sourceMap: sourceMap,
     protagonist: config.protagonist || null,
     title: config.title || null,
@@ -405,4 +491,7 @@ function loadCompileConfig(configPath, options = {}) {
   };
 }
 
-module.exports = { loadCompileConfig, expandVariables, expandPathTokens, collectVariableNames, CODES };
+module.exports = {
+  loadCompileConfig, expandVariables, expandPathTokens, collectVariableNames, CODES,
+  loadManifest, isOutOfBase, normalize,
+};
