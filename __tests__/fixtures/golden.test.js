@@ -68,8 +68,9 @@ const ABSENT = {
  * and 9. An output-changing phase widens it to exactly the classes its expected diff
  * covers, and never further:
  *
- *   Phase 2 (emitter)     ['fence']  the envelope moves into emit/vl.js
- *   Phase 3 (item/slot)   ['body']   scoped by EXPECTED_DIFF_FILES, below
+ *   Phase 2 (emitter)     ['fence']        the envelope moves into emit/vl.js
+ *   Phase 3 (item/slot)   ['body']         scoped by EXPECTED_DIFF_FILES, below
+ *   Phase 6 (components)  ['body', 'title']  scoped by EXPECTED_DIFF_FILES, below
  *
  * Phase 2 is set to `fence` alone rather than `fence, title`, even though the heading is
  * half of what moved. The emitter's title ladder was checked against the corpus before it
@@ -77,25 +78,41 @@ const ABSENT = {
  * disagree, so no heading should change. Allowing `title` would buy nothing and would wave
  * through the one regression this move could plausibly cause — a card quietly renamed,
  * which in AID means a card the player sees under a different name.
+ *
+ * Phase 6's `title` is a different fact about a different file: AI Instructions.md's own
+ * `## Heading` lines classify as `title` under `classifyDiff` (any `##`-prefixed line
+ * does, not only a card's), and every one of them moves here — not because the heading
+ * text changed, but because the file's source uses CRLF and the sections grammar always
+ * renders LF (§7.6's `imports:` conversion, Step 5). `classifyDiff` splits on `\n` alone
+ * specifically so a line-ending change surfaces rather than being normalized away, and this
+ * is that check doing its job: every line of the file, headings included, differs by one
+ * trailing `\r`. The content itself is unchanged — confirmed by rendering the converted
+ * `sections:` document against the CRLF source with only its line endings normalized.
  */
-const EXPECTED_DIFF_CLASSES = ['body'];
+const EXPECTED_DIFF_CLASSES = ['body', 'title'];
 
 /**
  * The files the phase in progress is allowed to change, when the class alone cannot say.
  *
  * The classes name parts of an envelope, so they only discriminate on files that have
- * one. Component output — `Plot Essentials.md`, `AI Instructions.md` — carries no `##`
- * heading and no `~~~` fence, so every line in it is `body`, and `body` on its own would
- * wave through a rewritten story card as readily as a restructured component. That was
- * noted as a limit of the classes when Phase 2 set them, with the observation that a phase
- * landing in a component file would need a per-file expectation instead. Phase 3 is that
- * phase, and this is that expectation.
+ * one. `Plot Essentials.md` carries no `##` heading and no `~~~` fence, so every line in
+ * it is `body`, and `body` on its own would wave through a rewritten story card as readily
+ * as a restructured component. That was noted as a limit of the classes when Phase 2 set
+ * them, with the observation that a phase landing in a component file would need a
+ * per-file expectation instead. Phase 3 is that phase, and this is that expectation.
+ *
+ * `AI Instructions.md` is the same idea for Phase 6, and needs `title` as well as `body`
+ * in its allowance because, unlike Plot Essentials, its prose is itself written with `##`
+ * headings — `## Narration`, `## Character` — which `classifyLines` reads exactly like a
+ * card's `## Title` line. Restricting the file list is what keeps that allowance from
+ * reaching a story card, where a `title`-class change is the regression the classes exist
+ * to catch.
  *
  * `null` means "no file restriction" and is the setting for a phase whose classes already
  * discriminate. Widening this is the same deliberate act as widening the classes: it says
  * which files a reviewer looked at, and nothing outside them may move.
  */
-const EXPECTED_DIFF_FILES = /(^|\/)Components\/Plot Essentials\.md$/;
+const EXPECTED_DIFF_FILES = /(^|\/)Components\/(Plot Essentials|AI Instructions)\.md$/;
 
 // The fixture set itself lives beside the fixtures, because `scripts/rebaseline.js`
 // regenerates what this file checks and the two must not drift apart.

@@ -108,6 +108,15 @@ function migrateAndCompile(tmpDir, project) {
       test('every file is byte-identical to the baseline', () => {
         const outputDir = results.get(project.name).outputDir;
         const differing = listMarkdown(baselineDir()).filter((rel) => {
+          // Phase 6 Step 5's one deliberate exception. All three v4/ sources now reach AI
+          // Instructions through `imports:` (§7.6) instead of a hardcoded passthrough path,
+          // which is a hand-made upgrade past what migration is asked to do — a bare `.md`
+          // passthrough is still ordinary, valid v4 syntax, and `migrateProjectFully()`
+          // rightly leaves it alone since there is no v3 spelling to convert *from*. So a
+          // freshly migrated `Loom/` tree keeps compiling the old shared `.md` verbatim,
+          // while the baseline now reflects the `sections:` conversion — a real, permanent
+          // divergence for this one file rather than a bug in either path.
+          if (path.basename(rel) === 'AI Instructions.md') return false;
           const a = path.join(outputDir, ...rel.split('/'));
           const b = path.join(baselineDir(), ...rel.split('/'));
           return !fs.existsSync(a) || !fs.readFileSync(a).equals(fs.readFileSync(b));
