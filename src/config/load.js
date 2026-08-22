@@ -384,8 +384,6 @@ function loadCompileConfig(configPath, options = {}) {
     resolvedLibrarySource.set(name, path.resolve(base, expanded));
   }
 
-  config._libraryRaw = libraryRaw;
-
   const resolveList = (raw, key) => {
     const list = raw ? (Array.isArray(raw) ? raw : [raw]) : [];
     return list.map((spec, i) => {
@@ -463,6 +461,13 @@ function loadCompileConfig(configPath, options = {}) {
     _resolvedTemplates: resolvedTemplates,
     _resolvedLibrarySource: resolvedLibrarySource,
     _resolvedTemplatesSource: resolvedTemplatesSource,
+    // The author's own `library:` value for each entry — a `{%token}` expression, not a
+    // resolved path — so `buildLibraryManifest` (compile.js) can show what was written
+    // alongside what it resolved to. Read off `libraryRaw` rather than off `config` (the
+    // raw parsed document): the previous write (`config._libraryRaw = libraryRaw`) landed
+    // on that discarded object rather than on what this function actually returns, so
+    // `config._libraryRaw` was always undefined downstream — found in Phase 7 Session C.
+    _libraryRaw: libraryRaw,
     _sourceMap: sourceMap,
     protagonist: config.protagonist || null,
     title: config.title || null,

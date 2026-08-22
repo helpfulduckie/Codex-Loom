@@ -61,7 +61,7 @@ function resolveItemRef(registry, ref) {
       return {
         item: null,
         code: CODES.UNKNOWN_CANON_SOURCE,
-        message: `"${label}" names canon set "${source}", which is not declared in structure.input.canon.`,
+        message: `"${label}" names canon set "${source}", which is not declared in structure.input.library.`,
         hint: known.length
           ? `Declared canon sets: ${known.join(', ')}.`
           : 'No canon sets are declared for this project.',
