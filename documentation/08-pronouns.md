@@ -8,6 +8,8 @@ Codex Loom resolves pronoun tokens in item field values and templates. Tokens ar
 
 Verb conjugation markers `[s]`, `[es]`, `[is]`, `[was]`, `[has]` are also resolved based on the most recently referenced character's pronoun set.
 
+**A leading `{$X...}` identifier may also be a role** — a per-branch name bound to an item id, resolved to that id before anything on this page runs. See [Roles](13-roles.md); everything below applies identically once a role has resolved to the item it names.
+
 ---
 
 ## Pronoun Sets
@@ -145,16 +147,20 @@ These are left as-is during the first pass and resolved in a second pass once al
 
 ## Protagonist Declaration
 
-The protagonist for a branch is declared in `compile.yaml`:
+The protagonist is the built-in role (see [Roles](13-roles.md)) — an ordinary entry in
+`roles:`, declared per branch:
 
 ```yaml
-protagonist: Aness              # global default
+roles:
+  protagonist: Aness              # global default
 
 branches:
   subject:
-    protagonist: Aness
+    roles:
+      protagonist: Aness
   researcher:
-    protagonist: Veyrn
+    roles:
+      protagonist: Veyrn
 ```
 
 An item's `{$Id}` tokens resolve to "you" when `Id` matches the active branch protagonist. All protagonist matching is case-insensitive.

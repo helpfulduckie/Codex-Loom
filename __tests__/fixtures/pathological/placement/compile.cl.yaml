@@ -39,6 +39,20 @@ placeholders:
   neverUsed: Which house raised you?
   longPrompt: What name did the house that raised you give to the child it did not want?
 
+# ── §9.3's four role ERRORs plus §6.4's unused WARN, latent until Phase 8 ────
+# Declared at root, so every branch's merged roles table carries all four — RoleTester's
+# tokens below therefore fire once per leaf, the same tripling cost the README already
+# names for root-unrestricted content.
+#   LI      — bound to `Anchor`, a real item. Never referenced by any token: CL0545.
+#   Anchor  — a role name equal to the real item id `Anchor`: CL0541 the moment it's used.
+#   Missing — bound to `NoSuchItem`, which resolves nowhere: CL0542.
+#   Loop    — bound to `LI`, itself a role rather than an item id: CL0543.
+roles:
+  LI: Anchor
+  Anchor: Ghost
+  Missing: NoSuchItem
+  Loop: LI
+
 components:
   plotEssential: '{%here}/components/plot-essentials.cl.yaml'
   # §12.3 check 3: the Description is one of two destinations where a placeholder does

@@ -111,6 +111,46 @@ before committing it.
 
 ---
 
+## `requiresRoles` — a library entry's role contract, computed
+
+**`manifestVersion: 2`.** Every library entry's manifest section may carry a `requiresRoles`
+key: the role names a consuming project must bind for that entry's cards to compile.
+
+```json
+{
+  "manifestVersion": 2,
+  "syncedAt": "2026-08-22T10:22:31Z",
+  "library": {
+    "esudia": {
+      "source": "C:/Shared/Esudia",
+      "files": { "Characters/Malcolm.cl.yaml": "sha256:9f2c…" },
+      "requiresRoles": ["LI"]
+    }
+  }
+}
+```
+
+**Computed, not declared.** `--snapshot` scans the entry's own frozen files for every
+`{$X}` token and checks whether `X` resolves to an item id anywhere in the snapshotted
+library — its own set or another one alongside it. What resolves nowhere is published as a
+required role. A `{$X}` role reference and a `{$X}` item reference share one grammar (see
+[Roles](13-roles.md)), so this is elimination, the same way an ERROR for an undeclared
+role at compile time is: a set with no unresolved tokens gets no `requiresRoles` key at
+all, the same "omit rather than assert" rule the manifest already follows for an entry with
+no `templates` section.
+
+**A set whose own items don't validate refuses instead of publishing.** Elimination is only
+trustworthy when the entry's own item content loads cleanly — a schema violation or a
+broken registry build means the scan cannot tell a role from a typo any better than the
+elimination it's built on, so `CL0116` fires instead of a role list for that entry. The
+entry's files are still frozen; only its `requiresRoles` key is withheld until the content
+is fixed and `--snapshot` runs again.
+
+Template entries carry no role contract — only `library:` entries can be referenced by
+`{$X}`.
+
+---
+
 ## Diagnostics
 
 | Code | Severity | Meaning |
@@ -120,6 +160,7 @@ before committing it.
 | `CL0113` | WARN | A library or template entry the config declares has no section in an otherwise-valid manifest. |
 | `CL0114` | WARN | A file under `snapshot/<name>/` on disk has no entry in the manifest. |
 | `CL0115` | ERROR | A file under `snapshot/<name>/` no longer matches its own manifest-recorded hash — hand-edited since the last `--snapshot`. |
+| `CL0116` | ERROR | `--snapshot` refused to compute `requiresRoles` for a library entry because the entry's own items do not validate. |
 | `CL0522` | WARN | A component reads from outside the project, and no library entry covers it — see below. |
 
 `CL0115` is the only ERROR: a corrupted freeze, not drift, and the one condition under which

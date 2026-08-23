@@ -1,6 +1,6 @@
 # compile.yaml Reference
 
-`compile.yaml` is the entry point for every Codex Loom project. It tells the compiler where to find items and templates, where to write output, how the scenario branches, and what the protagonist is for each branch.
+`compile.yaml` is the entry point for every Codex Loom project. It tells the compiler where to find items and templates, where to write output, how the scenario branches, and what roles (including the protagonist) each branch binds.
 
 ---
 
@@ -23,20 +23,23 @@ structure:
   input:
     items:                        # sequence of project item directories
       - ./Codex
-    canon:                        # named mapping of canonical item directories
+    library:                      # named mapping of shared item/component directories
       main: ../../_Canon
       lore: ../../_Lore
     templates:                    # sequence of template directories (later overrides earlier)
       - ../../_SharedTemplates
       - ./templates
+    snapshot: ./snapshot          # optional; freezes library entries (see 12-snapshot.md)
   output: ./output
 
-protagonist: Aness                # global default protagonist ID
 title: The Royal Academy          # optional; written once to {output}/Label.md
 
 variables:                        # key-value pairs; used in templates as {%key}
   setting: The Royal Academy
   year: "1315"
+
+roles:                            # per-branch name -> item id bindings (see 13-roles.md)
+  protagonist: Aness              # the built-in role — global default
 
 components:                       # root-level component specs (inline or file path)
   opening: "Who are you?"
@@ -50,7 +53,8 @@ lint:                             # the opinion layer's controls
 
 branches:
   subject:
-    protagonist: Aness
+    roles:
+      protagonist: Aness
     components:
       opening: ./openings/subject.md
     render:                       # merges over the root block, key by key
@@ -58,7 +62,8 @@ branches:
     variables:
       role: research subject
   researcher:
-    protagonist: Veyrn
+    roles:
+      protagonist: Veyrn
     components:
       opening: "You are a researcher."
   tier2:
@@ -77,7 +82,7 @@ All path resolution happens under `structure:`.
 
 ### `structure.input.items`
 
-A sequence of directories to load project item YAML files from. All `.yaml` files are loaded recursively. Entries support the same `{%variable}` and `{%canonName}` token expansion as `structure.input.templates` (resolved before the path is made absolute), so a shared path prefix variable can be reused here.
+A sequence of directories to load project item YAML files from. All `.yaml` files are loaded recursively. Entries support the same `{%variable}` and `{%libraryName}` token expansion as `structure.input.templates` (resolved before the path is made absolute), so a shared path prefix variable can be reused here.
 
 ```yaml
 items: [./Codex]
@@ -87,41 +92,48 @@ items:
   - ./extra-items
 ```
 
-### `structure.input.canon`
+### `structure.input.library`
 
-A **named mapping** of directories containing canonical (shared) item definitions. Each name is used in `{%name}` references and when reporting errors. All `.yaml` files are loaded recursively.
+A **named mapping** of directories containing shared item and component definitions —
+"canon," in author-facing terms, though the key covers more than characters and lore
+(§11.0). Each name is used in `{%name}` references and when reporting errors. All `.yaml`
+files are loaded recursively.
 
 ```yaml
-canon:
+library:
   main: ../../_Canon
   lore: ./lore-items
 ```
 
-Canon names are matched case-insensitively in `{%key}` references. Use the name to refer to canon directories in `include:` paths:
+Library names are matched case-insensitively in `{%key}` references. Use the name to refer to a library directory in `include:` paths:
 
 ```yaml
 - include: "{%main}/Characters/Aness.yaml"
 ```
 
-**Token expansion in canon values** — Canon path values support token expansion before path resolution:
+**Token expansion in library values** — Library path values support token expansion before path resolution:
 
 - `{%variableName}` — replaced with the value from the top-level `variables:` block
-- `{%otherCanonName}` — replaced with the resolved absolute path of another canon entry
+- `{%otherLibraryName}` — replaced with the resolved absolute path of another library entry
 
 This makes it practical to define a root path once as a variable and reference it for multiple subdirectory entries, rather than repeating the full path:
 
 ```yaml
 variables:
-  canonRoot: C:\Shared\AID\_Canon
+  libraryRoot: C:\Shared\AID\_Canon
 
 structure:
   input:
-    canon:
-      canonGeneral: '{%canonRoot}\StoryCards\_General'
-      canonNovalune: '{%canonRoot}\StoryCards\Novalune'
+    library:
+      libGeneral: '{%libraryRoot}\StoryCards\_General'
+      libNovalune: '{%libraryRoot}\StoryCards\Novalune'
 ```
 
-**Every canon name is also exposed as a variable**, so a canon entry can reference a sibling — `esudia: '{%canonRoot}/Esudia'` then `esudiaChars: '{%esudia}/Character'` — and so can any other path in the config. This is what replaced v3's separate `{@name}` family; a canon name colliding with a declared variable is an ERROR (`CL0521`), since the two now share one namespace.
+**Every library name is also exposed as a variable**, so a library entry can reference a sibling — `esudia: '{%libraryRoot}/Esudia'` then `esudiaChars: '{%esudia}/Character'` — and so can any other path in the config. This is what replaced v3's separate `{@name}` family; a library name colliding with a declared variable is an ERROR (`CL0521`), since the two now share one namespace.
+
+**A library directory may carry a reserved `canon.cl.yaml`**, excluded from item loading rather than parsed — see [Roles](13-roles.md#canonclyaml--reserved-not-yet-read).
+
+**`structure.input.snapshot` freezes library entries into a copy the project carries with it.** See [The Library Snapshot](12-snapshot.md) for `--snapshot`, the drift notice, and `requiresRoles`.
 
 ### `structure.input.templates`
 
@@ -133,12 +145,12 @@ templates:
   - ./templates              # project overrides — same name here wins
 ```
 
-Template path entries support the same token expansion as canon values: `{%variableName}` and `{%canonName}`. The full canon map is available when templates are resolved, so any named canon entry can be referenced:
+Template path entries support the same token expansion as library values: `{%variableName}` and `{%libraryName}`. The full library map is available when templates are resolved, so any named library entry can be referenced:
 
 ```yaml
 templates:
-  - '{%canonRoot}\templates'   # {%variable} expanded to absolute path
-  - '{%canonGeneral}\templates'  # a canon name, exposed as a variable
+  - '{%libraryRoot}\templates'   # {%variable} expanded to absolute path
+  - '{%libGeneral}\templates'  # a library name, exposed as a variable
   - ./templates
 ```
 
@@ -179,13 +191,26 @@ output: ./output
 
 These keys sit **outside** `structure:` at the top level of `compile.yaml`.
 
-### `protagonist`
+### `roles`
 
-Global default protagonist ID. Used when a branch doesn't declare its own. Matched case-insensitively against item `id` values.
+Per-branch name → item id bindings, merged down the branch chain like `variables:` and
+`placeholders:`. `protagonist` is the built-in role — a global default is set at root and
+a branch overrides or unbinds (`~`) it like any other role.
 
 ```yaml
-protagonist: Aness
+roles:
+  protagonist: Aness
+
+branches:
+  researcher:
+    roles:
+      protagonist: Veyrn
 ```
+
+An item's `{$Id}` matching the active branch's bound `protagonist` resolves to `"you"`
+rather than the item's display name, case-insensitively. See [Roles](13-roles.md) for the
+full mechanism — declaring other roles, `{$RoleName}` resolution, and the diagnostics a
+misused role raises.
 
 ### `title`
 
@@ -207,11 +232,11 @@ variables:
 
 Used in a template as: `The year is {%year}.`
 
-`{%key}` is expanded consistently across item bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and the config path fields (`structure.input.items`, `structure.input.canon`, and `structure.input.templates`), making variables useful both as content values and as shared path prefixes across the config (see the `structure.input.canon` section above for an example). The one exception is `include:`/`import:` paths, which resolve once before branches are enumerated and therefore see **root** variables only, not per-branch overrides.
+`{%key}` is expanded consistently across item bodies, templates, opening prose, component specs, branch `title`/`roles`, and the config path fields (`structure.input.items`, `structure.input.library`, and `structure.input.templates`), making variables useful both as content values and as shared path prefixes across the config (see the `structure.input.library` section above for an example). The one exception is `include:`/`import:` paths, which resolve once before branches are enumerated and therefore see **root** variables only, not per-branch overrides.
 
 ### `components`
 
-Specifies what content to write for root-level component files. Each value is an inline string, a relative file path, a `{%variable}`, or a `{%key}` reference to a named directory/file in `variables` (or a canon entry — `{%key}` resolves against components first, then canon).
+Specifies what content to write for root-level component files. Each value is an inline string, a relative file path, a `{%variable}`, or a `{%key}` reference to a named directory/file in `variables` (or a library entry — `{%key}` resolves against components first, then library).
 
 ```yaml
 components:
@@ -308,13 +333,15 @@ See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) for full detai
 branches:
   subject:
     title: The Subject's Path     # output folder: Branches/The Subject's Path/
-    protagonist: Aness
+    roles:
+      protagonist: Aness
     components:
       opening: "You are a research subject."
     variables:
       role: subject
   researcher:
-    protagonist: Veyrn             # no title: folder is Branches/researcher/
+    roles:
+      protagonist: Veyrn           # no title: folder is Branches/researcher/
   multipath:
     components:
       branchFraming: "Choose a path."
@@ -328,7 +355,7 @@ branches:
 | Key | Description |
 |---|---|
 | `title` | Output folder name for this branch node. When set, the compiler uses this string as the filesystem folder name instead of the YAML key. The key is still used for item branch dispatch and all internal matching; `title` only affects the output path. |
-| `protagonist` | Protagonist ID for this branch leaf (overrides root `protagonist`) |
+| `roles` | Role bindings for this branch, merged over inherited ones — `protagonist` included (see [Roles](13-roles.md)) |
 | `components` | Component specs for this branch (same keys as root `components:`) |
 | `variables` | Variables for this branch subtree (merged on top of parent variables) |
 | `branches` | Child branches (makes this node a non-leaf) |
@@ -339,4 +366,4 @@ branches:
 
 All paths in `compile.yaml` are resolved relative to the location of `compile.yaml` itself. Absolute paths are also valid.
 
-The compiler warns if a declared `items`, `canon`, or `templates` path does not exist. Missing `components` file paths are handled at compile time per component.
+The compiler warns if a declared `items`, `library`, or `templates` path does not exist. Missing `components` file paths are handled at compile time per component.

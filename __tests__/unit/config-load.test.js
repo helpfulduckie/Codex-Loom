@@ -363,6 +363,10 @@ describe('every diagnostic the config surface can emit', () => {
       SCHEMA_CODES.SUPERSEDED_KEY, SCHEMA_CODES.VALUE_NOT_ALLOWED,
       CODES.SNAPSHOT_DIR_MISSING, CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
       CODES.SNAPSHOT_MISSING_ENTRY, CODES.SNAPSHOT_FILE_UNTRACKED, CODES.SNAPSHOT_HASH_MISMATCH,
+      // CL0116 (LIBRARY_ROLE_SCAN_REFUSED, Phase 8 Decision 2) joins the same family for the
+      // same reason: raised by syncLibrary's requiresRoles computation, not by loadCompileConfig.
+      // Covered by __tests__/unit/snapshot.test.js and the --snapshot integration test.
+      CODES.LIBRARY_ROLE_SCAN_REFUSED,
       CODES.LIBRARY_DEPENDENCY_UNCOVERED,
       // CL0512 (VARIABLE_UNBIND_UNKNOWN) is declared here beside CL0510/CL0511 but raised by
       // model/branches.js's walkBranchChain (Phase 8 Decision 1), not by loadCompileConfig —

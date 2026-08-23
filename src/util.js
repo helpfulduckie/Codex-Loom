@@ -28,6 +28,14 @@ const CONFIG_BASENAMES = Object.freeze([
   'compile.cl.yaml', 'compile.cl.yml', 'compile.yaml', 'compile.yml',
 ]);
 
+/**
+ * Reserved filenames within a library directory — content the loader must not treat as an
+ * item even though it sits beside items (§9.4.2). `canon.cl.yaml` is the per-canon-set
+ * manifest; excluded from item loading (Decision 3, Phase 8) rather than parsed, since
+ * parsing it is deferred past Phase 8.
+ */
+const RESERVED_LIBRARY_BASENAMES = Object.freeze(['canon.cl.yaml']);
+
 function hasSuffix(name, suffixes) {
   const lower = name.toLowerCase();
   return suffixes.some((s) => lower.endsWith(s));
@@ -363,7 +371,7 @@ function checkMechanicalArtifacts(text, label, sink) {
 module.exports = {
   findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
   ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
-  YAML_SUFFIXES, CONFIG_BASENAMES, hasSuffix,
+  YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix,
   resolveVariables, checkUnexpandedVariables, walkItemTextFields, itemContext, checkUnresolvedFieldTokens,
   checkMechanicalArtifacts, maskFencedRegions,
   FIELD_TOKEN_RE, VAR_TOKEN_RE, TEMPLATE_FN_RE, TEMPLATE_TAG_RE, VERB_MARKER_RE, SUSPECT_VERB_MARKER_RE, JS_ARTIFACT_RE, JS_WORD_RE,

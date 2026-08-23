@@ -75,6 +75,7 @@ guard still recognizes the sigil so a half-migrated project fails clearly.)
 | `CL0113` | WARN | A `structure.input.library`/`templates` entry the config declares has no section in an otherwise-valid manifest. |
 | `CL0114` | WARN | A file under `snapshot/<name>/` on disk has no entry in the manifest. |
 | `CL0115` | ERROR | A file under `snapshot/<name>/` no longer matches its own manifest-recorded hash. |
+| `CL0116` | ERROR | `--snapshot` cannot compute `requiresRoles` for a library entry because the entry's own items do not validate. |
 | `CL0120` | WARN | A declared input path does not exist on disk. |
 | `CL0130` | WARN | An `include:` path does not exist. |
 | `CL0131` | ERROR | The same file was included more than once. |
@@ -102,6 +103,16 @@ the freeze can no longer answer the question it exists to answer.
 manifest section (`CL0113`) is checked, and skipped, before the file-level comparison that
 would raise `CL0114` ever runs for that same entry — there is nothing to compare a missing
 section against.
+
+`CL0116` is raised by `syncLibrary` itself, on `--snapshot`, not by `checkDrift` at compile
+time — the other five read an existing manifest, and this one is raised while writing a
+new one. `requiresRoles` (§9.4.4) is computed by elimination: a `{$X}` token that resolves
+to no item id anywhere in the snapshotted library is published as a required role. That is
+only trustworthy for an entry whose own item content validates cleanly — a set with a
+schema violation or a broken registry build gets `CL0116` instead of a role list, since an
+elimination result computed over content the compiler itself cannot load would be a claim
+resting on nothing. Sync still runs and the entry's files are still frozen; only its
+`requiresRoles` key is withheld.
 
 ### CL02xx — schema
 

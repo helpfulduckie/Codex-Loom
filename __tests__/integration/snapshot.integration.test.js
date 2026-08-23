@@ -93,7 +93,7 @@ describe('--snapshot (CLI mode)', () => {
     expect(fs.readFileSync(copied, 'utf8')).toBe(fs.readFileSync(path.join(tmpDir, 'main-lib', 'note.cl.yaml'), 'utf8'));
 
     const manifest = JSON.parse(fs.readFileSync(path.join(tmpDir, 'snapshot', 'manifest.json'), 'utf8'));
-    expect(manifest.manifestVersion).toBe(1);
+    expect(manifest.manifestVersion).toBe(2);
     expect(manifest.library.main.files['note.cl.yaml']).toMatch(/^sha256:/);
   });
 
@@ -102,6 +102,41 @@ describe('--snapshot (CLI mode)', () => {
     const result = spawnSync(process.execPath, [CLI, '--snapshot', configPath], { encoding: 'utf8', cwd: tmpDir });
     expect(result.status).toBe(0);
     expect(fs.existsSync(path.join(tmpDir, 'output'))).toBe(false);
+  });
+
+  test('a role token unresolved anywhere in the snapshot is published as requiresRoles', () => {
+    const configPath = buildProject();
+    fs.writeFileSync(path.join(tmpDir, 'main-lib', 'note.cl.yaml'), [
+      '- id: Note',
+      '  aid:',
+      '    type: Character',
+      '    title: Note',
+      '    triggers: [Note]',
+      '  render:',
+      '    template: Character',
+      '    wrapper: none',
+      '  body:',
+      '    Tagline: "{$LI} arrives."',
+      '',
+    ].join('\n'), 'utf8');
+    const result = spawnSync(process.execPath, [CLI, '--snapshot', configPath], { encoding: 'utf8', cwd: tmpDir });
+    expect(result.status).toBe(0);
+
+    const manifest = JSON.parse(fs.readFileSync(path.join(tmpDir, 'snapshot', 'manifest.json'), 'utf8'));
+    expect(manifest.library.main.requiresRoles).toEqual(['LI']);
+  });
+
+  test('a library entry whose own items fail to validate refuses requiresRoles, raises CL0116 and exits non-zero', () => {
+    const configPath = buildProject();
+    fs.writeFileSync(path.join(tmpDir, 'main-lib', 'note.cl.yaml'), '- id: Note\n  weird: nope\n', 'utf8');
+    const result = spawnSync(process.execPath, [CLI, '--snapshot', configPath], { encoding: 'utf8', cwd: tmpDir });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('CL0116');
+
+    // Sync still ran: the frozen copy exists even though the role scan was refused.
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot', 'main', 'note.cl.yaml'))).toBe(true);
+    const manifest = JSON.parse(fs.readFileSync(path.join(tmpDir, 'snapshot', 'manifest.json'), 'utf8'));
+    expect(manifest.library.main).not.toHaveProperty('requiresRoles');
   });
 });
 

@@ -15,6 +15,103 @@ const path = require('path');
 const crypto = require('crypto');
 
 const { CODES, loadManifest, isOutOfBase } = require('./config/load');
+const { buildCanonRegistry } = require('./loader/registry');
+const { Diagnostics } = require('./diag');
+
+/** Matches an applyTokenPass-style brace token: `{$X}`, `{$X.pronoun}`, `{$X's}`, etc. */
+const ROLE_TOKEN_RE = /\{\$([^{}]+)\}/g;
+
+/** The leading identifier of a `{$X...}` token — the same split `applyTokenPass` makes
+ * before checking whether it names a role or an item id (`model/pronouns.js:277`). */
+function leadingTokenId(inner) {
+  const trimmed = inner.trim();
+  const dot0 = trimmed.indexOf('.');
+  if (dot0 !== -1) return trimmed.slice(0, dot0);
+  if (trimmed.toLowerCase().endsWith("'s")) return trimmed.slice(0, -2);
+  return trimmed;
+}
+
+/** Every distinct `{$X...}` leading identifier in a library entry's frozen files, first-seen casing kept. */
+function scanRoleCandidates(sourcePath, files) {
+  const seen = new Map(); // lowercase -> first-seen casing
+  for (const rel of files) {
+    let text;
+    try {
+      text = fs.readFileSync(path.join(sourcePath, rel), 'utf8');
+    } catch (_) {
+      continue; // not a text file (or unreadable) — nothing to scan
+    }
+    ROLE_TOKEN_RE.lastIndex = 0;
+    let m;
+    while ((m = ROLE_TOKEN_RE.exec(text))) {
+      const leading = leadingTokenId(m[1]);
+      if (!leading) continue;
+      const lower = leading.toLowerCase();
+      if (!seen.has(lower)) seen.set(lower, leading);
+    }
+  }
+  return seen;
+}
+
+/**
+ * `requiresRoles` per library entry, computed by elimination (§9.4.4, Decision 2): a
+ * `{$X}` prefix in the entry's own frozen files that resolves to no item id anywhere in
+ * the snapshotted library — checked against every entry, not only its own, because a
+ * legitimate cross-set reference (§9.4.2's `requires:`, not yet enforced) must not be
+ * misreported as a role.
+ *
+ * A precondition guards the conflation Decision 2 accepts (a typo reads exactly like a
+ * role requirement): elimination is only trusted for an entry whose own item content
+ * validates cleanly. An entry that fails to build its own registry — a hard throw (a
+ * duplicate id, an item missing identity) or an ERROR diagnostic (a schema violation) —
+ * is refused rather than published as a role list; the caller raises `CL0116` for it and
+ * writes no `requiresRoles` key.
+ *
+ * Returns a Map of entry name -> `{ roles: string[] }` or `{ refused: string }`, library
+ * entries only — template entries carry no role contract.
+ */
+function computeRequiresRoles(entries, allFileHashes) {
+  const libraryEntries = entries.filter((e) => e.kind === 'library');
+  const registries = new Map(); // name -> ItemRegistry, or null if refused
+  const refusals = new Map(); // name -> reason
+
+  for (const entry of libraryEntries) {
+    const localDiag = new Diagnostics();
+    let registry = null;
+    try {
+      registry = buildCanonRegistry(new Map([[entry.name, entry.sourcePath]]), { diagnostics: localDiag });
+    } catch (err) {
+      refusals.set(entry.name, err.message);
+    }
+    if (registry && localDiag.hasErrors()) {
+      refusals.set(entry.name, localDiag.errors.map((d) => d.message).join('; '));
+      registry = null;
+    }
+    registries.set(entry.name, registry);
+  }
+
+  const result = new Map();
+  for (const entry of libraryEntries) {
+    if (refusals.has(entry.name)) {
+      result.set(entry.name, { refused: refusals.get(entry.name) });
+      continue;
+    }
+    const ownRegistry = registries.get(entry.name);
+    const candidates = scanRoleCandidates(entry.sourcePath, Object.keys(allFileHashes.get(entry.name) || {}));
+    const roles = [];
+    for (const [lower, original] of candidates) {
+      if (ownRegistry.has(lower)) continue; // an ordinary item reference in this set
+      const resolvesElsewhere = [...registries.entries()].some(
+        ([otherName, otherRegistry]) => otherName !== entry.name && otherRegistry && otherRegistry.has(lower)
+      );
+      if (resolvesElsewhere) continue;
+      roles.push(original);
+    }
+    if (roles.length) result.set(entry.name, { roles: roles.sort((a, b) => a.localeCompare(b)) });
+  }
+
+  return result;
+}
 
 /** Every file under `dir`, relative paths, sorted — not suffix-filtered (companion `.md`
  * files beside a `.yaml` component must survive a freeze same as the component itself). */
@@ -114,18 +211,27 @@ function syncLibrary(config, options = {}) {
   const manifestPath = path.join(snapshotDir, 'manifest.json');
   const previousManifest = loadManifest(manifestPath, diagnostics);
 
-  const newManifest = { manifestVersion: 1, syncedAt: new Date().toISOString(), library: {} };
+  const newManifest = { manifestVersion: 2, syncedAt: new Date().toISOString(), library: {} };
   const hasTemplates = entries.some((e) => e.kind === 'template');
   if (hasTemplates) newManifest.templates = {};
 
   const reportLines = [];
   let filesWritten = 0;
 
-  for (const entry of entries) {
+  // First pass: hash every entry's frozen file set. `requiresRoles` (Decision 2, Phase 8)
+  // needs every entry's file list and item registry available at once, to check whether a
+  // token unresolved in its own set resolves in another snapshotted one before elimination
+  // treats it as a role.
+  const collected = entries.map((entry) => {
     const files = listAllFiles(entry.sourcePath);
     const fileHashes = {};
     for (const rel of files) fileHashes[rel] = hashFile(path.join(entry.sourcePath, rel));
+    return { entry, files, fileHashes };
+  });
+  const fileHashesByName = new Map(collected.map((c) => [c.entry.name, c.fileHashes]));
+  const requiresRolesByName = computeRequiresRoles(entries, fileHashesByName);
 
+  for (const { entry, files, fileHashes } of collected) {
     const prevSection = previousManifest
       ? (entry.kind === 'library' ? previousManifest.library : previousManifest.templates || {})[entry.name]
       : undefined;
@@ -141,6 +247,19 @@ function syncLibrary(config, options = {}) {
     }
 
     const section = { source: entry.sourcePath, files: fileHashes };
+    const roleResult = requiresRolesByName.get(entry.name);
+    if (roleResult && roleResult.refused) {
+      if (diagnostics) {
+        diagnostics.error(
+          CODES.LIBRARY_ROLE_SCAN_REFUSED,
+          `${entryLabel(entry)}: cannot compute requiresRoles — this set's own items do not `
+          + `validate (${roleResult.refused}). Fix the item content and re-run --snapshot.`,
+          {}
+        );
+      }
+    } else if (roleResult && roleResult.roles) {
+      section.requiresRoles = roleResult.roles;
+    }
     if (entry.kind === 'library') newManifest.library[entry.name] = section;
     else newManifest.templates[entry.name] = section;
 

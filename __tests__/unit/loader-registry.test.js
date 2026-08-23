@@ -53,6 +53,22 @@ describe('file discovery across every accepted suffix (§4.6)', () => {
   test('a missing directory yields nothing rather than throwing', () => {
     expect(loadItemsFromDir([path.join(tmpDir, 'nope')])).toEqual([]);
   });
+
+  test('canon.cl.yaml is excluded from item loading (§9.4.2, Decision 3, Phase 8)', () => {
+    // Written by hand, ahead of any tooling — a manifest opening with a string `name:`
+    // fails the component-shape skip and would otherwise register as a phantom item and
+    // raise unknown-key errors on its own `roles:`/`placeholders:`/`requires:` keys.
+    write('Esudia/canon.cl.yaml', 'name: Esudia\ndescription: Esudia canon set.\nroles:\n  LI:\n    description: x\n');
+    write('Esudia/Malcolm.cl.yaml', 'id: Malcolm\nname: Malcolm\n');
+    const { items, diagnostics } = loadWithDiagnostics();
+    expect(items.map((i) => i.id)).toEqual(['Malcolm']);
+    expect(diagnostics.all).toHaveLength(0);
+  });
+
+  test('the exclusion is case-insensitive on the basename', () => {
+    write('Esudia/Canon.CL.YAML', 'name: Esudia\nroles:\n  LI: {}\n');
+    expect(loadItemsFromDir([tmpDir])).toEqual([]);
+  });
 });
 
 describe('item loading', () => {

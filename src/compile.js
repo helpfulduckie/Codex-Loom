@@ -2367,6 +2367,9 @@ if (require.main === module) {
           + `(${result.filesWritten} file(s)) to:\n  ${config._resolvedSnapshot}\n`
           + `Manifest: ${result.manifestPath}\n`
         );
+        // The manifest and copied files are still written above — sync itself succeeded —
+        // but a `requiresRoles` refusal (Decision 2, Phase 8) means the run is not clean.
+        if (snapshotDiagnostics.hasErrors()) process.exit(1);
       } catch (err) {
         console.error(`\nFatal: ${err.message}`);
         process.exit(1);

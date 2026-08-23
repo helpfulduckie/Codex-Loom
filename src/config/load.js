@@ -36,6 +36,12 @@ const CODES = Object.freeze({
   SNAPSHOT_FILE_UNTRACKED: 'CL0114',
   /** A file under `snapshot/<name>/` doesn't match its own manifest-recorded hash — corruption, not drift. */
   SNAPSHOT_HASH_MISMATCH: 'CL0115',
+  /**
+   * A library entry's own item content does not validate (a hard registry-build failure or
+   * an item schema ERROR), so `--snapshot` refuses to compute `requiresRoles` for it rather
+   * than publish an elimination result that cannot be trusted (§9.4.4, Decision 2, Phase 8).
+   */
+  LIBRARY_ROLE_SCAN_REFUSED: 'CL0116',
   PATH_NOT_FOUND: 'CL0120',
   VARIABLE_UNDECLARED: 'CL0510',
   VARIABLE_CYCLE: 'CL0511',

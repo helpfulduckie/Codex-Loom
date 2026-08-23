@@ -140,6 +140,29 @@ declares a single placeholder, so without these two the expansion arithmetic shi
 characters the key expands to a 79-character `${…}`, so a handful of references move a file
 across a cap. Its question text is not a mistake, and it is the fixture's only non-mistake.
 
+## What the snapshot gains in Phase 8
+
+**Step 4 adds `RoleTester` to `placement/Codex/items.cl.yaml`**, and `roles:` to
+`placement/compile.cl.yaml`, per §9.3's four role ERRORs and §6.4's unused-role WARN.
+Unlike Phase 7's snapshot states, a role diagnostic is a property of an item and a
+branch rather than of a whole project's library wiring, so `placement/` carries them as
+rows rather than needing a fifth project — the same reasoning the fixture already used
+for the field-cap items.
+
+`RoleTester` carries no render target, the same shape as `Bloated`/`Ledger`/`Verbose`/
+`Chatty` — it exists only to give the role checks something to fire on, not to exercise
+§7.4 placement. `roles:` is declared at the project root, so all three branches inherit
+it and `RoleTester`'s four tokens fire once per leaf, the same tripling cost already
+named above for root-unrestricted content. `{$Anchor}` resolves as an ordinary item
+reference once its `CL0541` collision is reported — "Anchor" is a real item id — so it
+raises no `CL0430`; `{$Missing}`, `{$Loop}` and `{$Undeclared}` each raise their specific
+role code *and* `CL0540`, because none of them ends up resolving to anything by the time
+the generic unknown-token check runs. That double report is `resolveRole` returning
+`null` on every failure path, same as the `CL0602`-style two-reports trade already
+settled for `CL0430` itself (§9.3, Phase 8 Session A). `LI` is declared and never
+referenced by any token in the project, so it draws one whole-compile `CL0545` — as does
+every other declared role here, since none of the four is ever referenced successfully.
+
 ## What the snapshot gains in Phase 6
 
 **Step 4 adds a third field cap: `notes:`, capped at 10,000 characters and measured the same
