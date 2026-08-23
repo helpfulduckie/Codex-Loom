@@ -32,14 +32,18 @@ beforeAll(() => {
     // that flag into the `[e]` marker (§4.5.1, rung 3).
     'render:',
     '  notesTemplate: Notes',
-    'protagonist: Aness',
+    'roles:',
+    '  protagonist: Aness',
     'branches:',
     '  subject:',
-    '    protagonist: Aness',
+    '    roles:',
+    '      protagonist: Aness',
     '  researcher:',
-    '    protagonist: Veyrn',
+    '    roles:',
+    '      protagonist: Veyrn',
     '  felix:',
-    '    protagonist: Aness',
+    '    roles:',
+    '      protagonist: Aness',
   ].join('\n');
 
   patchedConfigPath = path.join(tmpDir, 'compile.yaml');
@@ -128,11 +132,13 @@ describe('protagonist inherited from parent branch node', () => {
       // protagonist declared on parent node only — leaf nodes have none
       'branches:',
       '  Aness:',
-      '    protagonist: Aness',
+      '    roles:',
+      '      protagonist: Aness',
       '    branches:',
       '      Cult: {}',
       '  Veyrn:',
-      '    protagonist: Veyrn',
+      '    roles:',
+      '      protagonist: Veyrn',
       '    branches:',
       '      Cult: {}',
     ].join('\n');

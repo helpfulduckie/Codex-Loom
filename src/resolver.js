@@ -21,7 +21,7 @@ const { applyFieldOp, applyFieldsDelta, applyDelta } = require('./model/fieldops
 const { resolveItem, collectVariantDeltas, parseVariantsList } = require('./model/item');
 const {
   resolveBranchSpec, enumerateLeaves, getBranchConfig,
-  walkBranchChain, walkBranchTree, mergePlaceholders,
+  walkBranchChain, walkBranchTree, mergePlaceholders, localRoleKeysOf,
 } = require('./model/branches');
 
 module.exports = {
@@ -32,6 +32,7 @@ module.exports = {
   walkBranchChain,
   walkBranchTree,
   mergePlaceholders,
+  localRoleKeysOf,
   deepClone,
   applyFieldsDelta,
   applyFieldOp,

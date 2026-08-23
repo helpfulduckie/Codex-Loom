@@ -582,3 +582,108 @@ describe('applyPronounPasses', () => {
     expect(item.aid.title).toBe("Roshan's student");
   });
 });
+
+// ── roles (§9.2, §9.3) ──────────────────────────────────────────────────────
+
+describe('applyTokenPass — role resolution (§9.3)', () => {
+  const malcolm = makeItem('malcolm', 'male');
+  const aness = makeItem('aness', 'female');
+  const registry = new Map([['malcolm', malcolm], ['aness', aness]]);
+  const roles = { LI: 'Malcolm', protagonist: 'Aness' };
+
+  test('{$LI} rewrites to the bound item id and resolves like an ordinary reference', () => {
+    expect(applyTokenPass('{$LI} walked in', { item: malcolm, registry, roles, branchProtagonist: null }))
+      .toBe('Malcolm walked in');
+  });
+
+  test("{$LI's} rewrites and keeps the possessive suffix", () => {
+    expect(applyTokenPass("It was {$LI's} choice", { item: malcolm, registry, roles, branchProtagonist: null }))
+      .toBe("It was Malcolm's choice");
+  });
+
+  test('{$LI.he} rewrites and resolves the scoped pronoun', () => {
+    expect(applyTokenPass('{$LI.he} left', { item: malcolm, registry, roles, branchProtagonist: null }))
+      .toBe('he left');
+  });
+
+  test('{$LI.body.field} rewrites and leaves the cross-item ref for the second pass', () => {
+    expect(applyTokenPass('{$LI.body.Tagline}', { item: malcolm, registry, roles, branchProtagonist: null }))
+      .toBe('{$Malcolm.body.Tagline}');
+  });
+
+  test('a role bound to the protagonist resolves to "you"', () => {
+    expect(applyTokenPass('{$protagonist} arrived', {
+      item: malcolm, registry, roles, branchProtagonist: 'aness',
+    })).toBe('you arrived');
+  });
+
+  test('an ordinary item id is unaffected by an unrelated roles table', () => {
+    expect(applyTokenPass('{$Malcolm} left', { item: malcolm, registry, roles, branchProtagonist: null }))
+      .toBe('Malcolm left');
+  });
+
+  test('calls onRoleUsed with the role key on successful resolution', () => {
+    const onRoleUsed = jest.fn();
+    applyTokenPass('{$LI} and {$LI.he}', { item: malcolm, registry, roles, branchProtagonist: null, onRoleUsed });
+    expect(onRoleUsed).toHaveBeenCalledWith('LI');
+    expect(onRoleUsed).toHaveBeenCalledTimes(2);
+  });
+
+  test('no roles declared: behaves exactly as before roles existed, no CL0540 noise', () => {
+    const onWarn = jest.fn();
+    applyTokenPass('{$Nope}', { item: malcolm, registry, roles: null, branchProtagonist: null, onWarn });
+    expect(onWarn).not.toHaveBeenCalled();
+  });
+
+  describe('CL0540 — undeclared role or unknown item id', () => {
+    test('an unresolvable token on a role-declaring branch raises CL0540', () => {
+      const onWarn = jest.fn();
+      applyTokenPass('{$Nope}', { item: malcolm, registry, roles, branchProtagonist: null, onWarn });
+      expect(onWarn).toHaveBeenCalledWith('CL0540', expect.stringContaining('Nope'));
+      expect(onWarn).toHaveBeenCalledWith('CL0540', expect.stringContaining('LI'));
+    });
+
+    test('the dotted form also raises CL0540 when the prefix resolves to neither', () => {
+      const onWarn = jest.fn();
+      applyTokenPass('{$Nope.he}', { item: malcolm, registry, roles, branchProtagonist: null, onWarn });
+      expect(onWarn).toHaveBeenCalledWith('CL0540', expect.any(String));
+    });
+
+    test('a cross-item ref to a real item does not raise CL0540', () => {
+      const onWarn = jest.fn();
+      applyTokenPass('{$Malcolm.body.Tagline}', { item: malcolm, registry, roles, branchProtagonist: null, onWarn });
+      expect(onWarn).not.toHaveBeenCalled();
+    });
+  });
+
+  test('CL0541 — a role name colliding with an item id is ambiguous', () => {
+    const onWarn = jest.fn();
+    const collidingRegistry = new Map([['li', { id: 'li', name: 'LI' }], ['malcolm', malcolm]]);
+    applyTokenPass('{$LI}', {
+      item: malcolm, registry: collidingRegistry, roles, branchProtagonist: null, onWarn,
+    });
+    expect(onWarn).toHaveBeenCalledWith('CL0541', expect.stringContaining('LI'));
+  });
+
+  test('CL0543 — a role bound to another role name is one level of indirection too many', () => {
+    const onWarn = jest.fn();
+    const indirect = { LI: 'RIVAL', RIVAL: 'Malcolm' };
+    applyTokenPass('{$LI}', { item: malcolm, registry, roles: indirect, branchProtagonist: null, onWarn });
+    expect(onWarn).toHaveBeenCalledWith('CL0543', expect.stringContaining('RIVAL'));
+  });
+
+  test('CL0542 — a role bound to an item this branch excludes', () => {
+    const onWarn = jest.fn();
+    const excluded = { LI: 'Ghost' };
+    applyTokenPass('{$LI}', { item: malcolm, registry, roles: excluded, branchProtagonist: null, onWarn });
+    expect(onWarn).toHaveBeenCalledWith('CL0542', expect.stringContaining('Ghost'));
+  });
+
+  test('resolvedById takes precedence over the raw registry for the role target, like an item ref', () => {
+    const variant = { id: 'malcolm', name: { display: 'Malcolm (variant)' }, pronouns: 'male' };
+    const resolvedById = new Map([['malcolm', variant]]);
+    expect(applyTokenPass('{$LI}', {
+      item: malcolm, registry, roles, resolvedById, branchProtagonist: null,
+    })).toBe('Malcolm (variant)');
+  });
+});

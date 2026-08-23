@@ -392,12 +392,12 @@ describe('loadCompileConfig', () => {
     spy.mockRestore();
   });
 
-  test('passes through protagonist, variables, and branches', () => {
+  test('passes through roles (protagonist included, §9.2), variables, and branches', () => {
     const cfgPath = writeConfig(
-      'protagonist: Aria\nvariables:\n  role: knight\nbranches:\n  main: {}\n'
+      'roles:\n  protagonist: Aria\nvariables:\n  role: knight\nbranches:\n  main: {}\n'
     );
     const config = loadCompileConfig(cfgPath);
-    expect(config.protagonist).toBe('Aria');
+    expect(config.roles).toEqual({ protagonist: 'Aria' });
     expect(config.variables).toEqual({ role: 'knight' });
     expect(config.branches).toHaveProperty('main');
   });

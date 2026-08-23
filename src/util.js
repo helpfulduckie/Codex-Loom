@@ -156,7 +156,10 @@ function resolveVariables(text, variables, _resolving) {
       return match;
     }
     const actualKey = Object.keys(variables).find(k => k.toLowerCase() === lower);
-    if (actualKey === undefined) {
+    // A present-but-null key (`~`, or a bare `key:` with nothing after it) is unbound, not
+    // declared — treating it as declared would render the literal string "null" (Decision
+    // 1's measured bug: `Object.keys().find()` finds the key regardless of its value).
+    if (actualKey === undefined || variables[actualKey] === null || variables[actualKey] === undefined) {
       console.warn(`  WARN: variable "{%${key}}" not declared`);
       return match;
     }

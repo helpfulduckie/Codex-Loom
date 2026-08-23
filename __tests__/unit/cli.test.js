@@ -25,7 +25,8 @@ structure:
   input:
     items: []
   output: ./output
-protagonist: Test
+roles:
+  protagonist: Test
 branches:
   only: {}
 `.trimStart();
@@ -37,7 +38,8 @@ structure:
     items: []
   output: ./output
   reports: ./my-overviews
-protagonist: Test
+roles:
+  protagonist: Test
 branches:
   only: {}
 `.trimStart();
@@ -452,7 +454,7 @@ describe('CLI --lint-level flag', () => {
    */
   test('--lint reads lint.level from compile.cl.yaml when no flag is given', () => {
     write(path.join(tmp, 'proj', 'compile.yaml'),
-      MINIMAL_COMPILE_YAML.replace('protagonist: Test', 'lint:\n  level: off\nprotagonist: Test'));
+      MINIMAL_COMPILE_YAML.replace('roles:\n  protagonist: Test', 'lint:\n  level: off\nroles:\n  protagonist: Test'));
     write(
       path.join(tmp, 'proj', 'output', 'Story Cards', 'Char', 'a.md'),
       ['## Aria', '', '~~~', 'triggers: [Aria]', '~~~', '', 'She caught {$she} hair and love[does] it.', ''].join('\n')
@@ -468,7 +470,7 @@ describe('CLI --lint-level flag', () => {
 
   test('the flag wins over the config key, being what someone typed for this run', () => {
     write(path.join(tmp, 'proj', 'compile.yaml'),
-      MINIMAL_COMPILE_YAML.replace('protagonist: Test', 'lint:\n  level: off\nprotagonist: Test'));
+      MINIMAL_COMPILE_YAML.replace('roles:\n  protagonist: Test', 'lint:\n  level: off\nroles:\n  protagonist: Test'));
     write(
       path.join(tmp, 'proj', 'output', 'Story Cards', 'Char', 'a.md'),
       ['## Aria', '', '~~~', 'triggers: [Aria]', '~~~', '', 'She love[does] it.', ''].join('\n')

@@ -72,10 +72,12 @@ function buildProject() {
     `      main: ${path.join(tmpDir, 'main-lib')}`,
     '    snapshot: ./snapshot',
     `  output: ${path.join(tmpDir, 'output')}`,
-    'protagonist: Aness',
+    'roles:',
+    '  protagonist: Aness',
     'branches:',
     '  main:',
-    '    protagonist: Aness',
+    '    roles:',
+    '      protagonist: Aness',
     '',
   ].join('\n'), 'utf8');
   return configPath;

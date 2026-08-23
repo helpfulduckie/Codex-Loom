@@ -9,7 +9,7 @@ const {
 } = require('./loader');
 const {
   resolveItem, enumerateLeaves, walkBranchChain, walkBranchTree, mergePlaceholders,
-  resolveBranchSpec, collectVariantDeltas,
+  resolveBranchSpec, collectVariantDeltas, localRoleKeysOf,
 } = require('./resolver');
 const { resolvePlacements } = require('./model/item');
 const { slotsForBranch } = require('./model/component');
@@ -245,9 +245,19 @@ function resolveComponentSpec(spec, base, variables) {
 function buildCompileContext(config, branchPath, options = {}) {
   const chain = walkBranchChain(config.branches, branchPath, {
     rootPlaceholders: config.placeholders,
+    // Seeded here rather than merged afterward: `~` deletes a key from `chain.variables`
+    // directly (Decision 1), and re-merging the root table on top after the fact — the old
+    // shape — would silently put a deleted root key right back.
+    rootVariables: config._variables || config.variables || {},
+    rootRoles: config.roles || {},
     onWarn: options.onWarn || null,
   });
-  const variables = Object.assign({}, config._variables || config.variables || {}, chain.variables);
+  const variables = chain.variables;
+  // `null` when no node in the chain ever declared `roles:`, distinct from an object that
+  // merged down to no live bindings — a branch that unbinds its only inherited role is
+  // still role-aware territory for CL0540's gating (`model/pronouns.js`), not the same as a
+  // project that never mentioned roles at all.
+  const roles = chain.rolesDeclared ? chain.roles : null;
   const components = Object.assign({}, config.components || {}, chain.components);
   const render = Object.assign({}, config.render || {}, chain.render);
 
@@ -278,7 +288,9 @@ function buildCompileContext(config, branchPath, options = {}) {
   // same kind of thing — a per-branch mapping every check and the emitter read — and
   // because §12.3's question text expands against `variables`, so the two are always
   // wanted together.
-  return { variables, componentRefs, render, placeholders: chain.placeholders };
+  return {
+    variables, componentRefs, render, placeholders: chain.placeholders, roles,
+  };
 }
 
 /**
@@ -835,7 +847,48 @@ function questionsForMeasurement(table, variables) {
   return expandQuestions(table, variables);
 }
 
-function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, variables = {}, verbose = false, renderedById = null, projectNotesTemplate = null, diagnostics = new Diagnostics(), slotIndex = new Map(), branchLabel = '(root)', placeholders = {}, usage = null, usagePath = '') {
+/**
+ * `CL0545`: a role declared and never referenced by a resolved token anywhere in the
+ * compile (§9.2's WARN half — `resolveRole` in `model/pronouns.js` calls `onRoleUsed` only
+ * on success, so `roleUsage` names every role that actually did something).
+ *
+ * Whole-compile rather than `CL0535`'s subtree-scoped check, deliberately simpler: no
+ * golden declares a role yet, so there is no corpus case where a role is legitimately used
+ * on one branch and unused on a sibling that this coarser check would miss.
+ */
+function reportUnusedRoles(declarations, usage, { diagnostics, file } = {}) {
+  if (!diagnostics) return [];
+  const unused = [];
+  for (const { label, keys } of declarations) {
+    for (const key of keys) {
+      if (usage.has(key.toLowerCase())) continue;
+      unused.push(key);
+      diagnostics.warn(
+        DIAG_CODES.ROLE_UNUSED,
+        `role "${key}" is declared ${label} but no resolved token anywhere references it.`,
+        { file: file == null ? undefined : String(file) },
+      );
+    }
+  }
+  return unused;
+}
+
+function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, variables = {}, options = {}) {
+  const {
+    verbose = false,
+    renderedById = null,
+    projectNotesTemplate = null,
+    diagnostics = new Diagnostics(),
+    slotIndex = new Map(),
+    branchLabel = '(root)',
+    placeholders = {},
+    usage = null,
+    usagePath = '',
+    // §9.2's merged role table for this branch, and CL0545's usage callback — grouped with
+    // the rest of the trailing options rather than appended as a 17th positional parameter.
+    roles = null,
+    onRoleUsed = null,
+  } = options;
   // Build early so render functions can resolve cross-item refs during field expansion.
   const resolvedById = new Map();
   for (const item of resolvedItems) {
@@ -889,7 +942,9 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
   const occupants = new Map();
 
   for (const item of resolvedItems) {
-    applyPronounPasses(item, registry, branchProtagonist, resolvedById);
+    applyPronounPasses(
+      item, registry, branchProtagonist, resolvedById, roles, busWarner(diagnostics), onRoleUsed,
+    );
 
     // §7.2: the item says where it goes. Read once, here, and used for both outputs.
     const placement = resolvePlacements(item);
@@ -1403,6 +1458,27 @@ function compileRun(configPath, options, buses) {
   const placeholderDeclarations = [];
   const placeholderDuplicates = new Map();
 
+  // `CL0545`: every role name a resolved token actually bound to, project-wide — a
+  // whole-compile check rather than `CL0535`'s subtree-scoped one (Decision recorded in
+  // the Session A record: no golden declares a role yet, so there is no branch with a
+  // differently-scoped sibling to get wrong, and the simpler check is the cheaper one to
+  // build correctly today). `protagonist` is exempt: it is read structurally, by comparing
+  // an item id against `branchProtagonist`, wherever any `{$Id}` token resolves — not only
+  // where `{$protagonist}` is literally written — so "unused" is never a fact about it.
+  const roleUsage = new Set();
+  const onRoleUsed = (key) => roleUsage.add(String(key).toLowerCase());
+  const roleDeclarations = [];
+  if (config.roles) {
+    const keys = localRoleKeysOf({ roles: config.roles }).filter((k) => k.toLowerCase() !== 'protagonist');
+    if (keys.length) roleDeclarations.push({ path: '', label: 'at the project root', keys });
+  }
+  walkBranchTree(config.branches, ({ node, path: path_ }) => {
+    const keys = localRoleKeysOf(node).filter((k) => k.toLowerCase() !== 'protagonist');
+    if (keys.length) {
+      roleDeclarations.push({ path: path_.join('/'), label: `on branch "${path_.join('/')}"`, keys });
+    }
+  });
+
   const leaves = enumerateLeaves(config.branches);
 
   if (options.clean) {
@@ -1495,12 +1571,14 @@ function compileRun(configPath, options, buses) {
     if (verbose) console.log(`\n  Branch: ${label}`);
 
     // One traversal now serves what used to be four: the folder path, the inherited
-    // protagonist, the terminal node, and (inside buildCompileContext) the merged
-    // variables and components.
+    // roles table (`protagonist` is `roles.protagonist`, §9.2), the terminal node, and
+    // (inside buildCompileContext) the merged variables and components.
     const chain = walkBranchChain(config.branches, branchPath, {
-      rootProtagonist: config.protagonist || '',
+      rootRoles: config.roles || {},
     });
-    const inheritedProtagonist = chain.protagonist;
+    // Always a string: an absent `roles.protagonist` merges to `undefined`, and
+    // `resolveVariables` below requires a string input.
+    const inheritedProtagonist = chain.roles.protagonist || '';
     const folderPath = chain.folderPath;
     const outputDir = buildBranchOutputDir(config._resolvedOutput, folderPath);
     const ctx = buildCompileContext(config, branchPath, {
@@ -1536,10 +1614,14 @@ function compileRun(configPath, options, buses) {
     // cards and the component occupants together — see renderBranchItems.
     const renderedById = captureReports ? new Map() : null;
     const { written, occupants, placeholderNoise } = renderBranchItems(
-      resolvedItems, registry, templates, partials, outputDir, branchProtagonist, ctx.variables, verbose, renderedById,
-      (compileContext.render && compileContext.render.notesTemplate) || null,
-      compileDiagnostics, slotIndex, label, ctx.placeholders,
-      placeholderUsage, branchPath.join('/')
+      resolvedItems, registry, templates, partials, outputDir, branchProtagonist, ctx.variables,
+      {
+        verbose, renderedById,
+        projectNotesTemplate: (compileContext.render && compileContext.render.notesTemplate) || null,
+        diagnostics: compileDiagnostics, slotIndex, branchLabel: label, placeholders: ctx.placeholders,
+        usage: placeholderUsage, usagePath: branchPath.join('/'),
+        roles: ctx.roles, onRoleUsed,
+      },
     );
     totalFiles += written.length;
     reportCompileDiagnostics();
@@ -1575,6 +1657,7 @@ function compileRun(configPath, options, buses) {
           {
             defaultHeadingLevel: descriptor.defaultHeadingLevel,
             variables: ctx.variables, registry, branchProtagonist,
+            roles: ctx.roles, onRoleUsed,
             onWarn: busWarner(compileDiagnostics, { file: String(spec) }),
           },
         ));
@@ -1927,6 +2010,7 @@ function compileRun(configPath, options, buses) {
 
   // Last, because "unused" is only knowable once every write point has run — and the
   // Description and the scenario title are written after the branch tree.
+  reportUnusedRoles(roleDeclarations, roleUsage, { diagnostics: compileDiagnostics, file: configPath });
   reportUnusedPlaceholders(placeholderDeclarations, placeholderUsage, {
     diagnostics: compileDiagnostics, file: configPath,
   });

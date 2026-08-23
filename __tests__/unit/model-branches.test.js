@@ -2,18 +2,21 @@
 
 const fs = require('fs');
 const path = require('path');
-const { walkBranchChain, walkBranchTree } = require('../../src/model/branches');
+const { walkBranchChain, walkBranchTree, localRoleKeysOf } = require('../../src/model/branches');
+const { CODES } = require('../../src/diag');
 
+// `protagonist` moved into `roles:` in Phase 8 (§9.2) — it is an ordinary role name now,
+// not its own field, so the fixture below declares it there like any other project would.
 const TREE = {
   'Free Form': {
     variables: { scenario: 'free', shared: 'root-level' },
     components: { opening: './free.md' },
-    protagonist: 'Aness',
+    roles: { protagonist: 'Aness' },
     branches: {
       Veryn: {
         variables: { protag: 'veryn', shared: 'branch-level' },
         components: { openingChoice: 'Who owns you?' },
-        protagonist: 'Veryn',
+        roles: { protagonist: 'Veryn' },
         branches: { lovesYou: {} },
       },
       Malcolm: { variables: { protag: 'malcolm' } },
@@ -70,21 +73,101 @@ describe('walkBranchChain — merged variables and components', () => {
   });
 });
 
-describe('walkBranchChain — inherited protagonist', () => {
+describe('walkBranchChain — inherited protagonist (§9.2: roles.protagonist)', () => {
   test('takes the nearest ancestor that declares one', () => {
-    expect(walkBranchChain(TREE, ['Free Form', 'Veryn', 'lovesYou']).protagonist).toBe('Veryn');
+    expect(walkBranchChain(TREE, ['Free Form', 'Veryn', 'lovesYou']).roles.protagonist).toBe('Veryn');
   });
 
   test('falls back through a node that declares none', () => {
-    expect(walkBranchChain(TREE, ['Free Form', 'Malcolm']).protagonist).toBe('Aness');
+    expect(walkBranchChain(TREE, ['Free Form', 'Malcolm']).roles.protagonist).toBe('Aness');
   });
 
-  test('falls back to the root protagonist when no node declares one', () => {
-    expect(walkBranchChain(TREE, ['Wyvern'], { rootProtagonist: 'Melli' }).protagonist).toBe('Melli');
+  test('falls back to the root roles table when no node declares one', () => {
+    expect(walkBranchChain(TREE, ['Wyvern'], { rootRoles: { protagonist: 'Melli' } }).roles.protagonist).toBe('Melli');
   });
 
-  test('is null when nothing declares one', () => {
-    expect(walkBranchChain(TREE, ['Wyvern']).protagonist).toBeNull();
+  test('is undefined when nothing declares one', () => {
+    expect(walkBranchChain(TREE, ['Wyvern']).roles.protagonist).toBeUndefined();
+  });
+});
+
+describe('walkBranchChain — merged roles (§9.2)', () => {
+  const ROLE_TREE = {
+    root: {
+      roles: { LI: 'Malcolm', rival: 'Voss' },
+      branches: {
+        zephon: { roles: { LI: 'Zephon' } },
+        unbound: { roles: { rival: null } },
+        ghost: { roles: { neverInherited: null } },
+      },
+    },
+  };
+  const merge = (path, onWarn) =>
+    walkBranchChain(ROLE_TREE, path, { rootRoles: {}, onWarn }).roles;
+
+  test('a branch inherits root roles and overrides its own', () => {
+    expect(merge(['root', 'zephon'])).toEqual({ LI: 'Zephon', rival: 'Voss' });
+  });
+
+  test('~ unbinds a role rather than setting it null', () => {
+    const merged = merge(['root', 'unbound']);
+    expect('rival' in merged).toBe(false);
+    expect(merged.LI).toBe('Malcolm');
+  });
+
+  test('unbinding a role never inherited warns CL0544 and removes nothing', () => {
+    const warnings = [];
+    merge(['root', 'ghost'], (code, message) => warnings.push({ code, message }));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].code).toBe(CODES.ROLE_UNBIND_UNKNOWN);
+    expect(warnings[0].message).toMatch(/never inherited/);
+  });
+
+  test('rootRoles seeds the root of the chain', () => {
+    expect(walkBranchChain(ROLE_TREE, [], { rootRoles: { protagonist: 'Aness' } }).roles)
+      .toEqual({ protagonist: 'Aness' });
+  });
+});
+
+describe('walkBranchChain — retrofitted variable unbind (Decision 1)', () => {
+  const VAR_TREE = {
+    unbound: { variables: { li: null } },
+    ghost: { variables: { neverInherited: null } },
+  };
+  const merge = (path, onWarn) =>
+    walkBranchChain(VAR_TREE, path, { rootVariables: { li: 'Malcolm', scenario: 'x' }, onWarn }).variables;
+
+  test('~ deletes a variable rather than setting it null', () => {
+    const merged = merge(['unbound']);
+    expect('li' in merged).toBe(false);
+    expect(merged.scenario).toBe('x');
+  });
+
+  test('the merged result carries no trace of the deleted key to re-add', () => {
+    // Regression guard for the bug the retrofit exists to fix: `buildCompileContext` used
+    // to re-merge the root table on top of `chain.variables` after this call, which would
+    // silently put a deleted root key back. That re-merge is gone; this asserts the value
+    // this function alone returns is already correct without it.
+    expect(merge(['unbound'])).toEqual({ scenario: 'x' });
+  });
+
+  test('unbinding a variable never inherited warns CL0512', () => {
+    const warnings = [];
+    merge(['ghost'], (code, message) => warnings.push({ code, message }));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].code).toBe('CL0512');
+    expect(warnings[0].message).toMatch(/never inherited/);
+  });
+});
+
+describe('localRoleKeysOf', () => {
+  test('returns declared role names, minus unbinds', () => {
+    expect(localRoleKeysOf({ roles: { LI: 'Malcolm', rival: null } })).toEqual(['LI']);
+  });
+
+  test('a node with no roles returns an empty list', () => {
+    expect(localRoleKeysOf({})).toEqual([]);
+    expect(localRoleKeysOf(null)).toEqual([]);
   });
 });
 

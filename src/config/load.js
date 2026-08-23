@@ -39,6 +39,12 @@ const CODES = Object.freeze({
   PATH_NOT_FOUND: 'CL0120',
   VARIABLE_UNDECLARED: 'CL0510',
   VARIABLE_CYCLE: 'CL0511',
+  /**
+   * `~` unbinding a variable that was never inherited (§6.4, Decision 1) — raised by
+   * `model/branches.js`'s `walkBranchChain`, which duplicates this literal rather than
+   * importing it, since `model/` cannot depend on `config/` (§3.3 purity).
+   */
+  VARIABLE_UNBIND_UNKNOWN: 'CL0512',
   /** A branch-scoped variable used where only root variables resolve (§5.1). */
   VARIABLE_PRE_BRANCH: 'CL0520',
   /** A library name and a declared variable share one namespace as of §6.1. */
@@ -469,9 +475,11 @@ function loadCompileConfig(configPath, options = {}) {
     // `config._libraryRaw` was always undefined downstream — found in Phase 7 Session C.
     _libraryRaw: libraryRaw,
     _sourceMap: sourceMap,
-    protagonist: config.protagonist || null,
     title: config.title || null,
     components: config.components || null,
+    // The built-in `protagonist` role lives here as an ordinary `roles:` entry (§9.2) —
+    // Phase 8 retires the separate `protagonist:` key `walkBranchChain` used to read.
+    roles: config.roles || null,
     // Top-level as of §6.3, and branch-addressable, so it travels with the config rather
     // than through `structure.input`.
     scripts: config.scripts !== undefined ? config.scripts : null,

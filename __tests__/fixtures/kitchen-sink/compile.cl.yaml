@@ -54,7 +54,8 @@ structure:
   # variable (§6.1), which is what replaced {@}. Resolves to ./Review.
   reports: '{%main}/../../Review'
 
-# Phase 8. Declared here so the key is covered and its WARN is pinned.
+# Phase 8. `protagonist` is the built-in role (§9.2) — an ordinary entry here, not its
+# own key.
 roles:
   protagonist: Aness
   LI:          Kaiden
@@ -64,9 +65,6 @@ roles:
 placeholders:
   heroName: What should we call you?
   house:    'Which wing of {%setting} claims you?'
-
-# Phase 8 still reads protagonist: rather than roles.protagonist — see config/schema.js.
-protagonist: Aness
 
 # Phase 5. The mapping form at root; a branch below writes the empty-collection form.
 lint:
@@ -110,13 +108,13 @@ branches:
     variables:
       role: research subject
     roles:
+      protagonist: Veryn
       LI: Felicia
       # `~` unbinds an inherited binding (§6.4). Distinct from the empty collections
       # below, which mean "I have no new things for you".
       rival: ~
     placeholders:
       homeland: Which county raised you?
-    protagonist: Veryn
     # Every component respecified at branch level. Depth matters to the coverage check:
     # a key written only on a grandchild covers `branches.*.branches.*.components.…`, not
     # `branches.*.components.…`, so the full set has to appear on a first-level branch.

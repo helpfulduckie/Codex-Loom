@@ -96,6 +96,22 @@ const CODES = Object.freeze({
   PLACEHOLDER_UNUSED: 'CL0535',
   PLACEHOLDER_DUPLICATE_QUESTION: 'CL0536',
 
+  /**
+   * Roles (§9.2, §9.3). A role is a per-branch name → item id binding, resolved at the
+   * start of the pronoun pass (`model/pronouns.js`) before any other token lookup runs.
+   * `ROLE_UNBIND_UNKNOWN` mirrors `PLACEHOLDER_UNBIND_UNKNOWN`'s shape exactly — the same
+   * `~`-on-nothing-inherited mistake, one decade over. The other four are §9.3's resolution
+   * rules, verbatim: one level of indirection always, a role/item-id namespace collision is
+   * an ERROR, an undeclared role in a token is an ERROR, and a role bound to an item this
+   * branch excludes is an ERROR.
+   */
+  ROLE_UNBIND_UNKNOWN: 'CL0544',
+  ROLE_UNDECLARED: 'CL0540',
+  ROLE_COLLIDES_WITH_ITEM: 'CL0541',
+  ROLE_TARGET_EXCLUDED: 'CL0542',
+  ROLE_INDIRECTION: 'CL0543',
+  ROLE_UNUSED: 'CL0545',
+
   // Components (§7.2). Raised by `model/component.js`, which reports through `onWarn`
   // and therefore takes its severity from the table below.
   SECTION_TEXT_AND_SLOT: 'CL0601',
@@ -204,6 +220,13 @@ const SEVERITY_BY_CODE = Object.freeze({
   CL0435: SEVERITY.ERROR,
   CL0436: SEVERITY.WARN,
   CL0437: SEVERITY.WARN,
+  CL0512: SEVERITY.WARN,
+  CL0540: SEVERITY.ERROR,
+  CL0541: SEVERITY.ERROR,
+  CL0542: SEVERITY.ERROR,
+  CL0543: SEVERITY.ERROR,
+  CL0544: SEVERITY.WARN,
+  CL0545: SEVERITY.WARN,
 });
 
 /** WARN is the default: an unregistered code is still reported, never silently dropped. */

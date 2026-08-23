@@ -14,6 +14,15 @@ const { deepClone, findKey } = require('../util');
 const { CODES } = require('../diag');
 
 /**
+ * Mirrors `config/load.js`'s `CODES.VARIABLE_UNBIND_UNKNOWN` — the code is declared there,
+ * beside `CL0510`/`CL0511`, because it names a variable-band mistake even though this is
+ * the module that raises it. Duplicated as a literal rather than imported: `config/load.js`
+ * depends on `fs`, and `model/` is pure by contract (§3.3, enforced by
+ * `model-branches.test.js`'s "uses neither fs nor console" check).
+ */
+const VARIABLE_UNBIND_UNKNOWN = 'CL0512';
+
+/**
  * Resolve the branch spec for an item/block, walking the branch path.
  *
  * Returns:
@@ -179,16 +188,29 @@ function getBranchConfig(branches, branchPath) {
  *                and the ones that used to push the raw id both need to know
  */
 function walkBranchChain(branches, branchPath, options = {}) {
-  const { rootProtagonist = null, rootPlaceholders = null, onWarn = null } = options;
+  const {
+    rootPlaceholders = null, rootVariables = null, rootRoles = null, onWarn = null,
+  } = options;
   const result = {
     nodes: [],
     folderPath: [],
-    variables: {},
+    // Seeded with the root table and merged key-wise down the chain, `~` deleting rather
+    // than overriding with null (§6.4, Decision 1) — the same contract `placeholders`
+    // already had. `protagonist` is not a separate field: it is `roles.protagonist`,
+    // an ordinary entry in this table (§9.2), so callers read `result.roles.protagonist`.
+    variables: Object.assign({}, rootVariables || {}),
+    roles: Object.assign({}, rootRoles || {}),
+    // True once any node in the chain — including the root — declares a `roles:` key, even
+    // if every binding it declared is later unbound to nothing. Distinct from `roles` being
+    // non-empty: a branch that unbinds its only inherited role is still role-aware territory
+    // for CL0540's gating (`model/pronouns.js`'s `resolveRole`), which is what makes "declare
+    // then fully unbind" behave like "declare a role and mistype its name" rather than like a
+    // project that never mentioned roles at all.
+    rolesDeclared: !!(rootRoles && Object.keys(rootRoles).length),
     components: {},
     render: {},
     placeholders: Object.assign({}, rootPlaceholders || {}),
     scripts: undefined,
-    protagonist: rootProtagonist,
     node: null,
     complete: true,
   };
@@ -214,23 +236,27 @@ function walkBranchChain(branches, branchPath, options = {}) {
     result.node = node || null;
 
     if (node && typeof node === 'object') {
-      if (node.variables) Object.assign(result.variables, node.variables);
+      // `variables:` and `roles:` merge key-wise with `~` deleting (§6.4, Decision 1 —
+      // Phase 8 retrofits variables to match placeholders' existing unbind contract).
+      // A present-but-null key left as a plain assign renders the literal string "null"
+      // (`util.js`'s `resolveVariables`); deleting is what makes that impossible.
+      result.variables = mergeUnbindable(result.variables, node.variables, {
+        code: VARIABLE_UNBIND_UNKNOWN, kind: 'variable', onWarn,
+      });
+      if (node.roles) result.rolesDeclared = true;
+      result.roles = mergeUnbindable(result.roles, node.roles, {
+        code: CODES.ROLE_UNBIND_UNKNOWN, kind: 'role', onWarn,
+      });
       if (node.components) Object.assign(result.components, node.components);
       // `render:` merges key-wise like `components:`, so a branch can replace one
       // rendering default and inherit the rest — and `notesTemplate: ~` unbinds it,
       // which is how a branch without the mod that reads the marker turns it off.
       if (node.render) Object.assign(result.render, node.render);
-      if (node.protagonist) result.protagonist = node.protagonist;
       // Placeholders merge key-wise, and `~` deletes rather than overriding with null
       // (§6.4). Velvet Lattice does the same merge with `{**parent, **local}`, so the
       // emitted table matches what VL would compute from the same declarations — including
       // the detail that an overriding key keeps the *parent's* position rather than moving
       // to the end, which is what `delete`-then-set below would otherwise change.
-      //
-      // Only placeholders unbind today. `variables:` and `roles:` are listed alongside
-      // them in §6.4 and still use a plain assign above, so a `~` there sets null instead
-      // of deleting; retrofitting them is a behavior change for existing projects and
-      // belongs to whichever phase owns those keys, not to this one.
       result.placeholders = mergePlaceholders(result.placeholders, node, onWarn);
       // `scripts:` is top-level rather than a component (§6.3) but merges the same way,
       // so a branch can swap one hook bundle and inherit the rest.
@@ -284,6 +310,43 @@ function mergePlaceholders(table, node, onWarn = null) {
 }
 
 /**
+ * Fold one node's flat table into an inherited one, key-wise, `~` deleting rather than
+ * setting null (§6.4). The generalized shape `mergePlaceholders` above hand-rolled first —
+ * used for `roles:` and the `variables:` retrofit (Decision 1), which share the merge and
+ * differ only in the code and the noun the warning names.
+ */
+function mergeUnbindable(table, local, { code, kind, onWarn = null }) {
+  const merged = Object.assign({}, table || {});
+  if (!local || typeof local !== 'object') return merged;
+
+  for (const [key, value] of Object.entries(local)) {
+    if (value === null || value === undefined) {
+      if (!(key in merged) && onWarn) {
+        onWarn(
+          code,
+          `${kind} "${key}" is unbound with ~ but was never inherited here — nothing was `
+          + 'removed.',
+        );
+      }
+      delete merged[key];
+    } else {
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
+/**
+ * The role names a node declares directly, minus unbinds — `roles:`'s counterpart to
+ * `emit/placeholders.js`'s `localKeysOf`, for `CL0545`'s declared-but-unused check.
+ */
+function localRoleKeysOf(node) {
+  const local = node && node.roles;
+  if (!local || typeof local !== 'object') return [];
+  return Object.keys(local).filter((k) => local[k] !== null && local[k] !== undefined);
+}
+
+/**
  * Visit every node in a branch tree, depth-first, carrying state down.
  *
  * The counterpart to `walkBranchChain`, and a genuinely different operation: that one
@@ -311,5 +374,5 @@ function walkBranchTree(branches, visit, state = null, path = []) {
 
 module.exports = {
   resolveBranchSpec, enumerateLeaves, getBranchConfig,
-  walkBranchChain, walkBranchTree, mergePlaceholders,
+  walkBranchChain, walkBranchTree, mergePlaceholders, localRoleKeysOf,
 };

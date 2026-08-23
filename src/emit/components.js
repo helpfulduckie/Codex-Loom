@@ -263,11 +263,16 @@ function headingText(section, defaultHeadingLevel) {
 
 /** The lines of a text section's own content, variables and tokens resolved. */
 function textLines(section, options) {
-  const { variables = {}, registry, branchProtagonist } = options;
+  const { variables = {}, registry, branchProtagonist, roles, onWarn, onRoleUsed } = options;
   const prefix = section.bullet ? '- ' : '';
   const resolve = (value) => {
     const withVars = resolveVariables(String(value), variables);
-    return prefix + applyTokenPass(withVars, { item: {}, registry, branchProtagonist }).trim();
+    // §9.7: this is the call site most likely to be skipped, because `item: {}` reads as a
+    // degenerate case — but component prose (AI Instructions, Author's Note) is where a
+    // share of the hardcoded pronouns §9.1 fixes actually live, and roles resolve here too.
+    return prefix + applyTokenPass(
+      withVars, { item: {}, registry, branchProtagonist, roles, onWarn, onRoleUsed },
+    ).trim();
   };
 
   const text = section.text;

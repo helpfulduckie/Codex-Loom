@@ -321,6 +321,35 @@ describe('renderSectionedComponent — text sections', () => {
   test('a heading with no text still renders', () => {
     expect(renderPE({ divider: { heading: 'Cast' } }).text).toBe('Cast');
   });
+
+  // §9.7: the call site most likely to be skipped, since `applyTokenPass` runs against
+  // `item: {}` here — a role resolving in component prose is the half of the feature
+  // that reaches AI Instructions and Author's Note, not only character card bodies.
+  test('a role token resolves in section text (§9.7)', () => {
+    const malcolm = { id: 'malcolm', name: 'Malcolm', pronouns: 'male' };
+    const registry = new Map([['malcolm', malcolm]]);
+    const { text } = renderSectionedComponent(
+      component({ relationship: { text: 'History with {$LI} is unresolved. {$LI.He} does not raise it.' } }),
+      [], new Map(),
+      {
+        defaultHeadingLevel: 0, variables: {}, registry,
+        roles: { LI: 'Malcolm' }, branchProtagonist: null,
+      },
+    );
+    expect(text).toBe('History with Malcolm is unresolved. He does not raise it.');
+  });
+
+  test('an undeclared role in section text raises CL0540 through onWarn (§9.7)', () => {
+    const onWarn = jest.fn();
+    renderSectionedComponent(
+      component({ relationship: { text: '{$Nope} is unresolved.' } }), [], new Map(),
+      {
+        defaultHeadingLevel: 0, variables: {}, registry: new Map(),
+        roles: { LI: 'Malcolm' }, branchProtagonist: null, onWarn,
+      },
+    );
+    expect(onWarn).toHaveBeenCalledWith('CL0540', expect.stringContaining('Nope'));
+  });
 });
 
 describe('writeSectionedComponent', () => {

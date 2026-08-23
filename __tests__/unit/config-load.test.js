@@ -324,7 +324,9 @@ describe('every diagnostic the config surface can emit', () => {
     ['a v3 key that was renamed', SCHEMA_CODES.UNKNOWN_KEY, 'overview: ./Review\n', {}],
     ['wrong type, non-empty', SCHEMA_CODES.WRONG_TYPE, 'variables:\n  - a\n  - b\n', {}],
     ['missing required key', SCHEMA_CODES.MISSING_REQUIRED, 'version: 4\nstructure:\n  input:\n    items: []\n', { raw: true }],
-    ['not yet implemented', SCHEMA_CODES.NOT_YET_IMPLEMENTED, 'roles:\n  protagonist: Aness\n', {}],
+    // `roles:` lost its `note:` in Phase 8 — it is an implemented key now (§9.2) — so
+    // `lint.packs` (still declared-but-inert, §8.2.2) carries this case instead.
+    ['not yet implemented', SCHEMA_CODES.NOT_YET_IMPLEMENTED, 'lint:\n  packs:\n    discovery-markers: {}\n', {}],
     // The §4.3 case: a correctly spelled key one level too high.
     ['a valid key at the wrong level', SCHEMA_CODES.MISPLACED_KEY, 'items: [./Codex]\n', {}],
     ['a document that is not a mapping', CODES.CONFIG_NOT_A_MAPPING, '- a\n- list\n', {}],
@@ -362,6 +364,10 @@ describe('every diagnostic the config surface can emit', () => {
       CODES.SNAPSHOT_DIR_MISSING, CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
       CODES.SNAPSHOT_MISSING_ENTRY, CODES.SNAPSHOT_FILE_UNTRACKED, CODES.SNAPSHOT_HASH_MISMATCH,
       CODES.LIBRARY_DEPENDENCY_UNCOVERED,
+      // CL0512 (VARIABLE_UNBIND_UNKNOWN) is declared here beside CL0510/CL0511 but raised by
+      // model/branches.js's walkBranchChain (Phase 8 Decision 1), not by loadCompileConfig —
+      // covered by __tests__/unit/model-branches.test.js instead.
+      CODES.VARIABLE_UNBIND_UNKNOWN,
     ]);
     const reachable = [...Object.values(CODES), ...Object.values(SCHEMA_CODES)]
       .filter((c) => !unreachable.has(c));
@@ -372,7 +378,8 @@ describe('every diagnostic the config surface can emit', () => {
 
 describe('later-phase keys are recognized, not rejected', () => {
   test.each([
-    ['roles', 'roles:\n  protagonist: Aness\n'],
+    // `roles:` moved off this list in Phase 8 — see the `roles:` describe block below for
+    // its own coverage now that it is implemented (§9.2).
     ['lint.packs', 'lint:\n  packs:\n    discovery-markers: {}\n'],
   ])('%s WARNs as unimplemented rather than erroring', (_name, yaml) => {
     const { diagnostics } = load(yaml);

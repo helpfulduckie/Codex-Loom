@@ -1,0 +1,217 @@
+'use strict';
+
+/**
+ * Roles end to end (§9.2, §9.3, Phase 8 Step 0 + Step 1).
+ *
+ * These have to be integration tests for the same reason placement-diagnostics does: a
+ * role's declaration lives in `compile.cl.yaml`, its resolution runs inside `compile.js`'s
+ * leaf loop, and diagnostic collection across the whole branch tree is a property of the
+ * compile run, not of any one module.
+ */
+
+const os = require('os');
+const path = require('path');
+const fs = require('fs');
+const { compile } = require('../../src/compile');
+
+const dirs = [];
+
+/** Compile a one-off project and hand back what it said (see placement-diagnostics for why). */
+function compileProject(files) {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-roles-'));
+  dirs.push(tmpDir);
+  const slash = (p) => p.replace(/\\/g, '/');
+
+  for (const [rel, content] of Object.entries(files)) {
+    const full = path.join(tmpDir, rel);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, content.replace(/%TMP%/g, slash(tmpDir)), 'utf8');
+  }
+
+  const lines = [];
+  const capture = (...args) => { lines.push(args.join(' ')); };
+  const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(capture));
+  let threw = null;
+  try {
+    compile(path.join(tmpDir, 'compile.yaml'));
+  } catch (err) {
+    threw = err;
+  } finally {
+    spies.forEach((s) => s.mockRestore());
+  }
+  return { output: lines.join('\n'), threw, tmpDir };
+}
+
+/**
+ * Every diagnostic carrying `code`, each rejoined with its message line — `Diagnostic.format()`
+ * puts the code and location on one line and the message on the next, so a bare line filter
+ * would find the occurrence and lose the sentence naming what it's about.
+ */
+function occurrences(output, code) {
+  const lines = output.split('\n');
+  return lines
+    .map((line, i) => (line.includes(code) ? `${line}\n${lines[i + 1] || ''}` : null))
+    .filter(Boolean);
+}
+
+function cardFile(tmpDir, branch, type) {
+  return branch
+    ? path.join(tmpDir, 'output', 'Branches', branch, 'Story Cards', type, `${type}.md`)
+    : path.join(tmpDir, 'output', 'Story Cards', type, `${type}.md`);
+}
+
+const BASE = {
+  'templates/Full.template': '{$name.full} - {$body.Tagline}',
+};
+
+afterAll(() => {
+  for (const d of dirs) fs.rmSync(d, { recursive: true, force: true });
+});
+
+describe('a branch-level roles: block reaches the token pass', () => {
+  const files = {
+    ...BASE,
+    'Codex/items.yaml': [
+      '- id: Malcolm',
+      '  name: {display: Malcolm, full: Malcolm Vale}',
+      '  pronouns: male',
+      '  aid: {type: Character, triggers: [Malcolm]}',
+      '  render: {template: Full}',
+      '  body:',
+      '    Tagline: "History with {$LI} is unresolved. {$LI.he} does not raise it."',
+    ].join('\n'),
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'roles:',
+      '  LI: Malcolm',
+      'branches:',
+      '  zephon: {}',
+      '',
+    ].join('\n'),
+  };
+
+  test('{$LI} resolves against the declared role, with no CL0540/CL0430 noise', () => {
+    const { threw, output, tmpDir } = compileProject(files);
+    expect(threw).toBeNull();
+    expect(occurrences(output, 'CL0540')).toEqual([]);
+    expect(occurrences(output, 'CL0430')).toEqual([]);
+    const content = fs.readFileSync(cardFile(tmpDir, 'zephon', 'Character'), 'utf8');
+    expect(content).toContain('History with Malcolm is unresolved. he does not raise it.');
+  });
+});
+
+describe('~ unbinds a role rather than resolving to a null binding', () => {
+  const files = {
+    ...BASE,
+    'Codex/items.yaml': [
+      '- id: Malcolm',
+      '  name: {display: Malcolm, full: Malcolm Vale}',
+      '  pronouns: male',
+      '  aid: {type: Character, triggers: [Malcolm]}',
+      '  render: {template: Full}',
+      '  body:',
+      '    Tagline: "{$LI} left"',
+    ].join('\n'),
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'roles:',
+      '  LI: Malcolm',
+      'branches:',
+      '  unbound:',
+      '    roles:',
+      '      LI: ~',
+      '',
+    ].join('\n'),
+  };
+
+  test('CL0540 fires under the unbound branch, and nothing renders a null binding', () => {
+    const { output, tmpDir } = compileProject(files);
+    expect(occurrences(output, 'CL0540').length).toBeGreaterThan(0);
+    const content = fs.readFileSync(cardFile(tmpDir, 'unbound', 'Character'), 'utf8');
+    expect(content).not.toContain('null');
+  });
+});
+
+describe('an undeclared role collects across the branch rather than aborting on the first', () => {
+  const items = ['A', 'B', 'C', 'D'].map((n) => [
+    `- id: ${n}`,
+    `  name: {display: ${n}, full: ${n} Vale}`,
+    '  pronouns: male',
+    `  aid: {type: Character, triggers: [${n}]}`,
+    '  render: {template: Full}',
+    '  body:',
+    `    Tagline: "{$Rival} is watching ${n}"`,
+  ].join('\n')).join('\n');
+
+  const files = {
+    ...BASE,
+    'Codex/items.yaml': items,
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      // A different role declared, so the branch is role-aware (CL0540 is gated on that) —
+      // "Rival" itself is left undeclared, which is the case under test.
+      'roles:',
+      '  LI: A',
+      'branches:',
+      '  main: {}',
+      '',
+    ].join('\n'),
+  };
+
+  test('four cards referencing an undeclared role produce four CL0540 diagnostics from one compile', () => {
+    const { output } = compileProject(files);
+    // §9.4.3's collection requirement: one run, one report per occurrence, not an abort on
+    // the first — the compile bus never aborts mid-run (compile.js:1318's own claim).
+    expect(occurrences(output, 'CL0540').length).toBe(4);
+  });
+});
+
+describe('CL0545 — a role declared and never referenced', () => {
+  const files = {
+    ...BASE,
+    'Codex/items.yaml': [
+      '- id: Malcolm',
+      '  name: {display: Malcolm, full: Malcolm Vale}',
+      '  pronouns: male',
+      '  aid: {type: Character, triggers: [Malcolm]}',
+      '  render: {template: Full}',
+      '  body:',
+      '    Tagline: "Malcolm walked in"',
+    ].join('\n'),
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'roles:',
+      '  LI: Malcolm',
+      'branches:',
+      '  main: {}',
+      '',
+    ].join('\n'),
+  };
+
+  test('a role no text ever references warns CL0545, naming the role', () => {
+    const { output } = compileProject(files);
+    const hits = occurrences(output, 'CL0545');
+    expect(hits.length).toBe(1);
+    expect(hits[0]).toMatch(/LI/);
+  });
+});

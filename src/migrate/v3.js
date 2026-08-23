@@ -161,12 +161,25 @@ function migrateConfigDocument(doc) {
   };
   renameFraming(['components']);
 
+  // protagonist: → roles.protagonist:, at root and on every branch (§9.2, Phase 8). The
+  // pseudo-role conversion (`{%li}` → `{$LI}`) is Phase 8 Step 3, a separate session — this
+  // is only the key rename, without which a v3 project's `protagonist:` fails the v4
+  // schema outright the moment `roles:` stops being a declared-but-inert key.
+  const renameProtagonist = (nodePath) => {
+    if (!doc.hasIn([...nodePath, 'protagonist'])) return;
+    doc.setIn([...nodePath, 'roles', 'protagonist'], doc.getIn([...nodePath, 'protagonist'], true));
+    doc.deleteIn([...nodePath, 'protagonist']);
+    changes.push(`${[...nodePath, 'protagonist'].join('.')} → ${[...nodePath, 'roles', 'protagonist'].join('.')}`);
+  };
+  renameProtagonist([]);
+
   const walkBranches = (branchPath) => {
     const node = doc.getIn(branchPath);
     if (!YAML.isMap(node)) return;
     for (const pair of node.items) {
       const name = String(pair.key.value);
       renameFraming([...branchPath, name, 'components']);
+      renameProtagonist([...branchPath, name]);
       // v3 also allowed these directly on the branch node.
       if (doc.hasIn([...branchPath, name, 'openingChoice'])) {
         doc.setIn([...branchPath, name, 'components', 'branchFraming'],

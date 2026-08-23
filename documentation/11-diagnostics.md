@@ -424,6 +424,7 @@ exactly at the cap warns rather than erroring — the cap is inclusive.
 |---|---|---|
 | `CL0510` | ERROR | A referenced variable is not declared anywhere. |
 | `CL0511` | ERROR | Variables form a reference cycle; every key in the loop is named. |
+| `CL0512` | WARN | A variable is unbound with `~` but was never inherited at that node. |
 | `CL0520` | ERROR | A branch-scoped variable was used where only root variables resolve. |
 | `CL0521` | ERROR | A library name collides with a declared variable. |
 | `CL0522` | WARN | A component reads from outside the project, and no `structure.input.library` entry covers it. |
@@ -434,6 +435,12 @@ exactly at the cap warns rather than erroring — the cap is inclusive.
 | `CL0534` | WARN | A placeholder reached a title, where AID does not do what writing one implies. |
 | `CL0535` | WARN | A placeholder is declared and referenced nowhere beneath its declaring node. |
 | `CL0536` | WARN | Two or more placeholders declare the same question text. |
+| `CL0540` | ERROR | A `{$X}` token resolves to neither a declared role nor a known item id. |
+| `CL0541` | ERROR | A role name and an item id are the same string, which is ambiguous. |
+| `CL0542` | ERROR | A role is bound to an item id that does not resolve on this branch. |
+| `CL0543` | ERROR | A role is bound to another role name rather than directly to an item id. |
+| `CL0544` | WARN | A role is unbound with `~` but was never inherited at that node. |
+| `CL0545` | WARN | A role is declared and never referenced by a resolved token anywhere in the compile. |
 
 `CL0530` takes its own decade because `051x` is variables and `052x` is scoping; placeholders
 are a third thing in the band and will want neighbors as §12's remaining checks land.

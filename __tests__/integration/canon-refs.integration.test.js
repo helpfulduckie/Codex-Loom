@@ -79,10 +79,12 @@ beforeAll(() => {
     '    templates:',
     `      - ${templates}`,
     `  output: ${tmpDir}/output`,
-    'protagonist: Aness',
+    'roles:',
+    '  protagonist: Aness',
     'branches:',
     '  main:',
-    '    protagonist: Aness',
+    '    roles:',
+    '      protagonist: Aness',
     '',
   ].join('\n'), 'utf8');
 

@@ -15,10 +15,9 @@
  * its absence is what tells a v3 project to run `--migrate` rather than producing a
  * cascade of unknown-key errors.
  *
- * `protagonist` is the one exception, and deliberately not gone yet — see the comments
- * on the `protagonist:` keys below. It becomes `roles.protagonist` in Phase 8, once
- * `roles:` is an implemented feature rather than a declared-but-inert key; migrating the
- * spelling before then would leave every branch without a protagonist.
+ * `protagonist:` was the one exception through Phase 7 — see `v4 Phase 8 plan.md` — and is
+ * gone as of Phase 8: it is `roles.protagonist` now, an ordinary entry in `roles:` (§9.2),
+ * because `roles:` is an implemented feature rather than a declared-but-inert key.
  */
 
 const { TYPES } = require('../schema');
@@ -146,16 +145,14 @@ const BRANCH_NODE = {
   keys: {
     title: STRING,
     variables: STRING_RECORD,
-    roles: { type: TYPES.RECORD, of: STRING, note: 'Phase 8' },
+    // The built-in `protagonist` role lives here as an ordinary entry (§9.2) rather than
+    // as its own key — see the module header for why Phase 8 retires the separate key.
+    roles: { type: TYPES.RECORD, of: STRING },
     placeholders: STRING_RECORD,
     scripts: SCRIPTS,
     lint: BRANCH_LINT,
     components: COMPONENTS,
     render: RENDER,
-    // `protagonist:` becomes `roles.protagonist` in Phase 8, not here. §14.2 lists that
-    // transformation, but roles are Phase 8 work — migrating the key before the feature
-    // exists would leave every branch without a protagonist.
-    protagonist: STRING,
     branches: null, // patched below — a node cannot reference itself during construction
   },
 };
@@ -190,15 +187,13 @@ const CONFIG_SCHEMA = {
     },
 
     variables: STRING_RECORD,
-    roles: { type: TYPES.RECORD, of: STRING, note: 'Phase 8' },
+    roles: { type: TYPES.RECORD, of: STRING },
     placeholders: STRING_RECORD,
     scripts: SCRIPTS,
     lint: LINT,
     components: COMPONENTS,
     render: RENDER,
     branches: BRANCHES,
-    // See BRANCH_NODE: this moves to `roles.protagonist` in Phase 8, with the feature.
-    protagonist: STRING,
   },
 };
 

@@ -177,6 +177,18 @@ describe('resolveVariables', () => {
     warn.mockRestore();
   });
 
+  test('a present-but-null (~-unbound) variable is treated as undeclared, not rendered as "null" (Decision 1)', () => {
+    // Measured bug this guards: `Object.keys().find()` finds a present-but-null key
+    // regardless of its value, so a plain assign would fall through to
+    // `String(variables[actualKey])` and ship the literal word "null" into compiled prose.
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    const result = resolveVariables('X {%foo} Y', { foo: null });
+    expect(result).toBe('X {%foo} Y');
+    expect(result).not.toContain('null');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('foo'));
+    warn.mockRestore();
+  });
+
   test('cycle: warns and returns token literal', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation();
     const result = resolveVariables('{%a}', { a: '{%a}' });

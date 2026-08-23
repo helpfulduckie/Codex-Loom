@@ -5,6 +5,13 @@ const { walkItemTextFields } = require('../util');
 // Pure by contract (§3.3): warnings go to a caller-supplied onWarn(code, message).
 const CODES = Object.freeze({
   CROSS_ITEM_REF_MISSING: 'CL0330',
+  // Roles (§9.2, §9.3) — see diag.js for the full band comment; the values here are the
+  // source of truth `diag.test.js` checks against `SEVERITY_BY_CODE`.
+  ROLE_UNDECLARED: 'CL0540',
+  ROLE_COLLIDES_WITH_ITEM: 'CL0541',
+  ROLE_TARGET_EXCLUDED: 'CL0542',
+  ROLE_INDIRECTION: 'CL0543',
+  ROLE_UNUSED: 'CL0545',
 });
 
 /**
@@ -147,6 +154,74 @@ function getEffectivePronounSet(itemOrPronouns, itemId, branchProtagonist) {
 }
 
 /**
+ * Rewrite a token's leading identifier from a role name to its bound item id (§9.2, §9.3).
+ *
+ * Returns the bound item id, or `null` when `leading` is not a declared role — the caller
+ * falls through to its existing item-id handling unchanged. A role that IS declared but
+ * cannot resolve — collides with an item id, targets another role, or targets an item this
+ * branch excludes — raises its own ERROR and also returns `null`: the token is left
+ * unresolved on purpose, so `CL0430` catches it a second time at the output sweep (settled
+ * 2026-08-22, the same two-reports trade Phase 7 Decision 5 made for `CL0602`).
+ *
+ * Gated on `roles` carrying at least one entry, so a branch that declares none behaves
+ * exactly as it did before this existed — no new diagnostic on a corpus nothing here
+ * touches yet.
+ */
+function resolveRole(leading, { roles, registry, resolvedById, onWarn, onRoleUsed }) {
+  if (!roles || Object.keys(roles).length === 0) return null;
+  const leadingLower = leading.toLowerCase();
+  const roleKey = Object.keys(roles).find((k) => k.toLowerCase() === leadingLower);
+  if (roleKey === undefined) return null;
+
+  if (registry.has(leadingLower)) {
+    if (onWarn) {
+      onWarn(
+        CODES.ROLE_COLLIDES_WITH_ITEM,
+        `"${leading}" is both a declared role and an item id, which is ambiguous — rename `
+        + 'one (§9.3).',
+      );
+    }
+    return null;
+  }
+
+  const boundId = roles[roleKey];
+  const boundLower = boundId === null || boundId === undefined ? '' : String(boundId).toLowerCase();
+  const targetIsRole = Object.keys(roles).some((k) => k.toLowerCase() === boundLower);
+  if (targetIsRole) {
+    if (onWarn) {
+      onWarn(
+        CODES.ROLE_INDIRECTION,
+        `role "${roleKey}" is bound to "${boundId}", which is itself a role — a role must `
+        + 'resolve directly to an item id, one level of indirection always (§9.3).',
+      );
+    }
+    return null;
+  }
+
+  const target = (resolvedById && resolvedById.get(boundLower)) || registry.get(boundLower);
+  if (!target) {
+    if (onWarn) {
+      onWarn(
+        CODES.ROLE_TARGET_EXCLUDED,
+        `role "${roleKey}" is bound to "${boundId}", which does not resolve on this branch.`,
+      );
+    }
+    return null;
+  }
+
+  if (onRoleUsed) onRoleUsed(roleKey);
+  return boundId;
+}
+
+/** The message CL0540 raises — the compiler cannot tell an undeclared role from a misspelled item id (§9.3, both readings are named). */
+function roleUndeclaredMessage(name, roles) {
+  const scope = roles && Object.keys(roles).length
+    ? `Roles declared in scope: ${Object.keys(roles).join(', ')}.`
+    : 'No roles are declared on this branch.';
+  return `"{$${name}}" does not resolve to a declared role or a known item id. ${scope}`;
+}
+
+/**
  * Combined pronoun and verb conjugation pass.
  *
  * Processes a string left-to-right, handling:
@@ -164,7 +239,7 @@ function getEffectivePronounSet(itemOrPronouns, itemId, branchProtagonist) {
  *   opts.resolvedById    - optional Map of post-variant resolved items by lowercase id
  */
 function applyTokenPass(str, opts) {
-  const { item, registry, branchProtagonist, resolvedById } = opts;
+  const { item, registry, branchProtagonist, resolvedById, roles, onWarn, onRoleUsed } = opts;
   const itemId = (item.id || '').toLowerCase();
   const itemPronounSet = getEffectivePronounSet(item, itemId, branchProtagonist);
 
@@ -190,7 +265,20 @@ function applyTokenPass(str, opts) {
     }
 
     // Brace token: braceContent is the inner part (includes leading $)
-    const inner = braceContent.trim().slice(1); // strip leading $
+    let inner = braceContent.trim().slice(1); // strip leading $
+
+    // Roles resolve first, always (§9.3): rewrite a leading role name to its bound item id
+    // so every check below sees an ordinary card reference. `{$LI}`, `{$LI's}`, `{$LI.he}`
+    // and `{$LI.body.X}` all share one leading identifier, so one substitution handles all
+    // four — everything past this point reads `inner`, never `braceContent`.
+    {
+      const dot0 = inner.indexOf('.');
+      const possessive = dot0 === -1 && inner.toLowerCase().endsWith("'s");
+      const leading = dot0 !== -1 ? inner.slice(0, dot0) : possessive ? inner.slice(0, -2) : inner;
+      const trailing = dot0 !== -1 ? inner.slice(dot0) : possessive ? "'s" : '';
+      const roleId = resolveRole(leading, { roles, registry, resolvedById, onWarn, onRoleUsed });
+      if (roleId !== null) inner = roleId + trailing;
+    }
 
     // Check for dot — either "Id.pronoun" or "Id.body.field"
     const dotIdx = inner.indexOf('.');
@@ -216,11 +304,23 @@ function applyTokenPass(str, opts) {
         if (restLower === 'full') return matchCase(getFullName(refItem), inner);
         if (restLower === 'display') return matchCase(getDisplayName(refItem), inner);
 
-        // Otherwise it's a cross-item field ref like {$Id.body.field} — leave for second pass
-        return match;
+        // Otherwise it's a cross-item field ref like {$Id.body.field} — leave for second
+        // pass, but reconstructed from `inner` rather than the original `match`: a role
+        // rewrite above already replaced the leading identifier, and `applyCrossItemRefs`
+        // only understands item ids, never role names.
+        return `{$${inner}}`;
       }
 
-      // prefix not a registry ID — leave as-is
+      // prefix not a registry ID — leave as-is. Role-aware (§9.3) and gated on `roles`
+      // being non-null — some node in the chain declared a `roles:` key, even if every
+      // binding it declared is now unbound — the compiler cannot tell an undeclared role
+      // from a misspelled item id, so on role-aware territory this reports both readings
+      // in addition to — not instead of — CL0430 catching the same leaked token later at
+      // the output sweep (settled 2026-08-22). A project that never mentions roles behaves
+      // exactly as it did before this existed.
+      if (onWarn && roles) {
+        onWarn(CODES.ROLE_UNDECLARED, roleUndeclaredMessage(prefix, roles));
+      }
       return match;
     }
 
@@ -256,7 +356,11 @@ function applyTokenPass(str, opts) {
       return resolveProunounToken(inner, itemPronounSet);
     }
 
-    // Unknown — leave as-is
+    // Unknown — leave as-is (see the dotted branch above for why CL0540 is gated the
+    // same way here).
+    if (onWarn && roles) {
+      onWarn(CODES.ROLE_UNDECLARED, roleUndeclaredMessage(inner, roles));
+    }
     return match;
   });
 }
@@ -318,9 +422,13 @@ function applyCrossItemRefs(resolvedItems, registry, onWarn, resolvedById) {
  * @param {object} item
  * @param {Map} registry
  * @param {string|null} branchProtagonist - lowercase protagonist ID
+ * @param {Map} resolvedById
+ * @param {object|null} roles - this branch's merged role table (§9.2)
+ * @param {function|null} onWarn - (code, message) => void, for §9.3's role diagnostics
+ * @param {function|null} onRoleUsed - (roleKey) => void, for CL0545's usage tracking
  */
-function applyPronounPasses(item, registry, branchProtagonist, resolvedById) {
-  const opts = { item, registry, branchProtagonist, resolvedById };
+function applyPronounPasses(item, registry, branchProtagonist, resolvedById, roles, onWarn, onRoleUsed) {
+  const opts = { item, registry, branchProtagonist, resolvedById, roles, onWarn, onRoleUsed };
   walkItemTextFields(item, s => applyTokenPass(s, opts));
 }
 
