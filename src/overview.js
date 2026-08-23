@@ -3,6 +3,8 @@
 const fs   = require('fs');
 const path = require('path');
 
+const { childBranches } = require('./compiledTree');
+
 // ── private helpers ──────────────────────────────────────────────────────────
 
 function readFile(filePath) {
@@ -112,7 +114,6 @@ function buildStoryCardsBlock(storyCardsDir, headingLevel) {
  */
 function discoverLeaves(branchDir, ancestorCards, branchNames) {
   const storyCardsDir = path.join(branchDir, 'Story Cards');
-  const branchesDir   = path.join(branchDir, 'Branches');
 
   const myCards = [...ancestorCards];
   if (fs.existsSync(storyCardsDir)) {
@@ -120,20 +121,14 @@ function discoverLeaves(branchDir, ancestorCards, branchNames) {
     if (block) myCards.push(block);
   }
 
-  const childBranches = fs.existsSync(branchesDir)
-    ? fs.readdirSync(branchesDir, { withFileTypes: true })
-        .filter(e => e.isDirectory())
-        .sort((a, b) => a.name.localeCompare(b.name))
-    : [];
-
-  if (childBranches.length === 0) {
+  const children = childBranches(branchDir);
+  if (children.length === 0) {
     return [{ branchNames, cards: myCards, leafDir: branchDir }];
   }
 
   const leaves = [];
-  for (const child of childBranches) {
-    const childPath = path.join(branchesDir, child.name);
-    leaves.push(...discoverLeaves(childPath, myCards, [...branchNames, child.name]));
+  for (const child of children) {
+    leaves.push(...discoverLeaves(child.dir, myCards, [...branchNames, child.name]));
   }
   return leaves;
 }
@@ -166,21 +161,10 @@ function collectOverviewSections(branchDir, branchNames, rootDirName) {
   if (sectionParts.length === 1) sectionParts.push('_No content at this level._');
   sections.push(sectionParts.join('\n\n'));
 
-  const branchesDir = path.join(branchDir, 'Branches');
-  if (fs.existsSync(branchesDir)) {
-    const children = fs.readdirSync(branchesDir, { withFileTypes: true })
-      .filter(e => e.isDirectory())
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    for (const child of children) {
-      sections.push(
-        ...collectOverviewSections(
-          path.join(branchesDir, child.name),
-          [...branchNames, child.name],
-          rootDirName,
-        )
-      );
-    }
+  for (const child of childBranches(branchDir)) {
+    sections.push(
+      ...collectOverviewSections(child.dir, [...branchNames, child.name], rootDirName)
+    );
   }
   return sections;
 }

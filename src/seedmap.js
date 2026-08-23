@@ -5,6 +5,7 @@ const path = require('path');
 
 const { discoverLeaves, sanitizeFilename } = require('./overview');
 const { parseCards } = require('./emit/vl');
+const { resolveAt, ancestorDirs, collectMdFiles } = require('./compiledTree');
 
 // ── parsing ──────────────────────────────────────────────────────────────────
 
@@ -30,80 +31,26 @@ function parseCardsFromMd(content, type = null) {
 }
 
 /**
- * Walk from a leaf dir upward through Branches/ parent levels.
- * Returns dirs root-first (ancestors before the leaf).
- */
-function ancestorDirs(leafDir) {
-  let dir = leafDir;
-  const dirs = [];
-  while (true) {
-    dirs.unshift(dir);
-    const parent     = path.dirname(dir);
-    const parentName = path.basename(parent);
-    if (parent === dir || parentName !== 'Branches') break;
-    dir = path.dirname(parent);
-  }
-  return dirs;
-}
-
-/**
- * Collect all parsed cards visible to a leaf node: read Story Cards .md files
- * from the leaf dir and each ancestor branch dir, accumulating upward.
+ * Collect all parsed cards visible to a leaf node: `compiledTree.js:resolveAt` folds the
+ * ancestor chain into `resolved.cards`; this applies the seed map's own trigger filter
+ * over that, which is a report rule rather than a merge rule and so stays here.
  */
 function collectLeafCards(leafDir) {
-  const cards = [];
-  const visited = new Set();
-
-  for (const branchDir of ancestorDirs(leafDir)) {
-    const storyCardsDir = path.join(branchDir, 'Story Cards');
-    if (!fs.existsSync(storyCardsDir)) continue;
-
-    const mdFiles = collectMdFiles(storyCardsDir);
-    for (const file of mdFiles) {
-      if (visited.has(file)) continue;
-      visited.add(file);
-      const content = fs.readFileSync(file, 'utf8');
-      const cardType = path.basename(path.dirname(file));
-      cards.push(...parseCardsFromMd(content, cardType));
-    }
-  }
-
-  return cards;
+  return resolveAt(leafDir).resolved.cards
+    .filter((card) => card.triggers.length > 0);
 }
 
 /**
- * Collect the text of Plot Essentials.md and Opening.md visible to a leaf node.
- * Reads from each ancestor dir's Components/ folder (leaf overrides ancestor).
+ * Collect the text of Plot Essentials.md and Opening.md visible to a leaf node — VL's own
+ * `{...parent, ...local}` merge, keyed by filename, already folded into `resolved.components`.
  * Returns { peText, openingText } — empty string when not found.
  */
 function collectLeafComponents(leafDir) {
-  let peText      = '';
-  let openingText = '';
-
-  for (const branchDir of ancestorDirs(leafDir)) {
-    const compDir = path.join(branchDir, 'Components');
-    const pePath     = path.join(compDir, 'Plot Essentials.md');
-    const openPath   = path.join(compDir, 'Opening.md');
-    if (fs.existsSync(pePath))    peText      = fs.readFileSync(pePath, 'utf8');
-    if (fs.existsSync(openPath))  openingText = fs.readFileSync(openPath, 'utf8');
-  }
-
-  return { peText, openingText };
-}
-
-function collectMdFiles(dir) {
-  const results = [];
-  if (!fs.existsSync(dir)) return results;
-  function walk(current) {
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })
-        .sort((a, b) => a.name.localeCompare(b.name))) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.isFile() && entry.name.endsWith('.md')) results.push(full);
-    }
-  }
-  walk(dir);
-  return results;
+  const { components } = resolveAt(leafDir).resolved;
+  return {
+    peText: components['Plot Essentials'] || '',
+    openingText: components['Opening'] || '',
+  };
 }
 
 // ── analysis ─────────────────────────────────────────────────────────────────

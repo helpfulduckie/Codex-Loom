@@ -25,8 +25,8 @@
  * triggers. That filter is right for the seed map — a trigger-less card is genuinely
  * unseedable — and wrong here, because §4.8 puts hard limits on everything including
  * `kind: reference` items. A reference card over 2,000 characters was invisible to the one
- * report that exists to find it. What this module keeps from the seed map is the directory
- * walk (`ancestorDirs`, `collectMdFiles`); what it declines is the trigger filter.
+ * report that exists to find it. Both collectors share the same walk and the same merge now
+ * (`compiledTree.js`, Phase 10 Step 1); what this one declines is the trigger filter.
  *
  * `hasFence` is still required, matching `lint.js:241`. That is not a seedability judgment
  * but the definition of a card: a headed section with no fence is prose in a Story Cards
@@ -48,38 +48,23 @@
 
 const fs   = require('fs');
 const path = require('path');
-const YAML = require('yaml');
 
-const { ancestorDirs, collectMdFiles } = require('./seedmap');
-const { parseCards }                   = require('./emit/vl');
-const { LIMITS, measure }              = require('./limits');
-const { FILENAME: PLACEHOLDERS_FILE }  = require('./emit/placeholders');
+const { buildTree, flattenNodes, resolveAt } = require('./compiledTree');
+const { LIMITS, measure }                    = require('./limits');
 
 // ── collection ────────────────────────────────────────────────────────────────
 
 /**
  * Every node in the compiled tree, root first, depth-first through `Branches/`.
  *
- * `discoverLeaves` cannot serve here: it returns only the leaves, and the interior nodes it
- * passes through are exactly where `branchFraming` lives.
+ * A thin adapter over the shared tree (`compiledTree.js`, Phase 10 Decision 1/Step 1) kept
+ * at this shape and this name because it is a tested public entry point; the traversal
+ * itself lives in one place now. `discoverLeaves` cannot serve here: it returns only the
+ * leaves, and the interior nodes it passes through are exactly where `branchFraming` lives.
  */
-function discoverNodes(nodeDir, branchNames = []) {
-  const nodes       = [{ nodeDir, branchNames, isLeaf: true }];
-  const branchesDir = path.join(nodeDir, 'Branches');
-
-  if (!fs.existsSync(branchesDir)) return nodes;
-
-  const children = fs.readdirSync(branchesDir, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  if (children.length === 0) return nodes;
-
-  nodes[0].isLeaf = false;
-  for (const child of children) {
-    nodes.push(...discoverNodes(path.join(branchesDir, child.name), [...branchNames, child.name]));
-  }
-  return nodes;
+function discoverNodes(nodeDir) {
+  return flattenNodes(buildTree(nodeDir))
+    .map((n) => ({ nodeDir: n.dir, branchNames: n.branchNames, isLeaf: n.isLeaf }));
 }
 
 /**
@@ -88,24 +73,11 @@ function discoverNodes(nodeDir, branchNames = []) {
  * A plain `{...parent, ...local}` down the ancestor chain, which is VL's own merge
  * (`scenario.py:30`) — and it needs no further expansion because `emit/placeholders.js`
  * already resolved nesting on the way out, precisely so that VL's single substitution pass
- * produces the right text regardless of declaration order.
+ * produces the right text regardless of declaration order. `compiledTree.js:resolveAt` folds
+ * the chain; this just names the half of it this report wants.
  */
 function mergedPlaceholders(nodeDir) {
-  let table = {};
-  for (const dir of ancestorDirs(nodeDir)) {
-    const file = path.join(dir, PLACEHOLDERS_FILE);
-    if (!fs.existsSync(file)) continue;
-    try {
-      const parsed = YAML.parse(fs.readFileSync(file, 'utf8'));
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        table = { ...table, ...parsed };
-      }
-    } catch {
-      // An unreadable Placeholders.yaml is the compiler's to report, not the report's. The
-      // honest fallback is to measure without it and let the rendered length stand.
-    }
-  }
-  return table;
+  return resolveAt(nodeDir).resolved.placeholders;
 }
 
 /**
@@ -113,26 +85,12 @@ function mergedPlaceholders(nodeDir) {
  *
  * Deduplicated by *file* rather than by title, matching the seed map: a card inherited from
  * an ancestor is one file and one measurement, while two cards sharing a title across two
- * files are two rows and genuinely two cards.
+ * files are two rows and genuinely two cards. `hasFence` is still required here, matching
+ * `lint.js:241` — a headed section with no fence is prose, not a card — and is this report's
+ * own filter over `compiledTree.js`'s unfiltered `resolved.cards`, not a merge rule.
  */
 function collectLeafCardsForSizing(leafDir) {
-  const cards   = [];
-  const visited = new Set();
-
-  for (const branchDir of ancestorDirs(leafDir)) {
-    const storyCardsDir = path.join(branchDir, 'Story Cards');
-    if (!fs.existsSync(storyCardsDir)) continue;
-
-    for (const file of collectMdFiles(storyCardsDir)) {
-      if (visited.has(file)) continue;
-      visited.add(file);
-      const content  = fs.readFileSync(file, 'utf8');
-      const cardType = path.basename(path.dirname(file));
-      cards.push(...parseCards(content, { type: cardType }).filter((card) => card.hasFence));
-    }
-  }
-
-  return cards;
+  return resolveAt(leafDir).resolved.cards.filter((card) => card.hasFence);
 }
 
 // ── measurement ───────────────────────────────────────────────────────────────
