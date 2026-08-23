@@ -125,4 +125,14 @@ describe('pathological fixture', () => {
   test('a hand-edited snapshot file aborts the load', () => {
     expect(diagnoseProject('snapshot-corrupt')).toMatchSnapshot();
   });
+
+  /**
+   * The card-collision project (Phase 10 Step 3): two items share a displayed card name
+   * across different aid.type values. VL merges cards by name alone, so this is a latent
+   * hazard once inheritance arrives. CL0622 is the WARN that names the collision.
+   */
+  test('two cards share a name across types', () => {
+    expect(diagnoseProject('card-collision')).toMatchSnapshot();
+  });
+
 });

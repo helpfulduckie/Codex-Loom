@@ -228,3 +228,8 @@ WARN CL0536 compile.cl.yaml
   placeholders "altName" and "heroName" ask the same question ("What is your name?"). AID treats identical question text as one placeholder, so the player is prompted once and every one of these keys receives that single answer.
   hint: If they are meant to be answered separately, give them different question text. If they are meant to share an answer, one key does it with no duplicate prompt to explain."
 `;
+
+exports[`pathological fixture two cards share a name across types 1`] = `
+"WARN CL0622 Codex/items.cl.yaml
+  story cards "Shared Name" collide across types: Character in items.cl.yaml and Location in items.cl.yaml. Velvet Lattice merges cards by name, so the later declaration wins; under inheritance this winner becomes position-dependent."
+`;

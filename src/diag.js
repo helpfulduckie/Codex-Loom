@@ -193,6 +193,15 @@ const CODES = Object.freeze({
   /** Both description keys aimed at one `Description.md` — an unbranched root (§7.7). */
   DESCRIPTION_KEYS_COLLIDE: 'CL0621',
 
+  /**
+   * Two story cards share a name across different types on the same leaf (§8, Phase 10
+   * Decision 3). Velvet Lattice's `_merge_story_cards` keys on `name` alone, so the two
+   * collide and the winner is position-dependent. Today every leaf holds full copies, so
+   * the resolution is stable; under inheritance it will not be. WARN rather than ERROR
+   * because the hazard is latent rather than live.
+   */
+  CARD_NAME_COLLISION: 'CL0622',
+
   // Emit (§8). Both are facts about what Velvet Lattice can carry to AID, not opinions
   // about content — which is why they live in the compiler rather than in lint (§12.5).
   TRIGGER_CONTAINS_COMMA: 'CL0701',
@@ -238,6 +247,7 @@ const SEVERITY_BY_CODE = Object.freeze({
   CL0604: SEVERITY.WARN,
   CL0605: SEVERITY.WARN,
   CL0608: SEVERITY.WARN,
+  CL0622: SEVERITY.WARN,
   CL0430: SEVERITY.ERROR,
   CL0431: SEVERITY.ERROR,
   CL0432: SEVERITY.ERROR,

@@ -1,0 +1,17 @@
+# Two items whose displayed card name collides across types.
+
+- id: FirstCard
+  name: Shared Name
+  aid:
+    type: Character
+    triggers: [First]
+  body:
+    Tagline: First card body.
+
+- id: SecondCard
+  name: Shared Name
+  aid:
+    type: Location
+    triggers: [Second]
+  body:
+    Tagline: Second card body.

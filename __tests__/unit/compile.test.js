@@ -793,6 +793,79 @@ describe('compile writes the VL envelope through emit/vl.js', () => {
   });
 });
 
+// ── CL0622 card-name collision (Phase 10 Step 3) ───────────────────────────────
+
+describe('CL0622 card-name collision', () => {
+  let tmpDir;
+  let quiet;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-collision-'));
+    fs.mkdirSync(path.join(tmpDir, 'items'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
+    quiet = ['log', 'warn', 'error'].map((level) => jest.spyOn(console, level).mockImplementation(() => {}));
+  });
+
+  afterEach(() => {
+    quiet.forEach((spy) => spy.mockRestore());
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function compileCollisionProject(itemsYaml) {
+    fs.writeFileSync(path.join(tmpDir, 'items', 'items.yaml'), itemsYaml, 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'templates', 'Character.template'), '{$body.Tagline}', 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'templates', 'Location.template'), '{$body.Tagline}', 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'compile.yaml'), [
+      'version: 4',
+      'structure:',
+      `  input: { items: [${tmpDir}/items], templates: [${tmpDir}/templates] }`,
+      `  output: ${tmpDir}/output`,
+      'branches:',
+      '  main: {}',
+    ].join('\n'), 'utf8');
+
+    const diagnostics = new Diagnostics();
+    compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
+    return diagnostics;
+  }
+
+  test('warns when two cards share a name across types', () => {
+    const diagnostics = compileCollisionProject([
+      '- id: FirstCard',
+      '  name: Shared Name',
+      '  aid: { type: Character, triggers: [First] }',
+      '  body: { Tagline: first }',
+      '',
+      '- id: SecondCard',
+      '  name: Shared Name',
+      '  aid: { type: Location, triggers: [Second] }',
+      '  body: { Tagline: second }',
+    ].join('\n'));
+
+    const collision = diagnostics.warnings.find((d) => d.code === 'CL0622');
+    expect(collision).toBeTruthy();
+    expect(collision.message).toContain('Shared Name');
+    expect(collision.message).toContain('Character');
+    expect(collision.message).toContain('Location');
+  });
+
+  test('is silent when two cards share a name but not a type', () => {
+    const diagnostics = compileCollisionProject([
+      '- id: FirstCard',
+      '  name: Shared Name',
+      '  aid: { type: Character, triggers: [First] }',
+      '  body: { Tagline: first }',
+      '',
+      '- id: SecondCard',
+      '  name: Shared Name',
+      '  aid: { type: Character, triggers: [Second] }',
+      '  body: { Tagline: second }',
+    ].join('\n'));
+
+    expect(diagnostics.warnings.some((d) => d.code === 'CL0622')).toBe(false);
+  });
+});
+
 // ── the notes template ladder (§4.5) ─────────────────────────────────────────
 
 describe('resolveNotesTemplateName', () => {

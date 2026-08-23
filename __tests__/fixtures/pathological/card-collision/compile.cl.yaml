@@ -1,0 +1,21 @@
+# The pathological fixture, card-name collision layer.
+#
+# Two items share a displayed card name but declare different aid.type values. Velvet
+# Lattice merges story cards by name alone (Phase 10 Decision 3), so the two collide.
+# Today every leaf holds full copies and the winner is stable; the WARN exists because
+# inheritance will make the winner position-dependent.
+
+version: 4
+title: Pathological — Card Name Collision
+
+structure:
+  input:
+    items:
+      - './Codex'
+    templates:
+      - './templates'
+  output: './out'
+
+branches:
+  main:
+    title: Main Branch

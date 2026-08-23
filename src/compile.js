@@ -20,7 +20,7 @@ const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, 
 const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
 const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES, LINT_LEVELS } = require('./diag');
-const { renderCard } = require('./emit/vl');
+const { renderCard, cardTitle } = require('./emit/vl');
 const {
   FILENAME: PLACEHOLDERS_FILENAME, writeNodePlaceholders, checkUndeclaredPlaceholders,
   checkPlaceholderContext, reportUnusedPlaceholders, reportDuplicateQuestions, localKeysOf,
@@ -1131,6 +1131,11 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
   // owns the sort, so `order:` then item id is stated in exactly one place (§7.4).
   const occupants = new Map();
 
+  // Card-name collision detector (Phase 10 Step 3, CL0622). Keyed on the displayed card
+  // name rather than the item id, because that is what VL's `_merge_story_cards` keys on.
+  const seenNames = new Map(); // name → { type, file }
+  const reportedCollisions = new Set(); // name
+
   for (const item of resolvedItems) {
     applyPronounPasses(
       item, registry, branchProtagonist, resolvedById, roles, busWarner(diagnostics), onRoleUsed,
@@ -1255,6 +1260,24 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     }
 
     const type = (item.aid && item.aid.type) || 'Uncategorized';
+
+    // Phase 10 Step 3: warn when two cards on this leaf share a name across types. VL's
+    // card merge keys on name alone, so the collision is real and becomes position-dependent
+    // once inheritance arrives. Report once per collision, naming both types and files.
+    const cardName = cardTitle(item);
+    const existing = seenNames.get(cardName);
+    if (existing && existing.type !== type && !reportedCollisions.has(cardName)) {
+      reportedCollisions.add(cardName);
+      diagnostics.warn(
+        DIAG_CODES.CARD_NAME_COLLISION,
+        `story cards "${cardName}" collide across types: ${existing.type} in ${path.basename(existing.file)} and ${type} in ${path.basename(item._source)}. Velvet Lattice merges cards by name, so the later declaration wins; under inheritance this winner becomes position-dependent.`,
+        { file: item._source },
+      );
+    }
+    if (!existing) {
+      seenNames.set(cardName, { type, file: item._source });
+    }
+
     const leakSink = { diagnostics, file: item._source };
     checkUnexpandedVariables(rendered, `item "${itemId}" (${type})`, leakSink);
     checkUnresolvedFieldTokens(rendered, `item "${itemId}" (${type})`, leakSink);
@@ -2179,10 +2202,16 @@ function compileRun(configPath, options, buses) {
   }
 
   // Cross-branch review reports — emitted from the per-leaf data captured above.
+  const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
+  const reportSummary = [];
+
+  // §17.2 provenance report — always emitted from registry data, independent of leaf loop.
+  const { runProvenanceMode } = require('./provenance');
+  const provenanceWritten = runProvenanceMode(registry, reportBase, rootDirName);
+  reportSummary.push(`${provenanceWritten.length} provenance file(s)`);
+
   if ((captureReports && leafData.length > 0) || (options.inventory && inventoryData.length > 0)) {
-    const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
     const { runDiffMode, runAnnotateMode } = require('./diff');
-    const reportSummary = [];
     if (options.inventory) {
       fs.mkdirSync(reportBase, { recursive: true });
       const w = require('./inventory').runInventoryMode(inventoryData, reportBase);
@@ -2200,9 +2229,9 @@ function compileRun(configPath, options, buses) {
       const w = runAnnotateMode(leafData, allItemDefs, registry, annotateDir);
       reportSummary.push(`${w.length} annotation file(s)`);
     }
-    if (reportSummary.length > 0) {
-      console.log(`\nWrote ${reportSummary.join(' and ')} to:\n  ${reportBase}`);
-    }
+  }
+  if (reportSummary.length > 0) {
+    console.log(`\nWrote ${reportSummary.join(' and ')} to:\n  ${reportBase}`);
   }
 
   // Last, because "unused" is only knowable once every write point has run — and the

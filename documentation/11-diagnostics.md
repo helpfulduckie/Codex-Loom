@@ -291,6 +291,7 @@ English word. They stay WARN, they are tagged opinion-layer, and `lint.level` re
 | `CL0619` | ERROR | A section declares more than one of `text:`, `file:` and `from:`. |
 | `CL0620` | WARN | `metadata:` on a component whose output has no place for frontmatter. |
 | `CL0621` | WARN | Both description keys aimed at one file — an unbranched project. |
+| `CL0622` | WARN | Two story cards share a name across different types on the same leaf. |
 
 `CL0601` is an error rather than a resolved precedence because the two readings differ in
 output and neither is obviously right: text inside a slot could sit before or after the
