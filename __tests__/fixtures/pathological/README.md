@@ -33,6 +33,20 @@ the checks the fixture was written for. `checkDrift` (Phase 7) runs at the same 
 exactly like a schema violation does — which is why `snapshot-corrupt/` is its own project
 rather than a fourth mistake folded into `snapshot-mismatch/`.
 
+- `card-collision/` — a single project, single branch, two items sharing a displayed card
+  name across `aid.type` values, for `CL0622` (Phase 10 Step 3). **This should have been two
+  items added to `placement/Codex/items.cl.yaml`, per the precedent Phase 8 already set for
+  role diagnostics**: a card-name collision is a property of two items at a leaf, not of a
+  project's structure, which is exactly the reasoning the role-diagnostics entry below gives
+  for staying out of a fifth project. It was written as a separate project instead, and that
+  was not a considered exception — it is recorded here rather than silently kept. **The
+  concrete cost is real**: `placement/` dispatches across three branches (`open`, `gated`,
+  `silent`), so folding the pair in would have produced three `CL0622` rows in the snapshot
+  and proven the check fires once per leaf across branches. `card-collision/`'s one branch
+  proves only that the check fires at all. Left as its own project rather than moved, because
+  moving it now would touch the fixture the phase's later steps read against; **fold it into
+  `placement/` the next time that project's item set changes for an unrelated reason**, and
+  delete this directory then.
 - `placement/` — load-clean on purpose, so the compile phase runs in full. Carries §7.4's
   placement invariants and the §12 placeholder content that is still inert.
 - `schema/` — three unknown-key shapes, asserted for their hints as much as their codes.

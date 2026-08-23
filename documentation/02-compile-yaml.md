@@ -253,6 +253,8 @@ components:
 
 **`branchFraming:`** — Written to branch-point nodes' `Components/Opening.md`. Does **not** inherit; ignored on leaf nodes with a warning. Takes the same three shapes `opening:` does, but items cannot route into it — framing sits at an interior node, where no items are resolved.
 
+**Declared at the project root — sibling to `branches:` rather than inside any branch node — `branchFraming:` is a third, more limited call site**, written once to `{output}/Components/Opening.md` before the branch tree exists. It resolves `{%variable}` tokens but never checks whether its spec names a `sections:` document, so a role reference (`{$LI}`, `{$protagonist}` — see [Roles](13-roles.md)) is never even attempted there, whether the spec is a literal sentence or a file path. A `branchFraming:` declared *inside* a branch node goes through the ordinary component path instead, and resolves roles like any other `sections:` document (Phase 10 Step 4).
+
 **`description:`** — The scenario blurb AID shows on the listing page. Written once to `{output}/Description.md` after all branches compile. Accepts a `.md`/`.txt` file copied verbatim, or a component document with `sections:`. Not per-branch; branch-level declarations are ignored.
 
 **`adventureDescription:`** — The description a leaf carries, which AID applies to the adventure started from that leaf. An ordinary component: declared anywhere in the tree, inherited down it, written to each leaf's `Description.md`, and items may route into its slots. A leaf that has one and no `Opening.md` is `CL0616`, because Velvet Lattice would open the adventure on the blurb.

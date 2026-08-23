@@ -80,6 +80,8 @@ It takes the same three shapes an opening does — a sentence, a file, or a `sec
 
 Declared on a leaf, `branchFraming:` is ignored with a warning: a leaf has no children to frame.
 
+**A `branchFraming:` declared at the project root — outside every `branches:` node — is a third, separate call site with a real limitation.** It writes once to `{output}/Components/Opening.md` before any branch node exists, and resolves through the same literal/`{%variable}`-only path a plain-prose `opening:` uses: it never checks whether its spec names a `sections:` document, so a `{$role}` token there is never attempted regardless of shape. A `branchFraming:` declared inside a branch node — the case above — goes through the ordinary sectioned-component path and resolves roles the same way `opening:` and every other component does (Phase 10 Step 4; see [Roles](13-roles.md#using-a-role-in-prose)).
+
 ### Migrating a v3 block-list opening
 
 v3 pointed `opening:` at a YAML **sequence of paragraph blocks**, each with its own `branches:` and `variants:`. That format is gone — it was the fourth of four syntaxes for one idea, and its variant rules disagreed with every other dispatch in the language. `migrateProjectFully()` in `src/migrate/index.js` converts it; a block-list opening reaching the compiler is an error naming what it should become.

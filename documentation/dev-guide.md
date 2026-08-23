@@ -37,6 +37,7 @@ Phase 1 split the three files that had accreted several concerns each — `loade
 | `src/overview.js` | Leaf-review and whole-tree overview file generation |
 | `src/diff.js` | Cross-branch `--with-diff` (Shared/delta) and `--with-annotate` report generation |
 | `src/inventory.js` | `--with-inventory`: slot × branch × occupants report (§7.9) |
+| `src/provenance.js` | Provenance report: library set and source file per resolved item (§17.2) |
 | `src/seedmap.js`, `src/bodysize.js`, `src/lint.js` | Post-compile report modes, read from the written tree |
 | `src/migrate/v3.js` | One-time v3 → v4 conversion (§14.2) |
 | `src/migrate/description.js`, `src/migrate/opening.js` | The two v3 file formats §7.1 counted, converted to `sections:` |
@@ -79,8 +80,12 @@ FOR EACH LEAF:
   renderSectionedComponent()     → Components/{Plot Essentials,Summary,AI Instructions,
                                     Author Notes,Opening}.md + Description.md
   copyScripts()
-writeFramingRecursive()          → Components/Opening.md at interior nodes only
+Root-level branchFraming:        → Components/Opening.md, literal/{%variable} only —
+                                    never a sections: document, never a role (§9's exception)
+writeFramingRecursive()          → Components/Opening.md at interior nodes only, roles resolve
+Root Description                 → Description.md, roles resolve, branchProtagonist always null
 runLeafReviewMode()              → Overview/*.leaf.md
+runProvenanceMode()               → Overview/<root>.provenance.{md,csv}  (always, §17.2)
 (if --with-inventory) runInventoryMode() → Overview/Inventory.md
 (if --with-diff)      runDiffMode()      → Overview/Shared.md + Overview/*.delta.md
 (if --with-annotate)  runAnnotateMode()  → Overview/*.annotate.md
@@ -293,6 +298,20 @@ Coverage notes:
 - The `{$…}` field-reference family (`{$v.field}`, `{$Id.body.field}`) is a separate system (field interpolation + pronoun passes) and is **not** part of `expandTokens`. It has been standardized for coverage (`body`/`aid`/`render`/`name` via `walkItemTextFields`), surface (dotted field refs in item data), and failure visibility (`warnUnresolvedFieldTokens`); only collapsing its four resolvers into one dispatcher remains deferred. See `07-templates.md` "Token Systems at a Glance".
 
 Canon path resolution no longer needs a bespoke two-pass. v3 resolved plain-path canon entries first to build a lookup table, then resolved entries referencing sibling canon names against it. Now that canon names are ordinary variables (§6.1) and variables resolve against each other by topological sort (§6.2), a canon entry naming a sibling is just a variable naming a variable, and `expandPathTokens` handles it like any other. Unresolved tokens pass through unchanged, so the standard missing-path warning fires with the unexpanded token visible in the path string.
+
+---
+
+## Provenance Report (§17.2)
+
+**Answers "where did this item come from" for every item the registry resolved** — its library set (or `project`), its source file, and, for a renamed import, the id it was imported from. Unlike the three reports below, it is not gated behind a flag: `runProvenanceMode` (`provenance.js`) runs unconditionally at the end of `compile()` and writes to `config._resolvedReports` (falling back to `<output>/Overview`, same as every other report).
+
+**`<rootDirName>.provenance.md` + `.provenance.csv`**, one row per registry entry. Columns: `ID`, `Source` (`canon:<set>` or `project`), `File` (`_source`, the absolute path), `Via` (the `import:` value, for rename-on-import — §17.4), `Status` (`resolved` or `ambiguous`).
+
+**Reads the registry, not the compiled tree**, so it needs no leaf loop and costs nothing per branch — one pass over `registry` (the plain, uniquely-resolved keys) and one over `registry.ambiguous` (§17.3's contested ids, one row per rival rather than a single winner, since there isn't one). An id that exists in both canon and project is a load-time ERROR (`mergeRegistries`) and never reaches this report.
+
+**A rename-on-import item's row is `project`, not `canon:<set>`.** `id: dragon` over `import: wyvern` registers under `dragon` with `_source` pointing at the project file that declared the rename (`buildRegistry` only stamps `_canonSource` on canon-loaded items); `Via` carries `wyvern` so the row still answers "where did this come from" despite the local id having moved. A bare `import:` with no local `id:` never gets its own registry row at all — it resolves at render time to the canon item, whose row already carries its own canon provenance.
+
+**Not the same question as `library-dependencies.json`** (`compile.js`, written to `config._resolvedOutput`). That manifest is per-library-*directory*, keyed by library name; this report is per-*item*. The manifest existing does not mean this report is redundant with it.
 
 ---
 

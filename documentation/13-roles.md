@@ -65,6 +65,32 @@ sections:
       unprompted, and {$LI.his} restraint should read as deliberate.
 ```
 
+**Every leaf-level component resolves roles** — story cards, Plot Essentials, AI
+Instructions, Author's Note, and a leaf's own `opening:` all pass through the leaf loop,
+which has always threaded `roles` and a resolved `branchProtagonist` in. Two other sites
+render the same `sections:` grammar and, as of Phase 10 Step 4, resolve roles the same way:
+
+- **`branchFraming` at an interior branch node** — inherits the roles table down the
+  branch tree exactly as `variables:` does, merging key-wise with `~` deleting (the same
+  rule `walkBranchChain` uses for the leaf loop), so a role bound above an interior node
+  is visible to its framing even when that node declares no `roles:` of its own.
+- **The root `Description`** (§7.7's project-level blurb) — reads the project's own
+  `roles:`, gated the same way the leaf loop gates it: a project that never declares
+  `roles:` passes `null` rather than an empty table, so `CL0540` treats it as role-unaware
+  territory rather than a project with zero bindings. `branchProtagonist` is always `null`
+  here — the blurb belongs to the project, not to any branch, so `{$protagonist}` resolves
+  through the ordinary "you" pronoun substitution only if a role literally named
+  `protagonist` is declared at the project root; there is no branch chain to take one from.
+
+**One framing site is a real exception, not a gap in the fix above: a project-root
+`branchFraming:` never resolves a role at all.** Declared directly under the top-level
+`components:` key rather than inside any `branches:` node, it is written before the branch
+tree exists and reads through `resolveOpeningContent`, the same literal/`{%variable}`-only
+resolver an `opening:` written as plain prose uses — it never checks whether its spec names
+a `sections:` document, so a `{$role}` token there is never even attempted, whether the spec
+is a literal sentence or a file path. This is a structural limitation of that one call site,
+not a bug the roles work above addresses.
+
 **Roles resolve in component prose, not only in item bodies.** An Author's Note or AI
 Instructions rule referencing `{$LI}` resolves the same way a character card's body does —
 components are items too, under the §3.4 unification, so the same token pass reaches both.
