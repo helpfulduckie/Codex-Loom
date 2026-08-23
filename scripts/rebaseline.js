@@ -44,6 +44,7 @@ const os = require('os');
 const path = require('path');
 
 const { compile } = require('../src/compile');
+const { loadCompileConfig } = require('../src/config/load');
 const { classifyDiff, OPAQUE } = require('../__tests__/helpers/diffShape');
 
 const GOLDEN_DIR = path.resolve(__dirname, '..', 'goldenFixtures');
@@ -60,7 +61,13 @@ if (!fs.existsSync(path.join(GOLDEN_DIR, 'projects.js'))) {
 
 const {
   PROJECTS, OUTPUT_SUBDIR, BASELINE_SUBDIR, SOURCE_SUBDIR, REPORTS_SUBDIR, REPORT_MODES,
+  COMPILE_REPORT_LAYOUT,
 } = require('../goldenFixtures/projects');
+
+/** Every report mode a project freezes, whichever of the two mechanisms produces it. */
+function allReportModes(project) {
+  return [...project.reports, ...(project.compileReports || [])];
+}
 
 // ── arguments ────────────────────────────────────────────────────────────────
 
@@ -129,18 +136,49 @@ function buildTempTree(projects) {
   for (const project of projects) {
     process.stdout.write(`compiling ${project.name}… `);
     quietly(() => {
-      compile(path.join(tmpDir, project.dir, SOURCE_SUBDIR, 'compile.yaml'));
+      const configPath = path.join(tmpDir, project.dir, SOURCE_SUBDIR, 'compile.yaml');
+      const compileOptions = {};
+      for (const mode of project.compileReports || []) compileOptions[mode] = true;
+      compile(configPath, compileOptions);
+
       const scenarioRoot = path.join(tmpDir, project.dir, OUTPUT_SUBDIR);
       for (const mode of project.reports) {
         const dir = path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
         fs.mkdirSync(dir, { recursive: true });
         REPORT_MODES[mode]()(scenarioRoot, dir, false);
       }
+
+      collectCompileReports(project, configPath, tmpDir);
     });
     process.stdout.write('done\n');
   }
 
   return tmpDir;
+}
+
+/**
+ * Copy `diff`/`annotate`/`inventory` output into `v3-reports/<mode>/`. Mirrors
+ * `golden.test.js`'s helper of the same job — `compile()` writes those three wherever
+ * `structure.reports` resolves and returns nothing that names that path, so it is read
+ * back via `loadCompileConfig`, a second side-effect-free parse of the same `compile.yaml`.
+ */
+function collectCompileReports(project, configPath, tmpDir) {
+  const config = loadCompileConfig(configPath);
+  const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
+  for (const mode of project.compileReports || []) {
+    const layout = COMPILE_REPORT_LAYOUT[mode];
+    const dir = path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
+    fs.mkdirSync(dir, { recursive: true });
+    if (layout.files) {
+      for (const f of layout.files) {
+        const src = path.join(reportBase, f);
+        if (fs.existsSync(src)) fs.copyFileSync(src, path.join(dir, f));
+      }
+    } else if (layout.subdir) {
+      const src = path.join(reportBase, layout.subdir);
+      if (fs.existsSync(src)) fs.cpSync(src, dir, { recursive: true });
+    }
+  }
 }
 
 /**
@@ -266,7 +304,7 @@ function main() {
       }
 
       const reports = {};
-      for (const mode of project.reports) {
+      for (const mode of allReportModes(project)) {
         reports[mode] = diffTree(
           path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode),
           path.join(GOLDEN_DIR, project.dir, REPORTS_SUBDIR, mode),
@@ -303,7 +341,7 @@ function main() {
         written++;
       }
 
-      for (const mode of project.reports) {
+      for (const mode of allReportModes(project)) {
         const reportFrom = path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
         const reportTo = path.join(GOLDEN_DIR, project.dir, REPORTS_SUBDIR, mode);
         const report = reports[mode];

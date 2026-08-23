@@ -26,6 +26,7 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { compile } = require('../../src/compile');
+const { loadCompileConfig } = require('../../src/config/load');
 const { classifyDiff, OPAQUE } = require('../helpers/diffShape');
 
 const GOLDEN_DIR = path.resolve(__dirname, '../../goldenFixtures');
@@ -118,8 +119,9 @@ const EXPECTED_DIFF_FILES = /(^|\/)Components\/(Plot Essentials|AI Instructions)
 // regenerates what this file checks and the two must not drift apart.
 const {
   PROJECTS, OUTPUT_SUBDIR, BASELINE_SUBDIR, SOURCE_SUBDIR, REPORTS_SUBDIR, REPORT_MODES,
+  COMPILE_REPORT_LAYOUT,
 // eslint-disable-next-line global-require
-} = HAVE_FIXTURES ? require('../../goldenFixtures/projects') : ABSENT;
+} = HAVE_FIXTURES ? require('../../goldenFixtures/projects') : { ...ABSENT, COMPILE_REPORT_LAYOUT: {} };
 
 /**
  * Two things about that list are worth knowing here.
@@ -186,6 +188,32 @@ function normalizeManifest(raw, rootDir) {
   return scrub(parsed);
 }
 
+/**
+ * Copy `diff`/`annotate`/`inventory` output into `v3-reports/<mode>/`, the same relative
+ * path `REPORT_MODES` entries write to directly. `compile()` writes those three into
+ * whatever `structure.reports` resolves to for the project, and returns nothing that names
+ * that path, so it is read back the same way `compile.js` computed it — via
+ * `loadCompileConfig`, which is a second, side-effect-free parse of the same `compile.yaml`.
+ */
+function collectCompileReports(project, configPath) {
+  const config = loadCompileConfig(configPath);
+  const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
+  for (const mode of project.compileReports || []) {
+    const layout = COMPILE_REPORT_LAYOUT[mode];
+    const dir = path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
+    fs.mkdirSync(dir, { recursive: true });
+    if (layout.files) {
+      for (const f of layout.files) {
+        const src = path.join(reportBase, f);
+        if (fs.existsSync(src)) fs.copyFileSync(src, path.join(dir, f));
+      }
+    } else if (layout.subdir) {
+      const src = path.join(reportBase, layout.subdir);
+      if (fs.existsSync(src)) fs.cpSync(src, dir, { recursive: true });
+    }
+  }
+}
+
 beforeAll(() => {
   // Jest runs a file's root hooks even when every describe in it is skipped, so this guard
   // is what actually stops the absent case from compiling a fixture tree that is not there.
@@ -210,7 +238,10 @@ beforeAll(() => {
   const quiet = ['log', 'warn', 'error'].map((level) => jest.spyOn(console, level).mockImplementation(() => {}));
   try {
     for (const project of PROJECTS) {
-      compile(path.join(tmpDir, project.dir, SOURCE_SUBDIR, 'compile.yaml'));
+      const configPath = path.join(tmpDir, project.dir, SOURCE_SUBDIR, 'compile.yaml');
+      const compileOptions = {};
+      for (const mode of project.compileReports || []) compileOptions[mode] = true;
+      compile(configPath, compileOptions);
 
       // Reports run post-hoc against the tree that compile just wrote, which is how the
       // CLI invokes them — so what is frozen is what a user would get.
@@ -220,6 +251,10 @@ beforeAll(() => {
         fs.mkdirSync(dir, { recursive: true });
         REPORT_MODES[mode]()(scenarioRoot, dir, false);
       }
+
+      // `diff`/`annotate`/`inventory` already wrote during the compile() call above,
+      // gated on the flags just set — this only collects what landed into place.
+      collectCompileReports(project, configPath);
     }
   } finally {
     quiet.forEach((spy) => spy.mockRestore());
@@ -316,6 +351,33 @@ afterAll(() => {
    */
   describe.each(project.reports)(
     'report: %s',
+    (mode) => {
+      const actual = () => path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
+      const expected = () => path.join(GOLDEN_DIR, project.dir, REPORTS_SUBDIR, mode);
+
+      test('emits exactly the baseline file set', () => {
+        expect(listFiles(actual())).toEqual(listFiles(expected()));
+      });
+
+      test('every file is byte-identical to the baseline', () => {
+        const differing = listFiles(expected()).filter((rel) => {
+          const a = path.join(actual(), ...rel.split('/'));
+          const b = path.join(expected(), ...rel.split('/'));
+          return !fs.existsSync(a) || !fs.readFileSync(a).equals(fs.readFileSync(b));
+        });
+        expect(differing).toEqual([]);
+      });
+    },
+  );
+
+  /**
+   * Same two assertions as the post-hoc reports above, against `diff`/`annotate`/`inventory`
+   * once `collectCompileReports` has copied their output into the same `v3-reports/<mode>/`
+   * shape — they differ only in how the harness produces the files under test, not in what
+   * "frozen" means once the files are in place.
+   */
+  describe.each(project.compileReports || [])(
+    'compile report: %s',
     (mode) => {
       const actual = () => path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
       const expected = () => path.join(GOLDEN_DIR, project.dir, REPORTS_SUBDIR, mode);
