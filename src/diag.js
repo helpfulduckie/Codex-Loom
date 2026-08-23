@@ -59,6 +59,25 @@ const CODES = Object.freeze({
    * is normal, zero of seven is a mistake, and only the second is reported.
    */
   SELECTOR_MATCHED_NOTHING: 'CL0326',
+
+  /**
+   * The parser/eval band (§13, Phase 9). `CL0410`–`CL0412` predate this band and are
+   * declared in local `CODES` tables (`loader.js`, `compile.js`) rather than here — a trap
+   * for a free-code search, since grepping this registry for an open slot in `CL041x`
+   * misses both. Grep the number across the repo, not the registry.
+   *
+   * `TEMPLATE_PARSE_FAILED` covers a malformed render-function call wherever one is found:
+   * inside a `.template` file (via `render()`, with a file and — once the parser lands — a
+   * line) or inside a card body field (via `applyFieldRenderFunctions`, file only — a body
+   * field has no useful line within a multi-thousand-line YAML file). Both are the same
+   * defect, a call that doesn't parse, found in two different kinds of source.
+   */
+  TEMPLATE_PARSE_FAILED: 'CL0413',
+  TEMPLATE_UNKNOWN_FUNCTION: 'CL0414',
+  TEMPLATE_UNCLOSED_BLOCK: 'CL0415',
+  PARTIAL_CYCLE: 'CL0416',
+  PARTIAL_NOT_FOUND: 'CL0417',
+
   TEMPLATE_NOT_FOUND: 'CL0420',
   RENDER_FAILED: 'CL0421',
 

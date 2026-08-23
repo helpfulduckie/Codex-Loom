@@ -56,6 +56,12 @@ WARN CL0713 Codex/items.cl.yaml
 ERROR CL0714 Codex/items.cl.yaml
   Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+ERROR CL0413 templates/Broken.template
+  Malformed join() call in Broken: Malformed join(): join($body.Tagline)
+ERROR CL0415 templates/Unclosed.template
+  Unclosed {if $body.Tagline} block.
+ERROR CL0433 Codex/items.cl.yaml
+  leaked template tag {if $body.Tagline} in item "UnclosedBlock" (Character)
 ERROR CL0541
   "Anchor" is both a declared role and an item id, which is ambiguous — rename one (§9.3).
 ERROR CL0542
@@ -110,6 +116,12 @@ WARN CL0713 Codex/items.cl.yaml
 ERROR CL0714 Codex/items.cl.yaml
   Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+ERROR CL0413 templates/Broken.template
+  Malformed join() call in Broken: Malformed join(): join($body.Tagline)
+ERROR CL0415 templates/Unclosed.template
+  Unclosed {if $body.Tagline} block.
+ERROR CL0433 Codex/items.cl.yaml
+  leaked template tag {if $body.Tagline} in item "UnclosedBlock" (Character)
 ERROR CL0541
   "Anchor" is both a declared role and an item id, which is ambiguous — rename one (§9.3).
 ERROR CL0542
@@ -164,6 +176,12 @@ WARN CL0713 Codex/items.cl.yaml
 ERROR CL0714 Codex/items.cl.yaml
   Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+ERROR CL0413 templates/Broken.template
+  Malformed join() call in Broken: Malformed join(): join($body.Tagline)
+ERROR CL0415 templates/Unclosed.template
+  Unclosed {if $body.Tagline} block.
+ERROR CL0433 Codex/items.cl.yaml
+  leaked template tag {if $body.Tagline} in item "UnclosedBlock" (Character)
 ERROR CL0541
   "Anchor" is both a declared role and an item id, which is ambiguous — rename one (§9.3).
 ERROR CL0542

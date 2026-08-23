@@ -168,7 +168,7 @@ function renderNotesText(item, context, templates, partials, variables, projectN
     return undefined;
   }
   const notesContext = { ...context, render: { ...context.render, wrapper: 'none' } };
-  return render(template.content, notesContext, partials, variables);
+  return render(template.content, notesContext, partials, variables, { diagnostics, file: template._source, name });
 }
 
 /**
@@ -189,11 +189,15 @@ function getTemplateName(item, templates) {
 }
 
 /**
- * Get the template for an item. Checks render.template first, then aid.type.
+ * Get the template entry for an item. Checks render.template first, then aid.type.
+ *
+ * Returns the `{content, _source}` entry rather than the content string alone (Phase 9
+ * Step 0) — `_source` is what lets a render-time diagnostic name the template file instead
+ * of reporting a parse or eval failure with nowhere to point.
  */
 function getTemplate(item, templates) {
   const name = getTemplateName(item, templates);
-  return name ? templates.get(name.toLowerCase()).content : null;
+  return name ? templates.get(name.toLowerCase()) : null;
 }
 
 /**
@@ -607,7 +611,7 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
 
   if (template) {
     try {
-      return render(template.content, context, partials, variables);
+      return render(template.content, context, partials, variables, { diagnostics, file: template._source, name: target.template });
     } catch (err) {
       diagnostics.error(
         DIAG_CODES.RENDER_FAILED,
@@ -922,7 +926,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     pass++;
     for (const item of resolvedItems) {
       const snapshot = JSON.stringify(item.body);
-      applyFieldRenderFunctions(item, resolvedById);
+      applyFieldRenderFunctions(item, resolvedById, { diagnostics, file: item._source });
       if (JSON.stringify(item.body) !== snapshot) changed = true;
     }
   }
@@ -1026,8 +1030,8 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     // after all {%}/{$} passes, so it sees the final on-disk type. Aborts on invalid.
     validateCardType(item);
 
-    const template = getTemplate(item, templates);
-    if (!template) {
+    const templateEntry = getTemplate(item, templates);
+    if (!templateEntry) {
       const type = (item.aid && item.aid.type) || (item.render && item.render.template) || '?';
       diagnostics.error(
         DIAG_CODES.TEMPLATE_NOT_FOUND,
@@ -1042,7 +1046,9 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
 
     let rendered;
     try {
-      const bodyText = render(template, context, partials, variables);
+      const bodyText = render(templateEntry.content, context, partials, variables, {
+        diagnostics, file: templateEntry._source, name: getTemplateName(item, templates),
+      });
       // The body arrives already wrapped — `render` applies render.wrapper — which is
       // what §8.5 needs when Phase 5 measures the final string.
       rendered = renderCard({

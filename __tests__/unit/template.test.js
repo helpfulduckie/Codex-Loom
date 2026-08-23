@@ -20,6 +20,7 @@ const {
   applyFieldInterpolation,
   applyVariableInterpolation,
 } = require('../../src/template');
+const { Diagnostics } = require('../../src/diag');
 
 describe('resolveField', () => {
   const data = {
@@ -870,5 +871,89 @@ describe('applyVariableInterpolation', () => {
     const card = { name: 42, body: {} };
     applyVariableInterpolation(card, { x: 'y' });
     expect(card.name).toBe(42);
+  });
+});
+
+// ── render — diagnostics (Phase 9 Step 0/1) ──────────────────────────────────
+//
+// `render()`'s fifth argument threads a diagnostics bus through the parser/eval engine.
+// These pin the six stop conditions the Phase 9 Session A handoff names: a malformed call
+// reports CL0413 naming the template file (replacing a bare `console.warn`), an unclosed
+// {if} reports CL0415 and still renders literally (so the CL0433 leak sweep also catches
+// it downstream — the corpus proves that, not a unit test), an unknown/circular partial
+// reports CL0417/CL0416 instead of throwing, the \x00LBRACE\x00/\x00RBRACE\x00 sentinels
+// are gone from src/, and a {preserve} block's boundary survives data that contains the
+// literal text "{/preserve}".
+
+describe('render — diagnostics', () => {
+  test('malformed join() in a template reports CL0413 naming the file', () => {
+    const diagnostics = new Diagnostics();
+    const result = render('{join($body.x)}', { body: { x: 'a' } }, new Map(), null, {
+      diagnostics, file: 'Broken.template', name: 'Broken',
+    });
+    expect(result).toBe('');
+    expect(diagnostics.all).toHaveLength(1);
+    expect(diagnostics.all[0].code).toBe('CL0413');
+    expect(diagnostics.all[0].file).toBe('Broken.template');
+    expect(diagnostics.all[0].line).toBe(1);
+    expect(diagnostics.all[0].col).toBe(1);
+  });
+
+  test('an unclosed {if} block reports CL0415 and still renders as literal text', () => {
+    const diagnostics = new Diagnostics();
+    const result = render('{if $body.x}yes', { body: { x: 'true' } }, new Map(), null, {
+      diagnostics, file: 'Unclosed.template',
+    });
+    // Renders literally — same fallback the v3 regex engine used for a tag it couldn't
+    // match — so the output-sweep's CL0433 LEAKED_TEMPLATE_TAG check still catches it too
+    // (per the Phase 9 Session A handoff's Unknowns: both reports are correct).
+    expect(result).toBe('{if $body.x}yes');
+    expect(diagnostics.all.map(d => d.code)).toEqual(['CL0415']);
+  });
+
+  test('an unknown partial reports CL0417 instead of throwing', () => {
+    const diagnostics = new Diagnostics();
+    const result = render('{include ghost}', {}, new Map(), null, { diagnostics, file: 'x.template' });
+    expect(result).toBe('');
+    expect(diagnostics.all.map(d => d.code)).toEqual(['CL0417']);
+  });
+
+  test('a circular partial include reports CL0416 instead of throwing', () => {
+    const diagnostics = new Diagnostics();
+    const partials = new Map([
+      ['a', { content: '{include b}' }],
+      ['b', { content: '{include a}' }],
+    ]);
+    const result = render('{include a}', {}, partials, null, { diagnostics, file: 'x.template' });
+    expect(result).toBe('');
+    expect(diagnostics.all.map(d => d.code)).toEqual(['CL0416']);
+  });
+
+  test('a {preserve} block is bounded by the source, not by data that contains "{/preserve}"', () => {
+    const tmpl = 'A\n{preserve}\n{$body.text}\n{/preserve}\nB';
+    const data = { body: { text: 'line1{/preserve}line2' } };
+    expect(render(tmpl, data, new Map())).toBe('A\nline1{/preserve}line2\nB');
+  });
+
+  test('the \\x00LBRACE\\x00 / \\x00RBRACE\\x00 sentinel constants are gone from src/', () => {
+    // Matches the actual JS string-literal form (quoted), not prose mentioning the old
+    // sentinel by name — this file's own doc comments do that deliberately, to explain
+    // what the shim above stopped doing.
+    const sentinelLiteral = /['"]\\x00L?RBRACE\\x00['"]/;
+    const fs = require('fs');
+    const path = require('path');
+    const srcDir = path.resolve(__dirname, '../../src');
+    const offenders = [];
+    (function walk(dir) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (entry.name.endsWith('.js')) {
+          const text = fs.readFileSync(full, 'utf8');
+          if (sentinelLiteral.test(text)) offenders.push(full);
+        }
+      }
+    })(srcDir);
+    expect(offenders).toEqual([]);
   });
 });

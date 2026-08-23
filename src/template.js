@@ -1,9 +1,26 @@
 'use strict';
 
-const { normalizeVarKey, resolveVariables, walkItemTextFields, itemContext } = require('./util');
+const { resolveVariables, walkItemTextFields, itemContext } = require('./util');
+const { CODES } = require('./diag');
+const { tokenize, parse } = require('./render/parse');
+const evalMod = require('./render/eval');
+const {
+  resolveField, isTruthy, renderScalar, applyWrapper,
+  evaluateInline, evaluateJoin, evaluateList, evaluateAnd, evaluateProse, evaluateBlock, evaluateKeys,
+  renderProgram,
+} = evalMod;
 
 /**
- * Template engine for Codex Loom v3.
+ * Template engine for Codex Loom v4 (v4 spec §13).
+ *
+ * This module is the façade over `render/parse.js` (lexer + AST) and `render/eval.js`
+ * (the evaluation walk) — see the Phase 9 plan for why the engine moved. Five exports cross
+ * the module boundary for real (`compile.js` and `emit/components.js`); eight more are
+ * semantic functions re-exported from `eval.js` because `template.test.js` reaches them
+ * directly; four (`processIncludes`, `processConditionals`, `processInline`,
+ * `processWrapperBlocks`) are shims kept only so that file's three orphaned `describe`
+ * blocks keep passing until Phase 9 Step 3 re-expresses them through `render()` and deletes
+ * these. Nothing outside that test file has ever imported the four.
  *
  * Interpolation syntax:
  *   {$field}                     - top-level card field
@@ -32,293 +49,24 @@ const { normalizeVarKey, resolveVariables, walkItemTextFields, itemContext } = r
  *   {{ → {    }} → }
  */
 
-// Sentinel strings used during processing to protect escaped sequences
-const S_LBRACE = '\x00LBRACE\x00';
-const S_RBRACE = '\x00RBRACE\x00';
-
 /**
- * Case-insensitive deep field resolver.
- * Resolves paths like "body.Physical Traits.gender" against card data.
- *
- * Returns the value or null. Arrays and objects are returned as-is for render functions.
- * Plain scalars are returned as trimmed strings.
+ * Render a value as a string for inline output, following the same {$field} object/array
+ * rendering rules the AST walk uses.
  */
-function resolveField(ref, data) {
-  const path = ref.startsWith('$') ? ref.slice(1) : ref;
-  const parts = path.split('.');
-  if (parts.length > 0) parts[0] = normalizeVarKey(parts[0]);
-
-  let value = data;
-  for (const part of parts) {
-    if (value === null || value === undefined) return null;
-    if (typeof value !== 'object') return null;
-
-    const lower = part.toLowerCase();
-    const actualKey = Object.keys(value).find(k => k.toLowerCase() === lower);
-    if (actualKey === undefined) {
-      // Cross-item ref fallback: if we're still at the root context and an itemMap is
-      // available, treat the unresolved segment as an item ID and pivot to that item.
-      // e.g. $Aness.body.magic.affinity → find 'aness' in itemMap, then navigate body.magic.affinity
-      if (value === data && data.itemMap) {
-        const sourceItem = data.itemMap.get(lower);
-        if (sourceItem) {
-          value = sourceItem;
-          continue;
-        }
-      }
-      return null;
-    }
-    value = value[actualKey];
-  }
-
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'boolean') return value ? 'true' : 'false';
-  // Return arrays and objects as-is so render functions can work with them
-  if (Array.isArray(value)) return value.length > 0 ? value : null;
-  if (typeof value === 'object') return value;
-
-  const str = String(value).trim();
-  return str === '' ? null : str;
-}
-
-/**
- * Evaluate boolean truthiness of a field reference.
- */
-function isTruthy(ref, data) {
-  const val = resolveField(ref, data);
-  if (val === null) return false;
-  if (Array.isArray(val)) return val.length > 0;
-  if (typeof val === 'object') return Object.keys(val).length > 0;
-  if (String(val).toLowerCase() === 'false') return false;
-  if (val === '0') return false;
-  return true;
-}
-
-/**
- * Render a value as a string for inline output.
- * Arrays → elements joined with "; ".
- * Objects → not directly renderable, returns "".
- */
-function renderScalar(val) {
-  if (val === null || val === undefined) return '';
-  if (Array.isArray(val)) return val.join('; ');
-  if (typeof val === 'object') return '';
-  return String(val);
-}
-
-// ── Render functions ──────────────────────────────────────────────────────────
-
-function evaluateInline(inner, data) {
-  const refMatch = inner.match(/^inline\(\s*(\$[^)]+?)\s*\)$/s);
-  if (!refMatch) throw new Error('Malformed inline(): ' + inner);
-  const val = resolveField(refMatch[1].trim(), data);
-  if (val === null) return '';
-  if (typeof val === 'object' && !Array.isArray(val)) {
-    return Object.values(val).filter(v => v != null).join(' ');
-  }
-  if (Array.isArray(val)) return val.join(' ');
-  return String(val);
-}
-
-function evaluateJoin(inner, data) {
-  const sepMatch = inner.match(/^join\(\s*(["'`])([^"'`]*)\1\s*,(.+)\)$/s);
-  if (!sepMatch) throw new Error('Malformed join(): ' + inner);
-  const separator = sepMatch[2];
-  const refs = sepMatch[3].split(',').map(s => s.trim()).filter(Boolean);
-  const values = refs
-    .map(ref => resolveField(ref, data))
-    .filter(v => v !== null)
-    .flatMap(v => Array.isArray(v) ? v : (typeof v === 'object' ? Object.values(v).filter(x => x != null) : [v]));
-  return values.join(separator);
-}
-
-function evaluateList(inner, data) {
-  const refMatch = inner.match(/^list\(\s*(\$[^)]+?)\s*\)$/s);
-  if (!refMatch) throw new Error('Malformed list(): ' + inner);
-  const val = resolveField(refMatch[1].trim(), data);
+function renderResolved(val) {
   if (val === null) return '';
   if (Array.isArray(val)) {
     if (val.length === 1) return String(val[0]);
     return '\n' + val.map(item => '- ' + item).join('\n');
   }
   if (typeof val === 'object') {
+    if (val.full != null) return String(val.full);
     const entries = Object.values(val).filter(v => v != null);
     if (entries.length === 0) return '';
     if (entries.length === 1) return String(entries[0]);
     return '\n' + entries.map(v => '- ' + v).join('\n');
   }
   return renderScalar(val);
-}
-
-function evaluateAnd(inner, data) {
-  const refMatch = inner.match(/^and\(\s*(\$[^)]+?)\s*\)$/s);
-  if (!refMatch) throw new Error('Malformed and(): ' + inner);
-  const val = resolveField(refMatch[1].trim(), data);
-  if (val === null) return '';
-  const arr = Array.isArray(val) ? val : [String(val)];
-  if (arr.length === 0) return '';
-  if (arr.length === 1) return arr[0];
-  if (arr.length === 2) return arr[0] + ' and ' + arr[1];
-  return arr.slice(0, -1).join(', ') + ', and ' + arr[arr.length - 1];
-}
-
-function evaluateProse(inner, data) {
-  const refMatch = inner.match(/^prose\(\s*(\$[^)]+?)\s*\)$/s);
-  if (!refMatch) throw new Error('Malformed prose(): ' + inner);
-  const val = resolveField(refMatch[1].trim(), data);
-  if (val === null) return '';
-  const arr = Array.isArray(val) ? val : [String(val)];
-  return arr.map(item => {
-    let s = String(item).trim();
-    if (!s) return '';
-    s = s[0].toUpperCase() + s.slice(1);
-    // Remove trailing punctuation then add period
-    s = s.replace(/[.!?]+$/, '') + '.';
-    return s;
-  }).filter(Boolean).join(' ');
-}
-
-function evaluateBlock(inner, data) {
-  const refMatch = inner.match(/^block\(\s*(\$[^)]+?)\s*\)$/s);
-  if (!refMatch) throw new Error('Malformed block(): ' + inner);
-  const val = resolveField(refMatch[1].trim(), data);
-  if (val === null) return '';
-  if (Array.isArray(val)) return val.join('\n');
-  return renderScalar(val);
-}
-
-function evaluateKeys(inner, data) {
-  const refMatch = inner.match(/^keys\(\s*(\$[^)]+?)\s*\)$/s);
-  if (!refMatch) throw new Error('Malformed keys(): ' + inner);
-  const val = resolveField(refMatch[1].trim(), data);
-  if (val === null) return '';
-  if (typeof val === 'object' && !Array.isArray(val)) {
-    return Object.entries(val)
-      .map(([k, v]) => `- ${k}: ${v}`)
-      .join('\n');
-  }
-  return renderScalar(val);
-}
-
-// ── Processing stages ─────────────────────────────────────────────────────────
-
-/**
- * Expand {include partialName} directives depth-first.
- */
-function processIncludes(template, partials, stack) {
-  if (!stack) stack = [];
-  return template.replace(/\{include\s+(\S+)\}/g, function(match, name) {
-    const key = name.toLowerCase();
-    if (stack.includes(key)) {
-      throw new Error(`Circular partial include: ${[...stack, key].join(' → ')}`);
-    }
-    const partial = partials.get(key);
-    if (!partial) {
-      throw new Error(`Unknown partial "${name}" (no .partial file found)`);
-    }
-    const expanded = processIncludes(partial.content, partials, [...stack, key]);
-    // Protect escaped sequences within included content
-    return expanded
-      .replace(/\{\{/g, S_LBRACE)
-      .replace(/\}\}/g, S_RBRACE);
-  });
-}
-
-/**
- * Process {if $field}...{else}...{/if} blocks, innermost first.
- */
-function processConditionals(template, data) {
-  let result = template;
-  let changed = true;
-  while (changed) {
-    changed = false;
-    result = result.replace(
-      /\{if ([^}]+)\}((?:(?!\{if )[\s\S])*?)\{\/if\}/g,
-      function(match, condition, body) {
-        changed = true;
-        const truthy = isTruthy(condition.trim(), data);
-        const parts = body.split(/\{else\}/);
-        if (parts.length === 1) return truthy ? body : '';
-        return truthy ? parts[0] : parts[1];
-      }
-    );
-  }
-  return result;
-}
-
-/**
- * Process {wrapper}...{/wrapper} blocks.
- * Reads data.render.wrapper (curly | square | none) and wraps the block content.
- */
-function processWrapperBlocks(template, data) {
-  const wrapper = (data.render && data.render.wrapper) || 'none';
-  return template.replace(/\{wrapper\}([\s\S]*?)\{\/wrapper\}/g, function(match, content) {
-    return applyWrapper(content.trim(), wrapper);
-  });
-}
-
-/**
- * Apply wrapper to a string of content.
- */
-function applyWrapper(text, wrapper) {
-  const w = (wrapper || 'none').toLowerCase();
-  if (w === 'square') return `[\n${text}\n]`;
-  if (w === 'curly')  return `{\n${text}\n}`;
-  return text;
-}
-
-/**
- * Process all inline expressions: render functions and field refs.
- */
-function processInline(template, data) {
-  return template.replace(/\{([^{}]+)\}/g, function(match, inner) {
-    inner = inner.trim();
-
-    // Skip sentinels already embedded
-    if (inner.startsWith('\x00')) return match;
-
-    // Render functions
-    const fnDispatchers = [
-      ['inline(', evaluateInline],
-      ['join(',   evaluateJoin],
-      ['list(',   evaluateList],
-      ['and(',    evaluateAnd],
-      ['prose(',  evaluateProse],
-      ['block(',  evaluateBlock],
-      ['keys(',   evaluateKeys],
-    ];
-    for (const [prefix, fn] of fnDispatchers) {
-      if (inner.startsWith(prefix)) {
-        try {
-          return fn(inner, data);
-        } catch (e) {
-          console.warn('  WARN: ' + e.message);
-          return '';
-        }
-      }
-    }
-
-    // Field reference
-    if (inner.startsWith('$')) {
-      const val = resolveField(inner, data);
-      if (val === null) return '';
-      if (Array.isArray(val)) {
-        if (val.length === 1) return String(val[0]);
-        return '\n' + val.map(item => '- ' + item).join('\n');
-      }
-      if (typeof val === 'object') {
-        if (val.full != null) return String(val.full);
-        const entries = Object.values(val).filter(v => v != null);
-        if (entries.length === 0) return '';
-        if (entries.length === 1) return String(entries[0]);
-        return '\n' + entries.map(v => '- ' + v).join('\n');
-      }
-      return renderScalar(val);
-    }
-
-    // Unknown — leave as-is
-    return match;
-  });
 }
 
 /**
@@ -332,16 +80,27 @@ function processInline(template, data) {
  * 5. Collapse 2+ consecutive newlines → \n (removes all blank lines)
  * 6. Trim leading/trailing whitespace from whole document
  * 7. Restore preserved block contents
+ *
+ * `preserved`, when passed, is the list of already-evaluated `{preserve}` bodies the AST
+ * walk collected — `render()` has already replaced their source spans with
+ * `\x00PRESERVE_n\x00` sentinels, so step 1's own regex extraction is skipped and step 7
+ * restores from this list instead. Called with one argument, this function still finds and
+ * protects `{preserve}` blocks by regex over `str` itself — the original v3 behavior, kept
+ * for callers (and tests) that use it standalone rather than through `render()`.
  */
-function normalizeWhitespace(str) {
-  // Step 1: Extract {preserve}...{/preserve} blocks
-  const preserved = [];
-  let working = str.replace(/\{preserve\}([\s\S]*?)\{\/preserve\}/g, (match, content) => {
-    const idx = preserved.length;
-    // Trim one leading/trailing newline so tags on their own lines don't double up
-    preserved.push(content.replace(/^\n/, '').replace(/\n$/, ''));
-    return `\x00PRESERVE_${idx}\x00`;
-  });
+function normalizeWhitespace(str, preserved) {
+  let working = str;
+
+  if (preserved === undefined) {
+    // Step 1: Extract {preserve}...{/preserve} blocks
+    preserved = [];
+    working = str.replace(/\{preserve\}([\s\S]*?)\{\/preserve\}/g, (match, content) => {
+      const idx = preserved.length;
+      // Trim one leading/trailing newline so tags on their own lines don't double up
+      preserved.push(content.replace(/^\n/, '').replace(/\n$/, ''));
+      return `\x00PRESERVE_${idx}\x00`;
+    });
+  }
 
   // Step 2: Strip tabs
   working = working.replace(/\t/g, '');
@@ -398,24 +157,20 @@ function processFieldInterpolation(value, context) {
  *          {prose(...)}, {block(...)}, {keys(...)}
  * Leaves:  {$she}, {$Id}, {$Id.pronoun}, {%variable}, and all other {$...} tokens
  *          untouched so the pronoun pass can handle them.
+ *
+ * `options.diagnostics`/`options.file`, when given, turn a malformed call's
+ * `console.warn` into a `CL0413` diagnostic naming the item instead. This is a field
+ * value, not a template file, so the diagnostic carries no line — the same degradation
+ * `Diagnostic#location` already handles.
  */
-function applyFieldRenderFunctions(card, itemMap) {
+function applyFieldRenderFunctions(card, itemMap, options) {
   if (!card.body) return;
 
   const context = itemContext(card, itemMap ? { itemMap } : undefined);
 
-  applyRenderFunctionsRecursive(card.body, context);
+  applyRenderFunctionsRecursive(card.body, context, options || {});
 }
 
-/**
- * Expand {%varName} compile-time variable tokens in all string values in a card's
- * id, name, body, aid, and render blocks.
- * Called after applyFieldInterpolation, before cross-card refs and pronoun passes.
- *
- * Only string values are rewritten (arrays are mapped, objects recursed), so
- * non-string control fields — render.position, aid.encapsulate/known — are left
- * untouched while aid.title, aid.triggers, render.template/wrapper, etc. expand.
- */
 function applyVariableInterpolation(card, variables) {
   if (!variables) return;
   // card.name is normalized to {display, full, ...} by resolveItem before this runs
@@ -444,41 +199,48 @@ function applyVariableInterpolationRecursive(obj, variables) {
   }
 }
 
-function applyRenderFunctionsRecursive(obj, context) {
+function applyRenderFunctionsRecursive(obj, context, options) {
   if (!obj || typeof obj !== 'object') return;
   for (const key of Object.keys(obj)) {
     const val = obj[key];
     if (typeof val === 'string') {
-      obj[key] = processFieldRenderFunctions(val, context);
+      obj[key] = processFieldRenderFunctions(val, context, options);
     } else if (Array.isArray(val)) {
       obj[key] = val.map(item =>
-        typeof item === 'string' ? processFieldRenderFunctions(item, context) : item
+        typeof item === 'string' ? processFieldRenderFunctions(item, context, options) : item
       );
     } else if (typeof val === 'object' && val !== null) {
-      applyRenderFunctionsRecursive(val, context);
+      applyRenderFunctionsRecursive(val, context, options);
     }
   }
 }
 
-function processFieldRenderFunctions(value, context) {
+const RENDER_FN_DISPATCH = [
+  ['inline(', evaluateInline],
+  ['join(',   evaluateJoin],
+  ['list(',   evaluateList],
+  ['and(',    evaluateAnd],
+  ['prose(',  evaluateProse],
+  ['block(',  evaluateBlock],
+  ['keys(',   evaluateKeys],
+];
+
+function processFieldRenderFunctions(value, context, options) {
   if (typeof value !== 'string') return value;
   return value.replace(/\{([^{}]+)\}/g, function(match, inner) {
     inner = inner.trim();
-    const fnDispatchers = [
-      ['inline(', evaluateInline],
-      ['join(',   evaluateJoin],
-      ['list(',   evaluateList],
-      ['and(',    evaluateAnd],
-      ['prose(',  evaluateProse],
-      ['block(',  evaluateBlock],
-      ['keys(',   evaluateKeys],
-    ];
-    for (const [prefix, fn] of fnDispatchers) {
+    for (const [prefix, fn] of RENDER_FN_DISPATCH) {
       if (inner.startsWith(prefix)) {
         try {
           return fn(inner, context);
         } catch (e) {
-          console.warn(`  WARN: render function in field value: ${e.message}`);
+          if (options && options.diagnostics) {
+            options.diagnostics.error(
+              CODES.TEMPLATE_PARSE_FAILED,
+              `render function in field value: ${e.message}`,
+              { file: options.file },
+            );
+          }
           return match;
         }
       }
@@ -493,59 +255,136 @@ function processFieldRenderFunctions(value, context) {
  *
  * Pipeline:
  *   0. Resolve {%variable} tokens (compile-time variables)
- *   1. Escape {{ }} → sentinels
- *   2. Expand {include ...} partials
- *   3. processConditionals
- *   4. processWrapperBlocks
- *   5. processInline
- *   6. Restore sentinels → literal { }
- *   7. normalizeWhitespace
+ *   1. Expand {include} directives textually, recursively (still a string pass — a real
+ *      template opens a block in one partial and closes it in another, so an AST scoped to
+ *      one partial's own parse tree cannot represent it; see parse.js's header)
+ *   2. Tokenize + parse the fully-expanded string into an AST (escapes, conditionals,
+ *      wrapper, preserve, render functions and field refs are all tags in one grammar now)
+ *   3. Walk the AST against `data`
+ *   4. normalizeWhitespace, restoring any {preserve} sentinels the walk collected
  *
  * @param {string} template
  * @param {object} data - card data; body fields accessed via {$body.X}
  * @param {Map} partials
  * @param {object} [variables] - compile.yaml variables for {%varName} expansion
+ * @param {object} [options] - { diagnostics, file, name } (v4 spec §4.4 / Phase 9 Step 0).
+ *   `file` and `name` identify the template being rendered so a parse or eval failure can
+ *   finally name where it happened; `diagnostics` is the bus to report to. All optional —
+ *   a caller with nothing to report to gets the old silent-degradation behavior.
  */
-function render(template, data, partials, variables) {
+function render(template, data, partials, variables, options) {
   if (!partials) partials = new Map();
+  const { diagnostics, file, name } = options || {};
 
   // Step 0: Resolve {%variable} tokens
-  if (variables) template = resolveVariables(template, variables);
+  let source = template;
+  if (variables) source = resolveVariables(source, variables);
 
-  // Step 1: Escape literal delimiters
-  let result = template
-    .replace(/\{\{/g, S_LBRACE)
-    .replace(/\}\}/g, S_RBRACE);
+  const report = diagnostics
+    ? (code, message, span) => {
+        const loc = { file };
+        if (span && typeof span.line === 'number') loc.line = span.line;
+        if (span && typeof span.column === 'number') loc.col = span.column;
+        diagnostics.error(code, message, loc);
+      }
+    : () => {};
 
-  // Step 2: Expand partials
-  result = processIncludes(result, partials);
+  // Step 1: Expand {include} directives (see the doc comment above for why this stays a
+  // text pass rather than an AST node).
+  source = expandIncludes(source, partials, report);
 
-  // Step 3: Conditionals
-  result = processConditionals(result, data);
+  const preserved = [];
+  const flags = { wrapperUsed: false };
+  const ctx = { report, preserved, flags, name };
 
-  // Check after conditionals so a {wrapper} inside a false {if} branch doesn't suppress auto-wrap
-  const hasWrapperBlock = /\{wrapper\}/.test(result);
+  const doc = parse(tokenize(source), report);
+  let result = renderProgram(doc, data, ctx);
 
-  // Step 4: Wrapper blocks
-  result = processWrapperBlocks(result, data);
-
-  // Step 5: Inline expressions
-  result = processInline(result, data);
-
-  // Step 6: Restore sentinels
-  result = result
-    .replace(new RegExp(S_LBRACE.replace(/\x00/g, '\\x00'), 'g'), '{')
-    .replace(new RegExp(S_RBRACE.replace(/\x00/g, '\\x00'), 'g'), '}');
-
-  // Step 7: Whitespace normalization
-  result = normalizeWhitespace(result);
+  result = normalizeWhitespace(result, preserved);
 
   // Post-render: if card has render.wrapper and template didn't use {wrapper} block, wrap entire output
-  if (!hasWrapperBlock && data.render && data.render.wrapper && data.render.wrapper !== 'none') {
+  if (!flags.wrapperUsed && data.render && data.render.wrapper && data.render.wrapper !== 'none') {
     result = applyWrapper(result, data.render.wrapper);
   }
 
   return result;
+}
+
+/**
+ * Expand `{include NAME}` directives, recursively, before anything is tokenized.
+ *
+ * `report`, when it actually reports (a `diagnostics` bus was given to `render()`), turns
+ * an unknown or circular partial into `CL0417`/`CL0416` and the directive into empty text —
+ * a graceful degrade, replacing the old engine's unconditional throw (which aborted the
+ * whole item's render and surfaced as a generic `CL0421 RENDER_FAILED` at the compile.js
+ * call site). Nothing in the golden corpus exercises either failure, so this is a real
+ * behavior change confined to output no golden produces.
+ */
+function expandIncludes(source, partials, report, stack) {
+  stack = stack || [];
+  return source.replace(/\{include\s+(\S+)\}/g, function(match, includeName, offset, whole) {
+    const key = includeName.toLowerCase();
+    const line = whole.slice(0, offset).split('\n').length;
+    if (stack.includes(key)) {
+      report(CODES.PARTIAL_CYCLE, `Circular partial include: ${[...stack, key].join(' → ')}`, { line });
+      return '';
+    }
+    const partial = partials.get(key);
+    if (!partial) {
+      report(CODES.PARTIAL_NOT_FOUND, `Unknown partial "${includeName}" (no .partial file found).`, { line });
+      return '';
+    }
+    return expandIncludes(partial.content, partials, report, [...stack, key]);
+  });
+}
+
+// ── Shims (Phase 9 Decision 1) ───────────────────────────────────────────────
+//
+// Deleted in Phase 9 Step 3, along with the three template.test.js `describe` blocks they
+// exist for. Nothing outside that file has ever imported these four.
+//
+// `processConditionals`, `processWrapperBlocks` and `processInline` are thin: they parse
+// and walk through the real engine, safe because their own tests exercise one construct at
+// a time. `processIncludes` cannot take that shortcut — its two "throws on unknown/circular
+// partial" tests pin the *old* contract, which `expandIncludes` above no longer has (Step 0
+// turned those throws into diagnostics that degrade to empty text instead of aborting). So
+// this shim keeps the pre-Phase-9 string algorithm's expansion and cycle-detection logic,
+// minus the `\x00LBRACE\x00`/`\x00RBRACE\x00` sentinel dance the old function used to shield
+// escapes in included content — that mechanism is gone from `src/` entirely per this
+// session's stop conditions, and no test here exercises escapes through this shim (the two
+// that do call `render()` directly instead, which handles escapes via the lexer).
+function processIncludes(templateStr, partials, stack) {
+  if (!stack) stack = [];
+  return templateStr.replace(/\{include\s+(\S+)\}/g, function(match, name) {
+    const key = name.toLowerCase();
+    if (stack.includes(key)) {
+      throw new Error(`Circular partial include: ${[...stack, key].join(' → ')}`);
+    }
+    const partial = partials.get(key);
+    if (!partial) {
+      throw new Error(`Unknown partial "${name}" (no .partial file found)`);
+    }
+    return processIncludes(partial.content, partials, [...stack, key]);
+  });
+}
+
+function shimCtx() {
+  return { report: () => {}, preserved: [], flags: { wrapperUsed: false } };
+}
+
+function processConditionals(templateStr, data) {
+  const ctx = shimCtx();
+  return renderProgram(parse(tokenize(templateStr), ctx.report), data, ctx);
+}
+
+function processWrapperBlocks(templateStr, data) {
+  const ctx = shimCtx();
+  return renderProgram(parse(tokenize(templateStr), ctx.report), data, ctx);
+}
+
+function processInline(templateStr, data) {
+  const ctx = shimCtx();
+  return renderProgram(parse(tokenize(templateStr), ctx.report), data, ctx);
 }
 
 module.exports = {

@@ -18,19 +18,19 @@ describe('getTemplate', () => {
     ['npc', { content: 'npc template', _source: 'y' }],
   ]);
 
-  test('returns template by render.template field', () => {
+  test('returns template entry by render.template field', () => {
     const item = { render: { template: 'npc' }, aid: { type: 'character' } };
-    expect(getTemplate(item, templates)).toBe('npc template');
+    expect(getTemplate(item, templates)).toEqual({ content: 'npc template', _source: 'y' });
   });
 
   test('falls back to aid.type when render.template absent', () => {
     const item = { render: {}, aid: { type: 'Character' } };
-    expect(getTemplate(item, templates)).toBe('char template');
+    expect(getTemplate(item, templates)).toEqual({ content: 'char template', _source: 'x' });
   });
 
   test('type lookup is case-insensitive', () => {
     const item = { aid: { type: 'CHARACTER' } };
-    expect(getTemplate(item, templates)).toBe('char template');
+    expect(getTemplate(item, templates)).toEqual({ content: 'char template', _source: 'x' });
   });
 
   test('returns null when neither render.template nor aid.type found', () => {
