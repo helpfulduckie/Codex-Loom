@@ -330,3 +330,33 @@ describe('an empty tree', () => {
     expect(run(tree({}))).toBeNull();
   });
 });
+
+describe('card resolution is name-keyed, not file-keyed (Phase 10 Decision 3)', () => {
+  test('a leaf that overrides one card of a type resolves to one card, not two', () => {
+    // The corpus collision (The Institute's "The Institute" Location/Organization pair) is
+    // two cards of the same name at the *same* node — this pins the other shape the rule
+    // has to hold for: an ancestor's card and a leaf's differently-typed card sharing a
+    // name, where the leaf's is the one that should survive.
+    const root = tree({
+      'Story Cards/Location/Shared.md': card('Shared', 'ancestor body'),
+      'Branches/Left/Story Cards/Organization/Shared.md': card('Shared', 'leaf body'),
+    });
+    const cards = collectLeafCardsForSizing(path.join(root, 'Branches', 'Left'));
+    const shared = cards.filter((c) => c.title === 'Shared');
+    expect(shared).toHaveLength(1);
+    expect(shared[0].type).toBe('Organization');
+    expect(shared[0].body).toBe('leaf body');
+  });
+
+  test('a sibling leaf that does not override still sees the ancestor\'s card', () => {
+    const root = tree({
+      'Story Cards/Location/Shared.md': card('Shared', 'ancestor body'),
+      'Branches/Left/Story Cards/Organization/Shared.md': card('Shared', 'leaf body'),
+      'Branches/Right/Components/Opening.md': 'right',
+    });
+    const cards = collectLeafCardsForSizing(path.join(root, 'Branches', 'Right'));
+    const shared = cards.filter((c) => c.title === 'Shared');
+    expect(shared).toHaveLength(1);
+    expect(shared[0].type).toBe('Location');
+  });
+});

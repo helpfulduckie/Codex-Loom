@@ -10,7 +10,7 @@
  * directory list is read off disk, `ancestorDirs` is the single upward walk, and
  * `resolveAt`/`buildTree` are two views of the same per-node merge — computed fresh from
  * a single directory for `resolveAt`, computed incrementally on the way down for
- * `buildTree`. Both call the same `mergeDict`/`mergeCardsByFile` functions, so nothing
+ * `buildTree`. Both call the same `mergeDict`/`mergeCardsByName` functions, so nothing
  * about what "resolved" means can drift between them.
  *
  * Every node carries what it declares itself (`own`) and what Velvet Lattice resolves
@@ -20,9 +20,11 @@
  * rules, and stay with their reports rather than moving into this module.
  *
  * `resolved.components` and `resolved.placeholders` are VL's own merge (`scenario.py:30`):
- * `{...parent, ...local}` keyed by filename, local wins. `resolved.cards` keeps today's
- * union-deduplicated-by-file rule for this step — Decision 3 changes it to a name-keyed
- * map in Step 2, which is why the merge is one small function rather than inline.
+ * `{...parent, ...local}` keyed by filename, local wins. `resolved.cards` reproduces VL's
+ * own `_merge_story_cards` (Decision 3, Phase 10 Step 2): a name-keyed map, last
+ * declaration down the chain winning — collisions across type included, not hidden by
+ * keying on `(type, name)` instead. See `mergeCardsByName` below for why that would be
+ * the wrong fix rather than a safer one.
  *
  * `resolved.scripts` is not a merge at all: nothing under a branch's `Scripts/` dir
  * inherits from a parent — each branch's `Scripts/` is written whole from its own
@@ -169,17 +171,23 @@ function mergeDict(parentDict, ownDict) {
 }
 
 /**
- * Today's rule: union of ancestor and own cards, deduplicated by source file.
+ * VL's own `_merge_story_cards` rule (Decision 3): a `{card.name: card}` map built from
+ * the parent's resolved cards, with local cards written over it — keyed on `name` alone,
+ * not on `(type, name)`. Two cards sharing a name across different types collide, and the
+ * winner is whichever is declared last down the chain: the same node's own cards in
+ * `own.cards`'s order (itself file-sorted, per `collectMdFiles`), or a later ancestor's
+ * card overwriting an earlier one's. This is deliberate, not an oversight — see `CL0622`
+ * (Phase 10 Step 3), which warns about the hazard this reproduces rather than hiding it.
  *
- * The dedup guards against a file reachable twice (impossible in a tree, but the rule
- * predates this module and is kept exactly), not against `ownCards` itself — a single
- * file is one card sometimes and several other times (one `##` heading per card), and
- * they all carry that same `file` value. Checking against `seenFiles` alone, and never
- * adding to it mid-loop, is what keeps every card from a multi-card file.
+ * A `Map` preserves this correctly on its own: re-`set`ting an existing key overwrites its
+ * value but keeps its original iteration position, which is exactly VL's own dict
+ * semantics — the collision's *winner* is the later declaration, but its *position* in the
+ * resolved list is wherever the name was first seen.
  */
-function mergeCardsByFile(parentCards, ownCards) {
-  const seenFiles = new Set(parentCards.map((c) => c.file));
-  return [...parentCards, ...ownCards.filter((card) => !seenFiles.has(card.file))];
+function mergeCardsByName(parentCards, ownCards) {
+  const byName = new Map(parentCards.map((c) => [c.title, c]));
+  for (const card of ownCards) byName.set(card.title, card);
+  return [...byName.values()];
 }
 
 const EMPTY_RESOLVED = { components: {}, cards: [], placeholders: {}, scripts: [] };
@@ -187,7 +195,7 @@ const EMPTY_RESOLVED = { components: {}, cards: [], placeholders: {}, scripts: [
 function foldResolved(parentResolved, own) {
   return {
     components: mergeDict(parentResolved.components, own.components),
-    cards: mergeCardsByFile(parentResolved.cards, own.cards),
+    cards: mergeCardsByName(parentResolved.cards, own.cards),
     placeholders: mergeDict(parentResolved.placeholders, own.placeholders),
     scripts: own.scripts,
   };
@@ -256,5 +264,5 @@ module.exports = {
   collectMdFiles,
   collectFiles,
   mergeDict,
-  mergeCardsByFile,
+  mergeCardsByName,
 };

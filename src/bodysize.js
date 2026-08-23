@@ -83,11 +83,12 @@ function mergedPlaceholders(nodeDir) {
 /**
  * Every card visible to a leaf, unfiltered by triggers.
  *
- * Deduplicated by *file* rather than by title, matching the seed map: a card inherited from
- * an ancestor is one file and one measurement, while two cards sharing a title across two
- * files are two rows and genuinely two cards. `hasFence` is still required here, matching
- * `lint.js:241` — a headed section with no fence is prose, not a card — and is this report's
- * own filter over `compiledTree.js`'s unfiltered `resolved.cards`, not a merge rule.
+ * Keyed by name, matching VL's own merge (Decision 3): a leaf that overrides one card of
+ * a name measures that one card, not the ancestor's copy as well — two names collide the
+ * same way they collide for AID, and only the winner is sized. `hasFence` is still
+ * required here, matching `lint.js:241` — a headed section with no fence is prose, not a
+ * card — and is this report's own filter over `compiledTree.js`'s `resolved.cards`, not a
+ * merge rule.
  */
 function collectLeafCardsForSizing(leafDir) {
   return resolveAt(leafDir).resolved.cards.filter((card) => card.hasFence);
