@@ -20,11 +20,10 @@ function leaf(label, fileBase, itemPairs, components = {}) {
     fileBase,
     branchPath: label.split('/'),
     items: new Map(itemPairs),
-    components: {
-      plotEssentials: components.plotEssentials || [],
-      aiInstructions: components.aiInstructions || [],
-      authorsNote:    components.authorsNote    || [],
-    },
+    // Keyed by `SLOTTED_COMPONENTS` descriptor key, and spread rather than enumerated,
+    // mirroring what `compile.js` captures: a family absent from a leaf is absent from the
+    // object, which is the case `buildSharedAndDeltas` has to tolerate for real leaves too.
+    components: { ...components },
   };
 }
 
@@ -71,13 +70,41 @@ describe('buildSharedAndDeltas — component blocks', () => {
   test('PE block identical everywhere is shared; a divergent block goes to deltas', () => {
     const pe = key => text => ({ key, text });
     const data = [
-      leaf('a', 'a', [], { plotEssentials: [pe('genre')('GENRE'), pe('you')('YOU-A')] }),
-      leaf('b', 'b', [], { plotEssentials: [pe('genre')('GENRE'), pe('you')('YOU-B')] }),
+      leaf('a', 'a', [], { plotEssential: [pe('genre')('GENRE'), pe('you')('YOU-A')] }),
+      leaf('b', 'b', [], { plotEssential: [pe('genre')('GENRE'), pe('you')('YOU-B')] }),
     ];
     const { shared, deltas } = buildSharedAndDeltas(data);
-    expect(shared.components.plotEssentials.map(b => b.key)).toEqual(['genre']);
-    expect(deltas.get('a').components.plotEssentials.map(b => b.text)).toEqual(['YOU-A']);
-    expect(deltas.get('b').components.plotEssentials.map(b => b.text)).toEqual(['YOU-B']);
+    expect(shared.components.plotEssential.map(b => b.key)).toEqual(['genre']);
+    expect(deltas.get('a').components.plotEssential.map(b => b.text)).toEqual(['YOU-A']);
+    expect(deltas.get('b').components.plotEssential.map(b => b.text)).toEqual(['YOU-B']);
+  });
+
+  // The three families the hand-written list dropped. An opening that varies by branch is
+  // the most likely thing an author wants a bleed check to catch, and it was the one the
+  // report could not see at all.
+  test.each(['opening', 'summary', 'adventureDescription'])(
+    'a %s that varies by branch reaches the deltas',
+    (family) => {
+      const block = key => text => ({ key, text });
+      const data = [
+        leaf('a', 'a', [], { [family]: [block('body')('CALM')] }),
+        leaf('b', 'b', [], { [family]: [block('body')('STORM')] }),
+      ];
+      const { shared, deltas } = buildSharedAndDeltas(data);
+      expect(shared.components[family]).toEqual([]);
+      expect(deltas.get('a').components[family].map(b => b.text)).toEqual(['CALM']);
+      expect(deltas.get('b').components[family].map(b => b.text)).toEqual(['STORM']);
+    },
+  );
+
+  test('an opening identical in every leaf is shared, not a delta', () => {
+    const data = [
+      leaf('a', 'a', [], { opening: [{ key: 'Opening', text: 'SAME' }] }),
+      leaf('b', 'b', [], { opening: [{ key: 'Opening', text: 'SAME' }] }),
+    ];
+    const { shared, deltas } = buildSharedAndDeltas(data);
+    expect(shared.components.opening.map(b => b.text)).toEqual(['SAME']);
+    expect(deltas.get('a').components.opening).toEqual([]);
   });
 });
 

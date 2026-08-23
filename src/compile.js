@@ -1932,16 +1932,21 @@ function compileRun(configPath, options, buses) {
         branchPath,
         fileBase: branchPath.length ? branchPath.join(' - ') : rootDirName,
         items: renderedById,
-        components: {
-          // Every sectioned component reports per section, keyed by section name. The
-          // cross-branch reports diff component content by segment key, so per-section
-          // keys localize a difference to the section that carries it rather than
-          // reporting the whole component as changed — which is what §7.2's naming bought
-          // Plot Essentials, and there is no reason the prose components report worse.
-          plotEssentials: sectionedSegments.plotEssential || [],
-          aiInstructions: sectionedSegments.aiInstructions || [],
-          authorsNote:    sectionedSegments.authorsNote || [],
-        },
+        // Every sectioned component reports per section, keyed by section name. The
+        // cross-branch reports diff component content by segment key, so per-section
+        // keys localize a difference to the section that carries it rather than
+        // reporting the whole component as changed — which is what §7.2's naming bought
+        // Plot Essentials, and there is no reason the prose components report worse.
+        //
+        // Spread rather than named, and keyed by `descriptor.key` rather than by a name of
+        // its own: this site listed three of `SLOTTED_COMPONENTS`' six by hand, so `summary`,
+        // `opening` and `adventureDescription` were captured by the loop above and then
+        // dropped here, invisible to `--diff` and `--annotate` since Phase 6 added them. A
+        // list that has to be extended by hand when a component is added is a list that will
+        // not be, so there is no list. `description:` is absent for a real reason rather than
+        // this one — the scenario blurb is written once at the root and has no per-leaf value
+        // to diff.
+        components: { ...sectionedSegments },
       });
     }
 

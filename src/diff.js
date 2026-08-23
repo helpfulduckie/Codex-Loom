@@ -20,6 +20,7 @@ const fs   = require('fs');
 const path = require('path');
 const { resolveItem, resolveBranchSpec, collectVariantDeltas } = require('./resolver');
 const { resolveItemRef } = require('./model/refs');
+const { SLOTTED_COMPONENTS } = require('./emit/components');
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 
@@ -36,12 +37,28 @@ function shiftHeadings(content, shift) {
   });
 }
 
-/** Component families captured per leaf, in display order. */
-const COMPONENT_FAMILIES = [
-  ['plotEssentials', 'Plot Essentials'],
-  ['aiInstructions', 'AI Instructions'],
-  ['authorsNote',    "Author's Note"],
-];
+/**
+ * Component families captured per leaf, in `SLOTTED_COMPONENTS` display order.
+ *
+ * Derived rather than listed. The hand-written version carried Plot Essentials, AI
+ * Instructions and Author's Note, which was the whole component table when it was written
+ * and three of six after Phase 6 — so a variant landing in a leaf's `opening:`,
+ * `summary:` or `adventureDescription:` did not appear in a bleed check at all. Deriving
+ * it means the next row added to the table is read here without anyone remembering to
+ * come back.
+ */
+const COMPONENT_FAMILIES = SLOTTED_COMPONENTS.map((d) => [d.key, d.label]);
+
+/**
+ * Families whose report blocks are fenced as code rather than set as prose.
+ *
+ * Plot Essentials, Summary and AI Instructions are directive text an author reads
+ * literally and compares character by character; the fence stops Markdown from eating a
+ * leading `#` or collapsing a blank line, which is exactly what a diff is being read for.
+ * Openings and descriptions are prose meant to be read as prose. `summary` joins the
+ * fenced set because §7.3 gives it Plot Essentials' settings throughout.
+ */
+const FENCED_FAMILIES = new Set(['plotEssential', 'summary', 'aiInstructions']);
 
 // ════════════════════════════════════════════════════════════════════════════
 //  --with-diff : Shared.md + per-leaf *.delta.md  (rendered-block level, no annotation)
@@ -149,7 +166,7 @@ function renderComponentSections(components) {
   for (const [fam, title] of COMPONENT_FAMILIES) {
     const blocks = components[fam] || [];
     if (blocks.length === 0) continue;
-    const fenced = fam === 'plotEssentials' || fam === 'aiInstructions';
+    const fenced = FENCED_FAMILIES.has(fam);
     const body   = blocks.map(b => fenced ? `\`\`\`\n${b.text}\n\`\`\`` : b.text).join('\n\n');
     out.push(`## ${title}\n\n${body}`);
   }
