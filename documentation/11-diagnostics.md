@@ -159,7 +159,7 @@ Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein 
 | `CL0325` | ERROR | Two item definitions resolve to the same id on one branch. |
 | `CL0326` | WARN | A selector aimed at many items matched none of them. |
 | `CL0340` | ERROR | A reference is defined in more than one canon set and is not qualified. |
-| `CL0341` | ERROR | A reference names a canon set not declared in `structure.input.canon`. |
+| `CL0341` | ERROR | A reference names a canon set not declared in `structure.input.library`. |
 | `CL0342` | ERROR | A reference names an id that no canon set defines. |
 | `CL0330` | WARN | A cross-item reference names an item that does not exist. |
 
@@ -210,6 +210,12 @@ half is checked per branch, because a dispatch has no answer without one.
 | `CL0410` | ERROR | A `.template` or `.partial` still contains a `~~~` fence. |
 | `CL0411` | ERROR | A `render.notesTemplate` in compile.yaml names a template that is not loaded. |
 | `CL0412` | ERROR | A `render.notesTemplate` on an item names a template that is not loaded. |
+| `CL0413` | ERROR | A render-function call in a template or body field does not parse. |
+| `CL0414` | ERROR | A template uses an unknown render-function name. |
+| `CL0415` | ERROR | An `{if}`, `{wrapper}`, or `{preserve}` block is not closed. |
+| `CL0416` | ERROR | A partial includes itself, directly or indirectly. |
+| `CL0417` | ERROR | An `{include NAME}` names a partial that is not loaded. |
+| `CL0418` | ERROR | Cross-item render-function references form a cycle. |
 | `CL0420` | ERROR | No loaded template matches an item's `aid.type` or `render.template`. |
 | `CL0421` | ERROR | A template threw while rendering an item. |
 | `CL0430` | ERROR | A `{$…}` field, pronoun or character token survived into rendered output. |
@@ -235,9 +241,9 @@ a project the size of The Institute means the same message thousands of times. T
 per-item `render.notesTemplate` is not checked here, because that one is open and can be
 variable-driven; it reports at render time as `CL0412` and names the item.
 
-`CL0412`, `CL0420` and `CL0421` are per-item and report at render time, which is why they
+`CL0412`–`CL0418`, `CL0420` and `CL0421` are per-item and report at render time, which is why they
 are not the load-time check `CL0411` is. Each drops the one thing it names — the notes
-line, or the whole item — and leaves the rest of the leaf intact, and each fails the run
+line, the failed directive, or the whole item — and leaves the rest of the leaf intact, and each fails the run
 once the tree is written.
 
 ### CL0430–CL0437 in detail

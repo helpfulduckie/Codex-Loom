@@ -278,7 +278,7 @@ Phase A (`resolveBranchItems`) resolves all items for a branch and applies field
 
 **Canon naming (mapping not string)**
 
-`structure.input.canon` is a named mapping (`{main: ./path}`) rather than a plain string or array. Names serve two purposes: they appear in error messages (`canon:main` labels each side of a collision) and they are exposed as variables, so `{%main}` resolves in `include:` paths. A plain path string would require path-based display, which is brittle.
+`structure.input.library` is a named mapping (`{main: ./path}`) rather than a plain string or array. Names serve two purposes: they appear in error messages (`library:main` labels each side of a collision) and they are exposed as variables, so `{%main}` resolves in `include:` paths. A plain path string would require path-based display, which is brittle.
 
 **Token expansion — one family, one expander**
 

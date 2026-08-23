@@ -5,9 +5,6 @@ const {
   isTruthy,
   evaluateJoin,
   evaluateList,
-  processConditionals,
-  processInline,
-  processIncludes,
   render,
   applyFieldRenderFunctions,
   normalizeWhitespace,
@@ -16,7 +13,6 @@ const {
   evaluateBlock,
   evaluateKeys,
   evaluateInline,
-  processWrapperBlocks,
   applyFieldInterpolation,
   applyVariableInterpolation,
 } = require('../../src/template');
@@ -159,31 +155,6 @@ describe('evaluateList', () => {
   });
 });
 
-describe('processConditionals', () => {
-  test('truthy field — body is kept', () => {
-    expect(processConditionals('{if $known}yes{/if}', { known: 'true' })).toBe('yes');
-  });
-
-  test('falsy field — body is removed', () => {
-    expect(processConditionals('{if $known}yes{/if}', {})).toBe('');
-  });
-
-  test('else branch used when condition is false', () => {
-    expect(processConditionals('{if $known}yes{else}no{/if}', {})).toBe('no');
-  });
-
-  test('else branch skipped when condition is true', () => {
-    expect(processConditionals('{if $known}yes{else}no{/if}', { known: '1' })).toBe('yes');
-  });
-
-  test('nested conditionals resolve innermost first', () => {
-    const tmpl = '{if $a}{if $b}both{/if}{/if}';
-    expect(processConditionals(tmpl, { a: 'x', b: 'y' })).toBe('both');
-    expect(processConditionals(tmpl, { a: 'x' })).toBe('');
-    expect(processConditionals(tmpl, {})).toBe('');
-  });
-});
-
 describe('render', () => {
   test('interpolates top-level field', () => {
     expect(render('{$name}', { name: 'Aness' })).toBe('Aness');
@@ -225,51 +196,6 @@ describe('render', () => {
 
   test('missing field resolves to empty string', () => {
     expect(render('{$missing}', {})).toBe('');
-  });
-});
-
-// ── processIncludes ──────────────────────────────────────────────────────────
-
-describe('processIncludes', () => {
-  test('expands a simple include', () => {
-    const partials = new Map([['header', { content: 'HEADER' }]]);
-    expect(processIncludes('{include header}', partials)).toBe('HEADER');
-  });
-
-  test('name lookup is case-insensitive', () => {
-    const partials = new Map([['footer', { content: 'FOOTER' }]]);
-    expect(processIncludes('{include Footer}', partials)).toBe('FOOTER');
-  });
-
-  test('expands nested partials depth-first', () => {
-    const partials = new Map([
-      ['outer', { content: 'A{include inner}B' }],
-      ['inner', { content: 'X' }],
-    ]);
-    expect(processIncludes('{include outer}', partials)).toBe('AXB');
-  });
-
-  test('throws on unknown partial', () => {
-    expect(() => processIncludes('{include ghost}', new Map())).toThrow(/Unknown partial "ghost"/);
-  });
-
-  test('throws on circular include', () => {
-    const partials = new Map([
-      ['a', { content: '{include b}' }],
-      ['b', { content: '{include a}' }],
-    ]);
-    expect(() => processIncludes('{include a}', partials)).toThrow(/Circular partial include/);
-  });
-
-  test('partial content participates in conditional processing via render', () => {
-    const partials = new Map([['cond', { content: '{if $show}yes{/if}' }]]);
-    expect(render('{include cond}', { show: 'true' }, partials)).toBe('yes');
-    expect(render('{include cond}', { show: 'false' }, partials)).toBe('');
-  });
-
-  test('literal braces in partial survive render', () => {
-    const partials = new Map([['lit', { content: '{{curly}}' }]]);
-    expect(render('{include lit}', {}, partials)).toBe('{curly}');
   });
 });
 
@@ -680,29 +606,6 @@ describe('evaluateInline', () => {
 
   test('malformed syntax → throws', () => {
     expect(() => evaluateInline('inline(bad)', evalData)).toThrow('Malformed inline()');
-  });
-});
-
-// ── processWrapperBlocks ──────────────────────────────────────────────────────
-
-describe('processWrapperBlocks', () => {
-  test('square wrapper replaces {wrapper}...{/wrapper} block', () => {
-    expect(processWrapperBlocks('{wrapper}content{/wrapper}', { render: { wrapper: 'square' } }))
-      .toBe('[\ncontent\n]');
-  });
-
-  test('curly wrapper replaces block', () => {
-    expect(processWrapperBlocks('{wrapper}content{/wrapper}', { render: { wrapper: 'curly' } }))
-      .toBe('{\ncontent\n}');
-  });
-
-  test('none wrapper returns content unchanged', () => {
-    expect(processWrapperBlocks('{wrapper}content{/wrapper}', { render: { wrapper: 'none' } }))
-      .toBe('content');
-  });
-
-  test('no render block → treated as none', () => {
-    expect(processWrapperBlocks('{wrapper}content{/wrapper}', {})).toBe('content');
   });
 });
 

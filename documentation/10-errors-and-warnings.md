@@ -137,7 +137,7 @@ The most common cause is a mismatch between the item's `aid.type` value and the 
 **"Import failed: no item with id"**
 
 Check that:
-1. The canon directory is correctly declared in `compile.yaml` under `structure.input.canon`
+1. The canon directory is correctly declared in `compile.yaml` under `structure.input.library`
 2. The item ID in the `import:` entry matches the item's `id:` field (or `name:` if `id:` is absent) in the canon file
 3. The canon file is within the configured canon directory (loaded recursively)
 

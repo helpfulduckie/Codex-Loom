@@ -315,7 +315,7 @@ Codex Loom has two compile-time token families. `{%}` is the *path/value* family
 
 | Token | Name | Declared in | Resolves to | Available in |
 |---|---|---|---|---|
-| `{%key}` | Compile variable | `compile.yaml` `variables:` (root + per-branch), and every `structure.input.canon` name | a string value (recursive, cycle-detected; ERROR if undeclared) | item `id`/`name`/`body`/`aid`/`render` (string values), templates, opening prose, component specs, config paths, `include:` paths, branch `title`/`protagonist` |
+| `{%key}` | Compile variable | `compile.yaml` `variables:` (root + per-branch), and every `structure.input.library` name | a string value (recursive, cycle-detected; ERROR if undeclared) | item `id`/`name`/`body`/`aid`/`render` (string values), templates, opening prose, component specs, config paths, `include:` paths, branch `title`/`protagonist` |
 | `{$v.key}` / `{$Id.body.field}` | Field reference | an item's `v:` block / another item's fields | an item field value | templates, and item `body`/`aid`/`render`/`name` fields (the `{$…}` interpolation + cross-item + pronoun passes) |
 
 **There used to be a third: `{@key}`, a named reference declared under `structure.input.components` and `structure.input.canon`.** It is removed in v4, and deleting it cost nothing. Its lookup searched every per-type map in sequence and returned the first name match, so `{@pe}` resolved identically no matter which type declared it — no project could depend on the grouping, because the grouping never worked. Its one behavioral difference was already applied to every component spec downstream, and the declaration subtree duplicated `variables:`: both name a string for reuse.
@@ -332,7 +332,7 @@ Codex Loom has two compile-time token families. `{%}` is the *path/value* family
 
 **Unexpanded-variable warning:** as a final safety net, every rendered story card and component output is scanned for any leftover `{%…}` token; each distinct one emits a `WARN: unexpanded variable {%x} in …`. This is `{%}`-only. An *undeclared* variable therefore produces two complementary messages: `"{%x}" not declared` at expansion and the residual warning at output.
 
-**`{$…}` family status:** it is a separate system from `{%}`. It has been standardized for *coverage* (resolves in `body`/`aid`/`render`/`name`), *surface* (dotted field refs accepted in item data), and *failure visibility* (residual unresolved-token warning). What remains **deferred** is collapsing its four resolvers (`processFieldInterpolation`/`processInline` + `applyTokenPass`/`applyCrossItemRefs`) into one dispatcher — high risk because of pronoun scope, verb conjugation, the two-pass cross-item ordering, and protagonist "you". The naming overlap is also a known confusion point: `variable`/`variables` are aliases for *both* the `{%}` declaration intent (`compile.yaml` `variables:`) and the item-level `v:` block (`{$variables.key}`). See `dev-guide.md`.
+**`{$…}` family status:** it is a separate system from `{%}`. It has been standardized for *coverage* (resolves in `body`/`aid`/`render`/`name`), *surface* (dotted field refs accepted in item data), and *failure visibility* (residual unresolved-token warning). What remains **deferred** is collapsing its resolvers (`processFieldInterpolation` and the `render/parse.js` + `render/eval.js` walk, plus `applyTokenPass`/`applyCrossItemRefs` in `model/pronouns.js`) into one dispatcher — high risk because of pronoun scope, verb conjugation and protagonist "you". Phase 9 removed one of the original reasons: cross-item resolution is now a dependency-ordered single pass rather than an iterate-to-fixpoint loop. The naming overlap is also a known confusion point: `variable`/`variables` are aliases for *both* the `{%}` declaration intent (`compile.yaml` `variables:`) and the item-level `v:` block (`{$variables.key}`). See `dev-guide.md`.
 
 ---
 
@@ -357,6 +357,19 @@ line two (blank line above is kept)
 ```
 
 The `{preserve}` and `{/preserve}` tags are stripped from the output; only the inner content is emitted.
+
+## Diagnostics
+
+Template diagnostics all report through the render bus. Most name the template file; malformed render-function calls inside a card body field name the item but carry no line.
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `CL0413` | ERROR | A render-function call does not parse (e.g. `{join($body.x)}` is missing its quoted separator). |
+| `CL0414` | ERROR | A template uses a function name that is not one of `inline`, `join`, `list`, `and`, `prose`, `block`, or `keys`. |
+| `CL0415` | ERROR | An `{if}`, `{wrapper}`, or `{preserve}` block was opened but never closed. The block is emitted as literal text, so the downstream `CL0433` leak sweep may also fire. |
+| `CL0416` | ERROR | A partial includes itself, directly or indirectly. The failing directive is replaced with empty text and rendering continues. |
+| `CL0417` | ERROR | An `{include NAME}` names a partial that is not loaded. The directive is replaced with empty text and rendering continues. |
+| `CL0418` | ERROR | Cross-item render-function references form a genuine cycle (e.g. `A.body.x` expands `B.body.y` and vice versa). Every item and field on the cycle is named. |
 
 ---
 

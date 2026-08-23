@@ -15,12 +15,9 @@ const {
  *
  * This module is the façade over `render/parse.js` (lexer + AST) and `render/eval.js`
  * (the evaluation walk) — see the Phase 9 plan for why the engine moved. Five exports cross
- * the module boundary for real (`compile.js` and `emit/components.js`); eight more are
- * semantic functions re-exported from `eval.js` because `template.test.js` reaches them
- * directly; four (`processIncludes`, `processConditionals`, `processInline`,
- * `processWrapperBlocks`) are shims kept only so that file's three orphaned `describe`
- * blocks keep passing until Phase 9 Step 3 re-expresses them through `render()` and deletes
- * these. Nothing outside that test file has ever imported the four.
+ * the module boundary for real (`compile.js` and `emit/components.js`); the rest are
+ * semantic helpers and post-passes re-exported here because `template.test.js` reaches them
+ * directly.
  *
  * Interpolation syntax:
  *   {$field}                     - top-level card field
@@ -338,65 +335,12 @@ function expandIncludes(source, partials, report, stack) {
   });
 }
 
-// ── Shims (Phase 9 Decision 1) ───────────────────────────────────────────────
-//
-// Deleted in Phase 9 Step 3, along with the three template.test.js `describe` blocks they
-// exist for. Nothing outside that file has ever imported these four.
-//
-// `processConditionals`, `processWrapperBlocks` and `processInline` are thin: they parse
-// and walk through the real engine, safe because their own tests exercise one construct at
-// a time. `processIncludes` cannot take that shortcut — its two "throws on unknown/circular
-// partial" tests pin the *old* contract, which `expandIncludes` above no longer has (Step 0
-// turned those throws into diagnostics that degrade to empty text instead of aborting). So
-// this shim keeps the pre-Phase-9 string algorithm's expansion and cycle-detection logic,
-// minus the `\x00LBRACE\x00`/`\x00RBRACE\x00` sentinel dance the old function used to shield
-// escapes in included content — that mechanism is gone from `src/` entirely per this
-// session's stop conditions, and no test here exercises escapes through this shim (the two
-// that do call `render()` directly instead, which handles escapes via the lexer).
-function processIncludes(templateStr, partials, stack) {
-  if (!stack) stack = [];
-  return templateStr.replace(/\{include\s+(\S+)\}/g, function(match, name) {
-    const key = name.toLowerCase();
-    if (stack.includes(key)) {
-      throw new Error(`Circular partial include: ${[...stack, key].join(' → ')}`);
-    }
-    const partial = partials.get(key);
-    if (!partial) {
-      throw new Error(`Unknown partial "${name}" (no .partial file found)`);
-    }
-    return processIncludes(partial.content, partials, [...stack, key]);
-  });
-}
-
-function shimCtx() {
-  return { report: () => {}, preserved: [], flags: { wrapperUsed: false } };
-}
-
-function processConditionals(templateStr, data) {
-  const ctx = shimCtx();
-  return renderProgram(parse(tokenize(templateStr), ctx.report), data, ctx);
-}
-
-function processWrapperBlocks(templateStr, data) {
-  const ctx = shimCtx();
-  return renderProgram(parse(tokenize(templateStr), ctx.report), data, ctx);
-}
-
-function processInline(templateStr, data) {
-  const ctx = shimCtx();
-  return renderProgram(parse(tokenize(templateStr), ctx.report), data, ctx);
-}
-
 module.exports = {
   render,
   resolveField,
   applyFieldInterpolation,
   applyVariableInterpolation,
   applyFieldRenderFunctions,
-  processConditionals,
-  processInline,
-  processIncludes,
-  processWrapperBlocks,
   normalizeWhitespace,
   applyWrapper,
   isTruthy,
