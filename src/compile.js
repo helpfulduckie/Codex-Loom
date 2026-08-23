@@ -16,7 +16,7 @@ const { slotsForBranch } = require('./model/component');
 const { loadComponentDocument } = require('./loader/component');
 const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
-const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts, itemContext } = require('./util');
+const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts, itemContext, CONFIG_BASENAMES } = require('./util');
 const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
 const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES, LINT_LEVELS } = require('./diag');
@@ -2130,6 +2130,66 @@ function resolveArgs(positional) {
   };
 }
 
+/**
+ * Resolve `--migrate`'s config path by directory search alone (§14.2, §4.6, Decision 4).
+ *
+ * Deliberately not `resolveArgs`: that function calls `loadCompileConfig`, and the schema
+ * requires `version: 4` with no compatibility mode — a v3 project has no such key by
+ * definition, so routing `--migrate` through the shared resolver would reject exactly the
+ * input it exists to accept. This does only the filename search half, reusing
+ * `CONFIG_BASENAMES` (`util.js`) so it recognizes all four entry-point spellings rather
+ * than the two `resolveArgs`'s own `/\.ya?ml$/i` test knows.
+ */
+function resolveMigrateConfigPath(positional) {
+  if (positional && /\.ya?ml$/i.test(positional)) {
+    const resolved = path.resolve(positional);
+    return fs.existsSync(resolved) ? resolved : null;
+  }
+  const dir = path.resolve(positional || '.');
+  for (const base of CONFIG_BASENAMES) {
+    const candidate = path.join(dir, base);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Render `--migrate`'s review queue and notes as `migration-report.md` (§9.5, §14.2).
+ *
+ * Written beside the config rather than into `structure.reports` — Decision 4 — because
+ * the migrator creates that key during the same run (renaming `structure.overview`), so a
+ * path read from the config would depend on a key the invocation is midway through writing.
+ */
+function renderMigrationReport(result) {
+  const lines = [`# Migration report — ${result.configPath}`, ''];
+
+  lines.push('## What changed', '');
+  if (result.notes.length === 0) {
+    lines.push('Nothing to report.');
+  } else {
+    for (const note of result.notes) lines.push(`- ${note}`);
+  }
+  lines.push('');
+
+  lines.push(
+    '## Review queue', '',
+    'Every prose fragment that now carries a converted role token beside a hardcoded '
+    + 'gendered pronoun (§9.5). The migrator cannot convert the pronoun — only a person can '
+    + 'decide whether it should become a role reference too.', '',
+  );
+  if (!result.reviewQueue || result.reviewQueue.length === 0) {
+    lines.push('None found.');
+  } else {
+    for (const entry of result.reviewQueue) {
+      const at = entry.line ? `${entry.file}:${entry.line}` : entry.file;
+      lines.push(`- **${at}** — ${entry.text}`);
+    }
+  }
+  lines.push('');
+
+  return lines.join('\n');
+}
+
 // ── CLI entry point ───────────────────────────────────────────────────────────
 
 if (require.main === module) {
@@ -2143,6 +2203,8 @@ if (require.main === module) {
     ['cardSizes',  ['--card-sizes', '-b']],
     ['lint',       ['--lint',       '-L']],
     ['snapshot',   ['--snapshot']],
+    ['migrate',    ['--migrate']],
+    ['renameToCl', ['--rename-cl']],
     ['diff',       ['--with-diff',     '--diff',     '-d']],
     ['annotate',   ['--with-annotate', '--annotate', '-a']],
     ['inventory',  ['--with-inventory', '--inventory', '-i']],
@@ -2190,7 +2252,8 @@ if (require.main === module) {
   // lossy), so they are compile *options* — they force a compile rather than reading the
   // output dir like the post-hoc report modes (--leafReview/--overview/--seed-map/--card-sizes).
   const doCompile    = flags.compile || flags.diff || flags.annotate || flags.inventory ||
-    (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint && !flags.snapshot);
+    (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint &&
+      !flags.snapshot && !flags.migrate);
   const doLeafReview = flags.leafReview;
   const doOverview   = flags.overview;
   const doSeedMap    = flags.seedMap;
@@ -2201,15 +2264,50 @@ if (require.main === module) {
   if (positional.length === 0 && !flags.compile && !flags.diff && !flags.annotate &&
       !flags.inventory &&
       !flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint &&
-      !flags.snapshot) {
+      !flags.snapshot && !flags.migrate) {
     console.error(
       'Usage: codex-loom [mode flags] [compile options] [<folder | compile.yaml>]\n' +
-      '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --card-sizes|-b  --lint|-L  --snapshot\n' +
+      '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --card-sizes|-b  --lint|-L  --snapshot  --migrate\n' +
       '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-inventory|-i  --clean|-c  --verbose|-v  --live\n' +
+      '  Migrate options:       --rename-cl  (§4.6: also rename compile.yaml to compile.cl.yaml)\n' +
       '  Diagnostics:           --lint-level=off|error|warn  (overrides lint.level; reaches the opinion layer only)\n' +
-      '  No mode flag compiles. Report modes read the existing output tree; compile options force a compile.'
+      '  No mode flag compiles. Report modes read the existing output tree; compile options force a compile.\n' +
+      '  --migrate converts a v3 project in place and does not compile — run it again once migrated.'
     );
     process.exit(1);
+  }
+
+  // ── Migrate (§14.2, Decision 4) ──
+  //
+  // Resolves its own config path (by filename search alone, per util.js's CONFIG_BASENAMES)
+  // rather than through resolveArgs below: that function loads the config it finds, and the
+  // v4 schema requires `version: 4` with no compatibility mode. A v3 project — the only
+  // input `--migrate` exists to accept — has no such key, so routing through resolveArgs
+  // rejects it before the migrator ever runs. Handled and exited before resolveArgs is
+  // called at all, not merely before its result is used.
+  if (flags.migrate) {
+    const migrateConfigPath = resolveMigrateConfigPath(positional[0]);
+    if (!migrateConfigPath) {
+      console.error(`No v3 compile.yaml found at ${path.resolve(positional[0] || '.')}.`);
+      process.exit(1);
+    }
+    try {
+      const { migrateProjectFully } = require('./migrate');
+      const result = migrateProjectFully(migrateConfigPath, { renameToCl: flags.renameToCl });
+      const reportPath = path.join(path.dirname(result.configPath), 'migration-report.md');
+      fs.writeFileSync(reportPath, renderMigrationReport(result), 'utf8');
+      const queueCount = result.reviewQueue.length;
+      console.log(`Migrated ${migrateConfigPath}`);
+      console.log(
+        `Touched ${result.touched.length} file(s). Review queue: ${queueCount} `
+        + `entr${queueCount === 1 ? 'y' : 'ies'}.`
+      );
+      console.log(`Wrote ${reportPath}`);
+    } catch (err) {
+      console.error(`\nFatal: ${err.message}`);
+      process.exit(1);
+    }
+    process.exit(0);
   }
 
   const { configPath, scenarioRoot, outputDir, hasConfig, configLintLevel } = resolveArgs(positional[0]);

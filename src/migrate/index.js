@@ -25,6 +25,7 @@ const v3 = require('./v3');
 const { migratePlotEssentialsFiles } = require('./plot-essentials-apply');
 const { migrateDescriptionFiles } = require('./description');
 const { migrateOpeningFiles } = require('./opening');
+const { PRONOUN_SETS } = require('../model/pronouns');
 
 /**
  * Point `render.notesTemplate` at a notes template, once `aid.known` has become `notes:`.
@@ -100,6 +101,226 @@ function wireNotesTemplate(configPath, options = {}) {
     + 'without a notes template the marker is carried and never emitted (§4.5.1).',
   );
   return { notes, changed: true };
+}
+
+// ── Pseudo-roles (§9.1, §9.5, Phase 8 Step 3) ────────────────────────────────
+
+/**
+ * The gendered pronoun words the review queue watches for — read off `PRONOUN_SETS`
+ * rather than hand-listed, so the queue and the token-pass resolver agree by construction
+ * (per the Session B handoff). `verb_is`/`verb_was` are excluded: "is" and "was" are
+ * shared with every other pronoun set and would flag nearly every sentence.
+ */
+const GENDERED_PRONOUN_FIELDS = ['subject', 'object', 'possessive', 'reflexive', 'contraction'];
+const GENDERED_PRONOUN_WORDS = [...new Set(
+  ['female', 'male'].flatMap((set) => GENDERED_PRONOUN_FIELDS.map((field) => PRONOUN_SETS[set][field])),
+)];
+const GENDERED_PRONOUN_RE = new RegExp(
+  `\\b(?:${GENDERED_PRONOUN_WORDS.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
+  'i',
+);
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Rewrite `{%name}` to `{$ROLE}` in a string, moving a trailing `'s` inside the brace.
+ *
+ * `{%li}'s` and `{$LI's}` render the same possessive text, but only the second reaches
+ * `applyTokenPass`'s protagonist check (pronouns.js `:229`) — a token-for-token rewrite
+ * that left the apostrophe outside would look correct and silently drop that check.
+ */
+function rewritePseudoRoleTokens(text, name, roleName) {
+  const possessive = new RegExp(`\\{%${escapeRegExp(name)}\\}'s`, 'gi');
+  const plain = new RegExp(`\\{%${escapeRegExp(name)}\\}`, 'gi');
+  let changed = false;
+  let out = text.replace(possessive, () => { changed = true; return `{$${roleName}'s}`; });
+  out = out.replace(plain, () => { changed = true; return `{$${roleName}}`; });
+  return { text: out, changed };
+}
+
+/** True for any file the pseudo-role pass reads as prose: items, components, templates. */
+function isProseFile(name) {
+  return /\.(ya?ml|md|template|partial)$/i.test(name);
+}
+
+function walkFiles(dir, skip, fn) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) { walkFiles(full, skip, fn); continue; }
+    if (!entry.isFile() || !isProseFile(entry.name)) continue;
+    if (skip && path.resolve(full) === path.resolve(skip)) continue;
+    fn(full);
+  }
+}
+
+/**
+ * Convert a v3 hand-rolled pseudo-role — a variable whose value is a character's item id,
+ * standing in for the `roles:` indirection §9.2 gives a name (§9.1's `li: Malcolm`) — into
+ * a real role, and emit §9.5's review queue.
+ *
+ * Runs after the config break and after item structural migration, on the compiler's own
+ * loader (`wireNotesTemplate`'s neighbor): both `migrateConfigDocument` (edits a bare YAML
+ * Document, no registry in reach) and `migrateProjectFiles` (string rewriting with nothing
+ * to resolve against) run before the project is loadable, and "does this variable's value
+ * name a known item" needs a registry to ask.
+ *
+ * Detection (the handoff's one open question, settled here): a variable converts only if
+ * (a) it is referenced as `{%name}` somewhere in item or component prose, and (b) every
+ * value it is ever bound to — root and every branch — resolves to a known item id. (a)
+ * is load-bearing on its own: a project may declare other variables whose values happen to
+ * name an item (The Institute's `protag`/`liname`, used only to build `openingFile`'s
+ * path) without ever meaning them as a role, and (a) is what keeps those from converting.
+ * A false positive is the most destructive thing this migrator can do — it rewrites prose
+ * in every file — so every conversion is named in the notes for review rather than made
+ * silently.
+ */
+function migratePseudoRoles(configPath, options = {}) {
+  const notes = [];
+  const touched = [];
+  const conversions = [];
+  const reviewQueue = [];
+  const projectDir = path.dirname(configPath);
+
+  const { loadCompileConfig, loadItemsFromDir, buildRegistry, mergeRegistries } = require('../loader');
+  const { buildCanonRegistry } = require('../loader/registry');
+
+  const saved = { log: console.log, warn: console.warn, error: console.error };
+  let registry;
+  try {
+    console.log = () => {}; console.warn = () => {}; console.error = () => {};
+    const config = loadCompileConfig(configPath);
+    const canonRegistry = buildCanonRegistry(config._resolvedLibrary);
+    const projectItems = loadItemsFromDir(config._resolvedItems).filter((d) => !d.include);
+    const projectRegistry = buildRegistry(projectItems, 'project');
+    registry = mergeRegistries(canonRegistry, projectRegistry);
+  } finally {
+    Object.assign(console, saved);
+  }
+
+  // Step 1: names actually used as {%name} in prose. Config-only variables (path pieces,
+  // scenario switches) never reach this set, no matter what their value looks like.
+  const usedNames = new Set();
+  walkFiles(projectDir, configPath, (full) => {
+    const text = fs.readFileSync(full, 'utf8');
+    for (const m of text.matchAll(/\{%([A-Za-z0-9_]+)\}/g)) usedNames.add(m[1].toLowerCase());
+  });
+  if (usedNames.size === 0) return { notes, touched, conversions, reviewQueue };
+
+  // Step 2: every declared value of each such name, at root and every branch.
+  const source = fs.readFileSync(configPath, 'utf8');
+  const doc = YAML.parseDocument(source);
+  const declaredAt = new Map(); // lowercase name -> [{ nodePath, key, value }]
+
+  const collectAt = (nodePath) => {
+    const vars = doc.getIn([...nodePath, 'variables']);
+    if (!YAML.isMap(vars)) return;
+    for (const pair of vars.items) {
+      const key = String(pair.key.value);
+      const lower = key.toLowerCase();
+      if (!usedNames.has(lower)) continue;
+      const value = pair.value && pair.value.value;
+      if (typeof value !== 'string') continue;
+      if (!declaredAt.has(lower)) declaredAt.set(lower, []);
+      declaredAt.get(lower).push({ nodePath, key, value });
+    }
+  };
+  collectAt([]);
+  const walkBranches = (branchPath) => {
+    const node = doc.getIn(branchPath);
+    if (!YAML.isMap(node)) return;
+    for (const pair of node.items) {
+      const name = String(pair.key.value);
+      collectAt([...branchPath, name]);
+      walkBranches([...branchPath, name, 'branches']);
+    }
+  };
+  walkBranches(['branches']);
+
+  // Step 3: a name is a pseudo-role only if every binding it was ever given resolves — one
+  // unconverted binding means it is an ordinary variable that happens to share a value
+  // with an item somewhere, not a role (rebinding to a *different* known item, as `li`
+  // does across The Institute's branches, is corroboration but is not required).
+  const candidates = [];
+  for (const [lower, bindings] of declaredAt) {
+    if (bindings.every((b) => registry.has(b.value.toLowerCase()))) {
+      candidates.push({ name: bindings[0].key, roleName: bindings[0].key.toUpperCase(), bindings });
+    }
+  }
+  if (candidates.length === 0) return { notes, touched, conversions, reviewQueue };
+
+  // Step 4: move each candidate from variables: to roles: at every node it was declared,
+  // and rewrite {%name} to {$ROLE} in the config's own scalars — a component's text can be
+  // written inline in compile.yaml (§9.7) as well as in a separate file.
+  for (const { name, roleName, bindings } of candidates) {
+    for (const { nodePath } of bindings) {
+      const value = doc.getIn([...nodePath, 'variables', name], true);
+      doc.setIn([...nodePath, 'roles', roleName], value);
+      doc.deleteIn([...nodePath, 'variables', name]);
+    }
+    conversions.push({ name, roleName, values: [...new Set(bindings.map((b) => b.value))] });
+  }
+  YAML.visit(doc, {
+    Scalar(_key, node) {
+      if (typeof node.value !== 'string') return;
+      let next = node.value;
+      let changed = false;
+      for (const { name, roleName } of candidates) {
+        const result = rewritePseudoRoleTokens(next, name, roleName);
+        next = result.text;
+        changed = changed || result.changed;
+      }
+      if (changed) {
+        if (GENDERED_PRONOUN_RE.test(next)) {
+          reviewQueue.push({ file: path.relative(projectDir, configPath), line: null, text: next.trim() });
+        }
+        node.value = next;
+        delete node.type;
+      }
+    },
+  });
+  const output = doc.toString({ lineWidth: 0 });
+  if (output !== source) {
+    if (!options.dryRun) fs.writeFileSync(configPath, output, 'utf8');
+    touched.push(configPath);
+  }
+
+  // Step 5: the same rewrite over every other prose file, tracking the review queue —
+  // every line that now carries a converted role token beside a hardcoded gendered
+  // pronoun (§9.1's own TI.Veryn.yaml case: "{$LI} was your secret lover ... his betrayal").
+  walkFiles(projectDir, configPath, (full) => {
+    const fileSource = fs.readFileSync(full, 'utf8');
+    let text = fileSource;
+    let changed = false;
+    for (const { name, roleName } of candidates) {
+      const result = rewritePseudoRoleTokens(text, name, roleName);
+      text = result.text;
+      changed = changed || result.changed;
+    }
+    if (!changed) return;
+    if (!options.dryRun) fs.writeFileSync(full, text, 'utf8');
+    touched.push(full);
+
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (!candidates.some(({ roleName }) => line.includes(`{$${roleName}`))) continue;
+      if (GENDERED_PRONOUN_RE.test(line)) {
+        reviewQueue.push({ file: path.relative(projectDir, full), line: i + 1, text: line.trim() });
+      }
+    }
+  });
+
+  for (const { name, roleName, values } of conversions) {
+    notes.push(
+      `converted variable "${name}" to role "${roleName}" — its value (${values.join(', ')}) resolved `
+      + 'to a known item id everywhere it was bound (§9.1, §9.2). Check the review queue for prose '
+      + 'combining the new role token with a hardcoded pronoun.',
+    );
+  }
+
+  return { notes, touched, conversions, reviewQueue };
 }
 
 /**
@@ -205,6 +426,13 @@ function migrateProjectFully(configPath, options = {}) {
   notes.push(...wired.notes);
   if (wired.changed) touched.push(configPath);
 
+  // Phase 8 Step 3 (§9.1, §9.2). Beside wireNotesTemplate for the same reason: both need
+  // the project read back through the compiler's own loader, which only exists once the
+  // config break above has run.
+  const pseudoRoles = migratePseudoRoles(configPath, options);
+  notes.push(...pseudoRoles.notes);
+  touched.push(...pseudoRoles.touched);
+
   const pe = migratePlotEssentialsFiles(configPath, options);
   notes.push(...pe.notes);
   touched.push(...pe.touched);
@@ -234,9 +462,13 @@ function migrateProjectFully(configPath, options = {}) {
     finalConfigPath = renamed.configPath;
   }
 
-  return { notes, touched, changes: config.changes, configPath: finalConfigPath };
+  return {
+    notes, touched, changes: config.changes, configPath: finalConfigPath,
+    reviewQueue: pseudoRoles.reviewQueue,
+  };
 }
 
 module.exports = {
   migrateProjectFully, wireNotesTemplate, migratePlaceholders, renameConfigToCl,
+  migratePseudoRoles, rewritePseudoRoleTokens, GENDERED_PRONOUN_RE, GENDERED_PRONOUN_WORDS,
 };

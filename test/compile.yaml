@@ -9,15 +9,19 @@ structure:
       - ./cards
   output: ./output
 
-protagonist: Aness
+roles:
+  protagonist: Aness
 
 render:
   notesTemplate: Notes
 
 branches:
   subject:
-    protagonist: Aness
+    roles:
+      protagonist: Aness
   researcher:
-    protagonist: Veyrn
+    roles:
+      protagonist: Veyrn
   felix:
-    protagonist: Aness
+    roles:
+      protagonist: Aness

@@ -490,3 +490,70 @@ describe('CLI --lint-level flag', () => {
     expect(result.stderr).toMatch(/off, error, warn/);
   });
 });
+
+// ── --migrate flag (§14.2, Decision 4) ────────────────────────────────────────
+
+const V3_COMPILE_YAML = `
+structure:
+  input:
+    items: []
+  output: ./output
+protagonist: Test
+branches:
+  only: {}
+`.trimStart();
+
+describe('CLI --migrate flag', () => {
+  let tmp;
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cli-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true });
+  });
+
+  test('does not trip the version: 4 requirement a v3 project cannot meet', () => {
+    write(path.join(tmp, 'proj', 'compile.yaml'), V3_COMPILE_YAML);
+    const result = run(['--migrate', path.join(tmp, 'proj')], tmp);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+  });
+
+  test('rewrites protagonist: to roles.protagonist: and adds version: 4', () => {
+    write(path.join(tmp, 'proj', 'compile.yaml'), V3_COMPILE_YAML);
+    run(['--migrate', path.join(tmp, 'proj')], tmp);
+    const config = fs.readFileSync(path.join(tmp, 'proj', 'compile.yaml'), 'utf8');
+    expect(config).toContain('version: 4');
+    expect(config).toMatch(/roles:\s*\n\s*protagonist: Test/);
+    expect(config).not.toMatch(/^protagonist:/m);
+  });
+
+  test('writes migration-report.md beside the config', () => {
+    write(path.join(tmp, 'proj', 'compile.yaml'), V3_COMPILE_YAML);
+    run(['--migrate', path.join(tmp, 'proj')], tmp);
+    const report = fs.readFileSync(path.join(tmp, 'proj', 'migration-report.md'), 'utf8');
+    expect(report).toContain('# Migration report');
+    expect(report).toContain('## Review queue');
+  });
+
+  test('does not compile — no output tree is written', () => {
+    write(path.join(tmp, 'proj', 'compile.yaml'), V3_COMPILE_YAML);
+    run(['--migrate', path.join(tmp, 'proj')], tmp);
+    expect(fs.existsSync(path.join(tmp, 'proj', 'output'))).toBe(false);
+  });
+
+  test('with no v3 config anywhere, exits nonzero rather than silently doing nothing', () => {
+    const result = run(['--migrate', path.join(tmp, 'nowhere')], tmp);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/No v3 compile\.yaml found/);
+  });
+
+  test('finds compile.yaml in the current directory when no path is given', () => {
+    write(path.join(tmp, 'proj', 'compile.yaml'), V3_COMPILE_YAML);
+    const result = run(['--migrate'], path.join(tmp, 'proj'));
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(tmp, 'proj', 'migration-report.md'))).toBe(true);
+  });
+});

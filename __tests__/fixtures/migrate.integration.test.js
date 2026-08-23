@@ -72,13 +72,16 @@ function quietly(fn) {
 function migrateAndCompile(tmpDir, project) {
   const configPath = path.join(tmpDir, project.dir, LOOM_SUBDIR, 'compile.yaml');
 
-  const notes = [];
+  let notes = [];
+  let reviewQueue = [];
   quietly(() => {
-    notes.push(...migrateProjectFully(configPath).notes);
+    const result = migrateProjectFully(configPath);
+    notes = result.notes;
+    reviewQueue = result.reviewQueue;
     compile(configPath);
   });
 
-  return { outputDir: path.join(tmpDir, project.dir, OUTPUT_SUBDIR), notes };
+  return { outputDir: path.join(tmpDir, project.dir, OUTPUT_SUBDIR), notes, reviewQueue, configPath };
 }
 
 (HAVE_FIXTURES ? describe : describe.skip)('migrating a real v3 project reproduces the hand conversion\'s output', () => {
@@ -203,6 +206,72 @@ function migrateAndCompile(tmpDir, project) {
         const config = YAML.parse(fs.readFileSync(configPath, 'utf8'));
         const input = (config && config.structure && config.structure.input) || {};
         expect([project.name, input.snapshot]).toEqual([project.name, undefined]);
+      }
+    });
+  });
+
+  describe('Phase 8 Step 3 — the pseudo-role conversion, checked against the real corpus', () => {
+    // §14.2's proven-empty rule, the other direction: Phase 8 changes syntax and this time
+    // the corpus genuinely has one case to convert. The Institute's `li: Malcolm` — §9.1's
+    // motivating defect — is the only pseudo-role in any of the three golden projects;
+    // checked here rather than assumed, the same way Phase 4 and Phase 7 checked "nothing
+    // to convert" for their own keys.
+
+    test('only The Institute converts a variable to a role', () => {
+      for (const project of PROJECTS) {
+        const configPath = path.join(tmpDir, project.dir, LOOM_SUBDIR, 'compile.yaml');
+        const config = YAML.parse(fs.readFileSync(configPath, 'utf8'));
+        const roleNames = Object.keys((config && config.roles) || {}).filter((k) => k !== 'protagonist');
+        const expected = project.name === 'The Institute' ? ['LI'] : [];
+        expect([project.name, roleNames]).toEqual([project.name, expected]);
+      }
+    });
+
+    test('The Institute\'s li: role inherits and rebinds exactly where the variable did', () => {
+      const configPath = path.join(tmpDir, 'Esudia', 'The Institute', LOOM_SUBDIR, 'compile.yaml');
+      const config = YAML.parse(fs.readFileSync(configPath, 'utf8'));
+      expect(config.roles.LI).toBe('Malcolm');
+      expect(config.variables.li).toBeUndefined();
+      const branch = config.branches['Free Form'].branches.Aness.branches.Zephon;
+      expect(branch.roles.LI).toBe('Zephon');
+      expect(branch.variables && branch.variables.li).toBeUndefined();
+    });
+
+    test('variables used only to build another variable\'s value do not convert, even '
+      + 'though their own value also names an item', () => {
+      // `protag: veryn` and `liname: malcolm` both resolve to a known item id exactly like
+      // `li` does, but neither is ever written as `{%protag}` or `{%liname}` in prose —
+      // only inside `openingFile`'s own path expression in compile.yaml. Converting them
+      // would have deleted a variable `openingFile` still depends on.
+      const configPath = path.join(tmpDir, 'Esudia', 'The Institute', LOOM_SUBDIR, 'compile.yaml');
+      const config = YAML.parse(fs.readFileSync(configPath, 'utf8'));
+      expect(config.variables.protag).toBe('veryn');
+      expect(config.variables.liname).toBe('malcolm');
+      expect(config.variables.openingFile).toContain('{%protag}');
+      expect(config.variables.openingFile).toContain('{%liname}');
+    });
+
+    test('the review queue lists §9.1\'s own case — a converted role beside a hardcoded pronoun', () => {
+      const queue = results.get('The Institute').reviewQueue;
+      const hit = queue.find((e) => e.file.includes('TI.Veryn.yaml') && e.text.includes('his betrayal'));
+      expect(hit).toBeDefined();
+    });
+
+    test('the review queue covers component sections too, not only item bodies (§9.7)', () => {
+      // No golden project's component files carry a role token beside a pronoun today —
+      // the empty result below is a fact about the corpus, not a gap in the scan. Proven
+      // by construction: `migratePseudoRoles` walks every .yaml/.md/.template/.partial
+      // file under the project, item and component alike, with the same rewrite pass.
+      for (const project of PROJECTS) {
+        const queue = results.get(project.name).reviewQueue;
+        const inComponents = queue.filter((e) => /components?[\\/]/i.test(e.file));
+        expect([project.name, inComponents]).toEqual([project.name, []]);
+      }
+    });
+
+    test('Baseline and Coinflip Company have no pseudo-role review queue at all', () => {
+      for (const name of ['Baseline', 'Coinflip Company']) {
+        expect([name, results.get(name).reviewQueue]).toEqual([name, []]);
       }
     });
   });
