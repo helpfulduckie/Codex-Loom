@@ -374,5 +374,5 @@ function walkBranchTree(branches, visit, state = null, path = []) {
 
 module.exports = {
   resolveBranchSpec, enumerateLeaves, getBranchConfig,
-  walkBranchChain, walkBranchTree, mergePlaceholders, localRoleKeysOf,
+  walkBranchChain, walkBranchTree, mergePlaceholders, mergeUnbindable, localRoleKeysOf,
 };

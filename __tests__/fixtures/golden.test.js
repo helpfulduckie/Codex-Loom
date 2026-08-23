@@ -49,12 +49,16 @@ const HAVE_FIXTURES = fs.existsSync(path.join(GOLDEN_DIR, 'projects.js'));
 
 /**
  * `describe.each` rejects an empty array, so the absent case supplies one placeholder rather
- * than an empty project list. `reports` is non-empty for the same reason — the nested
- * `describe.each(project.reports)` is still evaluated to collect test names even when the
- * enclosing describe is skipped. Neither value is ever read: no hook body runs.
+ * than an empty project list. `reports` and `compileReports` are non-empty for the same
+ * reason — the nested `describe.each(project.reports)` and
+ * `describe.each(project.compileReports || [])` are still evaluated to collect test names even
+ * when the enclosing describe is skipped. None of the three values is ever read: no hook body
+ * runs.
  */
 const ABSENT = {
-  PROJECTS: [{ name: 'goldenFixtures/ is not cloned — see .gitignore', dir: '', reports: ['none'] }],
+  PROJECTS: [{
+    name: 'goldenFixtures/ is not cloned — see .gitignore', dir: '', reports: ['none'], compileReports: ['none'],
+  }],
   OUTPUT_SUBDIR: '',
   BASELINE_SUBDIR: '',
   SOURCE_SUBDIR: '',
@@ -89,8 +93,16 @@ const ABSENT = {
  * is that check doing its job: every line of the file, headings included, differs by one
  * trailing `\r`. The content itself is unchanged — confirmed by rendering the converted
  * `sections:` document against the CRLF source with only its line endings normalized.
+ *
+ * Phase 10 Step 4 (the roles gap, §9.2/§9.3) resets this to `['body']` alone rather than
+ * inheriting Phase 6's `title` — nothing here touches a heading, and carrying an unused
+ * allowance forward is exactly the accumulation this constant exists to prevent. Scoped
+ * to two files by `EXPECTED_DIFF_FILES` below, both hand-edited to carry a `{$role}`
+ * reference that resolves once `writeFramingRecursive` and the root Description render
+ * receive a roles table (`compile.js`) — everything else in both projects is untouched
+ * source, so a diff anywhere else is the regression this scoping exists to catch.
  */
-const EXPECTED_DIFF_CLASSES = ['body', 'title'];
+const EXPECTED_DIFF_CLASSES = ['body'];
 
 /**
  * The files the phase in progress is allowed to change, when the class alone cannot say.
@@ -112,8 +124,17 @@ const EXPECTED_DIFF_CLASSES = ['body', 'title'];
  * `null` means "no file restriction" and is the setting for a phase whose classes already
  * discriminate. Widening this is the same deliberate act as widening the classes: it says
  * which files a reviewer looked at, and nothing outside them may move.
+ *
+ * Phase 10 Step 4 replaces Phase 6's list rather than adding to it — `Components/Plot
+ * Essentials.md` and `Components/AI Instructions.md` carry no role reference in either
+ * project and are not part of this step's diff. The two paths below are exactly the two
+ * files hand-edited to prove the fix: Baseline's root `Description.md`, and The
+ * Institute's one converted interior framing at `Free Form/Aness` — every other of that
+ * project's 31 other `Who owns you?`/`Do they love or hate you?` occurrences stays a
+ * literal string outside `renderSectionedComponent` entirely, so this pattern is the
+ * whole of what should move.
  */
-const EXPECTED_DIFF_FILES = /(^|\/)Components\/(Plot Essentials|AI Instructions)\.md$/;
+const EXPECTED_DIFF_FILES = /^(Description\.md|Branches\/Free Form\/Branches\/Aness\/Components\/Opening\.md)$/;
 
 // The fixture set itself lives beside the fixtures, because `scripts/rebaseline.js`
 // regenerates what this file checks and the two must not drift apart.

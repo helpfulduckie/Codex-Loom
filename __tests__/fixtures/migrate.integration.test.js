@@ -120,6 +120,22 @@ function migrateAndCompile(tmpDir, project) {
           // while the baseline now reflects the `sections:` conversion — a real, permanent
           // divergence for this one file rather than a bug in either path.
           if (path.basename(rel) === 'AI Instructions.md') return false;
+          // Phase 10 Step 4's roles gap (§9.2/§9.3): two files were hand-edited in v4/ to
+          // carry a `{$role}` reference proving `writeFramingRecursive` and the root
+          // Description render now resolve roles — content with no v3 spelling to migrate
+          // from at all, unlike Phase 6's re-routed-but-unchanged passthrough. `Loom/`'s v3
+          // block for this framing (`ocLoveInterest`) predates the role system, so a fresh
+          // migration reproduces the old literal sentence and can never reproduce a
+          // hand-added token. Path-scoped rather than by basename, unlike the AI
+          // Instructions exception above — `Description.md` and `Opening.md` are common
+          // enough filenames elsewhere that excluding every instance would hide a real
+          // regression in either project's other output.
+          if (
+            path.join(project.dir, rel) === path.join('Baseline', 'Baseline', 'Description.md')
+            || path.join(project.dir, rel) === path.join(
+              'Esudia', 'The Institute', 'Branches', 'Free Form', 'Branches', 'Aness', 'Components', 'Opening.md',
+            )
+          ) return false;
           const a = path.join(outputDir, ...rel.split('/'));
           const b = path.join(baselineDir(), ...rel.split('/'));
           return !fs.existsSync(a) || !fs.readFileSync(a).equals(fs.readFileSync(b));

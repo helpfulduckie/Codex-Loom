@@ -215,3 +215,81 @@ describe('CL0545 — a role declared and never referenced', () => {
     expect(hits[0]).toMatch(/LI/);
   });
 });
+
+/**
+ * The roles gap (Phase 10 Step 4, v4 spec §9.2/§9.3): `branchFraming` and the root
+ * `Description` never received a roles table or a resolved protagonist, so a `{$role}`
+ * token at either site read as an undeclared role (CL0540) rather than resolving. Proven
+ * by the rendered file, not by the call site's arguments — per the step's own stop
+ * condition, an empty diff here would mean the fixture doesn't exercise the gap, not that
+ * it's closed.
+ */
+describe('the roles gap — branchFraming and the root Description', () => {
+  const files = {
+    ...BASE,
+    'Codex/items.yaml': [
+      '- id: Malcolm',
+      '  name: {display: Malcolm, full: Malcolm Vale}',
+      '  pronouns: male',
+      '  aid: {type: Character, triggers: [Malcolm]}',
+      '  render: {template: Full}',
+      '  body:',
+      '    Tagline: Malcolm walked in',
+    ].join('\n'),
+    'components/framing.cl.yaml': [
+      'sections:',
+      '  ask:',
+      '    text: "History with {$LI} is unresolved."',
+      '    render: {position: 1}',
+    ].join('\n'),
+    'components/description.cl.yaml': [
+      'sections:',
+      '  blurb:',
+      '    text: "Rumors mention {$LI}."',
+      '    render: {position: 1}',
+    ].join('\n'),
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'roles:',
+      '  LI: Malcolm',
+      'components:',
+      '  description: ./components/description.cl.yaml',
+      'branches:',
+      '  act1:',
+      '    components:',
+      '      branchFraming: ./components/framing.cl.yaml',
+      '    branches:',
+      '      calm: {components: {opening: Which way?}}',
+      '      storm: {components: {opening: Which way?}}',
+      '',
+    ].join('\n'),
+  };
+
+  test('a branchFraming component at an interior node resolves a role reference', () => {
+    const { output, tmpDir } = compileProject(files);
+    expect(occurrences(output, 'CL0540')).toEqual([]);
+    const framing = fs.readFileSync(
+      path.join(tmpDir, 'output', 'Branches', 'act1', 'Components', 'Opening.md'), 'utf8',
+    ).trim();
+    expect(framing).toBe('History with Malcolm is unresolved.');
+  });
+
+  test('the root Description resolves a role reference the same way', () => {
+    const { output, tmpDir } = compileProject(files);
+    expect(occurrences(output, 'CL0540')).toEqual([]);
+    const description = fs.readFileSync(
+      path.join(tmpDir, 'output', 'Description.md'), 'utf8',
+    ).trim();
+    expect(description).toBe('Rumors mention Malcolm.');
+  });
+
+  test('both sites calling onRoleUsed means CL0545 does not fire for a role only they reference', () => {
+    const { output } = compileProject(files);
+    expect(occurrences(output, 'CL0545')).toEqual([]);
+  });
+});

@@ -8,7 +8,7 @@ const {
   buildRegistry, mergeRegistries, loadYaml,
 } = require('./loader');
 const {
-  resolveItem, enumerateLeaves, walkBranchChain, walkBranchTree, mergePlaceholders,
+  resolveItem, enumerateLeaves, walkBranchChain, walkBranchTree, mergePlaceholders, mergeUnbindable,
   resolveBranchSpec, collectVariantDeltas, localRoleKeysOf,
 } = require('./resolver');
 const { resolvePlacements } = require('./model/item');
@@ -1349,12 +1349,24 @@ function writeComponentFile(outputDir, filename, content, sink) {
  * to do by hand — `declaredOpening !== undefined ? … : state.inheritedOpening` — is what
  * `buildCompileContext` already does for every component. What is left here is the node
  * write the leaf loop genuinely cannot reach.
+ *
+ * **Phase 10 Step 4 threads roles and a resolved protagonist through the same state channel
+ * `variables` and `table` already ride.** `walkBranchTree`'s visitor returns the state its
+ * children inherit, so per-node `roles`/`branchProtagonist` need no change to that mechanism
+ * — they merge into `state` exactly the way `branchVars`/`table` already do, via
+ * `mergeUnbindable`, the same key-wise `~`-deleting merge `walkBranchChain` uses for roles
+ * (`model/branches.js`), reused rather than reimplemented so the two cannot disagree. Two
+ * new *inputs* to the function were unavoidable — `rootRoles`, to seed the walk with what
+ * `config.roles` declares before any branch node is reached, and `onRoleUsed`, the sink the
+ * leaf loop's `resolveRole` already calls on every successful resolution — because this is a
+ * top-level function with no closure over `compile()`'s scope. Neither is `roles` or
+ * `branchProtagonist` itself: those still ride via state, computed fresh per node.
  */
-function writeFramingRecursive(branches, outputBase, configBase, variables, currentPath = [], verbose = false, rootPlaceholders = null, diagnostics = null, usage = null, loadSectioned = null, registry = null) {
+function writeFramingRecursive(branches, outputBase, configBase, variables, currentPath = [], verbose = false, rootPlaceholders = null, diagnostics = null, usage = null, loadSectioned = null, registry = null, rootRoles = null, onRoleUsed = null) {
   // An unbranched project has no interior nodes, so there is no framing to write.
   if (!branches || typeof branches !== 'object') return;
 
-  const renderFraming = (spec, nodePath, vars, table, name) => {
+  const renderFraming = (spec, nodePath, vars, table, name, roles, branchProtagonist) => {
     const resolvedSpec = resolveComponentSpec(spec, configBase, vars);
     const isFile = typeof resolvedSpec === 'string' && fs.existsSync(resolvedSpec)
       && fs.statSync(resolvedSpec).isFile();
@@ -1371,13 +1383,16 @@ function writeFramingRecursive(branches, outputBase, configBase, variables, curr
       // leaf, so there is no cast here to route into it. Same call the scenario blurb makes.
       const { text } = renderSectionedComponent(component, nodePath, new Map(), {
         defaultHeadingLevel: FRAMING_DESCRIPTOR.defaultHeadingLevel,
-        variables: vars, registry, branchProtagonist: null,
+        variables: vars, registry, branchProtagonist,
+        roles, onRoleUsed,
         onWarn: busWarner(diagnostics, { file: String(resolvedSpec) }),
       });
       return text;
     }
     return resolveOpeningContent(spec, configBase, vars);
   };
+
+  const rootRolesDeclared = !!(rootRoles && Object.keys(rootRoles).length);
 
   walkBranchTree(branches, ({ name, node, path: nodePath, isLeaf, state }) => {
     const nodeOutput = path.join(state.outputBase, 'Branches', name);
@@ -1391,11 +1406,31 @@ function writeFramingRecursive(branches, outputBase, configBase, variables, curr
 
     const table = mergePlaceholders(state.table, node);
 
+    // Roles merge the same way `walkBranchChain` merges them for the leaf loop — key-wise,
+    // `~` deleting, `rolesDeclared` sticky once any ancestor (including the project root)
+    // declares a `roles:` key at all, even if every binding it declared unbinds to nothing
+    // (§9.3's CL0540 gating cares about that distinction, not just whether the merged table
+    // is non-empty). No `onWarn` here, matching `mergePlaceholders` two lines above: this
+    // walker has never surfaced per-node unbind warnings and Step 4 does not start now.
+    const rolesDeclared = state.rolesDeclared || !!(node && node.roles);
+    const roles = mergeUnbindable(state.roles, node && node.roles, {
+      code: DIAG_CODES.ROLE_UNBIND_UNKNOWN, kind: 'role', onWarn: null,
+    });
+    // Same derivation the leaf loop uses (`chain.roles.protagonist`, resolved and
+    // lowercased against the branch's own variables) — reading the merged table directly
+    // rather than gating on `rolesDeclared` first, because an inherited protagonist is a
+    // real binding whether or not *this* node is the one that declared `roles:`.
+    const inheritedProtagonist = roles.protagonist || '';
+    const branchProtagonist = resolveVariables(inheritedProtagonist, branchVars).toLowerCase() || null;
+
     if (framing != null) {
       if (isLeaf) {
         console.warn(`  WARN: branchFraming on leaf branch "${name}" — ignoring`);
       } else {
-        const framingText = renderFraming(framing, nodePath, branchVars, table, name);
+        const framingText = renderFraming(
+          framing, nodePath, branchVars, table, name,
+          rolesDeclared ? roles : null, branchProtagonist,
+        );
         if (framingText) {
           checkUndeclaredPlaceholders(framingText, table, {
             diagnostics, where: `the branch framing on "${name}"`,
@@ -1413,8 +1448,13 @@ function writeFramingRecursive(branches, outputBase, configBase, variables, curr
       }
     }
 
-    return { outputBase: nodeOutput, variables: branchVars, table };
-  }, { outputBase, variables, table: Object.assign({}, rootPlaceholders || {}) });
+    return {
+      outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
+    };
+  }, {
+    outputBase, variables, table: Object.assign({}, rootPlaceholders || {}),
+    roles: Object.assign({}, rootRoles || {}), rolesDeclared: rootRolesDeclared,
+  });
 }
 
 /**
@@ -2012,7 +2052,7 @@ function compileRun(configPath, options, buses) {
     config.branches, config._resolvedOutput, config._base,
     config._variables || config.variables || {},
     [], verbose, config.placeholders, compileDiagnostics, placeholderUsage,
-    loadSectioned, registry,
+    loadSectioned, registry, config.roles || {}, onRoleUsed,
   );
 
   writeLabelsRecursive(
@@ -2076,11 +2116,19 @@ function compileRun(configPath, options, buses) {
       const descComponent = loadSectioned(descSpec, DESCRIPTION_DESCRIPTOR);
       if (descComponent) {
         descMetadata = descComponent.metadata;
+        // `branchProtagonist` stays null: the blurb belongs to the project, not to any
+        // branch, so there is no chain to take a protagonist from (Phase 10 Step 4).
+        // `roles` still reaches the render, gated the same way the leaf loop gates it
+        // (Decision — `buildCompileContext`'s `chain.rolesDeclared ? chain.roles : null`),
+        // so a `{$role}` token in the root description resolves instead of reading as an
+        // undeclared placeholder, and `onRoleUsed` marks it used so `CL0545` agrees.
+        const rootRolesDeclared = !!(config.roles && Object.keys(config.roles).length);
         ({ text: combined } = renderSectionedComponent(
           descComponent, [], new Map(),
           {
             defaultHeadingLevel: DESCRIPTION_DESCRIPTOR.defaultHeadingLevel,
             variables: rootVariables || {}, registry, branchProtagonist: null,
+            roles: rootRolesDeclared ? config.roles : null, onRoleUsed,
             onWarn: busWarner(compileDiagnostics, { file: String(descSpec) }),
           },
         ));
