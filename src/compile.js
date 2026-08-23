@@ -16,7 +16,7 @@ const { slotsForBranch } = require('./model/component');
 const { loadComponentDocument } = require('./loader/component');
 const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
-const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts, itemContext, CONFIG_BASENAMES } = require('./util');
+const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts, itemContext, CONFIG_BASENAMES, normalizeVarKey } = require('./util');
 const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
 const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES, LINT_LEVELS } = require('./diag');
@@ -877,6 +877,207 @@ function reportUnusedRoles(declarations, usage, { diagnostics, file } = {}) {
   return unused;
 }
 
+/**
+ * The fixed keys `itemContext` (`util.js`) attaches to every item's render context. A render
+ * function's first path segment matching one of these resolves against the *current* item —
+ * `resolveField`'s (`render/eval.js`) itemMap pivot only fires when the segment matches
+ * neither this set nor the current item, so the dependency graph below must exclude them the
+ * same way or it would draw an edge for every plain `$body.x` reference.
+ */
+const ITEM_CONTEXT_KEYS = new Set(['id', 'name', 'pronouns', 'aid', 'render', 'body', 'v', 'notes']);
+
+/** The render-function call syntax `processFieldRenderFunctions` (`template.js`) dispatches on. */
+const RENDER_FN_PREFIXES = ['inline(', 'join(', 'list(', 'and(', 'prose(', 'block(', 'keys('];
+
+/**
+ * Scan one item's body for cross-item render-function references (Phase 9 Step 2).
+ *
+ * An edge exists only when a render function's *first* path segment names another item —
+ * exactly the case `resolveField`'s itemMap pivot resolves — so this scan has to mirror that
+ * pivot's rule precisely rather than approximate it, or the graph would draw edges the
+ * evaluator never actually chases (or miss ones it does). Plain `{$Other.body.X}` field
+ * substitutions are `applyCrossItemRefs`'s pass, a different token family already resolved
+ * before this runs, and are not scanned here.
+ *
+ * Returns `[{ target, field }]` — `target` the referenced item's lowercase id, `field` the
+ * dotted body path the reference was found in, for `CL0418`'s message.
+ */
+function scanCrossItemRefs(body, resolvedById, selfId) {
+  const refs = [];
+  const scanString = (str, fieldPath) => {
+    str.replace(/\{([^{}]+)\}/g, (match, inner) => {
+      inner = inner.trim();
+      if (!RENDER_FN_PREFIXES.some((prefix) => inner.startsWith(prefix))) return match;
+      const tokens = inner.match(/\$[A-Za-z0-9_-]+/g) || [];
+      for (const token of tokens) {
+        const first = normalizeVarKey(token.slice(1)).toLowerCase();
+        if (ITEM_CONTEXT_KEYS.has(first)) continue;
+        if (first === selfId) continue;
+        if (!resolvedById.has(first)) continue;
+        refs.push({ target: first, field: fieldPath });
+      }
+      return match;
+    });
+  };
+  const walk = (obj, fieldPath) => {
+    if (!obj || typeof obj !== 'object') return;
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      const nextPath = fieldPath ? `${fieldPath}.${key}` : key;
+      if (typeof val === 'string') {
+        scanString(val, nextPath);
+      } else if (Array.isArray(val)) {
+        for (const entry of val) {
+          if (typeof entry === 'string') scanString(entry, nextPath);
+        }
+      } else if (typeof val === 'object' && val !== null) {
+        walk(val, nextPath);
+      }
+    }
+  };
+  walk(body, '');
+  return refs;
+}
+
+/**
+ * Tarjan's SCC over the cross-item dependency graph. Returns only the multi-node groups —
+ * every genuine cycle — because a single-node SCC is acyclic by construction once self-loops
+ * are excluded from the graph (Decision 3's Unknowns: self-reference is tolerated, not a
+ * cycle, and `scanCrossItemRefs` never records one).
+ */
+function findCycles(graph) {
+  let counter = 0;
+  const index = new Map();
+  const lowlink = new Map();
+  const onStack = new Set();
+  const stack = [];
+  const groups = [];
+
+  const strongconnect = (v) => {
+    index.set(v, counter);
+    lowlink.set(v, counter);
+    counter++;
+    stack.push(v);
+    onStack.add(v);
+    for (const w of graph.get(v) || []) {
+      if (!index.has(w)) {
+        strongconnect(w);
+        lowlink.set(v, Math.min(lowlink.get(v), lowlink.get(w)));
+      } else if (onStack.has(w)) {
+        lowlink.set(v, Math.min(lowlink.get(v), index.get(w)));
+      }
+    }
+    if (lowlink.get(v) === index.get(v)) {
+      const group = [];
+      let w;
+      do {
+        w = stack.pop();
+        onStack.delete(w);
+        group.push(w);
+      } while (w !== v);
+      if (group.length > 1) groups.push(group);
+    }
+  };
+
+  for (const v of graph.keys()) {
+    if (!index.has(v)) strongconnect(v);
+  }
+  return groups;
+}
+
+/**
+ * Post-order DFS topological order: a dependency is pushed onto `order` before the item that
+ * depends on it, because it is fully visited (recursed into) first. Safe to run on a graph
+ * that contains cycles — a node already on the current stack (`state === 1`) is skipped
+ * rather than re-entered, so every node still resolves to exactly one position in `order`.
+ * The caller excludes cyclic nodes from evaluation; their position in this order is otherwise
+ * unused.
+ */
+function topoOrder(graph) {
+  const state = new Map();
+  const order = [];
+  const visit = (node) => {
+    if (state.has(node)) return;
+    state.set(node, 1);
+    for (const dep of graph.get(node) || []) {
+      visit(dep);
+    }
+    state.set(node, 2);
+    order.push(node);
+  };
+  for (const node of graph.keys()) visit(node);
+  return order;
+}
+
+/** `CL0418`, naming every item and field on the cycle's edges rather than the uncoded warning it replaces. */
+function reportCycle(group, edgeFields, resolvedById, diagnostics) {
+  if (!diagnostics) return;
+  const groupSet = new Set(group);
+  const parts = [];
+  for (const from of group) {
+    for (const to of groupSet) {
+      const key = `${from}->${to}`;
+      const fields = edgeFields.get(key);
+      if (!fields) continue;
+      const fromItem = resolvedById.get(from);
+      const toItem = resolvedById.get(to);
+      for (const field of fields) {
+        parts.push(`"${fromItem.id}".${field} → "${toItem.id}"`);
+      }
+    }
+  }
+  diagnostics.error(
+    DIAG_CODES.CROSS_ITEM_CYCLE,
+    `Circular cross-item render dependency: ${parts.join(', ')}`,
+  );
+}
+
+/**
+ * Dependency-ordered cross-item render-function resolution (v4 spec §13, Phase 9 Step 2).
+ *
+ * Replaces the fixpoint loop that iterated to convergence: build the dependency graph the
+ * corpus's cross-item render functions imply, evaluate it in one topological pass, and report
+ * a genuine cycle by name instead of an uncoded warning after N passes.
+ *
+ * A render function that migrates from item `B` into item `A` is evaluated in `B`'s context —
+ * where the author wrote it — because `B` is resolved (and its body mutated in place) before
+ * `A` ever reads it. This is Decision 3's divergence, and the one place in the phase whose
+ * compiled output may legitimately move.
+ */
+function resolveCrossItemRenderFunctions(resolvedItems, resolvedById, diagnostics) {
+  const graph = new Map();
+  const edgeFields = new Map();
+
+  for (const item of resolvedItems) {
+    const idLower = (item.id || '').toLowerCase();
+    if (!idLower) continue;
+    const deps = graph.get(idLower) || new Set();
+    graph.set(idLower, deps);
+    if (!item.body) continue;
+    for (const { target, field } of scanCrossItemRefs(item.body, resolvedById, idLower)) {
+      deps.add(target);
+      const key = `${idLower}->${target}`;
+      if (!edgeFields.has(key)) edgeFields.set(key, new Set());
+      edgeFields.get(key).add(field);
+    }
+  }
+
+  const cyclic = new Set();
+  for (const group of findCycles(graph)) {
+    for (const id of group) cyclic.add(id);
+    reportCycle(group, edgeFields, resolvedById, diagnostics);
+  }
+
+  for (const id of topoOrder(graph)) {
+    // Left unexpanded: the item's leaked render-function text is caught downstream by the
+    // output sweep's CL0432 LEAKED_RENDER_FUNCTION, per Decision 3's Unknowns — two reports,
+    // both correct, rather than a guess at which side of the cycle to break.
+    if (cyclic.has(id)) continue;
+    const item = resolvedById.get(id);
+    applyFieldRenderFunctions(item, resolvedById, { diagnostics, file: item._source });
+  }
+}
+
 function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, variables = {}, options = {}) {
   const {
     verbose = false,
@@ -912,27 +1113,12 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
   applyCrossItemRefs(resolvedItems, registry, busWarner(diagnostics), resolvedById);
 
   // Expand render functions in body field values now that cross-item refs are resolved.
-  // Multi-pass: repeat until no body fields change, to handle order-dependent chains
-  // where A.field = join($B.body.x) and B.body.x itself contains a cross-item render
-  // function. Cap at N+1 passes (N = item count): a non-circular graph of N items has
-  // at most N-1 chain depth, so N-1 resolve passes + 1 convergence pass = N total.
-  // The +1 ensures the worst-case linear chain doesn't falsely trigger the warning —
-  // only a true cycle can exceed this bound.
-  const maxPasses = resolvedItems.length + 1;
-  let changed = true;
-  let pass = 0;
-  while (changed && pass < maxPasses) {
-    changed = false;
-    pass++;
-    for (const item of resolvedItems) {
-      const snapshot = JSON.stringify(item.body);
-      applyFieldRenderFunctions(item, resolvedById, { diagnostics, file: item._source });
-      if (JSON.stringify(item.body) !== snapshot) changed = true;
-    }
-  }
-  if (pass === maxPasses) {
-    console.warn(`  WARN: cross-item render functions may have circular dependencies — stopped after ${maxPasses} passes`);
-  }
+  // Dependency-ordered: a scan-build-sort-evaluate sequence over the same graph a chain
+  // like A.field = join($B.body.x) implies, replacing the fixpoint loop this used to be
+  // (v4 spec §13, Phase 9 Step 2 — see Decision 3 of the Phase 9 plan for why evaluating
+  // in topological order, rather than iterating to convergence, is the correction and not
+  // just a performance change).
+  resolveCrossItemRenderFunctions(resolvedItems, resolvedById, diagnostics);
 
   // §8.2: the envelope is the emitter's, not the template's. Templates render the body;
   // `emit/vl.js` writes the heading and the fence around it, and reports what it cannot
@@ -2063,6 +2249,7 @@ module.exports = {
   compile,
   resolveBranchItems,
   renderBranchItems,
+  resolveCrossItemRenderFunctions,
   getTemplate,
   getTemplateName,
   resolveNotesTemplateName,

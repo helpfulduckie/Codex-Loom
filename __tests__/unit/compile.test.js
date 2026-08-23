@@ -8,9 +8,11 @@ const {
   getTemplate, validateCardType, writeOpening, resolveOpeningContent, resolveBranchFolderPath,
   buildBranchOutputDir, buildCompileContext, writeOutput,
   resolveIncludes, resolveNotesTemplateName, resolveBranchItems, cleanAndArchive,
+  resolveCrossItemRenderFunctions,
 } = require('../../src/compile');
 const { buildRegistry } = require('../../src/loader/registry');
-const { Diagnostics } = require('../../src/diag');
+const { Diagnostics, CODES: DIAG_CODES } = require('../../src/diag');
+const template = require('../../src/template');
 
 describe('getTemplate', () => {
   const templates = new Map([

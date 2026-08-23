@@ -78,6 +78,13 @@ const CODES = Object.freeze({
   PARTIAL_CYCLE: 'CL0416',
   PARTIAL_NOT_FOUND: 'CL0417',
 
+  /**
+   * A genuine cycle in cross-item render-function dependencies (Phase 9 Step 2), replacing
+   * the uncoded `console.warn` the fixpoint loop printed after `maxPasses` — this one names
+   * the participating items and fields because the dependency graph now exists to ask.
+   */
+  CROSS_ITEM_CYCLE: 'CL0418',
+
   TEMPLATE_NOT_FOUND: 'CL0420',
   RENDER_FAILED: 'CL0421',
 
