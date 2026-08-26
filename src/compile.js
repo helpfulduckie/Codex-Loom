@@ -1428,36 +1428,30 @@ function writeFramingRecursive(rootNode, outputBase, configBase, configPath, var
         // the message is the one the old root rung wrote.
         if (isRoot) console.warn(`  WARN: root branchFraming with no branches — ignoring`);
         else console.warn(`  WARN: branchFraming on leaf branch "${name}" — ignoring`);
-      } else if (isRoot) {
-        // Step 0 walks the root like every other node; Step 1 promotes this arm onto the
-        // same sectioned render path the branches use, so until then the root keeps the
-        // literal/`{%variable}`-only resolver.
-        const rootFramingText = resolveOpeningContent(framing, configBase, branchVars);
-        if (rootFramingText) {
-          checkLimit(rootFramingText, questionsForMeasurement(table, branchVars), LIMITS.opening, {
-            diagnostics, loc: { file: configPath }, label: 'the project root (framing)',
-          });
-          const outPath = writeComponentFile(nodeOutput, 'Opening.md', rootFramingText, { diagnostics });
-          if (verbose) console.log(`    OK: Root OpeningChoice → ${outPath}`);
-        }
       } else {
+        // Phase 11 Step 1: the root renders through the same sectioned path an interior
+        // node uses, rather than the literal/`{%variable}`-only `resolveOpeningContent`
+        // the old hand-rolled rung called. That gains `sections:`, roles, `_variables`
+        // (library names folded in, since `branchVars` descends from the seed the root
+        // visit merged) and the undeclared-placeholder check, none of which the root ever
+        // had before.
         const framingText = renderFraming(
           framing, nodePath, branchVars, table, name,
           rolesDeclared ? roles : null, branchProtagonist,
         );
         if (framingText) {
           checkUndeclaredPlaceholders(framingText, table, {
-            diagnostics, where: `the branch framing on "${name}"`,
+            diagnostics, where: isRoot ? 'the project root (framing)' : `the branch framing on "${name}"`,
             usage, usagePath: nodePath.join('/'),
           });
           // Framing lands in the same `Opening.md` filename at an interior node, and VL caps
           // the file rather than the chain — components merge per filename, so a leaf's
           // opening replaces this rather than adding to it (§8.5).
           checkLimit(framingText, questionsForMeasurement(table, branchVars), LIMITS.opening, {
-            diagnostics, label: `branch "${name}" (framing)`,
+            diagnostics, label: isRoot ? 'the project root (framing)' : `branch "${name}" (framing)`,
           });
           const outPath = writeComponentFile(nodeOutput, 'Opening.md', framingText, { diagnostics });
-          if (verbose) console.log(`    OK: BranchFraming → ${outPath}`);
+          if (verbose) console.log(isRoot ? `    OK: Root OpeningChoice → ${outPath}` : `    OK: BranchFraming → ${outPath}`);
         }
       }
     }
