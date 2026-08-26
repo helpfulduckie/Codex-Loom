@@ -1,6 +1,6 @@
 'use strict';
 
-const { resolveVariables, walkItemTextFields, itemContext } = require('./util');
+const { resolveVariables, walkItemTextFields, walkTextRecursive, itemContext } = require('./util');
 const { CODES } = require('./diag');
 const { tokenize, parse } = require('./render/parse');
 const evalMod = require('./render/eval');
@@ -183,33 +183,11 @@ function applyVariableInterpolation(card, variables) {
 }
 
 function applyVariableInterpolationRecursive(obj, variables) {
-  if (!obj || typeof obj !== 'object') return;
-  for (const key of Object.keys(obj)) {
-    const val = obj[key];
-    if (typeof val === 'string') {
-      obj[key] = resolveVariables(val, variables);
-    } else if (Array.isArray(val)) {
-      obj[key] = val.map(item => typeof item === 'string' ? resolveVariables(item, variables) : item);
-    } else if (typeof val === 'object' && val !== null) {
-      applyVariableInterpolationRecursive(val, variables);
-    }
-  }
+  walkTextRecursive(obj, (s) => resolveVariables(s, variables));
 }
 
 function applyRenderFunctionsRecursive(obj, context, options) {
-  if (!obj || typeof obj !== 'object') return;
-  for (const key of Object.keys(obj)) {
-    const val = obj[key];
-    if (typeof val === 'string') {
-      obj[key] = processFieldRenderFunctions(val, context, options);
-    } else if (Array.isArray(val)) {
-      obj[key] = val.map(item =>
-        typeof item === 'string' ? processFieldRenderFunctions(item, context, options) : item
-      );
-    } else if (typeof val === 'object' && val !== null) {
-      applyRenderFunctionsRecursive(val, context, options);
-    }
-  }
+  walkTextRecursive(obj, (s) => processFieldRenderFunctions(s, context, options));
 }
 
 const RENDER_FN_DISPATCH = [

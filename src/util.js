@@ -220,6 +220,15 @@ function itemContext(item, extra) {
   };
 }
 
+/**
+ * Shared generic recursion over a value graph: string values are passed through `transform`,
+ * arrays are mapped leaving non-string elements alone, plain objects recurse. It inspects no
+ * key names, so which top-level fields a given pass walks is entirely up to the caller — each
+ * caller starts the walk from a deliberately different set (`walkItemTextFields` covers
+ * body/aid/render/name; `applyVariableInterpolation` covers those plus `id`, since a variable
+ * can appear in an item id; `applyFieldRenderFunctions` covers body only). Do not unify those
+ * field lists — the difference is intentional, not incidental.
+ */
 function walkTextRecursive(obj, transform) {
   if (!obj || typeof obj !== 'object') return;
   for (const key of Object.keys(obj)) {
@@ -372,7 +381,7 @@ module.exports = {
   findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
   ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
   YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix,
-  resolveVariables, checkUnexpandedVariables, walkItemTextFields, itemContext, checkUnresolvedFieldTokens,
+  resolveVariables, checkUnexpandedVariables, walkItemTextFields, walkTextRecursive, itemContext, checkUnresolvedFieldTokens,
   checkMechanicalArtifacts, maskFencedRegions,
   FIELD_TOKEN_RE, VAR_TOKEN_RE, TEMPLATE_FN_RE, TEMPLATE_TAG_RE, VERB_MARKER_RE, SUSPECT_VERB_MARKER_RE, JS_ARTIFACT_RE, JS_WORD_RE,
 };
