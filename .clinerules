@@ -1,0 +1,42 @@
+# Codex Loom — Cline Working Rules
+
+## Project Identity
+
+Codex Loom compiles YAML item definitions into Velvet Lattice story card format for AI Dungeon scenarios.
+
+## Branch / Version Context
+
+- Active work is the **v4 rebuild on `v4-phase1`**. Phases 1–7 are complete; Phase 8 is next.
+- **`sections:` is the only component grammar.** v3 syntaxes (`src/pe.js`, `src/description.js`, `src/opening.js`) no longer exist.
+- A component is a named mapping of sections, and every component type — Plot Essentials, AI Instructions, Author's Note, Opening, Description — reads the same way.
+
+## Testing
+
+- Run: `npm test` (Jest). Targets `test:unit`, `test:integration`, `test:coverage` also available.
+- `npm run compile` compiles `test/compile.yaml` as a smoke check.
+- **A passing suite is "done" for code changes.**
+
+##  Pathological Fixtures
+
+- `__tests__/fixtures/pathological/` freezes diagnostic output (code, severity, file, message).
+- It is authored from the spec. If the compiler disagrees, the fixture pins the disagreement rather than being edited to match.
+
+## Line Endings Are Load-Bearing
+
+- `.gitattributes` pins `__tests__/fixtures/**` and `test/**` to `eol=lf`.
+- CRLF conversion adds bytes per line and breaks character-count assertions in the pathological snapshot (CL0710 / CL0711 compare opening lengths against the 4,000-character cap).
+- If fixture assertions fail by a handful of characters on a fresh clone, check this before suspecting the compiler.
+
+## Working Norms
+
+- Confirm scope before touching files. List every file you will modify and flag anything out of scope or in live/published folders; wait for approval.
+- If disagreeing with an approach, make the case once concretely, then yield if the preference is restated. A second round is for factual errors or real risk only.
+- Stay on the ask; no unsolicited analysis of the user.
+
+## Session Recaps
+
+- Use the `wrap` skill for in-session wrap-up and session recaps.
+- Write session recaps directly to: `C:\Users\blues\Vault\4 Code\4.3.11 AID Tools - Codex Loom\0 System\03 Records`
+- Author in session recaps is your model name (ex: `Kimi 2.6`, `Qwen 3.8`)
+- Project in session recaps is `Codex Loom`
+- App in session recaps is either `Cline TUI` or `Cline VSCode`.

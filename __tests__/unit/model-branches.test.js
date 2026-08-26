@@ -190,18 +190,32 @@ describe('walkBranchChain — terminal node and chain', () => {
   });
 });
 
-describe('walkBranchTree — enumeration, not lookup', () => {
-  const visitAll = (tree, options) => {
+describe('walkBranchTree — enumeration rooted at the project node', () => {
+  const ROOT = { branches: TREE };
+
+  const visitAll = (rootNode, options) => {
     const seen = [];
-    walkBranchTree(tree, (visit) => {
+    walkBranchTree(rootNode, (visit) => {
       seen.push(visit);
       return options && options.next ? options.next(visit) : undefined;
     }, options && options.state);
     return seen;
   };
 
+  const pathOf = (v) => v.path.join('/');
+
+  test('visits the project root first, marked isRoot', () => {
+    const seen = visitAll(ROOT);
+    expect(seen[0].isRoot).toBe(true);
+    expect(seen[0].path).toEqual([]);
+    expect(seen[0].name).toBeNull();
+    expect(seen[0].node).toBe(ROOT);
+    expect(seen.slice(1).every((v) => v.isRoot === false)).toBe(true);
+  });
+
   test('visits every node in the tree', () => {
-    expect(visitAll(TREE).map((v) => v.path.join('/')).sort()).toEqual([
+    expect(visitAll(ROOT).map(pathOf).sort()).toEqual([
+      '',
       'Free Form',
       'Free Form/Malcolm',
       'Free Form/Veryn',
@@ -210,48 +224,62 @@ describe('walkBranchTree — enumeration, not lookup', () => {
     ]);
   });
 
+  test('a root with branches is not a leaf', () => {
+    expect(visitAll(ROOT)[0].isLeaf).toBe(false);
+  });
+
+  test('a root with no branches is the tree\'s only node, and a leaf', () => {
+    const seen = visitAll({ title: 'Unbranched' });
+    expect(seen).toHaveLength(1);
+    expect(seen[0].isRoot).toBe(true);
+    expect(seen[0].isLeaf).toBe(true);
+  });
+
   test('visits parents before their children', () => {
-    const order = visitAll(TREE).map((v) => v.path.join('/'));
+    const order = visitAll(ROOT).map(pathOf);
     expect(order.indexOf('Free Form')).toBeLessThan(order.indexOf('Free Form/Veryn'));
   });
 
   test('marks leaves correctly', () => {
-    const leaves = visitAll(TREE).filter((v) => v.isLeaf).map((v) => v.path.join('/')).sort();
+    const leaves = visitAll(ROOT).filter((v) => v.isLeaf).map(pathOf).sort();
     expect(leaves).toEqual(['Free Form/Malcolm', 'Free Form/Veryn/lovesYou', 'Wyvern']);
   });
 
   test('a node whose branches mapping is empty counts as a leaf', () => {
-    expect(visitAll({ a: { branches: {} } })[0].isLeaf).toBe(true);
+    const seen = visitAll({ branches: { a: { branches: {} } } });
+    expect(seen[0].isLeaf).toBe(false);
+    expect(seen[1].isLeaf).toBe(true);
   });
 
   test('carries state down when the visitor returns one', () => {
-    const seen = visitAll(TREE, {
+    const seen = visitAll(ROOT, {
       state: { depth: 0 },
       next: (v) => ({ depth: v.state.depth + 1 }),
     });
-    const byPath = Object.fromEntries(seen.map((v) => [v.path.join('/'), v.state.depth]));
-    expect(byPath['Free Form']).toBe(0);
-    expect(byPath['Free Form/Veryn']).toBe(1);
-    expect(byPath['Free Form/Veryn/lovesYou']).toBe(2);
+    const byPath = Object.fromEntries(seen.map((v) => [pathOf(v), v.state.depth]));
+    expect(byPath['']).toBe(0);
+    expect(byPath['Free Form']).toBe(1);
+    expect(byPath['Free Form/Veryn']).toBe(2);
+    expect(byPath['Free Form/Veryn/lovesYou']).toBe(3);
   });
 
   test('passes state through unchanged when the visitor returns undefined', () => {
-    const seen = visitAll(TREE, { state: { tag: 'root' } });
+    const seen = visitAll(ROOT, { state: { tag: 'root' } });
     expect(seen.every((v) => v.state.tag === 'root')).toBe(true);
   });
 
   test('exposes the node itself', () => {
-    const wyvern = visitAll(TREE).find((v) => v.name === 'Wyvern');
+    const wyvern = visitAll(ROOT).find((v) => v.name === 'Wyvern');
     expect(wyvern.node).toBe(TREE.Wyvern);
   });
 
-  test('a null or non-object tree visits nothing', () => {
+  test('a null or non-object root visits nothing', () => {
     expect(visitAll(null)).toEqual([]);
     expect(visitAll('nope')).toEqual([]);
   });
 
   test('preserves key casing, since enumeration has no key to match', () => {
-    expect(visitAll(TREE).map((v) => v.name)).toContain('Free Form');
+    expect(visitAll(ROOT).map((v) => v.name)).toContain('Free Form');
   });
 });
 

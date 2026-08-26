@@ -29,6 +29,8 @@ const fs = require('fs');
 const path = require('path');
 const YAML = require('yaml');
 
+const { walkBranchTree } = require('../model/branches');
+
 const NL = '\n';
 const SPLIT_LINES = /\r?\n/;
 
@@ -172,16 +174,10 @@ function migrateOpeningFiles(configPath, options = {}) {
     if (!components || typeof components !== 'object') return;
     if (typeof components.opening === 'string') specs.add(components.opening);
   };
-  const walk = (branches) => {
-    if (!branches || typeof branches !== 'object') return;
-    for (const node of Object.values(branches)) {
-      if (!node || typeof node !== 'object') continue;
-      collect(node.components);
-      walk(node.branches);
-    }
-  };
-  collect(config.components);
-  walk(config.branches);
+  // One walk over the config itself rather than root-then-branches rungs (Phase 11 Step
+  // 0): the walker visits the project root as a node, and `config.components` reads out
+  // of it exactly the way `node.components` reads out of any branch node.
+  walkBranchTree(config, ({ node }) => collect(node.components));
 
   const ctx = buildCompileContext(config, []);
   const notes = [];

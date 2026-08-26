@@ -94,16 +94,11 @@ function checkConfigNotesTemplates(config, templates, diagnostics, configPath) {
     );
   };
 
-  check(config, 'The project');
-  const walk = (branches, prefix) => {
-    if (!branches || typeof branches !== 'object') return;
-    for (const [name, node] of Object.entries(branches)) {
-      const label = prefix ? `${prefix}/${name}` : name;
-      check(node, `Branch "${label}"`);
-      if (node && node.branches) walk(node.branches, label);
-    }
-  };
-  walk(config.branches, '');
+  // The walker covers the project root too (Phase 11 Step 0); the old
+  // `check(config, 'The project')` rung lives in the `isRoot` arm, byte-for-byte.
+  walkBranchTree(config, ({ node, path: path_, isRoot }) => {
+    check(node, isRoot ? 'The project' : `Branch "${path_.join('/')}"`);
+  });
 }
 
 /**
@@ -1355,16 +1350,21 @@ function writeComponentFile(outputDir, filename, content, sink) {
  * children inherit, so per-node `roles`/`branchProtagonist` need no change to that mechanism
  * — they merge into `state` exactly the way `branchVars`/`table` already do, via
  * `mergeUnbindable`, the same key-wise `~`-deleting merge `walkBranchChain` uses for roles
- * (`model/branches.js`), reused rather than reimplemented so the two cannot disagree. Two
- * new *inputs* to the function were unavoidable — `rootRoles`, to seed the walk with what
- * `config.roles` declares before any branch node is reached, and `onRoleUsed`, the sink the
- * leaf loop's `resolveRole` already calls on every successful resolution — because this is a
- * top-level function with no closure over `compile()`'s scope. Neither is `roles` or
- * `branchProtagonist` itself: those still ride via state, computed fresh per node.
+ * (`model/branches.js`), reused rather than reimplemented so the two cannot disagree.
+ * `onRoleUsed`, the sink the leaf loop's `resolveRole` already calls on every successful
+ * resolution, arrives as an input because this is a top-level function with no closure over
+ * `compile()`'s scope. Neither is `roles` or `branchProtagonist` itself: those still ride
+ * via state, computed fresh per node.
+ *
+ * **Phase 11 Step 0 walks the project root like every other node.** The walker takes the
+ * root now, so the old hand-rolled root rung is gone: the root's own `branchFraming`
+ * arrives through the visitor's `isRoot` arm, and `config.roles` / `config.placeholders`
+ * are seeded by the root visit through the same merges the branch nodes use.
  */
-function writeFramingRecursive(branches, outputBase, configBase, variables, currentPath = [], verbose = false, rootPlaceholders = null, diagnostics = null, usage = null, loadSectioned = null, registry = null, rootRoles = null, onRoleUsed = null) {
-  // An unbranched project has no interior nodes, so there is no framing to write.
-  if (!branches || typeof branches !== 'object') return;
+function writeFramingRecursive(rootNode, outputBase, configBase, configPath, variables, verbose = false, diagnostics = null, usage = null, loadSectioned = null, registry = null, onRoleUsed = null) {
+  // The walker visits the project root as a node (Phase 11 Step 0), so an unbranched
+  // project still receives its root visit — that is where the "no branches" warn lands.
+  if (!rootNode || typeof rootNode !== 'object') return;
 
   const renderFraming = (spec, nodePath, vars, table, name, roles, branchProtagonist) => {
     const resolvedSpec = resolveComponentSpec(spec, configBase, vars);
@@ -1392,10 +1392,8 @@ function writeFramingRecursive(branches, outputBase, configBase, variables, curr
     return resolveOpeningContent(spec, configBase, vars);
   };
 
-  const rootRolesDeclared = !!(rootRoles && Object.keys(rootRoles).length);
-
-  walkBranchTree(branches, ({ name, node, path: nodePath, isLeaf, state }) => {
-    const nodeOutput = path.join(state.outputBase, 'Branches', name);
+  walkBranchTree(rootNode, ({ name, node, path: nodePath, isLeaf, isRoot, state }) => {
+    const nodeOutput = isRoot ? state.outputBase : path.join(state.outputBase, 'Branches', name);
     const branchVars = (node && node.variables)
       ? Object.assign({}, state.variables, node.variables)
       : state.variables;
@@ -1425,7 +1423,23 @@ function writeFramingRecursive(branches, outputBase, configBase, variables, curr
 
     if (framing != null) {
       if (isLeaf) {
-        console.warn(`  WARN: branchFraming on leaf branch "${name}" — ignoring`);
+        // The same rule at both levels: nothing below this node means nothing to frame.
+        // The walker's root visit reaches the project rung here (Phase 11 Step 0), and
+        // the message is the one the old root rung wrote.
+        if (isRoot) console.warn(`  WARN: root branchFraming with no branches — ignoring`);
+        else console.warn(`  WARN: branchFraming on leaf branch "${name}" — ignoring`);
+      } else if (isRoot) {
+        // Step 0 walks the root like every other node; Step 1 promotes this arm onto the
+        // same sectioned render path the branches use, so until then the root keeps the
+        // literal/`{%variable}`-only resolver.
+        const rootFramingText = resolveOpeningContent(framing, configBase, branchVars);
+        if (rootFramingText) {
+          checkLimit(rootFramingText, questionsForMeasurement(table, branchVars), LIMITS.opening, {
+            diagnostics, loc: { file: configPath }, label: 'the project root (framing)',
+          });
+          const outPath = writeComponentFile(nodeOutput, 'Opening.md', rootFramingText, { diagnostics });
+          if (verbose) console.log(`    OK: Root OpeningChoice → ${outPath}`);
+        }
       } else {
         const framingText = renderFraming(
           framing, nodePath, branchVars, table, name,
@@ -1452,25 +1466,62 @@ function writeFramingRecursive(branches, outputBase, configBase, variables, curr
       outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
     };
   }, {
-    outputBase, variables, table: Object.assign({}, rootPlaceholders || {}),
-    roles: Object.assign({}, rootRoles || {}), rolesDeclared: rootRolesDeclared,
+    // Seeded empty: the walker visits the project root first, and the root's own
+    // `placeholders:` and `roles:` establish these through the same merges any branch
+    // node uses. `variables` is the exception — the root visit merges the declared set,
+    // so the effective set (`_variables`, library names folded in) has to arrive already
+    // seeded (Step 1's root framing resolves against it); `_variables` ⊇ `variables`,
+    // so the root's merge leaves it untouched.
+    outputBase, variables, table: {}, roles: {}, rolesDeclared: false,
   });
 }
 
 /**
- * Write Label.md at every node in the branch tree.
+ * Write Label.md at every node in the branch tree, the project root included
+ * (Phase 11 Step 0).
  *
  * Node-level, not leaf-level, which is why it uses the tree visitor rather than the
  * leaf loop: a branch label belongs to the node the player is choosing.
  */
-function writeLabelsRecursive(branches, outputBase, variables, verbose = false, rootPlaceholders = null, diagnostics = null, configPath = null, usage = null) {
-  walkBranchTree(branches, ({ name, node, path: path_, state }) => {
-    const nodeOutput = path.join(state.outputBase, 'Branches', name);
+function writeLabelsRecursive(rootNode, outputBase, variables, rootVariables, verbose = false, diagnostics = null, configPath = null, usage = null) {
+  walkBranchTree(rootNode, ({ name, node, path: path_, isRoot, state }) => {
+    const nodeOutput = isRoot ? state.outputBase : path.join(state.outputBase, 'Branches', name);
     const branchVars = (node && node.variables)
       ? Object.assign({}, state.variables, node.variables)
       : state.variables;
 
     const table = mergePlaceholders(state.table, node);
+
+    if (isRoot) {
+      // The scenario title, written once at the project root. Two things stay different
+      // from a branch label here, both deliberately: it expands against `rootVariables`
+      // — the variables the author declared, not `_variables` with library names folded
+      // in, exactly as the old rung did — and it gets the "AID never substitutes a
+      // scenario title" warn where a branch title only half-works.
+      if (node.title == null) {
+        return { outputBase: nodeOutput, variables: branchVars, table };
+      }
+      const rootLabel = resolveVariables(String(node.title), rootVariables);
+      const labelPath = path.join(nodeOutput, 'Label.md');
+      checkUndeclaredPlaceholders(rootLabel, table, {
+        diagnostics, file: configPath, where: 'the project title',
+        usage, usagePath: '',
+      });
+      checkPlaceholderContext(rootLabel, {
+        diagnostics,
+        file: configPath,
+        where: 'the scenario title',
+        severity: 'warn',
+        reason: 'AID never fills a placeholder in the scenario title. The title names the '
+          + 'scenario in listings, before any adventure exists to answer a prompt, so the '
+          + 'raw text is what readers see. Legal to write, and occasionally meant as a '
+          + 'joke, but never substituted.',
+      });
+      fs.writeFileSync(labelPath, rootLabel + '\n', 'utf8');
+      if (verbose) console.log(`  OK: Label → ${labelPath}`);
+      return { outputBase: nodeOutput, variables: branchVars, table };
+    }
+
     const rawTitle = (node && node.title) || name;
     fs.mkdirSync(nodeOutput, { recursive: true });
     const outPath = path.join(nodeOutput, 'Label.md');
@@ -1496,7 +1547,7 @@ function writeLabelsRecursive(branches, outputBase, variables, verbose = false, 
     if (verbose) console.log(`    OK: Label → ${outPath}`);
 
     return { outputBase: nodeOutput, variables: branchVars, table };
-  }, { outputBase, variables, table: Object.assign({}, rootPlaceholders || {}) });
+  }, { outputBase, variables, table: {} });
 }
 
 /**
@@ -1511,25 +1562,18 @@ function writeLabelsRecursive(branches, outputBase, variables, verbose = false, 
  * key carries that key's question inline — see `emit/placeholders.js` for why the nesting
  * cannot be left to VL.
  */
-function writePlaceholdersRecursive(branches, outputBase, rootPlaceholders, variables, configPath, diagnostics, verbose = false, usage = null, declarations = null, duplicates = null) {
+function writePlaceholdersRecursive(rootNode, outputBase, variables, configPath, diagnostics, verbose = false, usage = null, declarations = null, duplicates = null) {
   const onWarn = (code, message, file) => diagnostics.add(
     severityOf(code), code, message, { file: file || configPath },
   );
 
-  const rootNode = { placeholders: rootPlaceholders };
-  const rootTable = Object.assign({}, rootPlaceholders || {});
-  if (declarations && rootPlaceholders) {
-    declarations.push({
-      path: '', label: 'at the project root', keys: localKeysOf(rootNode),
-    });
-  }
-  const written = writeNodePlaceholders(outputBase, rootNode, rootTable, variables, {
-    onWarn, file: configPath, diagnostics, usage, usagePath: '', duplicates,
-  });
-  if (written && verbose) console.log(`    OK: Placeholders → ${written}`);
-
-  walkBranchTree(branches, ({ name, node, path: path_, state }) => {
-    const nodeOutput = path.join(state.outputBase, 'Branches', name);
+  // The walker's root visit replaces the old hand-rolled root rung (Phase 11 Step 0):
+  // the root's own `placeholders:` live on the root node itself, the merged table starts
+  // empty and gains them at the root exactly the way a branch node gains its own, and
+  // the declarations entry keeps the root's `at the project root` label and its
+  // unconditional-on-`placeholders` push.
+  walkBranchTree(rootNode, ({ name, node, path: path_, isRoot, state }) => {
+    const nodeOutput = isRoot ? state.outputBase : path.join(state.outputBase, 'Branches', name);
     const branchVars = (node && node.variables)
       ? Object.assign({}, state.variables, node.variables)
       : state.variables;
@@ -1554,7 +1598,7 @@ function writePlaceholdersRecursive(branches, outputBase, rootPlaceholders, vari
     if (outPath && verbose) console.log(`    OK: Placeholders → ${outPath}`);
 
     return { outputBase: nodeOutput, variables: branchVars, table };
-  }, { outputBase, variables, table: rootTable });
+  }, { outputBase, variables, table: {} });
 }
 
 /**
@@ -2017,51 +2061,28 @@ function compileRun(configPath, options, buses) {
   }
 
   // Write Opening / OpeningChoice files (post-loop)
-
-  // Root-level branchFraming: non-inheriting, written at the root output dir
-  const rootOpeningChoice = config.components && config.components.branchFraming != null
-    ? config.components.branchFraming
-    : null;
-  if (rootOpeningChoice != null) {
-    const hasBranches = config.branches && Object.keys(config.branches).length > 0;
-    if (!hasBranches) {
-      console.warn(`  WARN: root branchFraming with no branches — ignoring`);
-    } else {
-      const expandedChoice = typeof rootOpeningChoice === 'string'
-        ? rootOpeningChoice
-        : rootOpeningChoice;
-      const content = resolveOpeningContent(expandedChoice, config._base, config.variables || {});
-      // The third `Opening.md` the compiler writes, and the one easiest to miss: root
-      // framing is non-inheriting and lands outside both recursive writers. Capped like
-      // the other two — VL reads it as this node's Opening and caps the file (§8.5).
-      checkLimit(
-        content,
-        questionsForMeasurement(config.placeholders, config._variables || config.variables || {}),
-        LIMITS.opening,
-        { diagnostics: compileDiagnostics, loc: { file: configPath }, label: 'the project root (framing)' },
-      );
-      const outPath = writeComponentFile(config._resolvedOutput, 'Opening.md', content, { diagnostics: compileDiagnostics });
-      if (verbose) console.log(`    OK: Root OpeningChoice → ${outPath}`);
-    }
-  }
+  //
+  // Root-level branchFraming lives in `writeFramingRecursive`'s root visit now (Phase 11
+  // Step 0) — the same component written at the node that declares it, landing in the
+  // root output dir where the old hand-rolled rung wrote it.
 
   // `opening:` is written by the leaf loop above, as an ordinary inherited component. What
   // is left for the tree visitor is framing, which belongs to a node the leaf loop never
   // visits.
   writeFramingRecursive(
-    config.branches, config._resolvedOutput, config._base,
+    config, config._resolvedOutput, config._base, configPath,
     config._variables || config.variables || {},
-    [], verbose, config.placeholders, compileDiagnostics, placeholderUsage,
-    loadSectioned, registry, config.roles || {}, onRoleUsed,
+    verbose, compileDiagnostics, placeholderUsage,
+    loadSectioned, registry, onRoleUsed,
   );
 
   writeLabelsRecursive(
-    config.branches, config._resolvedOutput, config._variables || config.variables || {}, verbose,
-    config.placeholders, compileDiagnostics, configPath, placeholderUsage,
+    config, config._resolvedOutput, config._variables || config.variables || {}, config.variables || {},
+    verbose, compileDiagnostics, configPath, placeholderUsage,
   );
 
   writePlaceholdersRecursive(
-    config.branches, config._resolvedOutput, config.placeholders,
+    config, config._resolvedOutput,
     config._variables || config.variables || {}, configPath, compileDiagnostics, verbose,
     placeholderUsage, placeholderDeclarations, placeholderDuplicates,
   );

@@ -347,29 +347,59 @@ function localRoleKeysOf(node) {
 }
 
 /**
- * Visit every node in a branch tree, depth-first, carrying state down.
+ * Visit every node of a config tree — **the project root included** — depth-first,
+ * carrying state down.
  *
  * The counterpart to `walkBranchChain`, and a genuinely different operation: that one
  * looks up a known path and accumulates along it, this one enumerates. Enumeration needs
  * no case-insensitive matching because it visits every key and the key *is* the answer.
  *
- * `visit({ name, node, path, isLeaf, state })` may return a new state for that node's
- * children; returning `undefined` passes the current state through unchanged. That is
- * what lets a caller merge variables down the tree without writing the recursion again.
+ * `visit({ name, node, path, isLeaf, isRoot, state })` may return a new state for that
+ * node's children; returning `undefined` passes the current state through unchanged. That
+ * is what lets a caller merge variables down the tree without writing the recursion again.
  *
- * Two callers need this rather than `walkBranchChain`, and both write at nodes the leaf
- * loop never reaches: `branchFraming` belongs to the node whose children it frames, and
- * `Label.md` is written at every node.
+ * **The root is a node, not a flag** (Phase 11 Step 0, Decision 1). The walker used to
+ * take a `branches:` map, which left the project root inexpressible — its own
+ * `components:`, `placeholders:`, `roles:` and `variables:` live on the config object,
+ * not inside any `branches:` — so every caller handled the root with its own hand-rolled
+ * rung, and one of them got it wrong. Now the root is always the first visit,
+ * `{ name: null, path: [], isRoot: true }`, the way `buildTree(rootDir)` on the output
+ * side takes a root with no toggle. A config object is node-shaped for this walk, so
+ * callers pass it directly.
+ *
+ * Each visitor keeps one `isRoot` conditional where the root genuinely differs — the
+ * output path (a branch writes to `<parent>/Branches/<name>`, the root to the output
+ * root) or a root-only rule, like `title:` meaning the scenario title rather than a
+ * choice label. That asymmetry belongs to the callers; the model layer has no knowledge
+ * of output directories (§3.3).
  */
-function walkBranchTree(branches, visit, state = null, path = []) {
+function walkBranchTree(rootNode, visit, state = null) {
+  if (!rootNode || typeof rootNode !== 'object') return;
+
+  const isRootLeaf = isLeafNode(rootNode);
+  const rootNext = visit({
+    name: null, node: rootNode, path: [], isLeaf: isRootLeaf, isRoot: true, state,
+  });
+  if (!isRootLeaf) {
+    walkBranchNodes(rootNode.branches, visit, rootNext === undefined ? state : rootNext, []);
+  }
+}
+
+/** The branch enumeration the root visit in `walkBranchTree` recurses into. */
+function walkBranchNodes(branches, visit, state, path) {
   if (!branches || typeof branches !== 'object') return;
   for (const [name, node] of Object.entries(branches)) {
     const childPath = [...path, name];
-    const sub = node && node.branches;
-    const isLeaf = !sub || Object.keys(sub).length === 0;
-    const next = visit({ name, node, path: childPath, isLeaf, state });
-    if (!isLeaf) walkBranchTree(sub, visit, next === undefined ? state : next, childPath);
+    const isLeaf = isLeafNode(node);
+    const next = visit({ name, node, path: childPath, isLeaf, isRoot: false, state });
+    if (!isLeaf) walkBranchNodes(node.branches, visit, next === undefined ? state : next, childPath);
   }
+}
+
+/** A node with no `branches:` (or an empty one) is a leaf — one rule at every level. */
+function isLeafNode(node) {
+  const sub = node && node.branches;
+  return !sub || typeof sub !== 'object' || Object.keys(sub).length === 0;
 }
 
 module.exports = {

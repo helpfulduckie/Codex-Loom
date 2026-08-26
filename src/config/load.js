@@ -23,6 +23,7 @@ const { Diagnostics, CODES: DIAG_CODES } = require('../diag');
 const { validate } = require('../schema');
 const { loadYamlDocument } = require('../loader/yaml');
 const { CONFIG_SCHEMA } = require('./schema');
+const { walkBranchTree } = require('../model/branches');
 
 const CODES = Object.freeze({
   CONFIG_NOT_A_MAPPING: 'CL0110',
@@ -138,17 +139,15 @@ function collectVariableNames(config) {
   );
   const branch = new Set();
 
-  const walk = (branches) => {
-    if (!branches || typeof branches !== 'object') return;
-    for (const node of Object.values(branches)) {
-      if (!node || typeof node !== 'object') continue;
-      if (node.variables && typeof node.variables === 'object') {
-        for (const k of Object.keys(node.variables)) branch.add(k.toLowerCase());
-      }
-      walk(node.branches);
+  // The shared walker covers the tree (Phase 11 Step 0). Its root visit is skipped:
+  // root variables are the `root` set, and counting them as branch-scoped would defeat
+  // the very check this function exists to serve.
+  walkBranchTree(config, ({ node, isRoot }) => {
+    if (isRoot) return;
+    if (node.variables && typeof node.variables === 'object') {
+      for (const k of Object.keys(node.variables)) branch.add(k.toLowerCase());
     }
-  };
-  walk(config.branches);
+  });
 
   const branchOnly = new Set([...branch].filter((k) => !root.has(k)));
   return { root, branch, branchOnly };
