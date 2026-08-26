@@ -1586,9 +1586,9 @@ function writePlaceholdersRecursive(rootNode, outputBase, variables, configPath,
     if (declarations) {
       const keys = localKeysOf(node);
       if (keys.length) {
-        declarations.push({
-          path: path_.join('/'), label: `on branch "${path_.join('/')}"`, keys,
-        });
+        declarations.push(isRoot
+          ? { path: '', label: 'at the project root', keys }
+          : { path: path_.join('/'), label: `on branch "${path_.join('/')}"`, keys });
       }
     }
 
@@ -1767,14 +1767,13 @@ function compileRun(configPath, options, buses) {
   const roleUsage = new Set();
   const onRoleUsed = (key) => roleUsage.add(String(key).toLowerCase());
   const roleDeclarations = [];
-  if (config.roles) {
-    const keys = localRoleKeysOf({ roles: config.roles }).filter((k) => k.toLowerCase() !== 'protagonist');
-    if (keys.length) roleDeclarations.push({ path: '', label: 'at the project root', keys });
-  }
-  walkBranchTree(config.branches, ({ node, path: path_ }) => {
+  // The walker's root visit replaces the old hand-rolled root rung (Phase 11 Step 0).
+  walkBranchTree(config, ({ node, path: path_, isRoot }) => {
     const keys = localRoleKeysOf(node).filter((k) => k.toLowerCase() !== 'protagonist');
     if (keys.length) {
-      roleDeclarations.push({ path: path_.join('/'), label: `on branch "${path_.join('/')}"`, keys });
+      roleDeclarations.push(isRoot
+        ? { path: '', label: 'at the project root', keys }
+        : { path: path_.join('/'), label: `on branch "${path_.join('/')}"`, keys });
     }
   });
 
@@ -2088,27 +2087,9 @@ function compileRun(configPath, options, buses) {
   );
   reportCompileDiagnostics();
 
-  // Root Label (project-level, written once to output root alongside Description.md)
-  if (config.title != null) {
-    const rootLabel = resolveVariables(String(config.title), config.variables || {});
-    const labelPath = path.join(config._resolvedOutput, 'Label.md');
-    checkUndeclaredPlaceholders(rootLabel, config.placeholders, {
-      diagnostics: compileDiagnostics, file: configPath, where: 'the project title',
-      usage: placeholderUsage, usagePath: '',
-    });
-    checkPlaceholderContext(rootLabel, {
-      diagnostics: compileDiagnostics,
-      file: configPath,
-      where: 'the scenario title',
-      severity: 'warn',
-      reason: 'AID never fills a placeholder in the scenario title. The title names the '
-        + 'scenario in listings, before any adventure exists to answer a prompt, so the '
-        + 'raw text is what readers see. Legal to write, and occasionally meant as a '
-        + 'joke, but never substituted.',
-    });
-    fs.writeFileSync(labelPath, rootLabel + '\n', 'utf8');
-    if (verbose) console.log(`  OK: Label → ${labelPath}`);
-  }
+  // Root Label is written by `writeLabelsRecursive`'s root visit now (Phase 11 Step 0) —
+  // the hand-rolled rung that used to live here duplicated it, writing the file twice and
+  // double-firing the placeholder-in-title warn.
 
   // The scenario blurb (§7.7), written once to the output root alongside Branches/.
   //
