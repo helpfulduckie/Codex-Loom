@@ -1273,16 +1273,23 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
 
     const type = (item.aid && item.aid.type) || 'Uncategorized';
 
-    // Phase 10 Step 3: warn when two cards on this leaf share a name across types. VL's
-    // card merge keys on name alone, so the collision is real and becomes position-dependent
-    // once inheritance arrives. Report once per collision, naming both types and files.
+    // Two cards on one leaf that share a display name are an error (Phase 11 Step 5).
+    // Velvet Lattice's `_merge_story_cards` keys on name alone, so only one of them ever
+    // reaches AID — the later declaration wins, and once cards are inherited rather than
+    // copied to every leaf that winner is position-dependent. Two cards meant to coexist
+    // must have distinct names; one card declared twice is a duplicate id (CL0325), not
+    // this. Cross-type or same-type makes no difference to VL, so neither does it here.
+    // Reported once per name per leaf.
     const cardName = cardTitle(item);
     const existing = seenNames.get(cardName);
-    if (existing && existing.type !== type && !reportedCollisions.has(cardName)) {
+    if (existing && !reportedCollisions.has(cardName)) {
       reportedCollisions.add(cardName);
-      diagnostics.warn(
+      const where = existing.type === type
+        ? `both as ${type}`
+        : `${existing.type} in ${path.basename(existing.file)} and ${type} in ${path.basename(item._source)}`;
+      diagnostics.error(
         DIAG_CODES.CARD_NAME_COLLISION,
-        `story cards "${cardName}" collide across types: ${existing.type} in ${path.basename(existing.file)} and ${type} in ${path.basename(item._source)}. Velvet Lattice merges cards by name, so the later declaration wins; under inheritance this winner becomes position-dependent.`,
+        `story cards named "${cardName}" collide on branch "${branchLabel}" (${where}). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.`,
         { file: item._source },
       );
     }

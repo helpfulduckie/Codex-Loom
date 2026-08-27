@@ -825,11 +825,17 @@ describe('CL0622 card-name collision', () => {
     ].join('\n'), 'utf8');
 
     const diagnostics = new Diagnostics();
-    compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
+    // CL0622 is an error as of Phase 11 Step 5, so `compile` aborts — the diagnostics
+    // object is populated before it throws, which is what these tests read.
+    try {
+      compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
+    } catch {
+      /* expected: compile aborts once the collision is an error */
+    }
     return diagnostics;
   }
 
-  test('warns when two cards share a name across types', () => {
+  test('errors when two cards share a name across types', () => {
     const diagnostics = compileCollisionProject([
       '- id: FirstCard',
       '  name: Shared Name',
@@ -842,14 +848,14 @@ describe('CL0622 card-name collision', () => {
       '  body: { Tagline: second }',
     ].join('\n'));
 
-    const collision = diagnostics.warnings.find((d) => d.code === 'CL0622');
+    const collision = diagnostics.errors.find((d) => d.code === 'CL0622');
     expect(collision).toBeTruthy();
     expect(collision.message).toContain('Shared Name');
     expect(collision.message).toContain('Character');
     expect(collision.message).toContain('Location');
   });
 
-  test('is silent when two cards share a name but not a type', () => {
+  test('errors when two cards share a name within one type', () => {
     const diagnostics = compileCollisionProject([
       '- id: FirstCard',
       '  name: Shared Name',
@@ -862,7 +868,9 @@ describe('CL0622 card-name collision', () => {
       '  body: { Tagline: second }',
     ].join('\n'));
 
-    expect(diagnostics.warnings.some((d) => d.code === 'CL0622')).toBe(false);
+    const collision = diagnostics.errors.find((d) => d.code === 'CL0622');
+    expect(collision).toBeTruthy();
+    expect(collision.message).toContain('Shared Name');
   });
 });
 

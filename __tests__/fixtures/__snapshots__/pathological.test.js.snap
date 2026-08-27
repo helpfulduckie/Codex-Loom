@@ -48,6 +48,8 @@ ERROR CL0533 Codex/items.cl.yaml
   placeholder "%heroName%" in the type of story card "MistypedType" on branch "open" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
 ERROR CL0420 Codex/items.cl.yaml
   no template found for item "MistypedType" (type: Character-%heroName%)
+ERROR CL0622 Codex/items.cl.yaml
+  story cards named "Anchor" collide on branch "open" (both as Character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
 ERROR CL0712 Codex/items.cl.yaml
   Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
@@ -108,6 +110,8 @@ ERROR CL0533 Codex/items.cl.yaml
   placeholder "%heroName%" in the type of story card "MistypedType" on branch "gated" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
 ERROR CL0420 Codex/items.cl.yaml
   no template found for item "MistypedType" (type: Character-%heroName%)
+ERROR CL0622 Codex/items.cl.yaml
+  story cards named "Anchor" collide on branch "gated" (both as Character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
 ERROR CL0712 Codex/items.cl.yaml
   Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
@@ -168,6 +172,8 @@ ERROR CL0533 Codex/items.cl.yaml
   placeholder "%heroName%" in the type of story card "MistypedType" on branch "silent" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
 ERROR CL0420 Codex/items.cl.yaml
   no template found for item "MistypedType" (type: Character-%heroName%)
+ERROR CL0622 Codex/items.cl.yaml
+  story cards named "Anchor" collide on branch "silent" (both as Character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
 ERROR CL0712 Codex/items.cl.yaml
   Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
@@ -230,6 +236,6 @@ WARN CL0536 compile.cl.yaml
 `;
 
 exports[`pathological fixture two cards share a name across types 1`] = `
-"WARN CL0622 Codex/items.cl.yaml
-  story cards "Shared Name" collide across types: Character in items.cl.yaml and Location in items.cl.yaml. Velvet Lattice merges cards by name, so the later declaration wins; under inheritance this winner becomes position-dependent."
+"ERROR CL0622 Codex/items.cl.yaml
+  story cards named "Shared Name" collide on branch "main" (Character in items.cl.yaml and Location in items.cl.yaml). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names."
 `;

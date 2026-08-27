@@ -128,8 +128,10 @@ describe('pathological fixture', () => {
 
   /**
    * The card-collision project (Phase 10 Step 3): two items share a displayed card name
-   * across different aid.type values. VL merges cards by name alone, so this is a latent
-   * hazard once inheritance arrives. CL0622 is the WARN that names the collision.
+   * across different aid.type values. VL merges cards by name alone, so only one reaches
+   * AID and which one is position-dependent once cards are inherited rather than copied
+   * to every leaf. CL0622 is the ERROR that names the collision (Phase 11 Step 5 — it was
+   * a WARN through Phase 10).
    */
   test('two cards share a name across types', () => {
     expect(diagnoseProject('card-collision')).toMatchSnapshot();
