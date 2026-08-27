@@ -103,37 +103,69 @@ function buildStoryCardsBlock(storyCardsDir, headingLevel) {
 }
 
 /**
- * Discover every leaf node under a scenario root directory. Each leaf accumulates
- * story-card blocks from every node on its ancestor chain, root first.
+ * One story-cards block for a leaf, merging every `Story Cards/` directory on its ancestor
+ * chain into a single view — one `### <type>` heading per type, its cards sorted by title.
  *
- * The traversal is `compiledTree.js`'s shared tree (Phase 11 Step 2) rather than a
- * private `childBranches` recursion — `overview.js` was the last report-layer walker
- * that still descended on its own. The card blocks are still built per node with
- * `buildStoryCardsBlock`, not read from `node.resolved.cards`: the resolved set is
- * name-keyed (`mergeCardsByName`), which collapses a within-leaf cross-type card-name
- * collision that the raw per-node block renders as two cards — The Institute has one
- * (`## The Institute` in both `Location/` and `Organization/`). Moving onto
- * `resolved.cards` is Step 4's job, where `leaf-review` has to read `resolved` anyway
- * and that collapse is an expected, attributed diff.
+ * Since Phase 11 Step 5 a card is written at the node that owns it and inherited down, so a
+ * leaf's cards are spread across several nodes on its chain. A leaf review is a picture of
+ * one leaf; the author reading it should not have to know or care which node in the tree a
+ * card was declared at, so this reassembles the picture rather than concatenating a block
+ * per node. A within-leaf duplicate card name is a compile error (`CL0622`), so there is
+ * nothing to de-duplicate — every `## <name>` chunk across the chain is a distinct card.
+ */
+function buildMergedStoryCardsBlock(storyCardsDirs, headingLevel) {
+  const hashes = '#'.repeat(headingLevel);
+  const byType = new Map(); // type name → [{ title, chunk }]
+
+  for (const dir of storyCardsDirs) {
+    if (!fs.existsSync(dir)) continue;
+    for (const file of collectMarkdownFiles(dir)) {
+      const parts = path.relative(dir, file).split(path.sep);
+      const type = parts.length > 1 ? parts[0] : '';
+      const content = readFile(file);
+      if (!content) continue;
+      for (const raw of content.split(/(?=^## )/m)) {
+        const chunk = raw.trim();
+        if (!chunk) continue;
+        const title = (chunk.match(/^##\s+(.*)/) || [, ''])[1].trim();
+        if (!byType.has(type)) byType.set(type, []);
+        byType.get(type).push({ title, chunk: shiftHeadings(chunk, headingLevel - 1) });
+      }
+    }
+  }
+  if (byType.size === 0) return null;
+
+  const lines = [];
+  for (const type of [...byType.keys()].sort((a, b) => a.localeCompare(b))) {
+    if (type) lines.push(`${hashes} ${type}`);
+    for (const { chunk } of byType.get(type).sort((a, b) => a.title.localeCompare(b.title))) {
+      lines.push(chunk);
+    }
+  }
+  return lines.join('\n\n');
+}
+
+/**
+ * Discover every leaf node under a scenario root directory, each carrying the merged
+ * story-cards block for that leaf.
  *
- * @typedef {{ branchNames: string[], cards: string[], leafDir: string }} LeafNode
+ * The traversal is `compiledTree.js`'s shared tree (Phase 11 Step 2) rather than a private
+ * `childBranches` recursion — `overview.js` was the last report-layer walker that still
+ * descended on its own.
+ *
+ * @typedef {{ branchNames: string[], cards: (string|null), leafDir: string }} LeafNode
  * @param {string} rootDir - absolute path of the scenario output root
  * @returns {LeafNode[]}
  */
 function discoverLeaves(rootDir) {
   return leafNodes(buildTree(rootDir)).map((leaf) => {
-    const chain = [];
-    for (let node = leaf; node; node = node.parent) chain.unshift(node);
-
-    const cards = [];
-    for (const node of chain) {
-      const storyCardsDir = path.join(node.dir, 'Story Cards');
-      if (!fs.existsSync(storyCardsDir)) continue;
-      const block = buildStoryCardsBlock(storyCardsDir, 3);
-      if (block) cards.push(block);
-    }
-
-    return { branchNames: leaf.branchNames, cards, leafDir: leaf.dir };
+    const dirs = [];
+    for (let node = leaf; node; node = node.parent) dirs.unshift(path.join(node.dir, 'Story Cards'));
+    return {
+      branchNames: leaf.branchNames,
+      cards: buildMergedStoryCardsBlock(dirs, 3),
+      leafDir: leaf.dir,
+    };
   });
 }
 
@@ -180,7 +212,7 @@ function collectOverviewSections(rootDir, rootDirName) {
  * Filename: sanitize(branchNames.join(" - ") || rootDirName) + ".leaf.md"
  */
 function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose = false) {
-  const { branchNames, cards, leafDir } = leaf;
+  const { branchNames, cards, leafDir } = leaf; // `cards` is the merged block, or null
 
   // Walk up from the leaf to find the nearest versions of each component file.
   let dir      = leafDir;
@@ -220,7 +252,7 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose = false
   if (plotEss)  parts.push(`## Plot Essentials\n\n\`\`\`\n${plotEss}\n\`\`\``);
   if (ainText)  parts.push(`## AI Instructions\n\n\`\`\`\n${ainText}\n\`\`\``);
   if (anText)   parts.push(`## Author's Note\n\n${anText}`);
-  if (cards.length > 0) parts.push(`## Story Cards\n\n${cards.join('\n\n')}`);
+  if (cards) parts.push(`## Story Cards\n\n${cards}`);
 
   fs.writeFileSync(outPath, parts.join('\n\n'), 'utf8');
   if (verbose) console.log(`  ✓  ${filename}`);

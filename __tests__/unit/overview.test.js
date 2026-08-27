@@ -98,7 +98,7 @@ describe('discoverLeaves', () => {
     const leaves = discoverLeaves(tmp);
     expect(leaves).toHaveLength(1);
     expect(leaves[0].branchNames).toEqual([]);
-    expect(leaves[0].cards.join('')).toContain('Alice');
+    expect(leaves[0].cards).toContain('Alice');
     fs.rmSync(tmp, { recursive: true });
   });
 
@@ -118,14 +118,16 @@ describe('discoverLeaves', () => {
     const b = leaves.find(l => l.branchNames[0] === 'B');
 
     // both inherit root card
-    expect(a.cards.join('\n')).toContain('Root card');
-    expect(b.cards.join('\n')).toContain('Root card');
+    expect(a.cards).toContain('Root card');
+    expect(b.cards).toContain('Root card');
     // each has its own card
-    expect(a.cards.join('\n')).toContain('A card');
-    expect(b.cards.join('\n')).toContain('B card');
+    expect(a.cards).toContain('A card');
+    expect(b.cards).toContain('B card');
     // no cross-contamination
-    expect(a.cards.join('\n')).not.toContain('B card');
-    expect(b.cards.join('\n')).not.toContain('A card');
+    expect(a.cards).not.toContain('B card');
+    expect(b.cards).not.toContain('A card');
+    // the merged block carries one heading per type, not one per contributing node
+    expect(a.cards.match(/^### Char$/gm)).toHaveLength(1);
 
     fs.rmSync(tmp, { recursive: true });
   });
