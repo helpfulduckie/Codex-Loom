@@ -56,8 +56,23 @@ afterAll(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
+// Phase 11 Step 5: a card constant across a subtree is written once at the node that owns
+// it and inherited down, so a leaf need not hold its own copy. Resolve it the way Velvet
+// Lattice does — the nearest `Story Cards/<type>/<type>.md` from the leaf up to the root.
+function resolveCardFile(leafDir, baseDir, type) {
+  let dir = leafDir;
+  for (;;) {
+    const candidate = path.join(dir, 'Story Cards', type, `${type}.md`);
+    if (fs.existsSync(candidate)) return candidate;
+    if (dir === baseDir) return candidate; // return the leaf-level path so callers' existsSync sees false
+    dir = path.dirname(path.dirname(dir));
+  }
+}
+
 function branchCardFile(branch, type) {
-  return path.join(tmpDir, 'output', 'Branches', branch, 'Story Cards', type, `${type}.md`);
+  return resolveCardFile(
+    path.join(tmpDir, 'output', 'Branches', branch), path.join(tmpDir, 'output'), type,
+  );
 }
 
 describe('output files exist', () => {
@@ -102,7 +117,23 @@ describe('protagonist you-mode', () => {
 
 describe('snapshot regression', () => {
   test('subject Character.md matches snapshot', () => {
-    const content = fs.readFileSync(branchCardFile('subject', 'Character'), 'utf8');
+    // Phase 11 Step 5: the subject leaf's Character cards are split across the nodes that
+    // own them (shared ones at the root, subject-only ones at the leaf). Reconstruct the
+    // resolved view the way Velvet Lattice does — every Character.md from the root down to
+    // the leaf, root first.
+    let dir = path.join(tmpDir, 'output');
+    const base = dir;
+    const leafDir = path.join(base, 'Branches', 'subject');
+    const chain = [];
+    for (let d = leafDir; ; d = path.dirname(path.dirname(d))) {
+      chain.unshift(d);
+      if (d === base) break;
+    }
+    const content = chain
+      .map((d) => path.join(d, 'Story Cards', 'Character', 'Character.md'))
+      .filter((p) => fs.existsSync(p))
+      .map((p) => fs.readFileSync(p, 'utf8').trimEnd())
+      .join('\n\n') + '\n';
     expect(content).toMatchSnapshot();
   });
 });
@@ -153,9 +184,9 @@ describe('protagonist inherited from parent branch node', () => {
   });
 
   function nestedCardFile(tier1, tier2, type) {
-    return path.join(
-      nestedTmpDir, 'output', 'Branches', tier1, 'Branches', tier2,
-      'Story Cards', type, `${type}.md`
+    return resolveCardFile(
+      path.join(nestedTmpDir, 'output', 'Branches', tier1, 'Branches', tier2),
+      path.join(nestedTmpDir, 'output'), type,
     );
   }
 

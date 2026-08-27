@@ -21,6 +21,20 @@ const read = (...parts) => fs.readFileSync(path.join(tmpDir, 'output', ...parts)
 const exists = (...parts) => fs.existsSync(path.join(tmpDir, 'output', ...parts));
 const plotEssentials = (branch) => read('Branches', branch, 'Components', 'Plot Essentials.md');
 
+// Phase 11 Step 5: a story card constant across the branch tree is written once at the
+// node that owns it and inherited down, so a leaf need not hold its own copy. Read it the
+// way Velvet Lattice resolves it — nearest `Story Cards/<type>/<type>.md` from the leaf up.
+const branchCard = (branch, type) => {
+  const base = path.join(tmpDir, 'output');
+  let dir = path.join(base, 'Branches', branch);
+  for (;;) {
+    const candidate = path.join(dir, 'Story Cards', type, `${type}.md`);
+    if (fs.existsSync(candidate)) return fs.readFileSync(candidate, 'utf8');
+    if (dir === base) throw new Error(`no ${type}.md from Branches/${branch} up to output root`);
+    dir = path.dirname(path.dirname(dir));
+  }
+};
+
 beforeAll(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-placement-'));
   const write = (rel, content) => {
@@ -106,12 +120,12 @@ afterAll(() => {
 
 describe('story cards stop asking permission (step 5)', () => {
   test('an item that renders only into a component produces no story card', () => {
-    expect(read('Branches', 'shown', 'Story Cards', 'Character', 'Character.md'))
+    expect(branchCard('shown', 'Character'))
       .not.toContain('Hero Vale');
   });
 
   test('an item that names both targets produces both', () => {
-    const cards = read('Branches', 'shown', 'Story Cards', 'Character', 'Character.md');
+    const cards = branchCard('shown', 'Character');
     expect(cards).toContain('Ally Renn');
     expect(cards).toContain('Extra Quill');
     expect(plotEssentials('shown')).toContain('Ally Renn (the second)');
@@ -119,7 +133,7 @@ describe('story cards stop asking permission (step 5)', () => {
 
   test('a story card carries the full template, not the slot\'s', () => {
     // Same item, two templates: the per-target `template:` is what `style: hint` was.
-    expect(read('Branches', 'shown', 'Story Cards', 'Character', 'Character.md'))
+    expect(branchCard('shown', 'Character'))
       .toContain('Tagline: the second');
   });
 });
@@ -157,7 +171,7 @@ describe('sections and slots (step 4)', () => {
     expect(hidden).not.toContain('Cast');
     expect(hidden).not.toContain('Ally Renn (');
     // …and the items themselves are untouched: they still ship their story cards.
-    expect(read('Branches', 'hidden', 'Story Cards', 'Character', 'Character.md'))
+    expect(branchCard('hidden', 'Character'))
       .toContain('Ally Renn');
   });
 

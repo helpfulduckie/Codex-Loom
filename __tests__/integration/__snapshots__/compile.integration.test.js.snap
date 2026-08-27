@@ -1,7 +1,28 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`snapshot regression subject Character.md matches snapshot 1`] = `
-"## Aness Rozen
+"## Mira Ashfen
+~~~
+triggers: [Mira, Ashfen]
+encapsulate: false
+notes: '[e]'
+~~~
+Mira Ashfen - Academy Scholar
+Physical Traits:
+Personality:
+
+## Kaiden Ventus
+~~~
+triggers: [Kaiden, Ventus]
+encapsulate: false
+notes: '[e]'
+~~~
+Kaiden Ventus - knight; master swordsman
+Physical Traits: male; mid 20s; short brown hair; silver eyes; tall broad build
+Personality: honorable, disciplined, protective, warm
+Magic: no affinity; magicless
+
+## Aness Rozen
 ~~~
 triggers: [Aness, Rozen]
 encapsulate: false
@@ -34,26 +55,5 @@ Magic: moderate water-affinity; minor growth-affinity; water whip attacks; minor
 Background:
 one of the top Academy mages; has built her reputation through research
 that requires things most researchers won't do to their subjects
-
-## Mira Ashfen
-~~~
-triggers: [Mira, Ashfen]
-encapsulate: false
-notes: '[e]'
-~~~
-Mira Ashfen - Academy Scholar
-Physical Traits:
-Personality:
-
-## Kaiden Ventus
-~~~
-triggers: [Kaiden, Ventus]
-encapsulate: false
-notes: '[e]'
-~~~
-Kaiden Ventus - knight; master swordsman
-Physical Traits: male; mid 20s; short brown hair; silver eyes; tall broad build
-Personality: honorable, disciplined, protective, warm
-Magic: no affinity; magicless
 "
 `;

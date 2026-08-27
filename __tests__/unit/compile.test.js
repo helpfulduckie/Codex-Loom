@@ -740,9 +740,18 @@ describe('compile writes the VL envelope through emit/vl.js', () => {
       ...branches,
     ].join('\n'), 'utf8');
     compile(path.join(tmpDir, 'compile.yaml'));
-    const leafDir = leaf.reduce((acc, segment) => path.join(acc, 'Branches', segment),
+    // Phase 11 Step 5: a card constant across the subtree is written once at the node that
+    // owns it and inherited down, so a leaf may not hold its own copy. Read it the way
+    // Velvet Lattice resolves it — the nearest Story Cards/Item/Item.md up the chain.
+    let dir = leaf.reduce((acc, segment) => path.join(acc, 'Branches', segment),
       path.join(tmpDir, 'output'));
-    return fs.readFileSync(path.join(leafDir, 'Story Cards', 'Item', 'Item.md'), 'utf8');
+    const base = path.join(tmpDir, 'output');
+    for (;;) {
+      const candidate = path.join(dir, 'Story Cards', 'Item', 'Item.md');
+      if (fs.existsSync(candidate)) return fs.readFileSync(candidate, 'utf8');
+      if (dir === base) throw new Error('no Item.md found from leaf up to output root');
+      dir = path.dirname(path.dirname(dir)); // strip "<segment>/Branches"
+    }
   }
 
   const ITEM = [
@@ -966,10 +975,18 @@ describe('the notes ladder end to end', () => {
       ...branches,
     ].join('\n'), 'utf8');
     compile(path.join(tmpDir, 'compile.yaml'));
-    return (...segments) => fs.readFileSync(
-      path.join(tmpDir, 'output', ...segments.flatMap((s) => ['Branches', s]),
-        'Story Cards', 'Item', 'Item.md'), 'utf8',
-    );
+    // Phase 11 Step 5: the card may be written at an ancestor node and inherited, so read
+    // it the way Velvet Lattice resolves it — nearest Item.md from the leaf up.
+    return (...segments) => {
+      let dir = path.join(tmpDir, 'output', ...segments.flatMap((s) => ['Branches', s]));
+      const base = path.join(tmpDir, 'output');
+      for (;;) {
+        const candidate = path.join(dir, 'Story Cards', 'Item', 'Item.md');
+        if (fs.existsSync(candidate)) return fs.readFileSync(candidate, 'utf8');
+        if (dir === base) throw new Error('no Item.md found from leaf up to output root');
+        dir = path.dirname(path.dirname(dir));
+      }
+    };
   }
 
   test('a type template named Item.notes renders the notes without any declaration', () => {

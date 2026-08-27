@@ -1309,26 +1309,25 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     });
     if (!grouped.has(type)) grouped.set(type, []);
     // Carry a sort key (the item's real id, lowercased) so output order is
-    // deterministic regardless of authoring order in the source YAML.
-    grouped.get(type).push({ sortKey: String(itemId).toLowerCase(), rendered });
+    // deterministic regardless of authoring order in the source YAML. `id`/`name` ride
+    // along so the caller's Phase 11 Step 5 inheritance pass can match this card to the
+    // same card on other leaves — `name` is what Velvet Lattice's card merge keys on.
+    grouped.get(type).push({
+      sortKey: String(itemId).toLowerCase(),
+      rendered,
+      id: item.id ? String(item.id) : null,
+      name: cardTitle(item),
+    });
     // Capture the rendered block per item id for cross-branch diff/annotate reports.
     if (renderedById && item.id) renderedById.set(item.id.toLowerCase(), { type, rendered });
   }
 
-  // Emit types alphabetically, and items within each type sorted by id, so the
-  // compiled Story Cards (and every downstream review/seed-map artifact) diff
-  // cleanly across branches and builds. Story Cards load by trigger in AID, so
-  // physical order has no gameplay effect.
-  const written = [];
-  for (const type of [...grouped.keys()].sort((a, b) => a.localeCompare(b))) {
-    const items = grouped.get(type)
-      .sort((a, b) => a.sortKey.localeCompare(b.sortKey) || a.rendered.localeCompare(b.rendered))
-      .map(c => c.rendered);
-    const outPath = writeOutput(outputDir, type, items);
-    written.push(outPath);
-    if (verbose) console.log(`    OK: ${type} (${items.length} item(s)) → ${outPath}`);
-  }
-  return { written, occupants, placeholderNoise };
+  // Phase 11 Step 5: the per-(node, type) file write is deferred to `compileRun`'s
+  // post-loop inheritance pass, which has every leaf's cards in hand and can write a
+  // card once at the deepest node whose whole subtree renders it identically, letting
+  // Velvet Lattice inherit it down. `grouped` is returned raw — types unsorted, cards
+  // unsorted within a type — because that pass re-groups by node before sorting.
+  return { grouped, occupants, placeholderNoise };
 }
 
 /**
@@ -1915,6 +1914,12 @@ function compileRun(configPath, options, buses) {
   const LIFT_EXCLUDED_COMPONENTS = new Set(['opening', 'adventureDescription']);
   const deferredComponents = new Map(); // descriptor.key → { descriptor, metadata, perLeaf: Map(outputDir → text) }
 
+  // Phase 11 Step 5 — story-card inheritance. One entry per leaf, filled by the loop:
+  // `{ branchPath, folderPath, outputDir, grouped: Map(type → [{sortKey, rendered, id, name}]) }`.
+  // The post-loop pass writes each card at the deepest node whose whole leaf-subtree
+  // renders it byte-identically, and per leaf otherwise.
+  const deferredCardLeaves = [];
+
   for (const branchPath of leaves) {
     const label = branchPath.length > 0 ? branchPath.join('/') : '(root)';
     if (verbose) console.log(`\n  Branch: ${label}`);
@@ -1962,7 +1967,7 @@ function compileRun(configPath, options, buses) {
     // Phase B: cross-item refs + pronouns + render + write. One pass produces the story
     // cards and the component occupants together — see renderBranchItems.
     const renderedById = captureReports ? new Map() : null;
-    const { written, occupants, placeholderNoise } = renderBranchItems(
+    const { grouped: leafCardGroups, occupants, placeholderNoise } = renderBranchItems(
       resolvedItems, registry, templates, partials, outputDir, branchProtagonist, ctx.variables,
       {
         verbose, renderedById,
@@ -1972,7 +1977,10 @@ function compileRun(configPath, options, buses) {
         roles: ctx.roles, onRoleUsed,
       },
     );
-    totalFiles += written.length;
+    // Phase 11 Step 5: story cards are written after the loop, at the node that owns each
+    // one, so a card constant across a subtree is written once and inherited rather than
+    // copied to every leaf. `totalFiles` is credited there.
+    deferredCardLeaves.push({ branchPath, folderPath, outputDir, grouped: leafCardGroups });
     reportCompileDiagnostics();
 
     if (options.inventory) {
@@ -2179,6 +2187,116 @@ function compileRun(configPath, options, buses) {
           if (verbose) console.log(`    OK: ${descriptor.verboseLabel} → ${outPath}`);
           totalFiles++;
         }
+      }
+    }
+  }
+
+  // ── Phase 11 Step 5: story-card inheritance ────────────────────────────────
+  //
+  // A card was rendered once per leaf above. Velvet Lattice inherits a node's cards down
+  // its subtree, merging by card name, so a card that renders byte-identically across a
+  // whole subtree need only be written once, at that subtree's root. This pass finds, for
+  // each card, the minimal set of nodes whose subtrees partition exactly the leaves that
+  // rendered it — the frontier — and writes the card there. A card that varies within its
+  // scope (a protagonist-dependent body, say) has each of its versions placed the same
+  // way, and one that reaches an irregular set of leaves falls all the way back to a copy
+  // per leaf. Every leaf still *resolves* to the same card set it did before; only the
+  // file layout changes (v4 spec §14.3, §15).
+  if (deferredCardLeaves.length <= 1) {
+    // One leaf (or none): there is no subtree to inherit down, so the frontier would only
+    // relocate the single leaf's cards to the output root for no saving. Write them where
+    // they were — same as the pre-Step-5 leaf loop did.
+    for (const leaf of deferredCardLeaves) {
+      const byType = new Map();
+      for (const [type, entries] of leaf.grouped) byType.set(type, entries);
+      for (const type of [...byType.keys()].sort((a, b) => a.localeCompare(b))) {
+        const items = byType.get(type)
+          .slice()
+          .sort((a, b) => a.sortKey.localeCompare(b.sortKey) || a.rendered.localeCompare(b.rendered))
+          .map((c) => c.rendered);
+        const outPath = writeOutput(leaf.outputDir, type, items);
+        if (verbose) console.log(`    OK: ${type} (${items.length} card(s)) → ${outPath}`);
+        totalFiles += 1;
+      }
+    }
+  } else {
+    const leafPaths = deferredCardLeaves.map((l) => l.branchPath);
+    const leavesUnder = (prefix) => {
+      const out = [];
+      for (let i = 0; i < leafPaths.length; i += 1) {
+        if (prefix.every((seg, k) => leafPaths[i][k] === seg)) out.push(i);
+      }
+      return out;
+    };
+    // The minimal nodes (as branch-id paths) whose subtrees cover exactly `carry`.
+    const frontier = (prefix, carry) => {
+      const under = leavesUnder(prefix);
+      if (under.length === 0) return [];
+      if (under.every((i) => carry.has(i))) return [prefix];
+      const deeper = under.filter((i) => leafPaths[i].length > prefix.length);
+      if (deeper.length === 0) {
+        return under.filter((i) => carry.has(i)).map((i) => leafPaths[i]);
+      }
+      const childSegs = [...new Set(deeper.map((i) => leafPaths[i][prefix.length]))];
+      const nodes = [];
+      for (const seg of childSegs) nodes.push(...frontier([...prefix, seg], carry));
+      for (const i of under) {
+        if (leafPaths[i].length === prefix.length && carry.has(i)) nodes.push(prefix);
+      }
+      return nodes;
+    };
+
+    // Every rendering of every card, indexed by the (type, name) pair — a card's file is
+    // `Story Cards/<type>/<type>.md` and Velvet Lattice merges within it by name, so that
+    // pair is the identity inheritance has to preserve. A per-branch variant that changes
+    // the name or the type is a different card here and lands on its own leaves; one that
+    // only changes the body is one entry with two texts, each placed on its own frontier.
+    // Keying on the item id would be wrong — a `variants:` item keeps one id while its
+    // name and type differ per branch. (The key separator is a control char so it cannot
+    // occur in either half.)
+    const cardIndex = new Map();
+    deferredCardLeaves.forEach((leaf, li) => {
+      for (const [type, entries] of leaf.grouped) {
+        for (const e of entries) {
+          const key = `${type}${e.name}`;
+          let rec = cardIndex.get(key);
+          if (!rec) { rec = { type, byText: new Map() }; cardIndex.set(key, rec); }
+          let group = rec.byText.get(e.rendered);
+          if (!group) { group = { carry: new Set(), sortKey: e.sortKey }; rec.byText.set(e.rendered, group); }
+          group.carry.add(li);
+        }
+      }
+    });
+
+    // nodeDir → type → [{ sortKey, rendered }]
+    const ownedByNode = new Map();
+    const putOwned = (dir, type, sortKey, rendered) => {
+      if (!ownedByNode.has(dir)) ownedByNode.set(dir, new Map());
+      const byType = ownedByNode.get(dir);
+      if (!byType.has(type)) byType.set(type, []);
+      byType.get(type).push({ sortKey, rendered });
+    };
+    for (const rec of cardIndex.values()) {
+      for (const [text, group] of rec.byText) {
+        for (const node of frontier([], group.carry)) {
+          const dir = buildBranchOutputDir(
+            config._resolvedOutput, resolveBranchFolderPath(config.branches, node),
+          );
+          putOwned(dir, rec.type, group.sortKey, text);
+        }
+      }
+    }
+
+    // Types alphabetical, cards within a type by id then rendered text — the order
+    // `renderBranchItems` used to apply itself, now applied once per owning node.
+    for (const [dir, byType] of ownedByNode) {
+      for (const type of [...byType.keys()].sort((a, b) => a.localeCompare(b))) {
+        const items = byType.get(type)
+          .sort((a, b) => a.sortKey.localeCompare(b.sortKey) || a.rendered.localeCompare(b.rendered))
+          .map((c) => c.rendered);
+        const outPath = writeOutput(dir, type, items);
+        if (verbose) console.log(`    OK: ${type} (${items.length} card(s)) → ${outPath}`);
+        totalFiles += 1;
       }
     }
   }

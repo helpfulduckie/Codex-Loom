@@ -384,10 +384,11 @@ describe('maskFences', () => {
 // built in the test. The fixtures are a separate private repo cloned into the gitignored
 // goldenFixtures/ (see .gitignore), so these two skip when it is absent — the parser's
 // behavior against hand-built input is covered by the describes above.
+// The base Character type is constant across The Institute's whole tree, so Phase 11
+// Step 5 writes it once at the output root and lets Velvet Lattice inherit it down.
 const FIXTURE = path.resolve(
   __dirname,
-  '../../goldenFixtures/Esudia/The Institute/v3/Branches/Alpha-Omega/Branches/Aness'
-    + '/Branches/Malcolm/Branches/hatesYou/Story Cards/Character/Character.md',
+  '../../goldenFixtures/Esudia/The Institute/v3/Story Cards/Character/Character.md',
 );
 
 (fs.existsSync(FIXTURE) ? describe : describe.skip)('against real compiled fixture output', () => {
