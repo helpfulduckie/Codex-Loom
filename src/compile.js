@@ -448,6 +448,23 @@ function resolveBranchFolderPath(branches, idPath) {
 }
 
 /**
+ * True when any branch node anywhere below the root satisfies `predicate` — used by the
+ * Phase 11 Step 4 inheritance pass to check whether a component key or `scripts:` is
+ * redeclared below the project root. A key declared only at the root can be written once
+ * there and left for Velvet Lattice to inherit; a key some branch overrides has to be
+ * resolved per leaf.
+ */
+function branchTreeDeclares(branches, predicate) {
+  if (!branches || typeof branches !== 'object') return false;
+  for (const node of Object.values(branches)) {
+    if (!node || typeof node !== 'object') continue;
+    if (predicate(node)) return true;
+    if (branchTreeDeclares(node.branches, predicate)) return true;
+  }
+  return false;
+}
+
+/**
  * Build a library dependency manifest for the output JSON file.
  */
 function buildLibraryManifest(config) {
@@ -1537,8 +1554,23 @@ function writeLabelsRecursive(rootNode, outputBase, variables, rootVariables, ve
         + 'the player is choosing, then keeps the raw placeholder text in the saved '
         + 'adventure’s title. Deliberate is possible; usually it is not.',
     });
-    fs.writeFileSync(outPath, labelText + '\n', 'utf8');
-    if (verbose) console.log(`    OK: Label → ${outPath}`);
+    // Velvet Lattice reads `Label.md` from the node's own directory and falls back to the
+    // directory name when the file is absent (`scenario.py:37`, `self._load_file("Label.md")
+    // or self.name`). A label that renders to its own branch key is therefore written for
+    // nothing — 60 of The Institute's 61 label files are exactly that. Write only where the
+    // rendered label differs from the segment VL would default to (Phase 11 Step 3,
+    // Decision 2). The diagnostics above still run either way: a broken placeholder in a
+    // title the author wrote is reportable whether or not the file lands.
+    if (labelText !== name) {
+      fs.writeFileSync(outPath, labelText + '\n', 'utf8');
+      if (verbose) console.log(`    OK: Label → ${outPath}`);
+    } else if (fs.existsSync(outPath)) {
+      // A prior compile of a since-shortened title left one behind. Harmless to VL, which
+      // would read it and get the same string it now defaults to, but noise in the tree
+      // and in any diff — the pre-build clean only archives whole stale nodes, not a live
+      // node whose label collapsed into its key.
+      fs.rmSync(outPath);
+    }
 
     return { outputBase: nodeOutput, variables: branchVars, table };
   }, { outputBase, variables, table: {} });
@@ -1858,6 +1890,24 @@ function compileRun(configPath, options, buses) {
   const descriptionLeaves = new Set();
   const openingLeaves = new Set();
 
+  // Phase 11 Step 4 — component and script inheritance. Velvet Lattice inherits a
+  // component down the branch tree by filename and a `Scripts/` dir wholesale, so a value
+  // that is identical at every leaf need only be written once, at the node that declares
+  // it, and VL folds it down. The leaf loop renders and checks every component per leaf
+  // exactly as before; only the *file write* is deferred to here, where the full set of
+  // per-leaf texts is known and the decision can be "one file at the root" or "one per
+  // leaf, as it was".
+  //
+  //   - `opening` is excluded: it shares the `Opening.md` filename with `branchFraming`,
+  //     which `writeFramingRecursive` writes at every interior node, so an inherited
+  //     opening lifted above a leaf would be shadowed by the nearest ancestor's framing
+  //     question (§7.3). It stays written at the leaf.
+  //   - `adventureDescription` is excluded: VL reads `Description.md` from the node's own
+  //     directory and does not inherit it (`scenario.py`), so the file has to land at
+  //     each leaf regardless of Codex Loom's own key-merge (`emit/components.js:120`).
+  const LIFT_EXCLUDED_COMPONENTS = new Set(['opening', 'adventureDescription']);
+  const deferredComponents = new Map(); // descriptor.key → { descriptor, metadata, perLeaf: Map(outputDir → text) }
+
   for (const branchPath of leaves) {
     const label = branchPath.length > 0 ? branchPath.join('/') : '(root)';
     if (verbose) console.log(`\n  Branch: ${label}`);
@@ -1985,11 +2035,36 @@ function compileRun(configPath, options, buses) {
         );
       }
 
-      const outPath = writeSectionedComponent(
-        outputDir, descriptor, text, { diagnostics: compileDiagnostics },
-        component ? component.metadata : null,
-      );
-      if (outPath) {
+      const metadata = component ? component.metadata : null;
+      // Phase 11 Step 4: a component that renders to something is written here only if it
+      // is one of the two the leaf must hold itself; every other component's write is
+      // deferred to the post-loop inheritance pass, which decides between one file at the
+      // declaring node and one per leaf. `sectionedWritten`/`sectionedSegments` and the
+      // CL0616 sets are still filled per leaf either way — the leaf *has* the component,
+      // whether it holds the bytes or inherits them, and `--diff`/`--annotate` read those
+      // in-memory segments, not the tree.
+      let wrote;
+      if (text && LIFT_EXCLUDED_COMPONENTS.has(descriptor.key)) {
+        const outPath = writeSectionedComponent(
+          outputDir, descriptor, text, { diagnostics: compileDiagnostics }, metadata,
+        );
+        wrote = !!outPath;
+        if (outPath) {
+          if (verbose) console.log(`    OK: ${descriptor.verboseLabel} → ${outPath}`);
+          totalFiles++;
+        }
+      } else if (text) {
+        let entry = deferredComponents.get(descriptor.key);
+        if (!entry) {
+          entry = { descriptor, metadata, perLeaf: new Map() };
+          deferredComponents.set(descriptor.key, entry);
+        }
+        entry.perLeaf.set(outputDir, text);
+        wrote = true;
+      } else {
+        wrote = false;
+      }
+      if (wrote) {
         sectionedWritten[descriptor.key] = true;
         sectionedSegments[descriptor.key] = segments;
         if (descriptor.key === 'adventureDescription') descriptionLeaves.add(label);
@@ -1997,8 +2072,6 @@ function compileRun(configPath, options, buses) {
         // Openings are written here now, so the set is built here — the two facts CL0616
         // compares are produced by one loop rather than by two passes that had to agree.
         if (descriptor.key === 'opening') openingLeaves.add(label);
-        if (verbose) console.log(`    OK: ${descriptor.verboseLabel} → ${outPath}`);
-        totalFiles++;
       } else if (!excluded) {
         // §7.4: a component that renders to nothing is an ERROR, not a gap. The gap list
         // is for a component that was asked for and could not be found; this one was
@@ -2021,6 +2094,12 @@ function compileRun(configPath, options, buses) {
     const hasAN = !!sectionedWritten.authorsNote;
 
     // Scripts
+    //
+    // Still written per leaf, unlike the deferred components above. Velvet Lattice would
+    // inherit a root `Scripts/` dir down the tree, so lifting these is a real win too, but
+    // `scripts/rebaseline.js` re-baselines markdown only — the shipped `.js` are copied
+    // input it deliberately will not absorb — so relocating them in the golden tree needs
+    // a re-baseline-tooling change that is its own errand (see the plan's Step 4 note).
     const scriptsSpec = compileContext.componentRefs.scripts;
     if (scriptsSpec && typeof scriptsSpec === 'string') {
       copyScripts(scriptsSpec, outputDir);
@@ -2051,6 +2130,50 @@ function compileRun(configPath, options, buses) {
     }
 
     leafSummaries.push({ label, leafItems, leafVariants, hasPE, hasAIN, hasAN });
+  }
+
+  // ── Phase 11 Step 4: component and script inheritance ──────────────────────
+  //
+  // Each deferred component (and the `Scripts/` dir) is written once at the output root
+  // when its value is identical at every leaf and no branch node redeclares it — the
+  // shape Velvet Lattice inherits down the tree for free. Anything else is written per
+  // leaf, byte-for-byte where the leaf loop used to write it, so the fallback is the old
+  // behavior rather than a new one.
+  //
+  // "Identical at every leaf" is required to be a total match, not a majority: a leaf that
+  // excludes the component (`~`, or a gap) is not in `perLeaf`, and lifting to the root
+  // would make VL inherit it there anyway. `leaves.length > 1` skips the single-leaf
+  // projects, where the one "leaf" already *is* the root and lifting would be a no-op that
+  // only muddies the diff.
+  const canLift = (perLeaf, declaredInBranches) => leaves.length > 1
+    && perLeaf.size === leaves.length
+    && !declaredInBranches
+    && new Set(perLeaf.values()).size === 1;
+
+  for (const { descriptor, metadata, perLeaf } of deferredComponents.values()) {
+    const declaredInBranches = branchTreeDeclares(
+      config.branches, (node) => node.components && node.components[descriptor.key] !== undefined,
+    );
+    if (canLift(perLeaf, declaredInBranches)) {
+      const [text] = perLeaf.values();
+      const outPath = writeSectionedComponent(
+        config._resolvedOutput, descriptor, text, { diagnostics: compileDiagnostics }, metadata,
+      );
+      if (outPath) {
+        if (verbose) console.log(`    OK: ${descriptor.verboseLabel} (inherited from root) → ${outPath}`);
+        totalFiles++;
+      }
+    } else {
+      for (const [leafDir, text] of perLeaf) {
+        const outPath = writeSectionedComponent(
+          leafDir, descriptor, text, { diagnostics: compileDiagnostics }, metadata,
+        );
+        if (outPath) {
+          if (verbose) console.log(`    OK: ${descriptor.verboseLabel} → ${outPath}`);
+          totalFiles++;
+        }
+      }
+    }
   }
 
   // Write Opening / OpeningChoice files (post-loop)
