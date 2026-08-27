@@ -6,9 +6,10 @@ Codex Loom compiles YAML item definitions into Velvet Lattice story card format 
 
 ## Branch / Version Context
 
-- Active work is the **v4 rebuild on `v4-phase1`**. Phases 1–7 are complete; Phase 8 is next.
+- Active work is the **v4 rebuild on `v4-phase1`**. Phases 1–11 are complete; Phase 12 is next.
 - **`sections:` is the only component grammar.** v3 syntaxes (`src/pe.js`, `src/description.js`, `src/opening.js`) no longer exist.
 - A component is a named mapping of sections, and every component type — Plot Essentials, AI Instructions, Author's Note, Opening, Description — reads the same way.
+- **Phase 11 changed where files are written.** A component, placeholder or story card lands at the node that owns it, not at every leaf — Velvet Lattice inherits them down the branch tree. `Label.md` and `Description.md` are the exceptions and still land per node. Story-card placement keys on `(type, name)`, never on item id.
 
 ## Testing
 

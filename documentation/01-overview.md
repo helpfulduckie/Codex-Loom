@@ -1,6 +1,6 @@
 # Codex Loom — Overview & Getting Started
 
-Codex Loom is a command-line compiler that turns YAML item definitions into Velvet Lattice story card files for AI Dungeon scenarios. You write your characters, locations, and other items in structured YAML; Codex Loom assembles them into the folder layout Velvet Lattice expects, resolves pronoun tokens, applies variant chains, and generates one complete output folder per playable branch.
+Codex Loom is a command-line compiler that turns YAML item definitions into Velvet Lattice story card files for AI Dungeon scenarios. You write your characters, locations, and other items in structured YAML; Codex Loom assembles them into the folder layout Velvet Lattice expects, resolves pronoun and role tokens, applies variant chains, and writes each file at the node in the branch tree that owns it.
 
 ---
 
@@ -52,14 +52,26 @@ codex-loom -b path/to/project/
 codex-loom --lint path/to/project/
 codex-loom -L path/to/project/
 
+# Freeze the library into a committed snapshot/ tree
+codex-loom --snapshot path/to/project/
+
+# Compile against the live library instead of the frozen snapshot
+codex-loom --live path/to/project/
+
+# Convert a v3 project to v4 in place (does not compile)
+codex-loom --migrate path/to/project/
+codex-loom --migrate --rename-cl path/to/project/
+
 # Combine: compile then generate both review files in one run
 codex-loom --compile --leafReview --overview path/to/project/
 codex-loom -C -l -o path/to/project/
 ```
 
-**Mode flags** — `-C`/`--compile`, `-l`/`--leafReview`, `-o`/`--overview`, `-s`/`--seed-map`, `-b`/`--card-sizes`, `-L`/`--lint` — control what runs. Any combination is valid:
+**Mode flags** — `-C`/`--compile`, `-l`/`--leafReview`, `-o`/`--overview`, `-s`/`--seed-map`, `-b`/`--card-sizes`, `-L`/`--lint`, `--snapshot`, `--migrate` — control what runs. Any combination is valid except `--migrate`, which runs alone.
 
-**Compile options** — `-d`/`--with-diff`, `-a`/`--with-annotate`, `-i`/`--with-inventory`, `-c`/`--clean`, `-v`/`--verbose` — modify a compile rather than selecting one. The first three emit review reports from data that only exists in memory during compilation, so any of them forces a compile. (`--diff`, `--annotate` and `--inventory` are accepted as aliases.)
+**Compile options** — `-d`/`--with-diff`, `-a`/`--with-annotate`, `-i`/`--with-inventory`, `-c`/`--clean`, `-v`/`--verbose`, `--live` — modify a compile rather than selecting one. The first three emit review reports from data that only exists in memory during compilation, so any of them forces a compile. (`--diff`, `--annotate` and `--inventory` are accepted as aliases.)
+
+**Diagnostics** — `--lint-level=off|error|warn` (also `--lint-level warn`) overrides `lint.level` from `compile.yaml`. It reaches the opinion layer only — the five heuristic codes that guess at whether prose was meant — and never silences a factual error. It is deliberately separate from `--verbose`: verbosity is about compile progress, this is about which diagnostics an author wants to hear.
 
 | Flags | What happens |
 |---|---|
@@ -70,6 +82,8 @@ codex-loom -C -l -o path/to/project/
 | `-s` | Seed map only |
 | `-b` | Item sizes only |
 | `-L` | Lint only |
+| `--snapshot` | Freeze the library, no compile |
+| `--migrate` | Convert a v3 project in place, no compile |
 | `-l -o` | Both review modes, no compile |
 | `-C -l` | Compile, then leaf-review |
 | `-C -o` | Compile, then overview |
@@ -79,6 +93,10 @@ codex-loom -C -l -o path/to/project/
 | `-C -l -o` | Compile, then both review modes |
 
 `-c`/`--clean` and `-v`/`--verbose` only apply to the compile step.
+
+**The library snapshot** (`--snapshot`, `--live`) — Shared items declared under `library:` are frozen into a committed `snapshot/` tree with a hashed manifest, so a compile reproduces byte-for-byte even when the shared source moves underneath it. Library-name `{%name}` tokens resolve against the snapshot by default; `--live` redirects them to the working library instead. See [The Library Snapshot](12-snapshot.md).
+
+**Migration** (`--migrate`, `--rename-cl`) — Converts a v3 project to the v4 schema in place and writes `migration-report.md` alongside the config, listing every file touched and a review queue of the conversions that need a human eye. It does not compile; run `codex-loom` again once the project has migrated. `--rename-cl` additionally renames `compile.yaml` to `compile.cl.yaml`.
 
 **Seed map** (`-s`/`--seed-map`) — Reads compiled output and reports which items' body text contains other items' triggers. When Item A's body mentions a word from Item B's trigger list, the Storyteller AI pulling Item A into context may also pull Item B — a "seed." The seed map makes these relationships visible so you can spot unintended context cascade or find items that nothing seeds.
 
@@ -163,58 +181,72 @@ One report is written to the overview folder:
 
 ```
 my-project/
-  compile.yaml                   ← required; project entry point
+  compile.cl.yaml                ← required; project entry point
   items/                         ← project item definitions and imports
-    characters.yaml
-    locations.yaml
-  canon/                         ← shared (canonical) item definitions
-    Characters/
-      Aness.yaml
-      Felicia.yaml
+    characters.cl.yaml
+    locations.cl.yaml
+  canon/                         ← shared item definitions, declared under `library:`
+    main/
+      Aness.cl.yaml
+      Felicia.cl.yaml
   templates/                     ← .template and .partial files
     Character.template
     Location.template
     ItemHeader.partial
-  plot-essentials.yaml           ← optional; defines Components/Plot Essentials.md
-  ai-instructions.yaml           ← optional; defines Components/AI Instructions.md
-  authors-note.yaml              ← optional; defines Components/Author's Note.md
+  components/                    ← optional; one file per component
+    plot-essentials.cl.yaml
+    ai-instructions.cl.yaml
+    authors-note.cl.yaml
+  snapshot/                      ← written by --snapshot; committed
   output/                        ← compiler writes here (do not edit manually)
 ```
+
+**Paths are declared, not conventional.** Nothing above is a magic directory name — `structure.input.items`, `structure.input.templates`, `structure.input.library` and `structure.output` name them, and the layout here is only what a typical project chooses. `library:` is a *mapping* of names to directories (`main: ./canon/main`), and each name is auto-exposed as a `{%name}` variable, which is how a component or item refers to shared content. See [compile.yaml Reference](02-compile-yaml.md).
+
+**`.cl.yaml` is the v4 extension.** Plain `.yaml` still loads; the suffix marks a file as Codex Loom's rather than something else's, and `--migrate --rename-cl` applies it to the config too.
 
 ---
 
 ## Output Structure
 
-For a project with two branch leaves `subject` and `researcher`, the output looks like:
+**Each file is written once, at the node that owns it.** Velvet Lattice inherits components, placeholders, scripts and story cards down the branch tree, so a leaf resolves to its ancestors' files without holding copies of them. A card or component that is identical across every branch is written at the root and nowhere else.
+
+For a project with two branch leaves `subject` and `researcher` that share most of their content:
 
 ```
 output/
-  Story Cards/                   ← root-level items (compiled for all branches)
+  Story Cards/                   ← every card identical across both leaves
     Character/
       Character.md
+  Components/
+    AI Instructions.md           ← identical at both leaves, so written once here
+  Label.md                       ← only when it differs from the directory name
   Branches/
     subject/
-      Story Cards/               ← all items compiled for the subject leaf
-        Character/
-          Character.md
-      Components/
-        Opening.md
-        Plot Essentials.md
-        AI Instructions.md
-        Author's Note.md
-      Scripts/                   ← optional; copied from scripts source
-    researcher/
       Story Cards/
         Character/
-          Character.md
+          Character.md           ← only the cards this leaf renders differently
+      Components/
+        Opening.md               ← per-leaf: this branch's first move
+        Plot Essentials.md       ← per-leaf: slots filled by per-branch items
+      Description.md             ← never inherits; written at every node
+      Scripts/                   ← optional; copied from scripts source
+    researcher/
       Components/
         Opening.md
         Plot Essentials.md
+      Description.md
 ```
 
 For nested branches (e.g. branch `A` with children `X` and `Y`), the path is `Branches/A/Branches/X/`.
 
 A project with no `branches:` key produces a single root-level output with no `Branches/` folder.
+
+**Two files never inherit and are written at every node that needs one:** `Label.md` and `Description.md`. Velvet Lattice reads both from the node's own directory with no parent in scope. `Label.md` is additionally omitted whenever the rendered label equals the directory segment, because VL falls back to the directory name when the file is absent.
+
+**Story cards are placed by frontier.** For each card and each distinct rendered text, the compiler finds the minimal set of nodes whose subtrees cover exactly the leaves that produced that text. A card constant everywhere lands at the root; a card scoped to one subtree lands once per subtree; a card with per-branch variant bodies gets one copy per version. This is why a leaf folder can contain far fewer cards than the branch actually plays with — the rest are inherited.
+
+**Reading the output tree is not how you check what a branch contains.** Use `--leafReview`, which resolves each leaf through its ancestor chain and writes one file showing everything that branch actually gets.
 
 ---
 
@@ -222,13 +254,15 @@ A project with no `branches:` key produces a single root-level output with no `B
 
 | File | Purpose |
 |---|---|
-| `compile.yaml` | Project configuration — paths, branches, protagonist, component references |
-| Item YAML files | Item definitions and imports under `items/` or `canon/` |
+| `compile.cl.yaml` | Project configuration — paths, branches, roles, placeholders, component references |
+| Item YAML files | Item definitions and imports, under the directories `structure.input.items` and `library:` name |
 | `.template` files | How each item type is rendered to markdown |
 | `.partial` files | Reusable template fragments |
-| Component YAML files | Plot Essentials, AI Instructions, Author's Note content |
+| Component YAML files | Plot Essentials, Summary, AI Instructions, Author's Note, Opening and Description content |
 
 Each is covered in its own reference document.
+
+**All seven component types share one grammar.** A component is a named mapping of `sections:`, and Plot Essentials, Summary, AI Instructions, Author's Note, Opening, branch framing and Description all read the same way. `imports:` pulls sections in from another component file and nests to any depth, which is how a house style is shared across projects. A component key may also point straight at a `.md` or `.txt`, which is copied through verbatim and declares no sections. See [Components](09-components.md).
 
 ---
 
@@ -236,9 +270,13 @@ Each is covered in its own reference document.
 
 **Items** are the atomic units of content — a character, a location, a settings block. Each item has a type (which controls its output folder), a body of content fields, and AID-specific metadata such as its triggers and card name.
 
-**Canon vs project items** — Canon items live in a shared folder available to any project. Project items are local to one scenario and can import and extend canon items.
+**Library vs project items** — Library items live in shared folders available to any project, declared as a mapping of names to directories under `library:`. Each name becomes a `{%name}` variable. Project items are local to one scenario and can import and extend library items. `--snapshot` freezes the library so a compile reproduces byte-for-byte even after the shared source moves.
 
-**Branches** define playable paths through the scenario. The compiler enumerates all leaf nodes in the branch tree and produces one complete output folder per leaf. Items can be filtered to specific branches or shared across all of them.
+**Branches** define playable paths through the scenario. The compiler enumerates every leaf in the branch tree and resolves each one's full content, then writes each file once at the node that owns it — Velvet Lattice inherits the rest down the tree. Items can be filtered to specific branches or shared across all of them.
+
+**Roles** name a character by the part they play rather than by who fills it — `protagonist`, `LI`, `rival`. A `{$role}` token resolves to whichever item that branch binds the role to, so one piece of text serves every branch. Roles are declared at the project root and rebound per branch node.
+
+**Placeholders** are AID's own `${question}` prompts, declared once under `placeholders:` and referenced as `%key%`. The player answers them when the adventure starts.
 
 **Variants** are named deltas that layer changes on top of an item. A character item might have a `networked` variant that adds implant details, or a `Felix` variant that changes gender. Branch dispatch maps branch names to variant names, so the right version of each item appears in each branch's output.
 
@@ -257,7 +295,8 @@ Each is covered in its own reference document.
 - [Field Operations](06-field-operations.md)
 - [Templates & Partials](07-templates.md)
 - [Pronoun System](08-pronouns.md)
-- [Components (PE, AIN, AN, Opening)](09-components.md)
+- [Components (PE, Summary, AIN, AN, Opening, Description)](09-components.md)
 - [Errors & Warnings](10-errors-and-warnings.md)
+- [Diagnostic Codes](11-diagnostics.md)
 - [The Library Snapshot](12-snapshot.md)
 - [Roles](13-roles.md)
