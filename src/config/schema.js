@@ -76,6 +76,22 @@ const RENDER = {
 };
 
 /**
+ * `templateFor:` — a template-selection file per rendering role, branch-addressable (§13.4).
+ *
+ * An open record: `base`, `notes`, and one key per component (`plotEssential`, …), each
+ * naming one `.cl.yaml` file — or a list of them, merged left to right — that carries a
+ * `templates:` namespace. What merges down the branch chain is the type-to-template map
+ * those files produce, key-wise, exactly as `components:` does (`src/model/branches.js`).
+ * It lives here rather than inside `render:` because `render:` merges with a shallow
+ * `Object.assign`, so a map nested one level deeper would be replaced wholesale by any
+ * branch that touched one role.
+ */
+const TEMPLATE_FOR = {
+  type: TYPES.RECORD,
+  of: { type: [TYPES.STRING, TYPES.SEQ], of: STRING },
+};
+
+/**
  * `lint:` — the opinion layer's controls (§12.5).
  *
  * `level:` is a closed set, so a typo is a `CL0206` naming the three legal values rather
@@ -153,6 +169,7 @@ const BRANCH_NODE = {
     lint: BRANCH_LINT,
     components: COMPONENTS,
     render: RENDER,
+    templateFor: TEMPLATE_FOR,
     branches: null, // patched below — a node cannot reference itself during construction
   },
 };
@@ -193,8 +210,9 @@ const CONFIG_SCHEMA = {
     lint: LINT,
     components: COMPONENTS,
     render: RENDER,
+    templateFor: TEMPLATE_FOR,
     branches: BRANCHES,
   },
 };
 
-module.exports = { CONFIG_SCHEMA, BRANCH_NODE, COMPONENTS, SCRIPTS, RENDER };
+module.exports = { CONFIG_SCHEMA, BRANCH_NODE, COMPONENTS, SCRIPTS, RENDER, TEMPLATE_FOR };

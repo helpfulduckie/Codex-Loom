@@ -7,6 +7,7 @@ const { loadCompileConfig } = require('./config/load');
 const {
   loadItemsFromDir, buildRegistry, mergeRegistries,
 } = require('./loader/registry');
+const { loadFieldTable } = require('./loader/field-table');
 
 /**
  * Load all files of a given extension from one or more directories recursively.
@@ -68,14 +69,20 @@ function checkNoFences(files, ext, diagnostics) {
 }
 
 /**
- * Load all templates and partials from one or more directories.
+ * Load all templates, partials and the field table from one or more directories.
+ *
+ * `fieldTable` is the §13 declaration surface — `fields.cl.yaml`'s three namespaces merged
+ * key-wise across the search path. It loads here, beside the `.template`/`.partial` files,
+ * because §13.5 requires the declarations and the templates that name them to travel
+ * together: a library shipping templates must ship the field table those templates use.
  */
 function loadTemplates(dirs, options = {}) {
   const templates = loadNamedFiles(dirs, '.template');
   const partials = loadNamedFiles(dirs, '.partial');
   checkNoFences(templates, '.template', options.diagnostics);
   checkNoFences(partials, '.partial', options.diagnostics);
-  return { templates, partials };
+  const fieldTable = loadFieldTable(dirs, options);
+  return { templates, partials, fieldTable };
 }
 
 // What remains here is template loading. Config loading moved to config/load.js, and

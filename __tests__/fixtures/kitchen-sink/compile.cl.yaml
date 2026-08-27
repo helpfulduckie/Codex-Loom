@@ -102,6 +102,15 @@ components:
 render:
   notesTemplate: ProjectNotes
 
+# Phase 12 (§13.4). A template-selection file per rendering role, branch-addressable.
+# `base` names one file; `notes` the list form (several files merge left to right). The
+# paths resolve against the templates search path at compile time, like component specs —
+# config loading only schema-checks them, so no file needs to exist beside this fixture.
+templateFor:
+  base:          templates.cl.yaml
+  notes:         [notes.cl.yaml, '{%tpl}/mod-notes.cl.yaml']
+  plotEssential: pe.cl.yaml
+
 branches:
   subject:
     title: The Subject's Path
@@ -132,6 +141,11 @@ branches:
     # mod a marker belongs to points at a blank template instead, which emits no line.
     render:
       notesTemplate: ~
+    # One role reslotted for this branch; `base` and `plotEssential` inherit the root's
+    # files (§13.4's key-wise merge). Depth matters to the coverage check — the key has to
+    # appear on a first-level branch to cover `branches.*.templateFor`.
+    templateFor:
+      base: '{%tpl}/terse.cl.yaml'
     scripts:
       input:   '{%scriptDir}/input.js'
       output:  '{%scriptDir}/output.js'

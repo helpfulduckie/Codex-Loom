@@ -16,6 +16,8 @@ const { slotsForBranch } = require('./model/component');
 const { loadComponentDocument } = require('./loader/component');
 const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
+const { renderFieldList } = require('./render/field-list');
+const { CODES: FIELD_TABLE_CODES } = require('./loader/field-table');
 const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts, itemContext, CONFIG_BASENAMES, normalizeVarKey } = require('./util');
 const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
@@ -79,12 +81,13 @@ const CODES = {
  * would report once per item per leaf, which for a project like The Institute means the
  * same typo printed thousands of times.
  */
-function checkConfigNotesTemplates(config, templates, diagnostics, configPath) {
+function checkConfigNotesTemplates(config, templates, diagnostics, configPath, fieldTable) {
   if (!diagnostics) return;
+  const fieldListTemplates = (fieldTable && fieldTable.templates) || {};
 
   const check = (node, where) => {
     const name = node && node.render && node.render.notesTemplate;
-    if (!name || templates.has(String(name).toLowerCase())) return;
+    if (!name || templates.has(String(name).toLowerCase()) || fieldListTemplates[String(name)]) return;
     diagnostics.error(
       CODES.NOTES_TEMPLATE_NOT_FOUND,
       `${where} declares render.notesTemplate "${name}", which is not a loaded template.`,
@@ -145,25 +148,36 @@ function resolveNotesTemplateName(item, templates, projectNotesTemplate) {
  * a notes template that did not spell out a {wrapper} block would otherwise be wrapped
  * by the post-render fallback and emit `notes: '{...}'`.
  */
-function renderNotesText(item, context, templates, partials, variables, projectNotesTemplate, diagnostics) {
-  const name = resolveNotesTemplateName(item, templates, projectNotesTemplate);
-  if (!name) return undefined;
-  const template = templates.get(name.toLowerCase());
-  if (!template) {
-    // Only rung 1 reaches here: rung 2 is existence-checked and rung 3 is validated at
-    // load, so the name came from the item and naming the item is what helps.
+function renderNotesText(item, context, templates, partials, variables, projectNotesTemplate, diagnostics, extra = {}) {
+  const { fieldTable = { templates: {} }, templateFor = {}, bodyName } = extra;
+  const resolved = resolveNotesRender(
+    item, bodyName || getTemplateName(item, templates), templates, fieldTable, projectNotesTemplate, templateFor,
+  );
+  if (!resolved) return undefined;
+
+  if (resolved.kind === 'missing') {
+    // Only rung 1 (or the branch rung, validated at load) reaches here: the `.notes` suffix
+    // rung is existence-checked, so a missing name came from the item.
     const label = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
     if (diagnostics) {
       diagnostics.error(
         CODES.ITEM_NOTES_TEMPLATE_NOT_FOUND,
-        `item "${label}" declares render.notesTemplate "${name}", which is not a loaded template.`,
+        `item "${label}" declares render.notesTemplate "${resolved.name}", which is not a loaded template.`,
         { file: item._source },
       );
     }
     return undefined;
   }
+
   const notesContext = { ...context, render: { ...context.render, wrapper: 'none' } };
-  return render(template.content, notesContext, partials, variables, { diagnostics, file: template._source, name });
+  if (resolved.kind === 'fieldList') {
+    return renderFieldList(resolved.list, fieldTable, notesContext, {
+      diagnostics, file: null, name: resolved.name, partials, variables, refRoot: resolved.refRoot || 'notes',
+    });
+  }
+  return render(resolved.entry.content, notesContext, partials, variables, {
+    diagnostics, file: resolved.entry._source, name: resolved.name,
+  });
 }
 
 /**
@@ -193,6 +207,140 @@ function getTemplateName(item, templates) {
 function getTemplate(item, templates) {
   const name = getTemplateName(item, templates);
   return name ? templates.get(name.toLowerCase()) : null;
+}
+
+// ── templateFor: rendering roles, branch-addressable (§13.4, Phase 12) ─────────
+
+/**
+ * Find one `templateFor` slot file on the templates search path.
+ *
+ * A slot value is a bare basename (`terse.cl.yaml`), a `{%tok}`-expanded relative path, or
+ * an absolute path. Bare names are matched against each resolved templates directory in
+ * turn; `config._resolvedTemplates` has already been redirected through the snapshot where
+ * one exists, so a slot file inside a frozen library directory freezes with it.
+ */
+function findTemplateForFile(spec, templateDirs, base) {
+  const s = String(spec);
+  if (path.isAbsolute(s) && fs.existsSync(s)) return s;
+  const rel = path.resolve(base, s);
+  if (fs.existsSync(rel)) return rel;
+  for (const dir of templateDirs) {
+    const p = path.join(dir, s);
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+/**
+ * Resolve a branch-merged `templateFor` map (`{ role: file | [files] }`) into
+ * `{ role: { <aid.type>: <field list> } }`.
+ *
+ * Each slot's files are read for their `templates:` namespace and merged left to right; the
+ * `fields:`/`groups:` of a slot file are not folded in — a role file reselects which fields
+ * a type shows, and the field declarations themselves stay single-sourced in
+ * `fields.cl.yaml` (§13.5: the table is not branch-addressable).
+ */
+function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostics, configPath) {
+  const roleMaps = {};
+  for (const [role, spec] of Object.entries(slots || {})) {
+    if (spec === null || spec === undefined) continue;
+    const files = Array.isArray(spec) ? spec : [spec];
+    const merged = {};
+    for (const file of files) {
+      const expanded = resolveVariables(String(file), variables);
+      const abs = findTemplateForFile(expanded, templateDirs, base);
+      if (!abs) {
+        if (diagnostics) {
+          diagnostics.error(
+            LOAD_CODES.PATH_NOT_FOUND,
+            `templateFor.${role} names "${file}", which was not found on the templates search path.`,
+            { file: configPath },
+          );
+        }
+        continue;
+      }
+      let doc;
+      try {
+        doc = loadYaml(abs);
+      } catch (err) {
+        if (diagnostics) {
+          diagnostics.error(FIELD_TABLE_CODES.FIELD_TABLE_MALFORMED,
+            `Could not parse templateFor.${role} file ${path.basename(abs)}: ${err.message}`, { file: abs });
+        }
+        continue;
+      }
+      if (doc && doc.templates && typeof doc.templates === 'object') {
+        Object.assign(merged, doc.templates);
+      }
+    }
+    roleMaps[role] = merged;
+  }
+  return roleMaps;
+}
+
+/** A named template, resolved to text entry or field list, ignoring the type→template map. */
+function lookupNamedTemplate(name, templates, fieldTable) {
+  if (!name) return null;
+  const lower = String(name).toLowerCase();
+  if (templates.has(lower)) return { kind: 'text', entry: templates.get(lower), name: String(name) };
+  const ft = fieldTable && fieldTable.templates;
+  if (ft && ft[name]) return { kind: 'fieldList', list: ft[name], name: String(name) };
+  return null;
+}
+
+/**
+ * The body ladder (§13.4): item `render.template` → `templateFor.base` keyed on `aid.type`
+ * → `aid.type` as a template name → verbatim (null).
+ *
+ * Returns `{ kind: 'text', entry, name } | { kind: 'fieldList', list, name } | null`. With
+ * no field table and no `templateFor`, this is `getTemplate` exactly — the two extra rungs
+ * only ever fire once a project declares one or the other.
+ */
+function resolveBodyRender(item, templates, fieldTable, templateForMaps) {
+  const explicit = item.render && item.render.template;
+  if (explicit) {
+    const hit = lookupNamedTemplate(explicit, templates, fieldTable);
+    if (hit) return hit;
+  }
+  const type = item.aid && item.aid.type;
+  const baseMap = (templateForMaps && templateForMaps.base) || {};
+  if (type && baseMap[type]) return { kind: 'fieldList', list: baseMap[type], name: type };
+  if (type) {
+    const hit = lookupNamedTemplate(type, templates, fieldTable);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/**
+ * The notes ladder (§4.5 rungs, with `templateFor.notes` inserted): item
+ * `render.notesTemplate` → `<body template>.notes` → `templateFor.notes` keyed on
+ * `aid.type` → the branch's `render.notesTemplate` → §4.5 default (null).
+ *
+ * The `.notes` filename-suffix rung is *kept*, not replaced — §13.4's end state drops it,
+ * but Phase 12 only inserts `templateFor` and leaves every rung that resolves something
+ * today resolving the same thing.
+ */
+function resolveNotesRender(item, bodyName, templates, fieldTable, projectNotesTemplate, templateForMaps) {
+  const explicit = item.render && item.render.notesTemplate;
+  if (explicit) {
+    const hit = lookupNamedTemplate(explicit, templates, fieldTable);
+    return hit || { kind: 'missing', name: String(explicit) };
+  }
+  if (bodyName) {
+    const hit = lookupNamedTemplate(`${bodyName}${NOTES_SUFFIX}`, templates, fieldTable);
+    if (hit) return hit;
+  }
+  const type = item.aid && item.aid.type;
+  const notesMap = (templateForMaps && templateForMaps.notes) || {};
+  if (type && notesMap[type]) {
+    return { kind: 'fieldList', list: notesMap[type], name: `templateFor.notes[${type}]`, refRoot: 'notes' };
+  }
+  if (projectNotesTemplate) {
+    const hit = lookupNamedTemplate(projectNotesTemplate, templates, fieldTable);
+    return hit || { kind: 'missing', name: String(projectNotesTemplate) };
+  }
+  return null;
 }
 
 /**
@@ -283,12 +431,34 @@ function buildCompileContext(config, branchPath, options = {}) {
     componentRefs[type] = resolveComponentSpec(spec, config._base, variables);
   }
 
+  // §13.4's branch-addressable `templateFor`. What merges down the chain is the
+  // type→field-list map each node's slot files *produce*, not the filenames: a node names
+  // one file for a role and gets that file's types, inheriting every other type from its
+  // ancestors (Decision 6). So each node in the chain — the root config first, then every
+  // branch node — is resolved on its own and the resulting per-role maps are folded
+  // key-wise, root to leaf. Empty and IO-free for any project that declares no `templateFor:`.
+  const templateFor = {};
+  for (const node of [config, ...chain.nodes]) {
+    if (!node || !node.templateFor) continue;
+    const resolved = resolveTemplateForMaps(
+      node.templateFor,
+      config._resolvedTemplates || [],
+      config._base || '.',
+      variables,
+      options.diagnostics || null,
+      options.configPath || null,
+    );
+    for (const [role, typeMap] of Object.entries(resolved)) {
+      templateFor[role] = Object.assign(templateFor[role] || {}, typeMap);
+    }
+  }
+
   // The branch-merged placeholder table (§12.2). Sits beside `variables` because it is the
   // same kind of thing — a per-branch mapping every check and the emitter read — and
   // because §12.3's question text expands against `variables`, so the two are always
   // wanted together.
   return {
-    variables, componentRefs, render, placeholders: chain.placeholders, roles,
+    variables, componentRefs, render, templateFor, placeholders: chain.placeholders, roles,
   };
 }
 
@@ -616,14 +786,33 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagno
  * render, which is the one case the ladder's verbatim rung cannot cover: no template and
  * no text is not a pass-through, it is an item that has nothing to say.
  */
-function renderPlacementBody(item, target, templates, partials, variables, diagnostics) {
-  const template = target.template ? templates.get(String(target.template).toLowerCase()) : null;
+function renderPlacementBody(item, target, templates, partials, variables, diagnostics, extra = {}) {
+  const { fieldTable = { templates: {} }, templateFor = {} } = extra;
   const context = itemContext(item, { render: { ...(item.render || {}), wrapper: 'none' } });
   const label = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
 
-  if (template) {
+  // The component-target ladder (§13.4): the target's own `template:` (a named text or
+  // field-list template) → `templateFor.<component>` keyed on `aid.type` → `templateFor.base`
+  // → verbatim. A per-item `render.<component>.template` reaches here as `target.template`,
+  // so rung 1 keeps it winning over the branch's slot.
+  const type = item.aid && item.aid.type;
+  let hit = target.template ? lookupNamedTemplate(target.template, templates, fieldTable) : null;
+  if (!hit && type) {
+    const compMap = templateFor[target.component] || {};
+    const baseMap = templateFor.base || {};
+    const list = compMap[type] || baseMap[type];
+    if (list) hit = { kind: 'fieldList', list, name: `${target.component}:${type}` };
+  }
+
+  if (hit) {
     try {
-      return render(template.content, context, partials, variables, { diagnostics, file: template._source, name: target.template });
+      if (hit.kind === 'fieldList') {
+        return renderFieldList(hit.list, fieldTable, context, {
+          diagnostics, file: null, name: hit.name, partials, variables,
+        });
+      }
+      return render(hit.entry.content, context, partials, variables,
+        { diagnostics, file: hit.entry._source, name: hit.name });
     } catch (err) {
       diagnostics.error(
         DIAG_CODES.RENDER_FAILED,
@@ -1105,6 +1294,11 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     // the rest of the trailing options rather than appended as a 17th positional parameter.
     roles = null,
     onRoleUsed = null,
+    // §13 — the field-declaration table (compile-wide) and the branch's resolved
+    // `templateFor` role maps. Both default to empty, and every ladder below falls back to
+    // exactly its pre-Phase-12 behavior when they are.
+    fieldTable = { fields: {}, groups: {}, templates: {} },
+    templateFor = {},
   } = options;
   // Build early so render functions can resolve cross-item refs during field expansion.
   const resolvedById = new Map();
@@ -1168,7 +1362,9 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
       // nothing is said here. Whether that silence matters is the no-output invariant's
       // question, below, and it is the only one with enough context to answer it.
       if (known && !known.slots.has(String(target.slot).toLowerCase())) continue;
-      const text = renderPlacementBody(item, target, templates, partials, variables, diagnostics);
+      const text = renderPlacementBody(item, target, templates, partials, variables, diagnostics, {
+        fieldTable, templateFor,
+      });
       if (text === null) continue;
       // Scanned per placement rather than once on the assembled component, because the
       // same item body can land in two components on one branch and the author needs to
@@ -1233,8 +1429,8 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     // after all {%}/{$} passes, so it sees the final on-disk type. Aborts on invalid.
     validateCardType(item);
 
-    const templateEntry = getTemplate(item, templates);
-    if (!templateEntry) {
+    const bodyRender = resolveBodyRender(item, templates, fieldTable, templateFor);
+    if (!bodyRender) {
       const type = (item.aid && item.aid.type) || (item.render && item.render.template) || '?';
       diagnostics.error(
         DIAG_CODES.TEMPLATE_NOT_FOUND,
@@ -1249,15 +1445,21 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
 
     let rendered;
     try {
-      const bodyText = render(templateEntry.content, context, partials, variables, {
-        diagnostics, file: templateEntry._source, name: getTemplateName(item, templates),
-      });
+      const bodyText = bodyRender.kind === 'fieldList'
+        ? renderFieldList(bodyRender.list, fieldTable, context, {
+          diagnostics, file: null, name: bodyRender.name, partials, variables,
+        })
+        : render(bodyRender.entry.content, context, partials, variables, {
+          diagnostics, file: bodyRender.entry._source, name: bodyRender.name,
+        });
       // The body arrives already wrapped — `render` applies render.wrapper — which is
       // what §8.5 needs when Phase 5 measures the final string.
       rendered = renderCard({
         item,
         bodyText,
-        notesText: renderNotesText(item, context, templates, partials, variables, projectNotesTemplate, diagnostics),
+        notesText: renderNotesText(item, context, templates, partials, variables, projectNotesTemplate, diagnostics, {
+          fieldTable, templateFor, bodyName: bodyRender.name,
+        }),
         diagnostics,
         loc: { file: item._source },
         questions,
@@ -1743,11 +1945,11 @@ function compileRun(configPath, options, buses) {
 
   fs.mkdirSync(config._resolvedOutput, { recursive: true });
 
-  const { templates, partials } = loadTemplates(config._resolvedTemplates, { diagnostics: loadDiagnostics });
+  const { templates, partials, fieldTable } = loadTemplates(config._resolvedTemplates, { diagnostics: loadDiagnostics });
   // Checked before anything renders: a template that still carries a fence would emit a
   // double envelope on every card it owns (§8.3), and the report names the files. The
   // notes-template check needs both halves in hand, so it runs against the same bus.
-  checkConfigNotesTemplates(config, templates, loadDiagnostics, configPath);
+  checkConfigNotesTemplates(config, templates, loadDiagnostics, configPath, fieldTable);
   loadCursor = reportLoadDiagnostics(loadDiagnostics, loadCursor);
   console.log(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
@@ -1937,6 +2139,8 @@ function compileRun(configPath, options, buses) {
     const outputDir = buildBranchOutputDir(config._resolvedOutput, folderPath);
     const ctx = buildCompileContext(config, branchPath, {
       onWarn: busWarner(compileDiagnostics, { file: configPath }),
+      diagnostics: compileDiagnostics,
+      configPath,
     });
     // Expand {%var} in protagonist using branch-merged variables, before the
     // case-insensitive match against item ids.
@@ -1975,6 +2179,7 @@ function compileRun(configPath, options, buses) {
         diagnostics: compileDiagnostics, slotIndex, branchLabel: label, placeholders: ctx.placeholders,
         usage: placeholderUsage, usagePath: branchPath.join('/'),
         roles: ctx.roles, onRoleUsed,
+        fieldTable, templateFor: ctx.templateFor,
       },
     );
     // Phase 11 Step 5: story cards are written after the loop, at the node that owns each
@@ -2579,6 +2784,10 @@ module.exports = {
   getTemplate,
   getTemplateName,
   resolveNotesTemplateName,
+  resolveBodyRender,
+  resolveNotesRender,
+  resolveTemplateForMaps,
+  renderPlacementBody,
   checkConfigNotesTemplates,
   CODES,
   validateCardType,

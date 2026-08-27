@@ -1,0 +1,25 @@
+# Phase 12 mechanism fixture — the base field table (§13.2–§13.3).
+#
+# Exercises every declaration key the emitter reads: label, render, join, wrap, wrapLabel,
+# block, from, always, labelWhen, plus a group and a bare (label-less) field. `landmarks`
+# is declared and named by no template on purpose — the dead-declaration case Session C's
+# check will report; harmless here.
+
+fields:
+  name: { label: Name }
+  vibe: { label: Vibe, join: "; ", wrap: "[]" }
+  appearance: { label: Appearance, join: "; ", labelWhen: { originalAppearance: Current Appearance } }
+  originalAppearance: { label: Original Appearance, join: "; " }
+  personality: { label: Personality, render: list }
+  abilities: { label: Abilities }
+  magic: { label: Magic, from: [magic.affinity, magic.effect], join: "; " }
+  pantheon: { label: Pantheon, render: keys, block: true }
+  relationships: { label: Relationships, render: list }
+  secret: { label: Hidden Info, wrap: "[]", wrapLabel: true }
+  landmarks: { render: list }
+
+groups:
+  core: [name, vibe, appearance, personality]
+
+templates:
+  Character: [core, abilities, magic, pantheon, relationships, secret]

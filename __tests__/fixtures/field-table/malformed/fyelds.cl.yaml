@@ -1,0 +1,4 @@
+# A near-miss on "fields.cl.yaml" (one transposition). The loader ignores it and warns
+# (CL0425) so the typo is not silently dropped, leaving the field table empty.
+templates:
+  Ignored: [good]

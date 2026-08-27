@@ -1,0 +1,36 @@
+{if $body.name}
+  Name: {$body.name}
+{/if}
+
+{if $body.vibe}
+  Vibe: [{join("; ", $body.vibe)}]
+{/if}
+
+{if $body.appearance}
+  {if $body.originalAppearance}Current Appearance{else}Appearance{/if}: {join("; ", $body.appearance)}
+{/if}
+
+{if $body.personality}
+  Personality: {list($body.personality)}
+{/if}
+
+{if $body.abilities}
+  Abilities: {$body.abilities}
+{/if}
+
+{if $body.magic.affinity}
+  Magic: {join("; ", $body.magic.affinity, $body.magic.effect)}
+{/if}
+
+{if $body.pantheon}
+  Pantheon:
+  {keys($body.pantheon)}
+{/if}
+
+{if $body.relationships}
+  Relationships: {list($body.relationships)}
+{/if}
+
+{if $body.secret}
+  [Hidden Info: {$body.secret}]
+{/if}

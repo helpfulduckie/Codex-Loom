@@ -1,0 +1,16 @@
+# Phase 12 mechanism fixture — the deliberately-wrong field table.
+#
+# One field with an unknown key, one field with an unknown render function, one group
+# member that names no field, and one template entry that names no field or group. Each is
+# a distinct diagnostic; none aborts the load.
+
+fields:
+  good:   { label: Good, join: '; ' }
+  weird:  { label: Weird, colour: blue }
+  bogus:  { label: Bogus, render: sparkle }
+
+groups:
+  set: [good, missingMember]
+
+templates:
+  Broken: [good, alsoMissing]

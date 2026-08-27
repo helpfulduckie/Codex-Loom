@@ -507,6 +507,10 @@ function loadCompileConfig(configPath, options = {}) {
     // because which mods a branch loads is what decides whether a notes marker means
     // anything there — so it travels with the config rather than under `structure.input`.
     render: config.render || null,
+    // §13.4's template-selection map. The root rung, lifted out for the same reason
+    // `render:` is — branch nodes keep theirs on the branch tree (`config.branches`), so
+    // this projection is the only place the root's would otherwise be dropped.
+    templateFor: config.templateFor || null,
     // The root rung of the placeholder table (§12.2). Branch nodes keep theirs on the
     // branch tree, so this is the only rung that needs lifting out — and it is easy to
     // miss precisely because the branch case works without it: a project declaring
