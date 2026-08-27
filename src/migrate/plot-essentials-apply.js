@@ -285,8 +285,15 @@ function migratePlotEssentialsFiles(configPath, options = {}) {
     config = loadCompileConfig(configPath);
     const canon = buildCanonRegistry(config._resolvedLibrary);
     registry = buildItemLookup(canon, loadItemsFromDir(config._resolvedItems));
-    const { templates } = loadTemplates(config._resolvedTemplates);
-    templateNames = new Set([...templates.keys()].map((k) => String(k).toLowerCase()));
+    const { templates, fieldTable } = loadTemplates(config._resolvedTemplates);
+    // A `.hint` / `.you` sibling target is valid whether it is a `.template` text file or a
+    // `templates:` entry in `fields.cl.yaml` (Phase 12) — both resolve through
+    // `lookupNamedTemplate` at compile time, so the migrator's existence check has to see
+    // both namespaces or it silently drops `template: Character.you` on a field-list corpus.
+    templateNames = new Set([
+      ...[...templates.keys()].map((k) => String(k).toLowerCase()),
+      ...Object.keys((fieldTable && fieldTable.templates) || {}).map((k) => k.toLowerCase()),
+    ]);
   } finally {
     Object.assign(console, saved);
   }

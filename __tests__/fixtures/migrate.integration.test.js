@@ -136,6 +136,22 @@ function migrateAndCompile(tmpDir, project) {
               'Esudia', 'The Institute', 'Branches', 'Free Form', 'Branches', 'Aness', 'Components', 'Opening.md',
             )
           ) return false;
+          // Phase 12 Step 3's field-table gap: The Institute's v3 `Loom/templates/` carries
+          // two local override partials (`appearance.partial`, `personality.partial`) that
+          // add `originalAppearance` / `originalPersonality` and a "Current " label prefix.
+          // The Phase 12 corpus migration converts those into a project `templates/fields.cl.yaml`
+          // by hand; `migrateProjectFully()` has no step that converts a local `.partial`
+          // override into a field-table entry (Phase 12 added no migration step), so a fresh
+          // migration reproduces the shared appearance/personality behavior while the
+          // hand-authored `v4/` carries the `original*` extension. Visible only on the
+          // transformed-protagonist leaves (Wyvern / Interface Crystal × Aness) where the
+          // `original*` data exists — a real, permanent divergence for these files, not a
+          // bug in either path. Path-scoped, like the roles exception above.
+          if (
+            project.dir === path.join('Esudia', 'The Institute')
+            && /^Branches[\\/](Wyvern|Interface Crystal)[\\/]Branches[\\/]Aness[\\/].*[\\/]Plot Essentials\.md$/
+              .test(rel.split('/').join(path.sep))
+          ) return false;
           const a = path.join(outputDir, ...rel.split('/'));
           const b = path.join(baselineDir(), ...rel.split('/'));
           return !fs.existsSync(a) || !fs.readFileSync(a).equals(fs.readFileSync(b));
