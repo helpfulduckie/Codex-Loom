@@ -95,7 +95,7 @@ describe('discoverLeaves', () => {
   test('flat root with no Branches/ returns single leaf', () => {
     const tmp = makeTmp();
     write(path.join(tmp, 'Story Cards', 'Char', 'Alice.md'), 'Alice');
-    const leaves = discoverLeaves(tmp, [], []);
+    const leaves = discoverLeaves(tmp);
     expect(leaves).toHaveLength(1);
     expect(leaves[0].branchNames).toEqual([]);
     expect(leaves[0].cards.join('')).toContain('Alice');
@@ -111,7 +111,7 @@ describe('discoverLeaves', () => {
     // branch B
     write(path.join(tmp, 'Branches', 'B', 'Story Cards', 'Char', 'B.md'), 'B card');
 
-    const leaves = discoverLeaves(tmp, [], []);
+    const leaves = discoverLeaves(tmp);
     expect(leaves).toHaveLength(2);
 
     const a = leaves.find(l => l.branchNames[0] === 'A');

@@ -217,7 +217,7 @@ function formatSeedMapCsv(rootDirName, leafResults) {
 function runSeedMapMode(scenarioRoot, outputDir, verbose = false) {
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
-  const leaves      = discoverLeaves(rootAbs, [], []);
+  const leaves      = discoverLeaves(rootAbs);
 
   if (leaves.length === 0) {
     console.warn('  WARN: No branch leaves found — nothing to map.');

@@ -3,7 +3,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const { childBranches } = require('./compiledTree');
+const { buildTree, flattenNodes, leafNodes } = require('./compiledTree');
 
 // ── private helpers ──────────────────────────────────────────────────────────
 
@@ -103,69 +103,73 @@ function buildStoryCardsBlock(storyCardsDir, headingLevel) {
 }
 
 /**
- * Recursively discover all leaf nodes under a scenario root directory.
- * Each leaf accumulates story-card blocks from all ancestor nodes.
+ * Discover every leaf node under a scenario root directory. Each leaf accumulates
+ * story-card blocks from every node on its ancestor chain, root first.
+ *
+ * The traversal is `compiledTree.js`'s shared tree (Phase 11 Step 2) rather than a
+ * private `childBranches` recursion — `overview.js` was the last report-layer walker
+ * that still descended on its own. The card blocks are still built per node with
+ * `buildStoryCardsBlock`, not read from `node.resolved.cards`: the resolved set is
+ * name-keyed (`mergeCardsByName`), which collapses a within-leaf cross-type card-name
+ * collision that the raw per-node block renders as two cards — The Institute has one
+ * (`## The Institute` in both `Location/` and `Organization/`). Moving onto
+ * `resolved.cards` is Step 4's job, where `leaf-review` has to read `resolved` anyway
+ * and that collapse is an expected, attributed diff.
  *
  * @typedef {{ branchNames: string[], cards: string[], leafDir: string }} LeafNode
- * @param {string}   branchDir     - absolute path of the node to walk
- * @param {string[]} ancestorCards - accumulated card blocks from ancestors
- * @param {string[]} branchNames   - path of branch names from root to here
+ * @param {string} rootDir - absolute path of the scenario output root
  * @returns {LeafNode[]}
  */
-function discoverLeaves(branchDir, ancestorCards, branchNames) {
-  const storyCardsDir = path.join(branchDir, 'Story Cards');
+function discoverLeaves(rootDir) {
+  return leafNodes(buildTree(rootDir)).map((leaf) => {
+    const chain = [];
+    for (let node = leaf; node; node = node.parent) chain.unshift(node);
 
-  const myCards = [...ancestorCards];
-  if (fs.existsSync(storyCardsDir)) {
-    const block = buildStoryCardsBlock(storyCardsDir, 3);
-    if (block) myCards.push(block);
-  }
+    const cards = [];
+    for (const node of chain) {
+      const storyCardsDir = path.join(node.dir, 'Story Cards');
+      if (!fs.existsSync(storyCardsDir)) continue;
+      const block = buildStoryCardsBlock(storyCardsDir, 3);
+      if (block) cards.push(block);
+    }
 
-  const children = childBranches(branchDir);
-  if (children.length === 0) {
-    return [{ branchNames, cards: myCards, leafDir: branchDir }];
-  }
-
-  const leaves = [];
-  for (const child of children) {
-    leaves.push(...discoverLeaves(child.dir, myCards, [...branchNames, child.name]));
-  }
-  return leaves;
+    return { branchNames: leaf.branchNames, cards, leafDir: leaf.dir };
+  });
 }
 
 /**
- * Walk every node in the tree (root + all branches, depth-first), collecting
- * one section per node showing only that node's own content.
+ * One section per node in the tree (root first, depth-first through `Branches/`),
+ * each showing only what that node declares itself.
+ *
+ * Traversal is `compiledTree.js`'s shared tree (Phase 11 Step 2); components come from
+ * `node.own.components`, the same filename-keyed map `readComponents` builds by hand.
+ * Story cards stay on `buildStoryCardsBlock` — `--overview` prints raw per-node blocks,
+ * not the resolved set.
  */
-function collectOverviewSections(branchDir, branchNames, rootDirName) {
+function collectOverviewSections(rootDir, rootDirName) {
   const sections = [];
 
-  const label   = branchNames.length === 0
-    ? rootDirName
-    : [rootDirName, ...branchNames].join(' - ');
-  const heading = `## ${label}`;
+  for (const node of flattenNodes(buildTree(rootDir))) {
+    const label = node.branchNames.length === 0
+      ? rootDirName
+      : [rootDirName, ...node.branchNames].join(' - ');
 
-  const ownComponents = readComponents(branchDir);
-  const storyCardsDir = path.join(branchDir, 'Story Cards');
-  const ownCards      = fs.existsSync(storyCardsDir)
-    ? buildStoryCardsBlock(storyCardsDir, 4)
-    : null;
+    const storyCardsDir = path.join(node.dir, 'Story Cards');
+    const ownCards      = fs.existsSync(storyCardsDir)
+      ? buildStoryCardsBlock(storyCardsDir, 4)
+      : null;
 
-  const sectionParts = [heading];
-  for (const [name, content] of Object.entries(ownComponents)) {
-    const fenced = name === 'Plot Essentials' || name === 'AI Instructions';
-    const body   = fenced ? `\`\`\`\n${content}\n\`\`\`` : content;
-    sectionParts.push(`### ${name}\n\n${body}`);
+    const sectionParts = [`## ${label}`];
+    for (const [name, content] of Object.entries(node.own.components)) {
+      const fenced = name === 'Plot Essentials' || name === 'AI Instructions';
+      const body   = fenced ? `\`\`\`\n${content}\n\`\`\`` : content;
+      sectionParts.push(`### ${name}\n\n${body}`);
+    }
+    if (ownCards) sectionParts.push(`### Story Cards\n\n${ownCards}`);
+    if (sectionParts.length === 1) sectionParts.push('_No content at this level._');
+    sections.push(sectionParts.join('\n\n'));
   }
-  if (ownCards) sectionParts.push(`### Story Cards\n\n${ownCards}`);
-  if (sectionParts.length === 1) sectionParts.push('_No content at this level._');
-  sections.push(sectionParts.join('\n\n'));
 
-  for (const child of childBranches(branchDir)) {
-    sections.push(
-      ...collectOverviewSections(child.dir, [...branchNames, child.name], rootDirName)
-    );
-  }
   return sections;
 }
 
@@ -231,7 +235,7 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose = false
 function runLeafReviewMode(scenarioRoot, outputDir, verbose = false) {
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
-  const leaves      = discoverLeaves(rootAbs, [], []);
+  const leaves      = discoverLeaves(rootAbs);
 
   if (leaves.length === 0) {
     console.warn('  WARN: No branch leaves found — nothing to compile.');
@@ -265,7 +269,7 @@ function runOverviewMode(scenarioRoot, outputDir, verbose = false) {
   const filename    = sanitizeFilename(rootDirName) + '.overview.md';
   const outPath     = path.join(outputDir, filename);
 
-  const sections = collectOverviewSections(rootAbs, [], rootDirName);
+  const sections = collectOverviewSections(rootAbs, rootDirName);
   const doc = [`# ${rootDirName}`, ...sections].join('\n\n');
   fs.writeFileSync(outPath, doc, 'utf8');
   if (verbose) console.log(`  ✓  ${filename}`);
