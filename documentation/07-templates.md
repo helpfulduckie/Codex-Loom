@@ -401,3 +401,5 @@ Physical Traits: {join("; ", $body.Physical Traits.gender, $body.Physical Traits
 A v3 template opened with the envelope, and everything below the last `~~~` was the body. Delete everything up to and including that line — that is the whole conversion, and `src/migrate/v3.js:stripTemplateHeader` does it mechanically. Keep any `{wrapper}` tag that lived in the header: it wraps the body, not the envelope.
 
 Then check the surviving body for `{$aid.encapsulate}`, `{$aid.known}`, and any `{$aid.title}` the migrator dropped as a duplicate of `name.full`. Those tokens now render empty rather than failing loudly.
+
+A project's **local `.partial` override** — a copy of a shared partial that adds behavior on top of it — is not auto-converted to a `fields.cl.yaml` entry. `--migrate` has no step for it: an arbitrary partial delta cannot be expressed as `label` / `labelWhen` / added-field declarations in general, so `.template` and `.partial` stay the escape hatch. Re-author the override by hand as a project field table.
