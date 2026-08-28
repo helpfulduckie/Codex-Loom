@@ -26,11 +26,14 @@
  * keying on `(type, name)` instead. See `mergeCardsByName` below for why that would be
  * the wrong fix rather than a safer one.
  *
- * `resolved.scripts` is not a merge at all: nothing under a branch's `Scripts/` dir
- * inherits from a parent — each branch's `Scripts/` is written whole from its own
- * `componentRefs.scripts` source, already resolved by the time it lands on disk. It is
- * carried here for a future consumer that wants a script inventory across the tree;
- * nothing in this phase reads it.
+ * `resolved.scripts` is not a merge in this module: it carries `own.scripts` verbatim.
+ * The actual resolution is VL's — since Phase 12 Step 6 a project's `Scripts/` dir is
+ * written once at the node that declares it (the output root, when every leaf resolved the
+ * same spec and no branch redeclared it) and VL inherits it down the subtree
+ * (`scenario.py`: `self.scripts = {**parent, **local}`), exactly as it does components and
+ * placeholders. This module does not model that inheritance for scripts; `own.scripts` is
+ * carried for a future consumer that wants a per-node script inventory, and nothing in
+ * this phase reads it.
  */
 
 const fs = require('fs');

@@ -31,9 +31,13 @@
  *   - It never copies `library-dependencies.json`. The manifest stamps the compile root, so
  *     a baseline written from a temp directory bakes that path in and defeats the
  *     harness's normalization on every later run.
- *   - It copies markdown only. Everything else under `v3/` — the scripts a project ships
- *     — is copied input, not compiler output, and re-baselining it would hide a change in
- *     what gets copied rather than record one.
+ *   - It copies markdown only, with one exception. A non-markdown file under a `Scripts/`
+ *     segment that left one path and reappeared byte-identically at another is *relocated*
+ *     — Phase 12 Step 6 lifts a project's `Scripts/` dir root-ward when every leaf resolved
+ *     the same one, and the re-baseline follows by moving the file, not re-contenting it. A
+ *     shipped `.js` whose bytes changed, or one that vanished with no byte-identical
+ *     counterpart, still aborts the run: scripts are copied input and a change to one has
+ *     to be seen, not absorbed.
  *   - It compiles into a temp copy of the whole `goldenFixtures/` tree, because each
  *     project's compile.yaml writes to `../Velvet Lattice/` and reaches up three levels
  *     for shared canon, so neither the output nor the inputs can be redirected.
@@ -209,10 +213,51 @@ function quietly(fn) {
 function diffTree(actualDir, expectedDir, { markdownOnly }) {
   const actual = new Set(listFiles(actualDir));
   const expected = new Set(listFiles(expectedDir));
-  const report = { changed: [], added: [], removed: [], classes: new Set() };
+  const report = { changed: [], added: [], removed: [], relocated: [], classes: new Set() };
 
   for (const rel of expected) if (!actual.has(rel)) report.removed.push(rel);
   for (const rel of actual) if (!expected.has(rel)) report.added.push(rel);
+
+  // Phase 12 Step 6: a shipped `.js` under `Scripts/` moves when branch inheritance lifts a
+  // project's script dir root-ward. Pair a removed file with an added one by its path from
+  // `Scripts/` on *and* by bytes; a match is a relocation, re-baselined by moving the file
+  // (many removed per-leaf copies collapse onto one added root copy). Anything left over —
+  // bytes changed, or a script added or removed outright — is a real content change, and it
+  // classifies OPAQUE so the run refuses exactly as an unexplained non-markdown diff does.
+  if (markdownOnly) {
+    const underScripts = (rel) => !rel.endsWith('.md') && rel.split('/').includes('Scripts');
+    const tail = (rel) => rel.slice(rel.indexOf('Scripts/'));
+    const bytesAt = (dir, rel) => fs.readFileSync(path.join(dir, ...rel.split('/')));
+    const removedScripts = report.removed.filter(underScripts);
+    const addedScripts = report.added.filter(underScripts);
+    const matchedRemoved = new Set();
+    const matchedAdded = new Set();
+
+    for (const added of addedScripts) {
+      const addedBytes = bytesAt(actualDir, added);
+      const moved = removedScripts.filter(
+        (r) => tail(r) === tail(added) && bytesAt(expectedDir, r).equals(addedBytes),
+      );
+      if (moved.length === 0) continue;
+      matchedAdded.add(added);
+      for (const r of moved) matchedRemoved.add(r);
+      report.relocated.push({ to: added, from: moved });
+    }
+
+    // A script file that is added or removed but not part of a byte-identical move is a
+    // real content change: pull it out of the file-set lists and report it as an OPAQUE
+    // change so the shape check refuses.
+    const strayScripts = [...removedScripts, ...addedScripts]
+      .filter((rel) => !matchedRemoved.has(rel) && !matchedAdded.has(rel));
+    report.removed = report.removed.filter((rel) => !matchedRemoved.has(rel) && !strayScripts.includes(rel));
+    report.added = report.added.filter((rel) => !matchedAdded.has(rel) && !strayScripts.includes(rel));
+    for (const rel of strayScripts) {
+      report.changed.push({
+        rel, classes: [OPAQUE], summary: `${rel} — script content differs, no byte-identical counterpart`,
+      });
+      report.classes.add(OPAQUE);
+    }
+  }
 
   for (const rel of [...actual].sort()) {
     if (!expected.has(rel)) continue;
@@ -244,10 +289,13 @@ function diffTree(actualDir, expectedDir, { markdownOnly }) {
 }
 
 function printReport(label, report, { verbose }) {
-  const counts = `${report.changed.length} changed, ${report.added.length} added, ${report.removed.length} removed`;
+  const reloc = report.relocated || [];
+  const counts = `${report.changed.length} changed, ${report.added.length} added, ${report.removed.length} removed`
+    + (reloc.length ? `, ${reloc.length} relocated` : '');
   console.log(`\n  ${label}: ${counts}`);
   for (const rel of report.added) console.log(`    + ${rel}`);
   for (const rel of report.removed) console.log(`    - ${rel}`);
+  for (const move of reloc) console.log(`    ⇄ ${move.to}  (was ${move.from.length}× under Branches/)`);
 
   const byClass = new Map();
   for (const change of report.changed) {
@@ -339,6 +387,14 @@ function main() {
         if (!rel.endsWith('.md')) continue;
         fs.rmSync(path.join(to, ...rel.split('/')), { force: true });
         written++;
+      }
+
+      // Phase 12 Step 6: apply the `Scripts/` relocations — write the file at its new path,
+      // drop every old copy. Byte-identity was already proven when the move was recognized.
+      for (const move of output.relocated || []) {
+        copyFile(path.join(from, ...move.to.split('/')), path.join(to, ...move.to.split('/')));
+        for (const old of move.from) fs.rmSync(path.join(to, ...old.split('/')), { force: true });
+        written += 1 + move.from.length;
       }
 
       for (const mode of allReportModes(project)) {

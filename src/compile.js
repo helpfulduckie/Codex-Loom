@@ -2131,6 +2131,7 @@ function compileRun(configPath, options, buses) {
   //     each leaf regardless of Codex Loom's own key-merge (`emit/components.js:120`).
   const LIFT_EXCLUDED_COMPONENTS = new Set(['opening', 'adventureDescription']);
   const deferredComponents = new Map(); // descriptor.key → { descriptor, metadata, perLeaf: Map(outputDir → text) }
+  const deferredScripts = new Map(); // outputDir → resolved scripts spec (a directory path), Phase 12 Step 6
 
   // Phase 11 Step 5 — story-card inheritance. One entry per leaf, filled by the loop:
   // `{ branchPath, folderPath, outputDir, grouped: Map(type → [{sortKey, rendered, id, name}]) }`.
@@ -2329,16 +2330,17 @@ function compileRun(configPath, options, buses) {
     const hasAIN = !!sectionedWritten.aiInstructions;
     const hasAN = !!sectionedWritten.authorsNote;
 
-    // Scripts
+    // Scripts (Phase 12 Step 6)
     //
-    // Still written per leaf, unlike the deferred components above. Velvet Lattice would
-    // inherit a root `Scripts/` dir down the tree, so lifting these is a real win too, but
-    // `scripts/rebaseline.js` re-baselines markdown only — the shipped `.js` are copied
-    // input it deliberately will not absorb — so relocating them in the golden tree needs
-    // a re-baseline-tooling change that is its own errand (see the plan's Step 4 note).
+    // Collected here, written by the inheritance pass below. Velvet Lattice inherits a
+    // node's `Scripts/` dir down its subtree (`scenario.py`: `self.scripts = {**parent,
+    // **local}`), so a `scripts:` spec that resolves identically at every leaf and is
+    // redeclared by no branch is written once at the output root, exactly as the deferred
+    // components are. Anything else is written per leaf, at the same `outputDir` this loop
+    // used to copy it to.
     const scriptsSpec = compileContext.componentRefs.scripts;
     if (scriptsSpec && typeof scriptsSpec === 'string') {
-      copyScripts(scriptsSpec, outputDir);
+      deferredScripts.set(outputDir, scriptsSpec);
     }
 
     if (captureReports) {
@@ -2409,6 +2411,27 @@ function compileRun(configPath, options, buses) {
           totalFiles++;
         }
       }
+    }
+  }
+
+  // The `Scripts/` dir rides the same lift test (Phase 12 Step 6). `canLift` compares the
+  // resolved spec strings — one distinct spec across every leaf is one identical
+  // `fs.cpSync` by construction — but `scripts/rebaseline.js` still asserts byte-identity
+  // of the copied files, because this pass is the only thing between a lifted layout and a
+  // silently re-contented script. A single-leaf project (`leaves.length === 1`) writes per
+  // leaf, where the one "leaf" already is the output root, so its layout does not move.
+  if (deferredScripts.size > 0) {
+    const scriptsDeclaredInBranches = branchTreeDeclares(
+      config.branches, (node) => node.scripts !== undefined,
+    );
+    if (canLift(deferredScripts, scriptsDeclaredInBranches)) {
+      const [spec] = deferredScripts.values();
+      copyScripts(spec, config._resolvedOutput);
+      if (verbose) {
+        console.log(`    OK: Scripts/ (inherited from root) → ${path.join(config._resolvedOutput, 'Scripts')}`);
+      }
+    } else {
+      for (const [leafDir, spec] of deferredScripts) copyScripts(spec, leafDir);
     }
   }
 
