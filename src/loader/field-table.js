@@ -47,9 +47,13 @@ const CODES = Object.freeze({
 /** The exact basenames a field table is read from — the `.cl.yaml` config pair (§4.6). */
 const FIELD_TABLE_BASENAMES = Object.freeze(['fields.cl.yaml', 'fields.cl.yml']);
 
-/** Keys a `fields:` entry may carry (§13.2). `field`/`name` are template-list overrides only. */
+/**
+ * Keys a `fields:` entry may carry (§13.2). `field`/`name` are template-list overrides only.
+ * `allowExtra` is *not* here: it opts a whole template out of the §13.6 unread-field audit
+ * and rides in the template's list as a `{ allowExtra: true }` marker (Decision 4).
+ */
 const FIELD_KEYS = Object.freeze([
-  'label', 'render', 'join', 'wrap', 'wrapLabel', 'block', 'from', 'always', 'labelWhen', 'allowExtra',
+  'label', 'render', 'join', 'wrap', 'wrapLabel', 'block', 'from', 'always', 'labelWhen',
 ]);
 
 function isPlainObject(v) {

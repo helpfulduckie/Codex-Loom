@@ -224,6 +224,13 @@ half is checked per branch, because a dispatch has no answer without one.
 | `CL0433` | ERROR | A template control tag (`{if}`, `{wrapper}`, `{preserve}`, `{include}`) leaked into rendered output. |
 | `CL0434` | ERROR | A verb-conjugation marker (`[s]`/`[es]`/`[is]`/`[was]`/`[has]`) was left unresolved. |
 | `CL0435` | ERROR | A JS interpolation artifact (`[object Object]` and friends) reached rendered output. |
+| `CL0422` | ERROR | A `fields.cl.yaml` is not a mapping, or one of its `fields:`/`groups:`/`templates:` entries has the wrong shape. |
+| `CL0423` | ERROR | A `fields:` entry carries an unknown key or an unknown `render:` function name. |
+| `CL0424` | WARN | A group member or template entry names something that is not a declared field or group. |
+| `CL0425` | WARN | A file in a templates directory looks like a misspelled `fields.cl.yaml` and is being ignored. |
+| `CL0426` | WARN | A `body:` key is read by no field in the resolved template and no declaration names it — a typo; its content is dropped. |
+| `CL0427` | WARN | A `body:` key is a declared field the resolved template's list does not include — misrouted; the message names the group it lives in. |
+| `CL0428` | WARN | A field is declared in the field table but no template names it, directly or through a group. |
 | `CL0436` | WARN | A bracketed lowercase word is not a recognized verb-conjugation marker — likely a typo. |
 | `CL0437` | WARN | A bare `undefined`/`NaN` appears in rendered output. |
 
@@ -266,6 +273,31 @@ half of the tool ran it. A project shipping a leaked `{$she}` now fails the comp
 `CL0436` and `CL0437` run in the same sweep and are *not* facts. Both judge whether
 ordinary prose was meant: `[does]` may be a deliberate bracket, and "undefined" is an
 English word. They stay WARN, they are tagged opinion-layer, and `lint.level` reaches them.
+
+### CL0422–CL0428 in detail — the field table
+
+`CL0422`–`CL0425` are load-time checks on `fields.cl.yaml` itself: a malformed document,
+an unknown key or render function, a group or template entry that names nothing, and a
+filename that is a near-miss of `fields.cl.yaml` (a `templateFor` slot file that only
+resembles one is left alone). A structurally broken entry is skipped and the rest of the
+table still loads, because a downstream project may override the whole file.
+
+`CL0426`–`CL0428` are the unread-field audit (spec §13.6). A field-list template names the
+`body:` keys it renders, so a key no field reads is content the compiler silently drops —
+the diagnostic the external schema reference was hand-maintained to stand in for. One
+symptom splits three ways: a key **no declaration names** is a typo (`CL0426`), a key
+**declared but absent from this template's list** is misrouted and the message names the
+group it lives in (`CL0427`), and a **declared field no template names** is a dead
+declaration (`CL0428`, the counterpart to `CL0545`). None is an opinion — a field is read
+or it is not — so `lint.level` cannot reach them.
+
+The audit runs on resolved leaf paths, not top-level keys, so `from: [personality.keywords,
+personality.expanded]` still flags `personality.other`. Findings key on `(item id, field
+path)` and are emitted once: a `body:` field resolves through every `variants:` and
+`branches:` expansion, so one mistake on a 32-leaf project would otherwise report 32 times.
+A `{ allowExtra: true }` marker in a template's list opts the whole template out — Directory
+and Unstructured compose their bodies from author-shaped sub-keys feeding an interpolated
+value, and the property belongs to the template, not to each field.
 
 ### CL06xx — components
 

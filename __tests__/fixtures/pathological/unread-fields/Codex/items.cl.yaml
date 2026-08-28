@@ -1,0 +1,36 @@
+# One deliberate mistake per item, each named with the code it raises. Every item
+# resolves on both leaves, so a working `(item id, field path)` dedupe reports each once.
+
+# strength: no declaration anywhere names it -> CL0426
+- id: Alba
+  name: Alba
+  aid:
+    type: Person
+    triggers: [Alba]
+  body:
+    name: Alba of the North
+    vibe: watchful
+    strength: uncanny
+
+# homeland: a real field, but it lives in the `origin` group and template Person omits
+# that group -> CL0427, naming the group
+- id: Cairn
+  name: Cairn
+  aid:
+    type: Person
+    triggers: [Cairn]
+  body:
+    name: Cairn
+    vibe: dry
+    homeland: the salt flats
+
+# Loose carries `{ allowExtra: true }`, so its undeclared keys raise nothing.
+- id: Nook
+  name: Nook
+  aid:
+    type: Loose
+    triggers: [Nook]
+  body:
+    name: Nook
+    colour: grey
+    texture: rough

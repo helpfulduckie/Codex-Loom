@@ -59,6 +59,12 @@ function expandList(list, table) {
       out.push({ name: null, decl: { __passthrough: entry.include !== undefined ? `{include ${entry.include}}` : String(entry.raw) } });
       return;
     }
+    // `{ allowExtra: true }` is a template-level marker for the unread-field audit
+    // (§13.6, Decision 4) — it carries no rendered content.
+    if (entry && typeof entry === 'object' && entry.allowExtra !== undefined
+      && entry.field === undefined && entry.name === undefined) {
+      return;
+    }
     if (typeof entry === 'string') {
       if (allowGroup && table.groups && Array.isArray(table.groups[entry])) {
         for (const member of table.groups[entry]) pushEntry(member, false);

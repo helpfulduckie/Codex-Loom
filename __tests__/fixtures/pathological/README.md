@@ -1,7 +1,8 @@
 # The pathological fixture
 
-Two projects that are wrong on purpose, and a committed snapshot of every diagnostic they
-raise. Added as Step 0 of Phase 4 (see `v4 Phase 4 plan` in the vault).
+Five projects that are wrong on purpose, and a committed snapshot of every diagnostic they
+raise. Added as Step 0 of Phase 4 (see `v4 Phase 4 plan` in the vault); grown one project
+at a time as later phases added checks the golden corpora cannot exercise.
 
 ## Why it exists
 
@@ -21,7 +22,7 @@ A golden fixture freezes v3-compiled output and asserts byte identity. A project
 wrong on purpose has no v3 baseline worth freezing — v3 would refuse it or compile it
 wrongly, and either way the bytes are not the thing under test.
 
-## Why it is four projects
+## Why it is five projects
 
 **The layers abort differently (§4.3), and Phase 7 added a second axis that aborts the
 same way.** A schema violation is an ERROR that stops the compile before anything is
@@ -56,6 +57,15 @@ rather than a fourth mistake folded into `snapshot-mismatch/`.
 - `snapshot-corrupt/` — a frozen file hand-edited since the manifest was written. `CL0115`
   is the one snapshot code that is an ERROR, so — like `schema/` — this project aborts
   before anything downstream runs.
+- `unread-fields/` — load-clean, like `placement/`: a field table plus items routed to
+  templates that do not read every `body:` key they carry, for `CL0426`/`CL0427`/`CL0428`
+  (Phase 12 Step 4, §13.6). Two branches so each item resolves twice and the
+  `(item id, field path)` dedupe is exercised. **This has the same shape as
+  `card-collision/` and the same argument against a separate project** — the mistakes are
+  properties of items at a leaf, not of a project's structure, so they could fold into
+  `placement/`. Kept separate for the same reason `card-collision/` was: `placement/` has
+  no field table and adding one would perturb a fixture the earlier phases read against.
+  Fold both in the next time `placement/`'s item set changes for an unrelated reason.
 
 ## Editing rules
 

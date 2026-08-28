@@ -137,4 +137,16 @@ describe('pathological fixture', () => {
     expect(diagnoseProject('card-collision')).toMatchSnapshot();
   });
 
+  /**
+   * The unread-fields project (Phase 12 Step 4, §13.6): load-clean, so the audit runs.
+   * `Alba` carries an undeclared body key (`strength` — CL0426); `Cairn` carries a real
+   * field the template omits (`homeland`, in the `origin` group — CL0427); `deadField` is
+   * declared and named by no template (CL0428). Two branches, so every item resolves
+   * twice — the `(item id, field path)` dedupe is what keeps each finding to one row.
+   * `Nook`'s template carries `{ allowExtra: true }` and raises nothing.
+   */
+  test('a body key no field reads, deduped across leaves', () => {
+    expect(diagnoseProject('unread-fields')).toMatchSnapshot();
+  });
+
 });

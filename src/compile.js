@@ -18,6 +18,7 @@ const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
 const { renderFieldList } = require('./render/field-list');
 const { CODES: FIELD_TABLE_CODES } = require('./loader/field-table');
+const { buildFieldAudit } = require('./render/field-audit');
 const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts, itemContext, CONFIG_BASENAMES, normalizeVarKey } = require('./util');
 const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
@@ -1299,6 +1300,10 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     // exactly its pre-Phase-12 behavior when they are.
     fieldTable = { fields: {}, groups: {}, templates: {} },
     templateFor = {},
+    // §13.6 — the unread-field audit, built once per compile so its `(item id, field
+    // path)` dedupe spans every leaf. Null on the report-mode paths that reuse this
+    // function without a field table.
+    fieldAudit = null,
   } = options;
   // Build early so render functions can resolve cross-item refs during field expansion.
   const resolvedById = new Map();
@@ -1438,6 +1443,13 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
         { file: item._source },
       );
       continue;
+    }
+
+    // §13.6: does the resolved template read every key this item's body carries? Runs on
+    // the field-list body only — a `.template` text body names nothing to check against.
+    // Findings are deduped compile-wide and emitted once, after every leaf.
+    if (fieldAudit && bodyRender.kind === 'fieldList') {
+      fieldAudit.auditBody(item, bodyRender.list, bodyRender.name);
     }
 
     // Build render context: top-level item fields + body for {$body.X} access
@@ -1953,6 +1965,10 @@ function compileRun(configPath, options, buses) {
   loadCursor = reportLoadDiagnostics(loadDiagnostics, loadCursor);
   console.log(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
+  // §13.6 — built once so the unread-field audit's `(item id, field path)` dedupe spans
+  // the whole compile. `finish()` runs after the leaf loop, beside reportUnusedRoles.
+  const fieldAudit = buildFieldAudit({ fieldTable, partials });
+
   // Build canon registry
   const canonRegistry = buildCanonRegistry(config._resolvedLibrary, { diagnostics: loadDiagnostics });
   // itemCount, not size: an id two canon sets both define holds no plain key (§17.3), and
@@ -2179,7 +2195,7 @@ function compileRun(configPath, options, buses) {
         diagnostics: compileDiagnostics, slotIndex, branchLabel: label, placeholders: ctx.placeholders,
         usage: placeholderUsage, usagePath: branchPath.join('/'),
         roles: ctx.roles, onRoleUsed,
-        fieldTable, templateFor: ctx.templateFor,
+        fieldTable, templateFor: ctx.templateFor, fieldAudit,
       },
     );
     // Phase 11 Step 5: story cards are written after the loop, at the node that owns each
@@ -2707,6 +2723,15 @@ function compileRun(configPath, options, buses) {
   const provenanceWritten = runProvenanceMode(registry, reportBase, rootDirName);
   reportSummary.push(`${provenanceWritten.length} provenance file(s)`);
 
+  // §13.8 — the generated field reference, opt-in. Derived from the merged field table,
+  // not the leaf loop, and written where SCHEMA.md's §3–§5 tables can be copied from.
+  if (options.schemaTables) {
+    const { runSchemaTablesMode } = require('./schematables');
+    const w = runSchemaTablesMode(fieldTable, path.join(reportBase, 'schema-tables'),
+      { title: config.title || rootDirName });
+    reportSummary.push(`${w.length} schema-tables file(s)`);
+  }
+
   if ((captureReports && leafData.length > 0) || (options.inventory && inventoryData.length > 0)) {
     const { runDiffMode, runAnnotateMode } = require('./diff');
     if (options.inventory) {
@@ -2734,6 +2759,8 @@ function compileRun(configPath, options, buses) {
   // Last, because "unused" is only knowable once every write point has run — and the
   // Description and the scenario title are written after the branch tree.
   reportUnusedRoles(roleDeclarations, roleUsage, { diagnostics: compileDiagnostics, file: configPath });
+  // §13.6: the deduped unread-field findings, then the whole-table dead-declaration sweep.
+  fieldAudit.finish(compileDiagnostics);
   reportUnusedPlaceholders(placeholderDeclarations, placeholderUsage, {
     diagnostics: compileDiagnostics, file: configPath,
   });
@@ -2936,6 +2963,7 @@ if (require.main === module) {
     ['diff',       ['--with-diff',     '--diff',     '-d']],
     ['annotate',   ['--with-annotate', '--annotate', '-a']],
     ['inventory',  ['--with-inventory', '--inventory', '-i']],
+    ['schemaTables', ['--schema-tables']],
     ['clean',      ['--clean',      '-c']],
     ['verbose',    ['--verbose',    '-v']],
     ['live',       ['--live']],
@@ -2980,6 +3008,7 @@ if (require.main === module) {
   // lossy), so they are compile *options* — they force a compile rather than reading the
   // output dir like the post-hoc report modes (--leafReview/--overview/--seed-map/--card-sizes).
   const doCompile    = flags.compile || flags.diff || flags.annotate || flags.inventory ||
+    flags.schemaTables ||
     (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint &&
       !flags.snapshot && !flags.migrate);
   const doLeafReview = flags.leafReview;
@@ -2990,13 +3019,13 @@ if (require.main === module) {
   const doSnapshot   = flags.snapshot;
 
   if (positional.length === 0 && !flags.compile && !flags.diff && !flags.annotate &&
-      !flags.inventory &&
+      !flags.inventory && !flags.schemaTables &&
       !flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint &&
       !flags.snapshot && !flags.migrate) {
     console.error(
       'Usage: codex-loom [mode flags] [compile options] [<folder | compile.yaml>]\n' +
       '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --card-sizes|-b  --lint|-L  --snapshot  --migrate\n' +
-      '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-inventory|-i  --clean|-c  --verbose|-v  --live\n' +
+      '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-inventory|-i  --schema-tables  --clean|-c  --verbose|-v  --live\n' +
       '  Migrate options:       --rename-cl  (§4.6: also rename compile.yaml to compile.cl.yaml)\n' +
       '  Diagnostics:           --lint-level=off|error|warn  (overrides lint.level; reaches the opinion layer only)\n' +
       '  No mode flag compiles. Report modes read the existing output tree; compile options force a compile.\n' +
@@ -3063,6 +3092,7 @@ if (require.main === module) {
         compile(configPath, {
           clean: flags.clean, verbose: flags.verbose,
           diff: flags.diff, annotate: flags.annotate, inventory: flags.inventory,
+          schemaTables: flags.schemaTables,
           lintLevel, live: flags.live,
         });
       } catch (err) {
