@@ -65,6 +65,121 @@ function validateCardType(item) {
   }
 }
 
+/**
+ * AI Dungeon's five built-in story-card categories, in the casing AID itself stores.
+ *
+ * Confirmed against the platform rather than inherited from Velvet Lattice's old list: a
+ * card pushed as `Race` comes back as `Race` and does not group with `race` in the editor,
+ * so AID stores the string verbatim and matches it exactly. Anything not in this set is a
+ * custom category and keeps whatever casing the author gave it — `Character - Dalor` and
+ * `Spell - Ice` are deliberate groupings, not misspellings of a built-in.
+ */
+const AID_BUILTIN_TYPES = new Set(['character', 'class', 'race', 'location', 'faction']);
+
+/**
+ * Normalize one `aid.type` for emit: trim leading space, fold a built-in to lowercase.
+ *
+ * Pure, and separate from `validateCardType` because the two answer different questions —
+ * that one asks whether the string can be a path at all and throws when it cannot, this one
+ * asks what should actually be written. Trailing space and period never reach here; they
+ * are fatal above, since Windows strips them and the type would silently become another.
+ *
+ * @returns {{ type: string, folded: boolean, trimmed: boolean }}
+ */
+function normalizeCardType(raw) {
+  if (typeof raw !== 'string' || raw === '') return { type: raw, folded: false, trimmed: false };
+  const trimmedText = raw.replace(/^\s+/, '');
+  const lower = trimmedText.toLowerCase();
+  const folded = AID_BUILTIN_TYPES.has(lower) && trimmedText !== lower;
+  return { type: folded ? lower : trimmedText, folded, trimmed: trimmedText !== raw };
+}
+
+/**
+ * Compile-wide accumulator for `aid.type` normalization and collisions (CL0626–CL0628).
+ *
+ * Shaped like `buildFieldAudit`: record as the compile walks branches, report once at the
+ * end. Both halves need that shape for the same reason — a type is resolved per item per
+ * branch, so per-site reporting would print one line per card per branch for a single
+ * authoring decision, and the collision check cannot run until every branch's types are in.
+ */
+function buildCardTypeAudit() {
+  // authored value → { to, file }. Keyed on the authored string so one warning covers
+  // every card that spells the type that way.
+  const foldedValues = new Map();
+  const trimmedValues = new Map();
+  // final type → the first source file that produced it, for the collision message.
+  const originOf = new Map();
+
+  function resolve(raw, loc = {}) {
+    const { type, folded, trimmed } = normalizeCardType(raw);
+    if (typeof type !== 'string' || type === '') return type;
+    const file = loc.file || null;
+    if (folded && !foldedValues.has(raw)) foldedValues.set(raw, { to: type, file });
+    if (trimmed && !trimmedValues.has(raw)) trimmedValues.set(raw, { to: type, file });
+    if (!originOf.has(type)) originOf.set(type, file);
+    return type;
+  }
+
+  function finish(diagnostics) {
+    if (!diagnostics) return;
+
+    for (const [authored, { to, file }] of trimmedValues) {
+      diagnostics.warn(
+        DIAG_CODES.CARD_TYPE_LEADING_SPACE,
+        `aid.type "${authored}" has leading whitespace; writing it as "${to}".`,
+        { file },
+        {
+          hint: 'A leading space survives in a directory name, so the type would reach AI '
+            + 'Dungeon as a category whose name differs from the obvious one by an '
+            + 'invisible character.',
+        },
+      );
+    }
+
+    for (const [authored, { to, file }] of foldedValues) {
+      // One line per authored value, not two: a leading-space type that is also a built-in
+      // has already been reported by CL0628, whose message names the same final value.
+      if (trimmedValues.has(authored)) continue;
+      diagnostics.warn(
+        DIAG_CODES.CARD_TYPE_NORMALIZED,
+        `aid.type "${authored}" names a built-in AI Dungeon category; writing it as "${to}".`,
+        { file },
+        {
+          hint: 'AID\'s built-in categories are lowercase and it matches the type string '
+            + `exactly, so "${authored}" would arrive as a custom category beside `
+            + `"${to}" rather than inside it. Declare it lowercase to silence this.`,
+        },
+      );
+    }
+
+    // Collision is checked on the *normalized* values: a pair that folded to one built-in
+    // has already been merged on purpose, and only a pair that still differs still collides.
+    const byPath = new Map();
+    for (const type of originOf.keys()) {
+      const key = type.trim().toLowerCase();
+      if (!byPath.has(key)) byPath.set(key, []);
+      byPath.get(key).push(type);
+    }
+    for (const [, variants] of byPath) {
+      if (variants.length < 2) continue;
+      const sorted = variants.slice().sort();
+      diagnostics.error(
+        DIAG_CODES.CARD_TYPE_CASE_COLLISION,
+        `aid.type values ${sorted.map((v) => `"${v}"`).join(' and ')} differ only by case, `
+        + 'and are written to the same file on a case-insensitive filesystem.',
+        { file: originOf.get(sorted[0]) },
+        {
+          hint: 'Story Cards/{type}/{type}.md is one path for all of them on Windows and '
+            + 'macOS, so the group written last overwrites the others and their cards never '
+            + 'reach AI Dungeon. Pick one spelling.',
+        },
+      );
+    }
+  }
+
+  return { resolve, finish };
+}
+
 /** Codes this module reports. CL04xx is the render/template band (§4.4). */
 const CODES = {
   NOTES_TEMPLATE_NOT_FOUND: 'CL0411',
@@ -895,6 +1010,7 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
   const {
     variables = {}, registry, branchProtagonist, roles = null, onRoleUsed = null,
     diagnostics, questions = null, storyCardType = null, spec, branchLabel = '(root)',
+    cardTypeAudit = null,
   } = options;
 
   const entries = component && component.render && Array.isArray(component.render.storyCards)
@@ -925,9 +1041,13 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
       continue;
     }
 
-    const cardType = (typeof entry.type === 'string' && entry.type.trim() !== '' && entry.type.trim())
+    const rawCardType = (typeof entry.type === 'string' && entry.type.trim() !== '' && entry.type.trim())
       || (typeof projectType === 'string' && projectType.trim() !== '' && projectType.trim())
       || descriptor.label;
+    // §7.8's cards land in the same `Story Cards/{type}/` tree as every other card, so they
+    // take the same normalization — otherwise a component declaring `type: Character` would
+    // reopen the collision this closes everywhere else.
+    const cardType = cardTypeAudit ? cardTypeAudit.resolve(rawCardType, loc) : rawCardType;
 
     const sub = selectComponentSections(
       component,
@@ -1448,6 +1568,10 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     // path)` dedupe spans every leaf. Null on the report-mode paths that reuse this
     // function without a field table.
     fieldAudit = null,
+    // CL0626–CL0628 — the `aid.type` normalizer, built once per compile for the same
+    // reason: it dedupes per authored value across every branch, and its collision check
+    // cannot run until every branch has contributed its types.
+    cardTypeAudit = null,
   } = options;
   // Build early so render functions can resolve cross-item refs during field expansion.
   const resolvedById = new Map();
@@ -1578,6 +1702,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     // after all {%}/{$} passes, so it sees the final on-disk type. Aborts on invalid.
     validateCardType(item);
 
+
     const bodyRender = resolveBodyRender(item, templates, fieldTable, templateFor);
     if (!bodyRender) {
       const type = (item.aid && item.aid.type) || (item.render && item.render.template) || '?';
@@ -1629,7 +1754,15 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
       continue;
     }
 
-    const type = (item.aid && item.aid.type) || 'Uncategorized';
+    // The written type, normalized (CL0626–CL0628). Applied here rather than to
+    // `item.aid.type` itself, because that value is also the *selector* the template ladder
+    // and `templateFor` key on, and those maps carry the author's casing from the config —
+    // folding the item would silently deselect a type's tier. Everything downstream of this
+    // line is on the writing side: the grouping key, the file path, the collision message,
+    // and the reports, which read the compiled tree from disk and so see this value anyway.
+    const type = cardTypeAudit
+      ? cardTypeAudit.resolve((item.aid && item.aid.type) || 'Uncategorized', { file: item._source })
+      : (item.aid && item.aid.type) || 'Uncategorized';
 
     // Two cards on one leaf that share a display name are an error (Phase 11 Step 5).
     // Velvet Lattice's `_merge_story_cards` keys on name alone, so only one of them ever
@@ -2112,6 +2245,7 @@ function compileRun(configPath, options, buses) {
   // §13.6 — built once so the unread-field audit's `(item id, field path)` dedupe spans
   // the whole compile. `finish()` runs after the leaf loop, beside reportUnusedRoles.
   const fieldAudit = buildFieldAudit({ fieldTable, partials });
+  const cardTypeAudit = buildCardTypeAudit();
 
   // Build canon registry
   const canonRegistry = buildCanonRegistry(config._resolvedLibrary, { diagnostics: loadDiagnostics });
@@ -2340,7 +2474,7 @@ function compileRun(configPath, options, buses) {
         diagnostics: compileDiagnostics, slotIndex, branchLabel: label, placeholders: ctx.placeholders,
         usage: placeholderUsage, usagePath: branchPath.join('/'),
         roles: ctx.roles, onRoleUsed,
-        fieldTable, templateFor: ctx.templateFor, fieldAudit,
+        fieldTable, templateFor: ctx.templateFor, fieldAudit, cardTypeAudit,
       },
     );
     // Phase 11 Step 5: story cards are written after the loop, at the node that owns each
@@ -2491,7 +2625,7 @@ function compileRun(configPath, options, buses) {
           diagnostics: compileDiagnostics,
           questions: questionsForMeasurement(ctx.placeholders, ctx.variables),
           storyCardType: config.storyCardType,
-          spec, branchLabel: label,
+          spec, branchLabel: label, cardTypeAudit,
         });
       }
     }
@@ -2971,6 +3105,9 @@ function compileRun(configPath, options, buses) {
   reportUnusedRoles(roleDeclarations, roleUsage, { diagnostics: compileDiagnostics, file: configPath });
   // §13.6: the deduped unread-field findings, then the whole-table dead-declaration sweep.
   fieldAudit.finish(compileDiagnostics);
+  // CL0626–CL0628, here for the same reason: the fold warns once per authored value across
+  // the whole compile, and a case collision is only visible once every branch's types are in.
+  cardTypeAudit.finish(compileDiagnostics);
   reportUnusedPlaceholders(placeholderDeclarations, placeholderUsage, {
     diagnostics: compileDiagnostics, file: configPath,
   });
@@ -3027,6 +3164,9 @@ module.exports = {
   checkConfigNotesTemplates,
   CODES,
   validateCardType,
+  normalizeCardType,
+  buildCardTypeAudit,
+  AID_BUILTIN_TYPES,
   writeOutput,
   resolveIncludes,
   buildCompileContext,

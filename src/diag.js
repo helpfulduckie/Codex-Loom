@@ -217,6 +217,51 @@ const CODES = Object.freeze({
   STORY_CARD_ENTRY_UNKNOWN_SECTION: 'CL0624',
   STORY_CARD_ENTRY_RENDERS_NOTHING: 'CL0625',
 
+  /**
+   * `aid.type` as a path segment, and what a case-insensitive filesystem does with two of
+   * them (§8).
+   *
+   * `aid.type` becomes `Story Cards/{type}/{type}.md`. On Windows and macOS `Character/`
+   * and `character/` are one directory and one file, so two type groups that differ only
+   * in case are written to the same path and the second write destroys the first. The
+   * compiler counts both groups, so the run reports the full card count and ships fewer
+   * cards — the failure is silent in the one place an author would look to catch it.
+   *
+   * ERROR, on `CL0622`'s reasoning: Velvet Lattice merging two cards by name is the same
+   * shape of loss, and an author who wrote a case-variant pair is always wrong. It is
+   * checked after normalization, so a pair that folds to one built-in (`Character` and
+   * `character`) is a merge the compiler performed on purpose and not reported here —
+   * only a pair that still differs after folding still collides.
+   */
+  CARD_TYPE_CASE_COLLISION: 'CL0626',
+
+  /**
+   * An `aid.type` naming one of AID's five built-in card types in any casing other than
+   * lowercase, folded to lowercase on the way out (§8).
+   *
+   * AI Dungeon stores the type string verbatim and groups by exact match, and its built-in
+   * categories are lowercase — confirmed against the platform, not inferred. So `Character`
+   * reaches AID as a *custom* category sitting beside the built-in `character` rather than
+   * inside it. Velvet Lattice folded these itself until 0.2 dropped the normalization, and
+   * nothing downstream replaced it.
+   *
+   * WARN, and reported once per distinct authored value rather than once per card: the fold
+   * is a correction the author will want, but it changes what ships, and 27 identical lines
+   * for one authoring decision would bury it.
+   */
+  CARD_TYPE_NORMALIZED: 'CL0627',
+
+  /**
+   * An `aid.type` with leading whitespace, trimmed on the way out (§8).
+   *
+   * `validateCardType` already rejects a *trailing* space or period, because Windows strips
+   * those from a path segment and the type would silently become a different one. A leading
+   * space survives instead: it makes a real ` Character/` directory and reaches AID as a
+   * distinct category whose name differs from the obvious one by an invisible character.
+   * Trimmed rather than rejected, because there is exactly one thing the author meant.
+   */
+  CARD_TYPE_LEADING_SPACE: 'CL0628',
+
   // Emit (§8). Both are facts about what Velvet Lattice can carry to AID, not opinions
   // about content — which is why they live in the compiler rather than in lint (§12.5).
   TRIGGER_CONTAINS_COMMA: 'CL0701',
@@ -263,6 +308,9 @@ const SEVERITY_BY_CODE = Object.freeze({
   CL0605: SEVERITY.WARN,
   CL0608: SEVERITY.WARN,
   CL0622: SEVERITY.ERROR,
+  CL0626: SEVERITY.ERROR,
+  CL0627: SEVERITY.WARN,
+  CL0628: SEVERITY.WARN,
   CL0430: SEVERITY.ERROR,
   CL0431: SEVERITY.ERROR,
   CL0432: SEVERITY.ERROR,

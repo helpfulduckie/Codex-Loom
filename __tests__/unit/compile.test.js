@@ -5,7 +5,8 @@ const path = require('path');
 const fs = require('fs');
 const {
   compile,
-  getTemplate, validateCardType, writeOpening, resolveOpeningContent, resolveBranchFolderPath,
+  getTemplate, validateCardType, normalizeCardType, buildCardTypeAudit,
+  writeOpening, resolveOpeningContent, resolveBranchFolderPath,
   buildBranchOutputDir, buildCompileContext, writeOutput,
   resolveIncludes, resolveBranchItems, cleanAndArchive,
   resolveCrossItemRenderFunctions,
@@ -665,6 +666,108 @@ describe('validateCardType', () => {
   });
 });
 
+// ── normalizeCardType / buildCardTypeAudit (CL0626–CL0628) ────────────────────
+//
+// `aid.type` becomes `Story Cards/{type}/{type}.md`. Two facts follow: AID's built-in
+// categories are lowercase and it matches the string exactly, and a case-insensitive
+// filesystem turns two case-variant types into one file. `validateCardType` above covers
+// what cannot be a path at all; these cover what is a legal path and still wrong.
+
+describe('normalizeCardType', () => {
+  test.each(['character', 'class', 'race', 'location', 'faction'])(
+    'folds the built-in %s to lowercase', (builtin) => {
+      const capitalized = builtin[0].toUpperCase() + builtin.slice(1);
+      expect(normalizeCardType(capitalized)).toEqual({
+        type: builtin, folded: true, trimmed: false,
+      });
+    }
+  );
+
+  test('leaves an already-lowercase built-in untouched', () => {
+    expect(normalizeCardType('character')).toEqual({
+      type: 'character', folded: false, trimmed: false,
+    });
+  });
+
+  test('leaves custom types alone, including ones that contain a built-in name', () => {
+    for (const custom of ['Character - Dalor', 'Spell - Ice', 'Character (Preset)', 'You']) {
+      expect(normalizeCardType(custom)).toEqual({ type: custom, folded: false, trimmed: false });
+    }
+  });
+
+  test('trims leading whitespace and folds in one pass', () => {
+    expect(normalizeCardType(' Character')).toEqual({
+      type: 'character', folded: true, trimmed: true,
+    });
+  });
+
+  test('is idempotent — it runs once per item per branch', () => {
+    const once = normalizeCardType('Character').type;
+    expect(normalizeCardType(once).type).toBe(once);
+  });
+
+  test('passes non-strings and empties through untouched', () => {
+    expect(normalizeCardType('')).toEqual({ type: '', folded: false, trimmed: false });
+    expect(normalizeCardType(undefined).type).toBeUndefined();
+  });
+});
+
+describe('buildCardTypeAudit', () => {
+  const report = (types) => {
+    const audit = buildCardTypeAudit();
+    for (const t of types) audit.resolve(t, { file: 'items.yaml' });
+    const diagnostics = new Diagnostics();
+    audit.finish(diagnostics);
+    return diagnostics;
+  };
+
+  test('resolve() returns the written type, leaving the authored value to the caller', () => {
+    // `item.aid.type` is deliberately *not* mutated: it is also the selector the template
+    // ladder and `templateFor` key on, and those maps carry the author's casing.
+    expect(buildCardTypeAudit().resolve('Character', { file: 'items.yaml' })).toBe('character');
+  });
+
+  test('warns once per authored value, not once per card', () => {
+    const diagnostics = report(['Character', 'Character', 'Character', 'Character']);
+    expect(diagnostics.warnings.filter((d) => d.code === 'CL0627')).toHaveLength(1);
+  });
+
+  test('CL0627 names both the authored value and what is written', () => {
+    const warn = report(['Race']).warnings.find((d) => d.code === 'CL0627');
+    expect(warn).toBeTruthy();
+    expect(warn.message).toContain('"Race"');
+    expect(warn.message).toContain('"race"');
+  });
+
+  test('CL0628 reports leading whitespace and suppresses the fold warning', () => {
+    const diagnostics = report([' Character']);
+    expect(diagnostics.warnings.find((d) => d.code === 'CL0628')).toBeTruthy();
+    // One line per authored value: CL0628's message already names the folded result.
+    expect(diagnostics.warnings.filter((d) => d.code === 'CL0627')).toHaveLength(0);
+  });
+
+  test('CL0626 errors on two custom types differing only by case', () => {
+    const err = report(['Widget', 'widget']).errors.find((d) => d.code === 'CL0626');
+    expect(err).toBeTruthy();
+    expect(err.message).toContain('"Widget"');
+    expect(err.message).toContain('"widget"');
+  });
+
+  test('a built-in pair folds to one type and is NOT a collision', () => {
+    // Normalization runs before the collision check on purpose: `Character` and
+    // `character` become one directory deliberately, so reporting them would flag a merge
+    // the compiler performed itself.
+    const diagnostics = report(['Character', 'character']);
+    expect(diagnostics.errors.filter((d) => d.code === 'CL0626')).toHaveLength(0);
+  });
+
+  test('silent on a corpus with no built-ins and no case variants', () => {
+    const diagnostics = report(['Character - Dalor', 'Spell - Ice', 'You', 'zz_Settings']);
+    expect(diagnostics.warnings.filter((d) => d.code.startsWith('CL062'))).toHaveLength(0);
+    expect(diagnostics.errors.filter((d) => d.code.startsWith('CL062'))).toHaveLength(0);
+  });
+});
+
 // ── config-loading errors abort before any filesystem work ────────────────────
 //
 // A schema violation in compile.yaml itself — here, a missing required structure.output —
@@ -860,8 +963,11 @@ describe('CL0622 card-name collision', () => {
     const collision = diagnostics.errors.find((d) => d.code === 'CL0622');
     expect(collision).toBeTruthy();
     expect(collision.message).toContain('Shared Name');
-    expect(collision.message).toContain('Character');
-    expect(collision.message).toContain('Location');
+    // Lowercase because `Character` and `Location` are AID built-ins and CL0627 folds them
+    // before anything downstream reads `aid.type` — including this message. The fixture
+    // still authors them capitalized, which is what keeps the fold covered from this end.
+    expect(collision.message).toContain('character');
+    expect(collision.message).toContain('location');
   });
 
   test('errors when two cards share a name within one type', () => {

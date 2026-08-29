@@ -13,7 +13,10 @@ exports[`pathological fixture a committed manifest that disagrees with the confi
 "WARN CL0113
   Library "alpha" has no entry in manifest.json.
 WARN CL0114
-  Library "beta": snapshot/beta/extra.yaml has no entry in the manifest."
+  Library "beta": snapshot/beta/extra.yaml has no entry in the manifest.
+WARN CL0627 Codex/items.cl.yaml
+  aid.type "Character" names a built-in AI Dungeon category; writing it as "character".
+  hint: AID's built-in categories are lowercase and it matches the type string exactly, so "Character" would arrive as a custom category beside "character" rather than inside it. Declare it lowercase to silence this."
 `;
 
 exports[`pathological fixture a hand-edited snapshot file aborts the load 1`] = `
@@ -58,7 +61,7 @@ ERROR CL0533 Codex/items.cl.yaml
 ERROR CL0420 Codex/items.cl.yaml
   no template found for item "MistypedType" (type: Character-%heroName%)
 ERROR CL0622 Codex/items.cl.yaml
-  story cards named "Anchor" collide on branch "open" (both as Character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
+  story cards named "Anchor" collide on branch "open" (both as character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
 ERROR CL0712 Codex/items.cl.yaml
   Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
@@ -72,7 +75,7 @@ ERROR CL0413 templates/Broken.template
 ERROR CL0415 templates/Unclosed.template
   Unclosed {if $body.Tagline} block.
 ERROR CL0433 Codex/items.cl.yaml
-  leaked template tag {if $body.Tagline} in item "UnclosedBlock" (Character)
+  leaked template tag {if $body.Tagline} in item "UnclosedBlock" (character)
 ERROR CL0541
   "Anchor" is both a declared role and an item id, which is ambiguous — rename one (§9.3).
 ERROR CL0542
@@ -86,11 +89,11 @@ ERROR CL0540
 ERROR CL0540
   "{$Undeclared}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Missing} in item "RoleTester" (Character)
+  unresolved token {$Missing} in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Loop} in item "RoleTester" (Character)
+  unresolved token {$Loop} in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Undeclared} in item "RoleTester" (Character)
+  unresolved token {$Undeclared} in item "RoleTester" (character)
 WARN CL0715 Codex/items.cl.yaml
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
 WARN CL0614 components/plot-essentials.cl.yaml
@@ -120,7 +123,7 @@ ERROR CL0533 Codex/items.cl.yaml
 ERROR CL0420 Codex/items.cl.yaml
   no template found for item "MistypedType" (type: Character-%heroName%)
 ERROR CL0622 Codex/items.cl.yaml
-  story cards named "Anchor" collide on branch "gated" (both as Character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
+  story cards named "Anchor" collide on branch "gated" (both as character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
 ERROR CL0712 Codex/items.cl.yaml
   Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
@@ -134,7 +137,7 @@ ERROR CL0413 templates/Broken.template
 ERROR CL0415 templates/Unclosed.template
   Unclosed {if $body.Tagline} block.
 ERROR CL0433 Codex/items.cl.yaml
-  leaked template tag {if $body.Tagline} in item "UnclosedBlock" (Character)
+  leaked template tag {if $body.Tagline} in item "UnclosedBlock" (character)
 ERROR CL0541
   "Anchor" is both a declared role and an item id, which is ambiguous — rename one (§9.3).
 ERROR CL0542
@@ -148,11 +151,11 @@ ERROR CL0540
 ERROR CL0540
   "{$Undeclared}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Missing} in item "RoleTester" (Character)
+  unresolved token {$Missing} in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Loop} in item "RoleTester" (Character)
+  unresolved token {$Loop} in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Undeclared} in item "RoleTester" (Character)
+  unresolved token {$Undeclared} in item "RoleTester" (character)
 WARN CL0715 Codex/items.cl.yaml
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
 WARN CL0614 components/plot-essentials.cl.yaml
@@ -182,7 +185,7 @@ ERROR CL0533 Codex/items.cl.yaml
 ERROR CL0420 Codex/items.cl.yaml
   no template found for item "MistypedType" (type: Character-%heroName%)
 ERROR CL0622 Codex/items.cl.yaml
-  story cards named "Anchor" collide on branch "silent" (both as Character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
+  story cards named "Anchor" collide on branch "silent" (both as character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
 ERROR CL0712 Codex/items.cl.yaml
   Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
@@ -196,7 +199,7 @@ ERROR CL0413 templates/Broken.template
 ERROR CL0415 templates/Unclosed.template
   Unclosed {if $body.Tagline} block.
 ERROR CL0433 Codex/items.cl.yaml
-  leaked template tag {if $body.Tagline} in item "UnclosedBlock" (Character)
+  leaked template tag {if $body.Tagline} in item "UnclosedBlock" (character)
 ERROR CL0541
   "Anchor" is both a declared role and an item id, which is ambiguous — rename one (§9.3).
 ERROR CL0542
@@ -210,11 +213,11 @@ ERROR CL0540
 ERROR CL0540
   "{$Undeclared}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Missing} in item "RoleTester" (Character)
+  unresolved token {$Missing} in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Loop} in item "RoleTester" (Character)
+  unresolved token {$Loop} in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Undeclared} in item "RoleTester" (Character)
+  unresolved token {$Undeclared} in item "RoleTester" (character)
 WARN CL0715 Codex/items.cl.yaml
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
 WARN CL0614 components/plot-essentials.cl.yaml
@@ -233,6 +236,9 @@ WARN CL0545 compile.cl.yaml
   role "Missing" is declared at the project root but no resolved token anywhere references it.
 WARN CL0545 compile.cl.yaml
   role "Loop" is declared at the project root but no resolved token anywhere references it.
+WARN CL0627 Codex/items.cl.yaml
+  aid.type "Character" names a built-in AI Dungeon category; writing it as "character".
+  hint: AID's built-in categories are lowercase and it matches the type string exactly, so "Character" would arrive as a custom category beside "character" rather than inside it. Declare it lowercase to silence this.
 WARN CL0535 compile.cl.yaml
   placeholder "altName" is declared at the project root but no text beneath it references "%altName%" — the player is asked the question and the answer goes nowhere.
   hint: Declared at the project root, so this counts every branch.
@@ -246,5 +252,17 @@ WARN CL0536 compile.cl.yaml
 
 exports[`pathological fixture two cards share a name across types 1`] = `
 "ERROR CL0622 Codex/items.cl.yaml
-  story cards named "Shared Name" collide on branch "main" (Character in items.cl.yaml and Location in items.cl.yaml). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names."
+  story cards named "Shared Name" collide on branch "main" (character in items.cl.yaml and location in items.cl.yaml). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
+WARN CL0628 Codex/items.cl.yaml
+  aid.type " Gadget" has leading whitespace; writing it as "Gadget".
+  hint: A leading space survives in a directory name, so the type would reach AI Dungeon as a category whose name differs from the obvious one by an invisible character.
+WARN CL0627 Codex/items.cl.yaml
+  aid.type "Character" names a built-in AI Dungeon category; writing it as "character".
+  hint: AID's built-in categories are lowercase and it matches the type string exactly, so "Character" would arrive as a custom category beside "character" rather than inside it. Declare it lowercase to silence this.
+WARN CL0627 Codex/items.cl.yaml
+  aid.type "Location" names a built-in AI Dungeon category; writing it as "location".
+  hint: AID's built-in categories are lowercase and it matches the type string exactly, so "Location" would arrive as a custom category beside "location" rather than inside it. Declare it lowercase to silence this.
+ERROR CL0626 Codex/items.cl.yaml
+  aid.type values "Widget" and "widget" differ only by case, and are written to the same file on a case-insensitive filesystem.
+  hint: Story Cards/{type}/{type}.md is one path for all of them on Windows and macOS, so the group written last overwrites the others and their cards never reach AI Dungeon. Pick one spelling."
 `;

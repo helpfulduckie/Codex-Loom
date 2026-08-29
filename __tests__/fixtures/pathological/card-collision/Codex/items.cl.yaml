@@ -15,3 +15,40 @@
     triggers: [Second]
   body:
     Tagline: Second card body.
+
+# CL0626 — two *custom* types differing only by case. They are one directory and one file on
+# a case-insensitive filesystem, so the group written last overwrites the other. Custom on
+# purpose: a built-in pair like Character/character folds to one type and is a deliberate
+# merge, so it could never raise this.
+- id: WidgetUpper
+  name: Widget Upper
+  aid:
+    type: Widget
+    triggers: [WidgetUpper]
+  render:
+    template: Character
+  body:
+    Tagline: Upper-case widget type.
+
+- id: WidgetLower
+  name: Widget Lower
+  aid:
+    type: widget
+    triggers: [WidgetLower]
+  render:
+    template: Character
+  body:
+    Tagline: Lower-case widget type.
+
+# CL0628 — leading whitespace on a type. Trailing space is fatal in `validateCardType`
+# (Windows strips it), but a leading one makes a real directory and reaches AID as a
+# category differing from the obvious one by an invisible character.
+- id: LeadingSpaceType
+  name: Leading Space Type
+  aid:
+    type: ' Gadget'
+    triggers: [LeadingSpace]
+  render:
+    template: Character
+  body:
+    Tagline: Leading-space type.

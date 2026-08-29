@@ -327,6 +327,9 @@ value, and the property belongs to the template, not to each field.
 | `CL0623` | ERROR | A `render.storyCards` entry (§7.8) declares no `title:` — the title is the card's AID name and the frontier keys on it. |
 | `CL0624` | WARN | A `render.storyCards` entry's `sections:` names a section the component does not declare; it is dropped from that entry. |
 | `CL0625` | WARN | A `render.storyCards` entry renders no text on a branch — its `variant:` / `sections:` selectors left nothing. No card is written. |
+| `CL0626` | ERROR | Two `aid.type` values differ only by case, so they are one file on a case-insensitive filesystem and one group's cards are overwritten. |
+| `CL0627` | WARN | An `aid.type` names an AID built-in category in non-lowercase form; it is folded to lowercase. |
+| `CL0628` | WARN | An `aid.type` has leading whitespace; it is trimmed. |
 
 `CL0601` is an error rather than a resolved precedence because the two readings differ in
 output and neither is obviously right: text inside a slot could sit before or after the
@@ -423,6 +426,48 @@ ERROR because the title is the card's AID name and its position in the frontier 
 there is nowhere for an untitled entry to go. `CL0624` and `CL0625` are WARNs on the same
 reasoning as `CL0602`: the component field still ships, so a selector that names a missing
 section or resolves to nothing is a lost alternate rather than a broken compile.
+
+### CL0626–CL0628 in detail — `aid.type` as a path segment
+
+`aid.type` is written to disk as `Story Cards/{type}/{type}.md`, which makes a category name
+into a path segment and drags two filesystem facts into the compiler. `validateCardType`
+already handles the fatal half — an illegal character, a trailing space or period that
+Windows would strip. These three handle what survives validation and still goes wrong.
+
+`CL0626` is `CL0622`'s shape one layer up. `CL0622` exists because Velvet Lattice merges two
+cards by name and only one reaches AID; here the *filesystem* merges two types, and the group
+written last overwrites the rest. It is worse than the card case in one respect: the compiler
+counts every group, so the run reports the full card count while shipping fewer cards, and
+the summary table an author would check to catch it is exactly what hides it. ERROR for
+`CL0622`'s reason — an author who wrote a case-variant pair is always wrong, because the two
+spellings cannot both exist.
+
+`CL0627` folds an `aid.type` naming one of AID's five built-in categories — `character`,
+`class`, `race`, `location`, `faction` — to lowercase. AI Dungeon stores the type string
+verbatim and groups by exact match, so `Character` arrives as a *custom* category sitting
+beside the built-in `character` rather than inside it. This was confirmed against the
+platform: a card pushed as `Race` comes back as `Race`, and a `Location` card and a
+`location` card do not group in the scenario editor. Velvet Lattice folded these itself
+until 0.2 dropped the normalization, and nothing downstream replaced it. Only bare built-in
+names fold — `Character - Dalor` and `Spell - Ice` are deliberate custom groupings and are
+left alone.
+
+`CL0627` is reported once per distinct authored value rather than once per card, because the
+fold is one authoring decision however many cards share it; per-card reporting would print
+27 identical lines for the Institute corpus and bury the finding.
+
+`CL0628` trims leading whitespace. The trailing case is fatal above, since Windows strips it
+and the type would silently become a different one; a leading space instead survives into a
+real ` Character/` directory and reaches AID as a category differing from the obvious one by
+an invisible character. It is trimmed rather than rejected because there is exactly one thing
+the author meant. A value that is both trimmed and folded reports only `CL0628`, whose
+message already names the final value.
+
+**Order matters between the three.** Normalization runs first and the collision check reads
+its output, so `Character` and `character` — which fold to one built-in — are a merge the
+compiler performed on purpose and are not reported as a collision. Only a pair that still
+differs after folding, like `Widget` and `widget`, still collides. Reversing the order would
+report every folded pair as an error.
 
 ### CL07xx — emit
 

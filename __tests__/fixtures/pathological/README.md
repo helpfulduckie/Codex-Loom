@@ -48,6 +48,17 @@ rather than a fourth mistake folded into `snapshot-mismatch/`.
   moving it now would touch the fixture the phase's later steps read against; **fold it into
   `placement/` the next time that project's item set changes for an unrelated reason**, and
   delete this directory then.
+
+  It has since also taken the `aid.type` collisions — `CL0626` (two custom types differing
+  only by case, which are one file on a case-insensitive filesystem), `CL0627` (a built-in
+  category named in non-lowercase form, folded) and `CL0628` (leading whitespace, trimmed).
+  They live here because they are the same mistake one level up: a card name collides inside
+  a type, a type collides inside the filesystem, and both are properties of items at a leaf.
+  `CL0627` needed no new item — `placement/` already declares `type: Character` and raises it
+  incidentally — but a *custom* pair does, because a built-in pair folds to one type and can
+  never raise `CL0626`. That distinction is the reason `Widget`/`widget` are here rather than
+  a second `Character`/`character`, and it is the row worth checking first if this snapshot
+  ever loses `CL0626`.
 - `placement/` — load-clean on purpose, so the compile phase runs in full. Carries §7.4's
   placement invariants and the §12 placeholder content that is still inert.
 - `schema/` — three unknown-key shapes, asserted for their hints as much as their codes.
