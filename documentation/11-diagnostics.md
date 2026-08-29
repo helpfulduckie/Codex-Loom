@@ -330,6 +330,7 @@ value, and the property belongs to the template, not to each field.
 | `CL0626` | ERROR | Two `aid.type` values differ only by case, so they are one file on a case-insensitive filesystem and one group's cards are overwritten. |
 | `CL0627` | WARN | An `aid.type` names an AID built-in category in non-lowercase form; it is folded to lowercase. |
 | `CL0628` | WARN | An `aid.type` has leading whitespace; it is trimmed. |
+| `CL0629` | ERROR | `adventureDescription` declares `advanced:` or `description:` in `metadata:` — both belong to the scenario blurb only. |
 
 `CL0601` is an error rather than a resolved precedence because the two readings differ in
 output and neither is obviously right: text inside a slot could sit before or after the
@@ -426,6 +427,31 @@ ERROR because the title is the card's AID name and its position in the frontier 
 there is nowhere for an untitled entry to go. `CL0624` and `CL0625` are WARNs on the same
 reasoning as `CL0602`: the component field still ships, so a selector that names a missing
 section or resolves to nothing is a lost alternate rather than a broken compile.
+
+### CL0629 in detail — the two description keys share a flag they should not
+
+`description:` and `adventureDescription:` both write `Description.md`, so they share one
+descriptor row's `frontmatter: true` — and that flag is there for the scenario blurb's sake.
+`CL0620` fires when a component *cannot* carry frontmatter; `adventureDescription` can, so
+nothing stopped an author from putting `advanced:` or `description:` on a leaf, and the
+compiler wrote both through to every leaf's `Description.md` without a word.
+
+The markdown description is a **Scenario** field. A scenario has a landing page that renders
+it; an adventure does not. An adventure carries only a plain description, which AID seeds from
+the leaf's Opening and Velvet Lattice can overwrite — safe, because the player can change it
+from the post-start menu. There is no equivalent escape hatch for a markdown one.
+
+**ERROR rather than WARN, because the risk is asymmetric and one side is irreversible.** VL 0.2
+reads node metadata only at the root, so today both keys are inert at a leaf and the author gets
+no signal that they wrote something meaningless. The best case for allowing it is that nothing
+happens. The worst case is that AID adds markdown descriptions for adventures — plausible, on
+the current pace of platform change — the same frontmatter goes live, sets a field on the
+player's own adventure, and leaves them no way to change it. Revisit the severity if that
+support arrives with a way for the player to edit it.
+
+Only those two keys are refused. Anything else under `adventureDescription`'s `metadata:` is
+harmless at a leaf and passes, rather than the check inventing a whitelist for keys VL does not
+read at all.
 
 ### CL0626–CL0628 in detail — `aid.type` as a path segment
 

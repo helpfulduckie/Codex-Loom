@@ -78,6 +78,15 @@ rather than a fourth mistake folded into `snapshot-mismatch/`.
   no field table and adding one would perturb a fixture the earlier phases read against.
   Fold both in the next time `placement/`'s item set changes for an unrelated reason.
 
+`placement/components/adventure-description.cl.yaml` carries **two** faults rather than the
+usual one, and the exception is deliberate. Its first is the CL0616 pairing — an adventure
+description on a branch with no opening — which is a property of the *branch*, not of the file.
+Its second is `advanced:` in `metadata:` for CL0629, which is a property of the file. They do
+not interact, and the alternative was a second `adventureDescription` component existing only
+to hold one key, which is exactly the unjustified extra the entries above argue against. The
+`tags:` beside it is not a mistake: it is there to prove the check refuses two named keys
+rather than inventing a whitelist.
+
 ## Editing rules
 
 - **Author from the spec, not from the implementation.** The fixture states what *should*

@@ -5,6 +5,17 @@
 #
 # `file:` and `from:` are §7.7's two new section sources. Both are exercised here so a
 # regression in either shows up in the diagnostic stream rather than only in the unit tests.
+#
+# CL0629 — a second, unrelated fault in the same file, and deliberately so. This component
+# shares `Description.md` with the scenario blurb and therefore its `frontmatter: true`, which
+# is what let `advanced:` reach a leaf with no diagnostic at all. Both keys are Scenario
+# fields VL reads at the root and nowhere else, and the markdown one has no adventure
+# equivalent a player could undo. `tags:` rides along to prove the check refuses two named
+# keys rather than inventing a whitelist.
+
+metadata:
+  advanced: true
+  tags: [pathological]
 
 sections:
   pitch:

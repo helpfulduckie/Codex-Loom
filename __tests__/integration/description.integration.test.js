@@ -402,6 +402,60 @@ describe('metadata: becomes Description.md frontmatter', () => {
 
     expect(codes(diagnostics, CODES.COMPONENT_METADATA_UNSUPPORTED)).toHaveLength(1);
   });
+
+  // §7.7 — the other half of the same flag. `adventureDescription` shares `Description.md`
+  // with the scenario blurb and so inherits `frontmatter: true`, which is what let these two
+  // keys through to a leaf with no diagnostic at all. They are Scenario fields VL reads at
+  // the root and nowhere else, and the markdown one has no adventure equivalent a player
+  // could undo, so they are refused here rather than written and left inert.
+  test.each(['advanced: true', 'description: A plain blurb.'])(
+    'adventureDescription declaring %s in metadata: is CL0629', (badKey) => {
+      const { diagnostics } = compileProject({
+        ...BASE,
+        'compile.yaml': config([
+          'adventureDescription: ./components/adv.cl.yaml',
+          'opening: ./openings/calm.md',
+        ]),
+        'components/adv.cl.yaml':
+          `metadata:\n  ${badKey}\nsections:\n  body:\n    text: A quiet harbor town.\n`,
+      });
+
+      expect(codes(diagnostics, CODES.ADVENTURE_DESCRIPTION_ADVANCED)).toHaveLength(1);
+    }
+  );
+
+  test('other metadata keys on adventureDescription pass — no whitelist', () => {
+    // VL does not read anything else from a leaf's frontmatter, so a stray key is inert
+    // rather than dangerous. Only the two the root reads are refused.
+    const { diagnostics } = compileProject({
+      ...BASE,
+      'compile.yaml': config([
+        'adventureDescription: ./components/adv.cl.yaml',
+        'opening: ./openings/calm.md',
+      ]),
+      'components/adv.cl.yaml':
+        'metadata:\n  tags: [thriller]\nsections:\n  body:\n    text: A quiet harbor town.\n',
+    });
+
+    expect(codes(diagnostics, CODES.ADVENTURE_DESCRIPTION_ADVANCED)).toHaveLength(0);
+  });
+
+  test('the scenario blurb still carries both keys freely', () => {
+    const { diagnostics } = compileProject({
+      ...BASE,
+      'compile.yaml': config(['description: ./components/desc.cl.yaml']),
+      'components/desc.cl.yaml': [
+        'metadata:',
+        '  advanced: true',
+        '  description: A plain blurb.',
+        'sections:',
+        '  pitch:',
+        '    text: A story about a harbor.',
+      ].join('\n'),
+    });
+
+    expect(codes(diagnostics, CODES.ADVENTURE_DESCRIPTION_ADVANCED)).toHaveLength(0);
+  });
 });
 
 // ── §7.7's opening guard ─────────────────────────────────────────────────────

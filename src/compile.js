@@ -2382,6 +2382,31 @@ function compileRun(configPath, options, buses) {
           { file: String(spec) },
         );
       }
+      // §7.7 — the other half of the same flag. `adventureDescription` shares
+      // `Description.md` with the scenario blurb and so inherits `frontmatter: true`, but
+      // only the blurb should carry `advanced:` and `description:`. Both are Scenario
+      // fields VL reads at the root and nowhere else, and the markdown one has no adventure
+      // equivalent the player could undo. Checked on the cache miss with CL0620, so an
+      // author hears it once rather than once per leaf.
+      if (loaded && loaded.metadata && descriptor.key === 'adventureDescription') {
+        const offending = ['advanced', 'description']
+          .filter((key) => Object.prototype.hasOwnProperty.call(loaded.metadata, key));
+        if (offending.length > 0) {
+          compileDiagnostics.error(
+            DIAG_CODES.ADVENTURE_DESCRIPTION_ADVANCED,
+            `"${descriptor.label}" declares ${offending.map((k) => `${k}:`).join(' and ')} in `
+            + 'metadata:, which belongs to the scenario blurb only.',
+            { file: String(spec) },
+            {
+              hint: 'Velvet Lattice reads both keys at the root and nowhere else, so they do '
+                + 'nothing at a leaf today. AID has no markdown description for an adventure, '
+                + 'and if it gains one this frontmatter would set a field the player cannot '
+                + `change. Move them to the ${DESCRIPTION_DESCRIPTOR.label} component; other `
+                + 'metadata keys are fine here.',
+            },
+          );
+        }
+      }
       sectionedDocs.set(spec, loaded);
     }
     return sectionedDocs.get(spec);

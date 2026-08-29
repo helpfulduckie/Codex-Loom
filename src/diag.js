@@ -218,6 +218,26 @@ const CODES = Object.freeze({
   STORY_CARD_ENTRY_RENDERS_NOTHING: 'CL0625',
 
   /**
+   * `advanced:` or `description:` in `adventureDescription`'s `metadata:` (§7.7).
+   *
+   * The two description keys share `Description.md`, so they share the descriptor's
+   * `frontmatter` flag — but only the scenario blurb should carry these two keys. The
+   * markdown description is a *Scenario* field: a scenario has a landing page that renders
+   * it, an adventure does not. An adventure carries only a plain description, which AID
+   * seeds from the leaf's Opening and Velvet Lattice can overwrite — safe, because the
+   * player can change it from the post-start menu. There is no equivalent escape hatch for
+   * a markdown one.
+   *
+   * ERROR rather than WARN because the risk is asymmetric and irreversible. Velvet Lattice
+   * 0.2 reads node metadata only at the root, so today the keys are inert and an author
+   * gets no feedback that they wrote something meaningless. If AID adds markdown
+   * descriptions for adventures — plausible, given how fast that platform is moving — the
+   * same frontmatter becomes live, sets a field on the player's own adventure, and leaves
+   * them no way to change it. Revisit the severity if that support arrives.
+   */
+  ADVENTURE_DESCRIPTION_ADVANCED: 'CL0629',
+
+  /**
    * `aid.type` as a path segment, and what a case-insensitive filesystem does with two of
    * them (§8).
    *
@@ -308,6 +328,7 @@ const SEVERITY_BY_CODE = Object.freeze({
   CL0605: SEVERITY.WARN,
   CL0608: SEVERITY.WARN,
   CL0622: SEVERITY.ERROR,
+  CL0629: SEVERITY.ERROR,
   CL0626: SEVERITY.ERROR,
   CL0627: SEVERITY.WARN,
   CL0628: SEVERITY.WARN,
