@@ -214,16 +214,21 @@ The value always reaches AID as a **string** — the Velvet Lattice loader decla
 
 ### Rendering notes through a template
 
-For anything richer than a literal, a template renders the text. Which template is found by a four-rung ladder, most specific first:
+For anything richer than a literal, a template renders the text. Which template is found by a three-rung ladder, most specific first:
 
 | Rung | Source | Example |
 |---|---|---|
 | 1 | `render.notesTemplate` on the item | `notesTemplate: SpecialNotes` |
-| 2 | `<body template>.notes`, if that file exists | `Character.notes.template` |
-| 3 | `render.notesTemplate` in `compile.yaml`, merged down the branch chain | see [compile.yaml](02-compile-yaml.md) |
-| 4 | none — the default rendering above | |
+| 2 | the branch-addressable notes default: `templateFor.notes` keyed on `aid.type`, then the `render.notesTemplate` scalar in `compile.yaml` — both merged down the branch chain | see [compile.yaml](02-compile-yaml.md) |
+| 3 | none — the default rendering above | |
 
-Rung 2 follows whichever template actually rendered the body, not `aid.type` or `render.template` chosen in advance, so an item that overrides its body template cannot have its notes rendered by a different family. It is the same suffixed-sibling mechanism `Character.hint` uses.
+Rung 2 is where a project sets one notes template for a whole type or a whole scenario, and a branch swaps it for the mod case — a branch that drops WTG points `notesTemplate` at a blank template and every card in it stops emitting the marker. Earlier versions also resolved a `<body template>.notes` file by filename alone; that rung was removed in Phase 13 because it activated a renderer with nothing declared.
+
+```yaml
+# compile.yaml
+render:
+  notesTemplate: MarkerNotes
+```
 
 ```yaml
 - id: Aness
@@ -232,11 +237,11 @@ Rung 2 follows whichever template actually rendered the body, not `aid.type` or 
 ```
 
 ```
-# Character.notes.template
+# MarkerNotes.template
 {if $notes.known}[e]{/if}
 ```
 
-That item needs no `notesTemplate` declaration at all — rung 2 finds the template by name. The template sees the same item context as a body template, with the item's `notes:` under `{$notes}`. `render.wrapper` is forced off while it renders: the wrapper describes the body, and a notes template without an explicit `{wrapper}` block would otherwise emit `notes: '{...}'`.
+That item needs no `notesTemplate` declaration — the project default renders it. The template sees the same item context as a body template, with the item's `notes:` under `{$notes}`. `render.wrapper` is forced off while it renders: the wrapper describes the body, and a notes template without an explicit `{wrapper}` block would otherwise emit `notes: '{...}'`.
 
 **Opting out needs no syntax.** A template that renders empty suppresses the `notes:` line entirely, so `{if $notes.known}[e]{/if}` writes nothing for an item that never set the flag.
 

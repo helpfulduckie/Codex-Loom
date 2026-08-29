@@ -79,3 +79,26 @@ describe('provenance line', () => {
     expect(md).toMatch(/where they disagree, `SCHEMA\.md` has drifted/);
   });
 });
+
+describe('Role and tier templates (§13.4)', () => {
+  test('the section is absent when no templateFor is declared', () => {
+    expect(md).not.toMatch(/## Role and tier templates/);
+    expect(generateSchemaTables(TABLE, { title: 'T', tierTemplates: [] }))
+      .not.toMatch(/## Role and tier templates/);
+  });
+
+  test('a terse base list and a Pattern 2 name are listed under their branch and role', () => {
+    const withTiers = generateSchemaTables(TABLE, {
+      title: 'T',
+      tierTemplates: [
+        { branch: 'lowContext', role: 'base', name: 'Character', list: ['vibe', { field: 'appearance', label: 'Look' }] },
+        { branch: 'lowContext', role: 'base', name: 'CharacterFull', list: ['vibe', 'appearance', 'skills'] },
+      ],
+    });
+    expect(withTiers).toMatch(/## Role and tier templates/);
+    expect(withTiers).toMatch(/### Branch `lowContext` — role `base`/);
+    const section = withTiers.slice(withTiers.indexOf('#### `Character`'));
+    expect(section).toMatch(/#### `Character`\n\n- `vibe`\n- `appearance` _\(override\)_/);
+    expect(section).toMatch(/#### `CharacterFull`\n\n- `vibe`\n- `appearance`\n- \*\*skills\*\* _\(group\)_: `magic`/);
+  });
+});

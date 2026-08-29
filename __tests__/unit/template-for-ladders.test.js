@@ -14,7 +14,6 @@ const { Diagnostics } = require('../../src/diag');
 
 const textTemplates = new Map([
   ['character', { content: '{$body.name}', _source: 'Character.template' }],
-  ['character.notes', { content: 'NOTES {$notes.k}', _source: 'Character.notes.template' }],
 ]);
 
 const fieldTable = {
@@ -27,21 +26,40 @@ const fieldTable = {
 };
 
 describe('resolveBodyRender — body ladder', () => {
-  test('rung 1: item render.template names a field-list template', () => {
+  test('rung 1: an item render.template that differs from aid.type names a field-list template', () => {
     const hit = resolveBodyRender(
       { render: { template: 'Fancy' }, aid: { type: 'Character' } }, textTemplates, fieldTable, {},
     );
     expect(hit).toMatchObject({ kind: 'fieldList', name: 'Fancy' });
   });
 
-  test('rung 1 still wins over a templateFor.base entry for the same type', () => {
+  test('a render.template equal to aid.type is the normaliser default, not a choice — it falls to templateFor.base', () => {
+    // `model/item.js` fills `render.template` with `aid.type` for every card, so honouring
+    // it at rung 1 would shadow every branch's `templateFor.base`. Phase 13 finding.
     const tf = { base: { Character: [{ field: 'name', label: 'Branch' }] } };
     const hit = resolveBodyRender(
       { render: { template: 'Character' }, aid: { type: 'Character' } }, textTemplates, fieldTable, tf,
     );
-    // render.template: Character resolves the *named* template (here the text one), not the
-    // branch's type→list map.
-    expect(hit).toEqual({ kind: 'text', entry: textTemplates.get('character'), name: 'Character' });
+    expect(hit).toEqual({ kind: 'fieldList', list: tf.base.Character, name: 'Character' });
+  });
+
+  test('a differing render.template still wins over templateFor.base for the same type', () => {
+    const tf = { base: { Character: [{ field: 'name', label: 'Branch' }] } };
+    const hit = resolveBodyRender(
+      { render: { template: 'Fancy' }, aid: { type: 'Character' } }, textTemplates, fieldTable, tf,
+    );
+    expect(hit).toMatchObject({ kind: 'fieldList', name: 'Fancy' });
+    expect(hit.list).toBe(fieldTable.templates.Fancy);
+  });
+
+  test('Pattern 2: render.template names a list the branch\'s slot file defines, not the shared table', () => {
+    // `CharacterFull` exists only in `templateFor.base`, so an item opts back into it on the
+    // tiered branch — the important card in a terse cast (§13.4).
+    const tf = { base: { Character: [{ field: 'name', label: 'Terse' }], CharacterFull: [{ field: 'name', label: 'Full' }] } };
+    const hit = resolveBodyRender(
+      { render: { template: 'CharacterFull' }, aid: { type: 'Character' } }, new Map(), { templates: {} }, tf,
+    );
+    expect(hit).toEqual({ kind: 'fieldList', list: tf.base.CharacterFull, name: 'CharacterFull' });
   });
 
   test('rung 2: templateFor.base keyed on aid.type', () => {
@@ -62,38 +80,39 @@ describe('resolveBodyRender — body ladder', () => {
   });
 });
 
-describe('resolveNotesRender — notes ladder', () => {
+describe('resolveNotesRender — notes ladder (three rungs, §13.4 end state)', () => {
   test('rung 1: item render.notesTemplate, named', () => {
     expect(resolveNotesRender(
-      { render: { notesTemplate: 'Fancy' }, aid: { type: 'Character' } }, 'Character',
+      { render: { notesTemplate: 'Fancy' }, aid: { type: 'Character' } },
       textTemplates, fieldTable, null, {},
     )).toMatchObject({ kind: 'fieldList', name: 'Fancy' });
   });
 
-  test('rung 2: <bodyName>.notes suffix still resolves (kept, not replaced)', () => {
-    expect(resolveNotesRender({ aid: { type: 'Character' } }, 'Character', textTemplates, fieldTable, null, {}))
-      .toEqual({ kind: 'text', entry: textTemplates.get('character.notes'), name: 'Character.notes' });
-  });
-
-  test('rung 3: templateFor.notes keyed on aid.type, with the notes ref root', () => {
+  test('rung 2: templateFor.notes keyed on aid.type, with the notes ref root', () => {
     const tf = { notes: { Character: [{ field: 'k', label: 'K' }] } };
-    const hit = resolveNotesRender({ aid: { type: 'Character' } }, 'Other', new Map(), { templates: {} }, null, tf);
+    const hit = resolveNotesRender({ aid: { type: 'Character' } }, new Map(), { templates: {} }, null, tf);
     expect(hit).toMatchObject({ kind: 'fieldList', refRoot: 'notes' });
     expect(hit.list).toBe(tf.notes.Character);
   });
 
-  test('rung 4: the branch/project notesTemplate name', () => {
-    expect(resolveNotesRender({ aid: { type: 'X' } }, 'X', textTemplates, fieldTable, 'Fancy', {}))
+  test('rung 2 (scalar spelling): the branch/project notesTemplate name', () => {
+    expect(resolveNotesRender({ aid: { type: 'X' } }, textTemplates, fieldTable, 'Fancy', {}))
       .toMatchObject({ kind: 'fieldList', name: 'Fancy' });
   });
 
+  test('a type-keyed templateFor.notes entry wins over the scalar notesTemplate', () => {
+    const tf = { notes: { Character: [{ field: 'k', label: 'K' }] } };
+    const hit = resolveNotesRender({ aid: { type: 'Character' } }, textTemplates, fieldTable, 'Fancy', tf);
+    expect(hit.list).toBe(tf.notes.Character);
+  });
+
   test('rung 1 with an unknown name is a missing marker, not a silent fall-through', () => {
-    expect(resolveNotesRender({ render: { notesTemplate: 'Ghost' }, aid: { type: 'X' } }, 'X',
+    expect(resolveNotesRender({ render: { notesTemplate: 'Ghost' }, aid: { type: 'X' } },
       new Map(), { templates: {} }, 'Fancy', {})).toEqual({ kind: 'missing', name: 'Ghost' });
   });
 
   test('nothing set → null (§4.5 default)', () => {
-    expect(resolveNotesRender({ aid: { type: 'X' } }, 'X', new Map(), { templates: {} }, null, {})).toBeNull();
+    expect(resolveNotesRender({ aid: { type: 'X' } }, new Map(), { templates: {} }, null, {})).toBeNull();
   });
 });
 

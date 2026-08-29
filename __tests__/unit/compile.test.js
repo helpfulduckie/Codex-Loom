@@ -7,7 +7,7 @@ const {
   compile,
   getTemplate, validateCardType, writeOpening, resolveOpeningContent, resolveBranchFolderPath,
   buildBranchOutputDir, buildCompileContext, writeOutput,
-  resolveIncludes, resolveNotesTemplateName, resolveBranchItems, cleanAndArchive,
+  resolveIncludes, resolveBranchItems, cleanAndArchive,
   resolveCrossItemRenderFunctions,
 } = require('../../src/compile');
 const { buildRegistry } = require('../../src/loader/registry');
@@ -885,56 +885,6 @@ describe('CL0622 card-name collision', () => {
 
 // ── the notes template ladder (§4.5) ─────────────────────────────────────────
 
-describe('resolveNotesTemplateName', () => {
-  const templates = new Map([
-    ['item', { content: 'body' }],
-    ['item.notes', { content: 'type notes' }],
-    ['character', { content: 'body' }],
-    ['explicit', { content: 'explicit notes' }],
-    ['projectnotes', { content: 'project notes' }],
-  ]);
-
-  const item = (render, type) => ({ render, aid: { type } });
-
-  test('rung 1 — the item names its own template', () => {
-    expect(resolveNotesTemplateName(item({ template: 'Item', notesTemplate: 'Explicit' }, 'Item'), templates, 'ProjectNotes'))
-      .toBe('Explicit');
-  });
-
-  test('rung 1 wins even when it names a template that does not exist', () => {
-    // Falling through on a typo would render the wrong notes silently. The render-time
-    // ERR that follows is the better failure.
-    expect(resolveNotesTemplateName(item({ template: 'Item', notesTemplate: 'Nope' }, 'Item'), templates, 'ProjectNotes'))
-      .toBe('Nope');
-  });
-
-  test('rung 2 — the body template gets its .notes sibling', () => {
-    expect(resolveNotesTemplateName(item({ template: 'Item' }, 'Item'), templates, 'ProjectNotes'))
-      .toBe('Item.notes');
-  });
-
-  test('rung 2 follows the template that actually resolved the body', () => {
-    // render.template overrides aid.type for the body, so the notes must follow it there
-    // rather than picking up Item.notes from the type.
-    expect(resolveNotesTemplateName(item({ template: 'Character' }, 'Item'), templates, null))
-      .toBeNull();
-  });
-
-  test('rung 2 resolves through aid.type when there is no render.template', () => {
-    expect(resolveNotesTemplateName(item({}, 'Item'), templates, null)).toBe('Item.notes');
-  });
-
-  test('rung 3 — the project default, when no .notes sibling exists', () => {
-    expect(resolveNotesTemplateName(item({ template: 'Character' }, 'Character'), templates, 'ProjectNotes'))
-      .toBe('ProjectNotes');
-  });
-
-  test('rung 4 — nothing at all, leaving §4.5\'s default rule', () => {
-    expect(resolveNotesTemplateName(item({ template: 'Character' }, 'Character'), templates, null))
-      .toBeNull();
-  });
-});
-
 describe('the notes ladder end to end', () => {
   let tmpDir;
   let quiet;
@@ -989,9 +939,14 @@ describe('the notes ladder end to end', () => {
     };
   }
 
-  test('a type template named Item.notes renders the notes without any declaration', () => {
+  test('a loaded Item.notes template is inert — the filename-suffix rung was removed (§13.4, Phase 13)', () => {
+    // Pre-Phase-13 this resolved `notes:` through Item.notes by filename alone. With that
+    // rung gone and no render.notesTemplate declared anywhere, the ladder falls straight
+    // through to §4.5's default: the mapping renders as `key: value` lines.
     const read = build({ templates: { 'Item.notes': '{if $notes.known}[e]{/if}' } });
-    expect(read('main')).toContain("notes: '[e]'");
+    const text = read('main');
+    expect(text).not.toContain("notes: '[e]'");
+    expect(text).toContain("notes: 'known: true'");
   });
 
   test('the project default applies when no type template exists', () => {

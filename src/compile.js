@@ -65,9 +65,6 @@ function validateCardType(item) {
   }
 }
 
-/** The suffix that makes a template the notes companion of another (§4.5, rung 2). */
-const NOTES_SUFFIX = '.notes';
-
 /** Codes this module reports. CL04xx is the render/template band (§4.4). */
 const CODES = {
   NOTES_TEMPLATE_NOT_FOUND: 'CL0411',
@@ -106,36 +103,6 @@ function checkConfigNotesTemplates(config, templates, diagnostics, configPath, f
 }
 
 /**
- * Which template renders this item's `notes:`, as a name — or null for §4.5's default.
- *
- * Four rungs, most specific first:
- *
- *   1. `render.notesTemplate` on the item.
- *   2. `<body template>.notes`, when such a template is loaded. The name is the one that
- *      actually resolved the body rather than `aid.type` or `render.template` picked in
- *      advance, so an item that overrides its body template cannot end up with its notes
- *      rendered by a different family. This is the mechanism `Character.hint` already
- *      uses — a suffixed sibling, resolved by filename.
- *   3. The branch's merged `render.notesTemplate` from compile.yaml. It lives on the
- *      branch node because which mods a branch loads is what decides whether a marker
- *      means anything there; `notesTemplate: ~` on a branch turns the control off for
- *      every card in it without touching an item.
- *   4. Nothing — §4.5 renders the notes value itself (scalar verbatim, mapping as
- *      `key: value` lines).
- */
-function resolveNotesTemplateName(item, templates, projectNotesTemplate) {
-  const explicit = item.render && item.render.notesTemplate;
-  if (explicit) return String(explicit);
-
-  const bodyName = getTemplateName(item, templates);
-  if (bodyName && templates.has(`${bodyName.toLowerCase()}${NOTES_SUFFIX}`)) {
-    return `${bodyName}${NOTES_SUFFIX}`;
-  }
-
-  return projectNotesTemplate ? String(projectNotesTemplate) : null;
-}
-
-/**
  * Render `notes:` through the resolved notes template, or return undefined (§4.5).
  *
  * Undefined rather than an empty string, because the two mean different things to the
@@ -150,15 +117,15 @@ function resolveNotesTemplateName(item, templates, projectNotesTemplate) {
  * by the post-render fallback and emit `notes: '{...}'`.
  */
 function renderNotesText(item, context, templates, partials, variables, projectNotesTemplate, diagnostics, extra = {}) {
-  const { fieldTable = { templates: {} }, templateFor = {}, bodyName } = extra;
+  const { fieldTable = { templates: {} }, templateFor = {} } = extra;
   const resolved = resolveNotesRender(
-    item, bodyName || getTemplateName(item, templates), templates, fieldTable, projectNotesTemplate, templateFor,
+    item, templates, fieldTable, projectNotesTemplate, templateFor,
   );
   if (!resolved) return undefined;
 
   if (resolved.kind === 'missing') {
-    // Only rung 1 (or the branch rung, validated at load) reaches here: the `.notes` suffix
-    // rung is existence-checked, so a missing name came from the item.
+    // Only rung 1 reaches here — the project/branch `render.notesTemplate` name is
+    // existence-checked at load (`CL0411`), so a missing name came from the item.
     const label = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
     if (diagnostics) {
       diagnostics.error(
@@ -184,8 +151,9 @@ function renderNotesText(item, context, templates, partials, variables, projectN
 /**
  * The name of the template that renders this item's body: render.template, then aid.type.
  *
- * Returns the name rather than the content because the notes ladder appends a suffix to
- * it, and it must be the same answer `getTemplate` reached rather than a second guess.
+ * Returns the name rather than the content because `resolveBodyRender` and the notes
+ * ladder need the name that actually resolved the body — the same answer `getTemplate`
+ * reached — rather than a second guess.
  */
 function getTemplateName(item, templates) {
   const keys = [
@@ -279,32 +247,67 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
   return roleMaps;
 }
 
+/**
+ * Case-insensitive lookup of a name in a `templateFor` role map.
+ *
+ * A slot file's `templates:` keys are usually `aid.type` names, but nothing stops one from
+ * being a free-standing name a single item selects with `render.template` to opt back into
+ * a fuller list on a tiered branch (§13.4 Pattern 2). This is the only path that reaches
+ * those names — `lookupNamedTemplate` sees the shared field table, never the slot maps.
+ */
+function lookupSlotList(name, map) {
+  if (!name || !map) return null;
+  if (Object.prototype.hasOwnProperty.call(map, name)) return map[name];
+  const lower = String(name).toLowerCase();
+  const key = Object.keys(map).find((k) => k.toLowerCase() === lower);
+  return key ? map[key] : null;
+}
+
 /** A named template, resolved to text entry or field list, ignoring the type→template map. */
 function lookupNamedTemplate(name, templates, fieldTable) {
   if (!name) return null;
   const lower = String(name).toLowerCase();
   if (templates.has(lower)) return { kind: 'text', entry: templates.get(lower), name: String(name) };
   const ft = fieldTable && fieldTable.templates;
-  if (ft && ft[name]) return { kind: 'fieldList', list: ft[name], name: String(name) };
+  if (ft) {
+    // Field-list names match case-insensitively too. The text branch above already
+    // lowercases, so a consumer that lowercases a name before calling (the notes ladder,
+    // `renderPlacementBody`) must not miss a field-list template on case alone.
+    const key = Object.prototype.hasOwnProperty.call(ft, name)
+      ? name
+      : Object.keys(ft).find((k) => k.toLowerCase() === lower);
+    if (key) return { kind: 'fieldList', list: ft[key], name: String(name) };
+  }
   return null;
 }
 
 /**
- * The body ladder (§13.4): item `render.template` → `templateFor.base` keyed on `aid.type`
- * → `aid.type` as a template name → verbatim (null).
+ * The body ladder (§13.4): a *chosen* item `render.template` → `templateFor.base` keyed on
+ * `aid.type` → `aid.type` as a template name → verbatim (null).
  *
  * Returns `{ kind: 'text', entry, name } | { kind: 'fieldList', list, name } | null`. With
  * no field table and no `templateFor`, this is `getTemplate` exactly — the two extra rungs
  * only ever fire once a project declares one or the other.
+ *
+ * **A `render.template` equal to `aid.type` is not a choice.** `model/item.js` fills that in
+ * for every card that names no template, and every type has a shared-table template of its
+ * own name, so honouring it here would let rung 1 shadow a branch's `templateFor.base` for
+ * the entire corpus (Phase 13 finding). It is treated as absent — rung 3 renders the type's
+ * default. A `render.template` that differs from `aid.type` *is* a choice: a cross-type
+ * name, `Character.hint`, or a name the branch's slot file defines to opt one card back into
+ * a fuller list on a tiered branch (§13.4 Pattern 2). That still wins at rung 1.
  */
 function resolveBodyRender(item, templates, fieldTable, templateForMaps) {
+  const type = item.aid && item.aid.type;
+  const baseMap = (templateForMaps && templateForMaps.base) || {};
+
   const explicit = item.render && item.render.template;
-  if (explicit) {
+  if (explicit && String(explicit).toLowerCase() !== String(type || '').toLowerCase()) {
+    const slot = lookupSlotList(explicit, baseMap);
+    if (slot) return { kind: 'fieldList', list: slot, name: String(explicit) };
     const hit = lookupNamedTemplate(explicit, templates, fieldTable);
     if (hit) return hit;
   }
-  const type = item.aid && item.aid.type;
-  const baseMap = (templateForMaps && templateForMaps.base) || {};
   if (type && baseMap[type]) return { kind: 'fieldList', list: baseMap[type], name: type };
   if (type) {
     const hit = lookupNamedTemplate(type, templates, fieldTable);
@@ -314,23 +317,19 @@ function resolveBodyRender(item, templates, fieldTable, templateForMaps) {
 }
 
 /**
- * The notes ladder (§4.5 rungs, with `templateFor.notes` inserted): item
- * `render.notesTemplate` → `<body template>.notes` → `templateFor.notes` keyed on
- * `aid.type` → the branch's `render.notesTemplate` → §4.5 default (null).
+ * The notes ladder (§4.5.1, §13.4 end state — three rungs): item `render.notesTemplate` →
+ * the branch-addressable notes default (`templateFor.notes` keyed on `aid.type`, then the
+ * merged `render.notesTemplate` scalar) → §4.5's default rendering (null).
  *
- * The `.notes` filename-suffix rung is *kept*, not replaced — §13.4's end state drops it,
- * but Phase 12 only inserts `templateFor` and leaves every rung that resolves something
- * today resolving the same thing.
+ * The `<body template>.notes` filename-suffix rung was removed in Phase 13 (Decision 5):
+ * it activated a renderer by filename with no declaration, `templateFor.notes` is its
+ * branch-addressable replacement, and no corpus project ever named a `*.notes` template.
  */
-function resolveNotesRender(item, bodyName, templates, fieldTable, projectNotesTemplate, templateForMaps) {
+function resolveNotesRender(item, templates, fieldTable, projectNotesTemplate, templateForMaps) {
   const explicit = item.render && item.render.notesTemplate;
   if (explicit) {
     const hit = lookupNamedTemplate(explicit, templates, fieldTable);
     return hit || { kind: 'missing', name: String(explicit) };
-  }
-  if (bodyName) {
-    const hit = lookupNamedTemplate(`${bodyName}${NOTES_SUFFIX}`, templates, fieldTable);
-    if (hit) return hit;
   }
   const type = item.aid && item.aid.type;
   const notesMap = (templateForMaps && templateForMaps.notes) || {};
@@ -1470,7 +1469,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
         item,
         bodyText,
         notesText: renderNotesText(item, context, templates, partials, variables, projectNotesTemplate, diagnostics, {
-          fieldTable, templateFor, bodyName: bodyRender.name,
+          fieldTable, templateFor,
         }),
         diagnostics,
         loc: { file: item._source },
@@ -2750,8 +2749,26 @@ function compileRun(configPath, options, buses) {
   // not the leaf loop, and written where SCHEMA.md's §3–§5 tables can be copied from.
   if (options.schemaTables) {
     const { runSchemaTablesMode } = require('./schematables');
+    // §13.4 — every template a branch's `templateFor` slot files produce, so a tier author
+    // can diff a terse list against the full type in one place. Gathered here rather than
+    // in the leaf loop: the slot files resolve per node, but the report is whole-project.
+    // Empty for any project that declares no `templateFor:`.
+    const stVariables = config._variables || config.variables || {};
+    const tierTemplates = [];
+    walkBranchTree(config, ({ node, path: nodePath, isRoot }) => {
+      if (!node || !node.templateFor) return;
+      const maps = resolveTemplateForMaps(
+        node.templateFor, config._resolvedTemplates || [], config._base || '.',
+        stVariables, null, configPath,
+      );
+      for (const [role, typeMap] of Object.entries(maps)) {
+        for (const [name, list] of Object.entries(typeMap)) {
+          tierTemplates.push({ branch: isRoot ? '(root)' : nodePath.join('/'), role, name, list });
+        }
+      }
+    });
     const w = runSchemaTablesMode(fieldTable, path.join(reportBase, 'schema-tables'),
-      { title: config.title || rootDirName });
+      { title: config.title || rootDirName, tierTemplates });
     reportSummary.push(`${w.length} schema-tables file(s)`);
   }
 
@@ -2833,7 +2850,6 @@ module.exports = {
   resolveCrossItemRenderFunctions,
   getTemplate,
   getTemplateName,
-  resolveNotesTemplateName,
   resolveBodyRender,
   resolveNotesRender,
   resolveTemplateForMaps,
