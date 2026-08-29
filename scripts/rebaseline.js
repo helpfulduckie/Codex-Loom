@@ -131,9 +131,16 @@ function buildTempTree(projects) {
     recursive: true,
     // Both committed baselines are the comparison target, not an input — and the report
     // baseline shares its path with where fresh reports are about to be written.
+    // OUTPUT_SUBDIR ("Velvet Lattice/") is compiler output, gitignored: absent on a clean
+    // clone, but on a checkout where someone ran the CLI against a fixture directly it
+    // survives the copy, and compile does not run with --clean here — so a stale per-leaf
+    // dir the current compiler no longer writes would linger as an orphan and break the
+    // "emits exactly the baseline file set" assertion. Phase 12 Session D hit this with
+    // the Scripts/ lift and deleted the local dirs by hand; excluding it here is the fix.
     filter: (src) => {
       const segments = path.relative(GOLDEN_DIR, src).split(path.sep);
-      return !segments.includes(BASELINE_SUBDIR) && !segments.includes(REPORTS_SUBDIR);
+      return !segments.includes(BASELINE_SUBDIR) && !segments.includes(REPORTS_SUBDIR)
+        && !segments.includes(OUTPUT_SUBDIR);
     },
   });
 

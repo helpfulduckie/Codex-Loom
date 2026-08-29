@@ -102,15 +102,26 @@ function migrateAndCompile(tmpDir, project) {
     describe(project.name, () => {
       const baselineDir = () => path.join(GOLDEN_DIR, project.dir, BASELINE_SUBDIR);
 
+      // Phase 13 Step 6: Coinflip's `v4/` gains a `lowContext` context tier — a branch
+      // carrying `templateFor.base: terse.cl.yaml`. A context tier is a v4-only authoring
+      // construct with no v3 spelling, so `migrateProjectFully()` has no step that could
+      // produce it and a fresh migration of `Loom/` reproduces only the two framing
+      // branches. The `Branches/lowContext/` subtree in the re-baselined `v3/` is
+      // therefore a permanent divergence for this one project, the same shape as the
+      // Phase 6 / 10 / 12 exceptions below — not a bug in either path.
+      const isTierOnly = (rel) => project.dir === path.join('Eldemyr', 'Coinflip Company')
+        && rel.split('/').slice(0, 2).join('/') === 'Branches/lowContext';
+      const baselineMarkdown = () => listMarkdown(baselineDir()).filter((rel) => !isTierOnly(rel));
+
       test('writes exactly the files the baseline has', () => {
         // Checked before content, because a missing or extra file is a different failure
         // from a changed one — an item that migrated into the wrong output shows up here.
-        expect(listMarkdown(results.get(project.name).outputDir)).toEqual(listMarkdown(baselineDir()));
+        expect(listMarkdown(results.get(project.name).outputDir)).toEqual(baselineMarkdown());
       });
 
       test('every file is byte-identical to the baseline', () => {
         const outputDir = results.get(project.name).outputDir;
-        const differing = listMarkdown(baselineDir()).filter((rel) => {
+        const differing = baselineMarkdown().filter((rel) => {
           // Phase 6 Step 5's one deliberate exception. All three v4/ sources now reach AI
           // Instructions through `imports:` (§7.6) instead of a hardcoded passthrough path,
           // which is a hand-made upgrade past what migration is asked to do — a bare `.md`

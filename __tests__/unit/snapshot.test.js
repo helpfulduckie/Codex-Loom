@@ -105,6 +105,53 @@ describe('syncLibrary — the freeze', () => {
     const diffReport = fs.readFileSync(path.join(config._resolvedReports, 'snapshot', 'sync-diff.txt'), 'utf8');
     expect(diffReport).toContain('all new (no previous snapshot entry)');
   });
+
+  test('a re-sync after a source file is removed prunes it from snapshot/<name>/ and the manifest', () => {
+    writeFile('main-lib/extra.cl.yaml', 'id: Extra\nname: Extra\n');
+    const { config } = buildProject();
+    syncLibrary(config);
+    const pruned = path.join(config._resolvedSnapshot, 'main', 'extra.cl.yaml');
+    expect(fs.existsSync(pruned)).toBe(true);
+
+    fs.rmSync(path.join(tmpDir, 'main-lib', 'extra.cl.yaml'));
+    syncLibrary(config);
+
+    expect(fs.existsSync(pruned)).toBe(false);
+    // The kept files are untouched.
+    expect(fs.existsSync(path.join(config._resolvedSnapshot, 'main', 'thing.cl.yaml'))).toBe(true);
+    const manifest = JSON.parse(fs.readFileSync(path.join(config._resolvedSnapshot, 'manifest.json'), 'utf8'));
+    // Array form: the keys contain dots, which toHaveProperty would otherwise read as a path.
+    expect(Object.keys(manifest.library.main.files)).not.toContain('extra.cl.yaml');
+    expect(Object.keys(manifest.library.main.files)).toContain('thing.cl.yaml');
+  });
+
+  test('a re-sync removes a subdirectory left empty by the prune', () => {
+    writeFile('main-lib/old/legacy.template', 'stale\n');
+    const { config } = buildProject();
+    syncLibrary(config);
+    expect(fs.existsSync(path.join(config._resolvedSnapshot, 'main', 'old'))).toBe(true);
+
+    fs.rmSync(path.join(tmpDir, 'main-lib', 'old'), { recursive: true, force: true });
+    syncLibrary(config);
+
+    expect(fs.existsSync(path.join(config._resolvedSnapshot, 'main', 'old'))).toBe(false);
+    // The entry directory itself survives even though only the pruned subdir was under it.
+    expect(fs.existsSync(path.join(config._resolvedSnapshot, 'main'))).toBe(true);
+  });
+
+  test('a pruned snapshot no longer trips checkDrift CL0114 (untracked snapshot file)', () => {
+    writeFile('main-lib/extra.cl.yaml', 'id: Extra\nname: Extra\n');
+    const { config } = buildProject();
+    syncLibrary(config);
+    fs.rmSync(path.join(tmpDir, 'main-lib', 'extra.cl.yaml'));
+    syncLibrary(config);
+
+    const diagnostics = new Diagnostics();
+    const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    checkDrift(config, diagnostics);
+    spy.mockRestore();
+    expect(diagnostics.all.find((d) => d.code === CODES.SNAPSHOT_FILE_UNTRACKED)).toBeUndefined();
+  });
 });
 
 describe('requiresRoles — computed by elimination (Decision 2, Phase 8)', () => {

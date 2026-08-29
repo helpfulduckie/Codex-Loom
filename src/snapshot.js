@@ -113,6 +113,18 @@ function computeRequiresRoles(entries, allFileHashes) {
   return result;
 }
 
+/** Remove every empty directory under `dir` (depth-first), leaving `dir` itself in place.
+ * Used after a prune pass so a slot-file rename does not strand an empty subtree. */
+function removeEmptyDirs(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const sub = path.join(dir, entry.name);
+    removeEmptyDirs(sub);
+    if (fs.readdirSync(sub).length === 0) fs.rmdirSync(sub);
+  }
+}
+
 /** Every file under `dir`, relative paths, sorted — not suffix-filtered (companion `.md`
  * files beside a `.yaml` component must survive a freeze same as the component itself). */
 function listAllFiles(dir) {
@@ -244,6 +256,20 @@ function syncLibrary(config, options = {}) {
       fs.mkdirSync(path.dirname(to), { recursive: true });
       fs.copyFileSync(from, to);
       filesWritten += 1;
+    }
+
+    // Prune: delete any file a previous snapshot left in `destDir` that this run's source
+    // no longer has. `loadTemplates` reads the directory, not the manifest, so a removed or
+    // renamed slot file (a stale `.template` next to a new `fields.cl.yaml`, an old
+    // `terse.cl.yaml`) would shadow the live field table and silence the emitter. Phase 12
+    // Sessions B and C pruned the golden `snapshot/0/` trees by hand; this makes it
+    // automatic. Deletions are not counted in `filesWritten` — that tracks copies.
+    if (fs.existsSync(destDir)) {
+      const keep = new Set(files);
+      for (const rel of listAllFiles(destDir)) {
+        if (!keep.has(rel)) fs.rmSync(path.join(destDir, rel));
+      }
+      removeEmptyDirs(destDir);
     }
 
     const section = { source: entry.sourcePath, files: fileHashes };

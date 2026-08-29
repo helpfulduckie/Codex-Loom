@@ -247,11 +247,17 @@ beforeAll(() => {
   // report baseline must be excluded for a second reason: the harness writes fresh
   // reports to that same relative path inside the temp tree, and a copied baseline would
   // survive there as a stale file the file-set assertion could not tell from a real one.
+  // OUTPUT_SUBDIR ("Velvet Lattice/") is excluded for a third: it is gitignored compiler
+  // output, absent on a clean clone, but a checkout where the CLI was run against a
+  // fixture directly keeps a stale copy — and this harness does not pass --clean, so an
+  // orphan per-leaf dir the current compiler no longer writes would break the
+  // "emits exactly the baseline file set" assertion.
   fs.cpSync(GOLDEN_DIR, tmpDir, {
     recursive: true,
     filter: (src) => {
       const segments = path.relative(GOLDEN_DIR, src).split(path.sep);
-      return !segments.includes(BASELINE_SUBDIR) && !segments.includes(REPORTS_SUBDIR);
+      return !segments.includes(BASELINE_SUBDIR) && !segments.includes(REPORTS_SUBDIR)
+        && !segments.includes(OUTPUT_SUBDIR);
     },
   });
 
@@ -417,4 +423,73 @@ afterAll(() => {
       });
     },
   );
+});
+
+/**
+ * The label-membership guard (Phase 13 Decision 2, §13.4) against a real scenario.
+ *
+ * Coinflip's `lowContext` branch carries `templateFor.base: terse.cl.yaml`, whose terse
+ * `Character` list only *omits* — no substitution. So the guard here is the strict form:
+ * every stanza the terse card keeps is byte-identical to the full card's, the kept labels
+ * are an in-order subsequence, and the terse card is genuinely shorter (it drops
+ * `Background`). Byte-identity against a frozen baseline cannot make this assertion — the
+ * tier card is *supposed* to differ from the full one — which is why this guard exists.
+ *
+ * The full comparison branch is `foundFamily`: both it and `lowContext` render the party's
+ * base variants (the `minions` alternates apply only on that branch), so the same three
+ * cards appear under the same names on each.
+ */
+const { parseCards, isSubsequence } = require('../helpers/tier-wellformed');
+
+(HAVE_FIXTURES ? describe : describe.skip)('Coinflip Company — lowContext tier is well-formed', () => {
+  const CARD = ['Branches', '%b', 'Story Cards', 'Character', 'Character.md'];
+  const read = (branch) => {
+    const rel = CARD.map((s) => (s === '%b' ? branch : s));
+    return fs.readFileSync(
+      path.join(tmpDir, 'Eldemyr', 'Coinflip Company', OUTPUT_SUBDIR, ...rel), 'utf8',
+    );
+  };
+
+  let terse;
+  let full;
+  beforeAll(() => {
+    terse = parseCards(read('lowContext'));
+    full = parseCards(read('foundFamily'));
+  });
+
+  test('the tier renders the same cast as the full branch', () => {
+    expect([...terse.keys()].sort()).toEqual([...full.keys()].sort());
+    expect(terse.size).toBeGreaterThan(0);
+  });
+
+  test('every terse card only omits — kept stanzas are byte-identical and in order, and it is shorter', () => {
+    for (const [name, terseStanzas] of terse) {
+      const fullStanzas = full.get(name);
+      const fullLabels = fullStanzas.map((s) => s.label);
+      const terseLabels = terseStanzas.map((s) => s.label);
+
+      // (a) invents nothing.
+      for (const l of terseLabels) {
+        expect(fullLabels).toContain(l);
+      }
+      // (b) kept labels are an in-order subsequence of the full render's.
+      expect(isSubsequence(terseLabels, fullLabels)).toBe(true);
+      // (c) pure omission: every kept stanza's body is byte-identical to the full render's.
+      const fullByLabel = new Map(fullStanzas.map((s) => [s.label, s.body]));
+      for (const s of terseStanzas) {
+        expect(s.body).toBe(fullByLabel.get(s.label));
+      }
+      // the tier actually does something — the terse card is strictly shorter.
+      expect(terseLabels.length).toBeLessThan(fullLabels.length);
+    }
+  });
+
+  test('the terse Character list drops Background', () => {
+    for (const [, terseStanzas] of terse) {
+      expect(terseStanzas.map((s) => s.label)).not.toContain('Background');
+    }
+    for (const [, fullStanzas] of full) {
+      expect(fullStanzas.map((s) => s.label)).toContain('Background');
+    }
+  });
 });

@@ -3,10 +3,12 @@
 Codex Loom compiles YAML item definitions into Velvet Lattice story card format
 for AI Dungeon scenarios. The released compiler is v3.3.2 (see `package.json`);
 active work is the v4 rebuild on the `v4-phase1` branch — a clean break from v3.
-**Phases 1 through 11 are complete, plus Phase 12 Sessions A–C.** Phase 12
-Session D (lifting `Scripts/` to its declaring node) and Phase 13 (context
-tiering plus `render.storyCards`) are planned, not built; Phase 14 is convention
-packs.
+**Phases 1 through 13 are complete.** Phase 13 added context tiering (a tier is
+a branch carrying `templateFor: { base: terse.cl.yaml }`; a label-membership
+guard replaces byte-identity for tier output), the `render.storyCards` emit path
+with `card:` removed, a `syncLibrary` prune, and the notes-ladder collapse to
+three rungs. Coinflip carries the one worked `lowContext` tier. Phase 14 is
+convention packs.
 
 The phases a change today is most likely to touch. **Phase 8** migrates v3
 projects in place (`--migrate`, `--rename-cl`) and writes a `migration-report.md`
@@ -55,7 +57,7 @@ writing, so they live in a separate private repo cloned into the gitignored `gol
 **If that directory is absent, this is all working as intended.** `golden.test.js` and
 `migrate.integration.test.js` register their suites as skipped, one `describe` in
 `emit-vl.test.js` skips, and everything else runs. The full suite with the goldens present is
-**1,961 across 71 suites** (as of Phase 12 Session C); without them the passing count is lower
+**2,003 across 77 suites** (as of Phase 13 Session C); without them the passing count is lower
 and 15 tests register as skipped. **Do not try to repair this.** There is no missing dependency
 to install and no path to fix; the tests are skipping because the data they compare against is
 private. Treat that as green.
