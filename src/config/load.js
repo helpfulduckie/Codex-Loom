@@ -511,6 +511,11 @@ function loadCompileConfig(configPath, options = {}) {
     // `render:` is — branch nodes keep theirs on the branch tree (`config.branches`), so
     // this projection is the only place the root's would otherwise be dropped.
     templateFor: config.templateFor || null,
+    // §7.8's per-component story-card category. Project-level only — nothing about which
+    // AID `type` a reference card sorts under varies per branch — so unlike `render:` and
+    // `templateFor:` there is no branch rung to keep on the tree, and this projection is
+    // the whole of it.
+    storyCardType: config.storyCardType || null,
     // The root rung of the placeholder table (§12.2). Branch nodes keep theirs on the
     // branch tree, so this is the only rung that needs lifting out — and it is easy to
     // miss precisely because the branch case works without it: a project declaring

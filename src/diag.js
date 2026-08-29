@@ -202,6 +202,21 @@ const CODES = Object.freeze({
    */
   CARD_NAME_COLLISION: 'CL0622',
 
+  /**
+   * §7.8's `render.storyCards` entries. Raised in `compile.js`, which is the only place
+   * that holds the component's sections and the leaf's occupants at once — so, like the
+   * placement codes above, they carry severity at the call site and are absent from
+   * `SEVERITY_BY_CODE`.
+   *
+   * `NO_TITLE` is an ERROR because the title is the card's AID name and the frontier keys
+   * on it — an untitled entry has nowhere to land. `UNKNOWN_SECTION` and `RENDERS_NOTHING`
+   * are WARNs: the component field still ships, so a broken alternate is a lost card rather
+   * than a broken compile.
+   */
+  STORY_CARD_ENTRY_NO_TITLE: 'CL0623',
+  STORY_CARD_ENTRY_UNKNOWN_SECTION: 'CL0624',
+  STORY_CARD_ENTRY_RENDERS_NOTHING: 'CL0625',
+
   // Emit (§8). Both are facts about what Velvet Lattice can carry to AID, not opinions
   // about content — which is why they live in the compiler rather than in lint (§12.5).
   TRIGGER_CONTAINS_COMMA: 'CL0701',

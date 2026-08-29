@@ -111,6 +111,17 @@ templateFor:
   notes:         [notes.cl.yaml, '{%tpl}/mod-notes.cl.yaml']
   plotEssential: pe.cl.yaml
 
+# §7.8's middle rung: the AID story-card `type` a component's `render.storyCards` alternates
+# land under, one per component. Project-level only. A `zz_` prefix is the realistic use —
+# it sorts the alternates to the end of the player's card list — but any string is legal.
+storyCardType:
+  plotEssential:        zz_PE
+  summary:              zz_Summary
+  aiInstructions:       zz_AIN
+  authorsNote:          zz_AN
+  adventureDescription: zz_AdvDesc
+  opening:              zz_Opening
+
 branches:
   subject:
     title: The Subject's Path

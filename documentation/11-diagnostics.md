@@ -324,6 +324,9 @@ value, and the property belongs to the template, not to each field.
 | `CL0620` | WARN | `metadata:` on a component whose output has no place for frontmatter. |
 | `CL0621` | WARN | Both description keys aimed at one file — an unbranched project. |
 | `CL0622` | ERROR | Two story cards share a display name on the same leaf — Velvet Lattice merges by name, so only one reaches AID. |
+| `CL0623` | ERROR | A `render.storyCards` entry (§7.8) declares no `title:` — the title is the card's AID name and the frontier keys on it. |
+| `CL0624` | WARN | A `render.storyCards` entry's `sections:` names a section the component does not declare; it is dropped from that entry. |
+| `CL0625` | WARN | A `render.storyCards` entry renders no text on a branch — its `variant:` / `sections:` selectors left nothing. No card is written. |
 
 `CL0601` is an error rather than a resolved precedence because the two readings differ in
 output and neither is obviously right: text inside a slot could sit before or after the
@@ -412,6 +415,14 @@ Description. Declaring it elsewhere is an author expecting an effect there is no
 description keys write the same `Description.md`. The scenario blurb survives, because it is
 the half with a native AID field behind it. It is reported rather than silently resolved
 because which of the two the author meant is not recoverable from the file that is left.
+
+`CL0623`–`CL0625` guard §7.8's `render.storyCards` entries. A `render.storyCards` entry is
+not an item — it has a `title`, an optional `variant:` and an optional `sections:` subset,
+and it renders the component again as a trigger-less `kind: reference` card. `CL0623` is an
+ERROR because the title is the card's AID name and its position in the frontier index, so
+there is nowhere for an untitled entry to go. `CL0624` and `CL0625` are WARNs on the same
+reasoning as `CL0602`: the component field still ships, so a selector that names a missing
+section or resolves to nothing is a lost alternate rather than a broken compile.
 
 ### CL07xx — emit
 

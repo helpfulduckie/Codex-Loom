@@ -60,20 +60,20 @@ function normalizeComponent(doc, options = {}) {
     if (section.isSlot) slots.set(section.name, section);
   }
 
-  // `card:` is §7.8 and belongs to Phase 12. It is carried through opaque rather than
-  // normalized or dropped: dropping it would silently lose an author's declaration, and
-  // normalizing it would mean pinning a copy of the story-card key surface here, a second
-  // declaration to keep in step with the first.
+  // `branches:` is the §7.6.2a fan-out and is carried through unresolved because dispatch
+  // is a per-branch question and this runs once per file. It is resolved in
+  // `sectionsForBranch`, where the branch path exists.
   //
-  // `branches:` is the §7.6.2a fan-out and is carried through unresolved for the same reason
-  // a section's is: dispatch is a per-branch question and this runs once per file. It is
-  // resolved in `sectionsForBranch`, where the branch path exists.
+  // `render:` (§7.8) is carried through opaque for the same reason: `render.component.variant`
+  // and each `render.storyCards` entry are section-variant selectors, and which sections a
+  // selector resolves to is a per-branch question. `src/compile.js`'s leaf loop applies them
+  // against `rawSections` where the branch path exists.
   return {
     sections,
     slots,
     branches: (doc && doc.branches) || null,
-    card: (doc && doc.card) || null,
-    // §7.7's frontmatter. Carried through opaque for the same reason `card:` is: the keys
+    render: (doc && doc.render) || null,
+    // §7.7's frontmatter. Carried through opaque for the same reason `render:` is: the keys
     // belong to Velvet Lattice and AID, and normalizing them here would pin a copy of a
     // surface this project does not own.
     metadata: (doc && doc.metadata) || null,

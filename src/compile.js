@@ -12,7 +12,7 @@ const {
   resolveBranchSpec, collectVariantDeltas, localRoleKeysOf,
 } = require('./resolver');
 const { resolvePlacements } = require('./model/item');
-const { slotsForBranch } = require('./model/component');
+const { slotsForBranch, normalizeComponent, applySectionSelector } = require('./model/component');
 const { loadComponentDocument } = require('./loader/component');
 const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
@@ -836,6 +836,151 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
     { file: item._source },
   );
   return null;
+}
+
+/**
+ * The sections one `render.storyCards` entry (or `render.component`) renders (§7.8).
+ *
+ * Selection is a `sections:` subset (a plain key-filter over `rawSections`) then a `variant:`
+ * fan-out (`applySectionSelector`, the same one `imports:` uses). The result is re-normalized
+ * into a component the section renderer can take. The re-normalization runs `normalizeSection`
+ * again, so its `onWarn` is a no-op here: load-time normalization already reported the base
+ * sections' structure, and a selector only edits `text:`/`heading:`/`render:` — it cannot
+ * introduce the slot/text conflict or the render-nothing case those checks catch. A `variant:`
+ * that empties a section shows up instead as CL0625 on the entry, raised by the caller.
+ *
+ * `entrySections` is the entry's `sections:` list, or null for `render.component`.
+ */
+function selectComponentSections(component, variant, entrySections, onUnknownSection) {
+  let raw = (component && component.rawSections) || {};
+
+  if (Array.isArray(entrySections) && entrySections.length > 0) {
+    const want = new Set(entrySections.map((s) => String(s).toLowerCase()));
+    const picked = {};
+    const got = new Set();
+    for (const [name, def] of Object.entries(raw)) {
+      if (want.has(name.toLowerCase())) { picked[name] = def; got.add(name.toLowerCase()); }
+    }
+    for (const s of entrySections) {
+      if (!got.has(String(s).toLowerCase()) && onUnknownSection) onUnknownSection(s);
+    }
+    raw = picked;
+  }
+
+  if (typeof variant === 'string' && variant.trim() !== '') {
+    raw = applySectionSelector(raw, variant.trim()).sections;
+  }
+
+  return normalizeComponent({ sections: raw, branches: component && component.branches }, {});
+}
+
+/**
+ * §7.8 — a component's `render.storyCards` entries, rendered for one leaf.
+ *
+ * Each entry renders the component again — a `variant:` selector, a `sections:` subset, or
+ * both, with the leaf's slot occupants in place — and is emitted as a trigger-less
+ * `kind: reference` story card: the rendered component text as the `notes:` payload, a
+ * one-line orienting string as the body. The cards are appended to `grouped` (the leaf's
+ * `renderBranchItems` card map) so Phase 11 frontier placement writes them like any other
+ * card, keyed on `(type, name)`.
+ *
+ * The card's AID `type` resolves on §7.8's three-rung ladder: the entry's own `type:`, then
+ * `storyCardType[<component key>]` from compile.yaml, then the component's display label.
+ *
+ * `CL0622` is checked here rather than inherited from `renderBranchItems`: these cards are
+ * built after that function returns, so its `seenNames` set never sees them. The check reads
+ * the names already in `grouped` (the real cards) plus the entries emitted so far.
+ */
+function renderComponentStoryCards(component, descriptor, branchPath, filled, grouped, options) {
+  const {
+    variables = {}, registry, branchProtagonist, roles = null, onRoleUsed = null,
+    diagnostics, questions = null, storyCardType = null, spec, branchLabel = '(root)',
+  } = options;
+
+  const entries = component && component.render && Array.isArray(component.render.storyCards)
+    ? component.render.storyCards : [];
+  if (entries.length === 0) return;
+
+  const loc = { file: String(spec) };
+  const projectType = (storyCardType && typeof storyCardType === 'object')
+    ? storyCardType[descriptor.key] : null;
+
+  // Names already taken on this leaf, per type — the real cards, then each entry as it lands.
+  const takenByType = new Map();
+  for (const [type, cards] of grouped) {
+    takenByType.set(type, new Set(cards.map((c) => c.name)));
+  }
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+
+    const title = typeof entry.title === 'string' ? entry.title.trim() : '';
+    if (title === '') {
+      diagnostics.error(
+        DIAG_CODES.STORY_CARD_ENTRY_NO_TITLE,
+        `a render.storyCards entry on component "${descriptor.label}" declares no title: — `
+        + 'the title is the card\'s AID name and its place in the frontier index.',
+        loc,
+      );
+      continue;
+    }
+
+    const cardType = (typeof entry.type === 'string' && entry.type.trim() !== '' && entry.type.trim())
+      || (typeof projectType === 'string' && projectType.trim() !== '' && projectType.trim())
+      || descriptor.label;
+
+    const sub = selectComponentSections(
+      component,
+      typeof entry.variant === 'string' ? entry.variant : null,
+      entry.sections,
+      (name) => diagnostics.warn(
+        DIAG_CODES.STORY_CARD_ENTRY_UNKNOWN_SECTION,
+        `render.storyCards entry "${title}" names section "${name}", which component `
+        + `"${descriptor.label}" does not declare — it is dropped from this entry.`,
+        loc,
+      ),
+    );
+
+    const { text: notesText } = renderSectionedComponent(sub, branchPath, filled, {
+      defaultHeadingLevel: descriptor.defaultHeadingLevel,
+      variables, registry, branchProtagonist, roles, onRoleUsed,
+      onWarn: busWarner(diagnostics, loc),
+    });
+
+    if (!notesText || notesText.trim() === '') {
+      diagnostics.warn(
+        DIAG_CODES.STORY_CARD_ENTRY_RENDERS_NOTHING,
+        `render.storyCards entry "${title}" renders no text on branch "${branchLabel}" — `
+        + 'its variant:/sections: selectors left nothing. No card is written.',
+        loc,
+      );
+      continue;
+    }
+
+    if (!takenByType.has(cardType)) takenByType.set(cardType, new Set());
+    if (takenByType.get(cardType).has(title)) {
+      diagnostics.error(
+        DIAG_CODES.CARD_NAME_COLLISION,
+        `story cards named "${title}" collide on branch "${branchLabel}" (both as ${cardType}). `
+        + 'Velvet Lattice merges story cards by name, so only one survives to AID. '
+        + 'Give them distinct names.',
+        loc,
+      );
+      continue;
+    }
+    takenByType.get(cardType).add(title);
+
+    const body = `${title} — copy the description field below into your scenario's ${descriptor.label}.`;
+    const synthetic = { kind: 'reference', name: title, aid: { type: cardType, title } };
+    const rendered = renderCard({
+      item: synthetic, bodyText: body, notesText, diagnostics, loc, questions,
+    }).text;
+
+    if (!grouped.has(cardType)) grouped.set(cardType, []);
+    grouped.get(cardType).push({
+      sortKey: title.toLowerCase(), rendered, id: null, name: title,
+    });
+  }
 }
 
 /**
@@ -2230,8 +2375,17 @@ function compileRun(configPath, options, buses) {
         segments = [{ key: descriptor.label, text: passthrough }];
       } else {
         warnEmptySlots(descriptor, slotIndex, filled, label, compileDiagnostics, spec);
+        // §7.8: `render.component.variant` selects which section-variant ships in the
+        // component field. Absent (every golden today) it is a no-op and `component` renders
+        // as-is; the slot set is unchanged either way because a variant cannot toggle `slot:`.
+        const fieldVariant = component && component.render && component.render.component
+          && typeof component.render.component.variant === 'string'
+          ? component.render.component.variant.trim() : '';
+        const fieldComponent = fieldVariant
+          ? selectComponentSections(component, fieldVariant, null, null)
+          : component;
         ({ text, segments, excluded = false } = renderSectionedComponent(
-          component, branchPath, filled,
+          fieldComponent, branchPath, filled,
           {
             defaultHeadingLevel: descriptor.defaultHeadingLevel,
             variables: ctx.variables, registry, branchProtagonist,
@@ -2323,6 +2477,22 @@ function compileRun(configPath, options, buses) {
           + 'every section is excluded by its own branches: dispatch, empty, or an unfilled slot.',
           { file: String(spec) },
         );
+      }
+
+      // §7.8: after the component field, its `render.storyCards` alternates. They join
+      // `leafCardGroups` here — after `renderBranchItems` has returned — so Phase 11 frontier
+      // placement writes them with the real cards. Skipped when the component is excluded
+      // from this branch (`~`): the author said "not on this branch", and an alternate copy
+      // is still this branch getting the component.
+      if (!excluded && component && component.render) {
+        renderComponentStoryCards(component, descriptor, branchPath, filled, leafCardGroups, {
+          variables: ctx.variables, registry, branchProtagonist,
+          roles: ctx.roles, onRoleUsed,
+          diagnostics: compileDiagnostics,
+          questions: questionsForMeasurement(ctx.placeholders, ctx.variables),
+          storyCardType: config.storyCardType,
+          spec, branchLabel: label,
+        });
       }
     }
     const hasPE = !!sectionedWritten.plotEssential;

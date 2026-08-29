@@ -152,7 +152,7 @@ const COMPONENT_SCHEMA = {
     // every section defining it, which is exactly what `branches:` above now does, and its
     // `sections: {x: ~}` removed a section, which the section's own dispatch already does
     // from the other end. The `ain:`/`cards:` split was a render-target concept wearing
-    // dispatch clothing and becomes `render.storyCards` in Phase 12.
+    // dispatch clothing and is now `render.storyCards` (§7.8, Phase 13).
 
     /**
      * §7.6 — an ordered list of components to pull in before the local `sections:` layer.
@@ -168,17 +168,36 @@ const COMPONENT_SCHEMA = {
       of: { type: TYPES.MAP, keys: { from: STRING, importVariants: ANY } },
     },
 
-    // §7.8, moved to Phase 12 on 2026-08-20 with the `--profile` build profile: two of its
-    // three use cases are verbosity tiers, and a verbosity tier is undefined until something
-    // says what one is. Declared so writing one is a clear "not yet" rather than a confusing
-    // unknown-key ERROR — the same courtesy the item surface extends to the render targets.
-    render: { type: TYPES.MAP, keys: { component: ANY, storyCards: ANY }, note: 'Phase 12' },
-
-    // v3's AI Instructions story card (§7.8). Superseded by `render.storyCards` when
-    // Phase 12 lands; declared as an open namespace until then, because its key surface is
-    // the story-card surface and pinning a copy of it here would be a second declaration
-    // to keep in step with the first.
-    card: { type: TYPES.ANY, note: 'Phase 12' },
+    /**
+     * §7.8 — the multi-target render. `component:` is what ships in the component field, and
+     * its `variant:` is a section-variant selector (§7.6), not a document-level declaration.
+     * `storyCards:` is a list of independent renderings, each emitted as a trigger-less
+     * `kind: reference` story card whose payload sits in `notes:` — a longer, shorter, or
+     * scenario-specific-only alternate the player can read and swap in themselves.
+     *
+     * A `storyCards` entry is not an item: it has a `title` and optional `variant:` /
+     * `sections:` selectors, and its AID story-card `type` resolves on a three-rung ladder
+     * (the entry's own `type:`, then `storyCardType[<component>]` in compile.yaml, then the
+     * component's display label).
+     */
+    render: {
+      type: TYPES.MAP,
+      keys: {
+        component: { type: TYPES.MAP, keys: { variant: STRING } },
+        storyCards: {
+          type: TYPES.SEQ,
+          of: {
+            type: TYPES.MAP,
+            keys: {
+              title: STRING,
+              variant: STRING,
+              sections: { type: TYPES.SEQ, of: STRING },
+              type: STRING,
+            },
+          },
+        },
+      },
+    },
   },
 };
 

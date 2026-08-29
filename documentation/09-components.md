@@ -481,9 +481,35 @@ sections:
 |---|---|
 | `branches: {subject: intimate}` with `variants: {intimate: {apply: [close]}}` | `branches: {subject: close}` on each section that defines a `close` variant |
 | `variants: {detached: {sections: {rules: ~}}}` | `branches: {detached: ~}` on the `rules` section |
-| `branches: {x: {ain: …, cards: …}}` | `render.storyCards` (§7.8, Phase 12) |
+| `branches: {x: {ain: …, cards: …}}` | `render.storyCards` (see below) |
 
 The two dispatches disagreed, which is the other half of why only one survives: `~` on an item or a section excludes it, while `~` on an AI Instructions document meant "apply no variants".
+
+### Swappable alternates — `render.storyCards`
+
+A scenario ships one version of a component in its field and offers alternates as story cards the player can read and paste in themselves — a fuller ruleset, a terser one, or the scenario-specific parts only. Every component can do this; AI Instructions is where it is used most.
+
+```yaml
+render:
+  component:
+    variant: concise                 # what ships in the AI Instructions field (optional)
+  storyCards:
+    - title: AI Instructions — Full
+      variant: verbose               # a section-variant selector (§7.6), applied everywhere it is defined
+    - title: AI Instructions — Scenario Rules Only
+      sections: [institute, pacing]   # a subset — omits the imported house style
+      type: zz_AIN                     # overrides the project default (see below)
+```
+
+Each `storyCards` entry renders the component again — with the leaf's slot occupants in place — as a **trigger-less** story card: `kind: reference` is set for you, the rendered text goes in `notes:` (AID's 10,000-character `description` field), and the body is a one-line "copy the description field…" prompt. A trigger-less card never enters context, so the alternates cost nothing during play, and the `empty-triggers` lint knows not to flag them.
+
+The card's AID `type` — which groups it in the story-card editor — resolves on three rungs, most specific first:
+
+1. the entry's own `type:`;
+2. `storyCardType.<component>` in `compile.yaml` (project-wide, e.g. `storyCardType: {aiInstructions: zz_AIN}` to sort the alternates to the end of the player's list);
+3. the component's display label (`AI Instructions`, `Plot Essentials`, …).
+
+Placement is the ordinary frontier mechanism: an alternate that renders identically across a subtree is written once at that subtree's root; one that varies per branch has each version placed on its own frontier. Two entries whose titles collide under one type are an ERROR (`CL0622`), the same as any two story cards sharing a name.
 
 ---
 
@@ -502,7 +528,7 @@ sections:
         text: Stay inside the subject's head; report sensation before thought.
 ```
 
-A `card:` block is carried through but not yet read — §7.8, Phase 12. Author's Note produces no story card.
+Author's Note produces no story card of its own, but like every component it can offer alternates through `render.storyCards` (see [AI Instructions](#swappable-alternates--renderstorycards) above). The v3 `card:` block is gone — a file still carrying one gets an unknown-key ERROR pointing at `render.storyCards`.
 
 ---
 

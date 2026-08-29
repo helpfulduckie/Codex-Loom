@@ -76,6 +76,35 @@ const RENDER = {
 };
 
 /**
+ * `storyCardType:` — the AID story-card `type` a component's `render.storyCards` entries
+ * land under, one per component (§7.8).
+ *
+ * A `render.storyCards` entry has no `aid.type` of its own — it is not an item — so its
+ * category is resolved on a three-rung ladder: the entry's own `type:`, then this map keyed
+ * by component, then the component's display label (`AI Instructions`, `Plot Essentials`).
+ * This rung exists so a project can steer where the alternates sort in the player's card
+ * list (a `zz_` prefix, say) without that opinion being authored into Codex Loom's default
+ * or into a shared component file.
+ *
+ * Root only, and a closed map rather than an open record: unlike `templateFor:` — whose
+ * keys are genuinely open (`base`, `notes`, any component) — the only meaningful keys here
+ * are the component names, so a typo is worth a `CL0201` rather than silent inertness. It
+ * is not branch-addressable: which category a reference card sorts under is a whole-scenario
+ * decision, and nothing about it varies per branch.
+ */
+const STORY_CARD_TYPE = {
+  type: TYPES.MAP,
+  keys: {
+    plotEssential: STRING,
+    summary: STRING,
+    aiInstructions: STRING,
+    authorsNote: STRING,
+    adventureDescription: STRING,
+    opening: STRING,
+  },
+};
+
+/**
  * `templateFor:` — a template-selection file per rendering role, branch-addressable (§13.4).
  *
  * An open record: `base`, `notes`, and one key per component (`plotEssential`, …), each
@@ -211,8 +240,11 @@ const CONFIG_SCHEMA = {
     components: COMPONENTS,
     render: RENDER,
     templateFor: TEMPLATE_FOR,
+    storyCardType: STORY_CARD_TYPE,
     branches: BRANCHES,
   },
 };
 
-module.exports = { CONFIG_SCHEMA, BRANCH_NODE, COMPONENTS, SCRIPTS, RENDER, TEMPLATE_FOR };
+module.exports = {
+  CONFIG_SCHEMA, BRANCH_NODE, COMPONENTS, SCRIPTS, RENDER, TEMPLATE_FOR, STORY_CARD_TYPE,
+};

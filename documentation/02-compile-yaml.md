@@ -287,6 +287,18 @@ branches:
 
 **Use a blank template rather than `~` to turn notes off.** `notesTemplate: ~` unbinds the inherited value, which drops the branch to rung 3 — the built-in rendering of the notes value itself. For a scalar like `'[e]'` that is the same marker again; for a mapping it is `known: true` reaching AID as text. A template that renders nothing emits no `notes:` line at all, which is what "off" should mean.
 
+### `storyCardType`
+
+The AID story-card `type` that a component's `render.storyCards` alternates land under — one per component, project-wide.
+
+```yaml
+storyCardType:
+  aiInstructions: zz_AIN            # sorts the alternates to the end of the player's card list
+  plotEssential:  zz_PE
+```
+
+This is the middle rung of the ladder in [Components → Swappable alternates](09-components.md#swappable-alternates--renderstorycards): an entry's own `type:` wins over it, and with neither set the card takes the component's display label (`AI Instructions`). It is **not** branch-addressable — which category a reference card sorts under is a whole-scenario decision — so unlike `render:` it has no branch rung.
+
 ### `lint`
 
 Controls for Codex Loom's **opinion layer** — the checks that judge quality rather than

@@ -156,7 +156,29 @@ const RENAMED = Object.freeze({
   description: 'adventureDescription',
 });
 
+/**
+ * Keys v4 removed outright, with what replaces the capability.
+ *
+ * Distinct from `RENAMED` because there is no mechanical migration: `migrateProjectFully()`
+ * has no path that reads a component `card:` block or a `branches: {x: {ain:, cards:}}`
+ * mapping (the feature was release-facing and never triggered before the v4 rebuild), so a
+ * hint pointing at the migrator would send the author somewhere that does nothing. The
+ * replacement is re-authored by hand.
+ */
+const REMOVED = Object.freeze({
+  card: {
+    hint: '"card:" is gone in v4. Its replacement is "render.storyCards" (§7.8) — a list of '
+      + 'independent renderings, each an alternate the player can swap in. Re-author it there; '
+      + 'there is no automatic migration for this one.',
+  },
+});
+
 function suggestFor(key, ownPath, declaredHere, keyIndex) {
+  const removed = REMOVED[key];
+  if (removed !== undefined) {
+    return { code: CODES.UNKNOWN_KEY, hint: removed.hint };
+  }
+
   const renamedTo = RENAMED[key];
   if (renamedTo !== undefined) {
     return {

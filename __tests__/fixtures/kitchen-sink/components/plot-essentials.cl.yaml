@@ -103,18 +103,19 @@ imports:
   - from: '{%components}/base-plot-essentials.cl.yaml'
     importVariants: [terse]
 
-# §7.8 — declared, noted, and Phase 12 rather than Phase 6: two of its three use cases are
-# verbosity tiers, and a verbosity tier is undefined until something says what one is.
+# §7.8 — the multi-target render, live as of Phase 13. `component.variant` selects what
+# ships in the component field; each `storyCards` entry is an independent rendering emitted
+# as a trigger-less `kind: reference` card. The `type:` on the second entry overrides the
+# `storyCardType[plotEssential]` default from compile.yaml (rung 3 over rung 2).
 render:
   component:
     variant: terse
   storyCards:
     - title: Plot Essentials — Full
       variant: verbose
-
-card:
-  title: Plot Essentials (reference copy)
-  triggers: []
+    - title: Plot Essentials — Scenario Rules Only
+      sections: [genre, rules]
+      type: zz_PE_rules
 
 # §7.7 — frontmatter for the component's output file. Declared on every component because
 # the key is about a document's own metadata, and emitted by the rows whose output has
