@@ -16,8 +16,14 @@
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { diffTree } = require('../../scripts/rebaseline');
 const { OPAQUE } = require('../helpers/diffShape');
+
+// `scripts/rebaseline.js` `process.exit(1)`s at module load when `goldenFixtures/` is
+// absent — it is a CLI over that private repo. `diffTree` itself needs no fixture, but the
+// require does, so this suite gates on the fixtures exactly as `golden.test.js` does: it
+// runs with them cloned and registers as skipped without.
+const HAVE_FIXTURES = fs.existsSync(path.resolve(__dirname, '../../goldenFixtures/projects.js'));
+const { diffTree } = HAVE_FIXTURES ? require('../../scripts/rebaseline') : {};
 
 const dirs = [];
 afterAll(() => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }); });
@@ -36,69 +42,71 @@ function tree(files) {
 
 const LIB = 'exports.shared = 1;\n// a fairly long line to make a byte flip unambiguous\n';
 
-test('a per-leaf script lifted to the root is reported as relocated, not changed', () => {
-  const expected = tree({
-    'Label.md': '# Root\n',
-    'Branches/a/Scripts/library.js': LIB,
-    'Branches/b/Scripts/library.js': LIB,
-  });
-  const actual = tree({
-    'Label.md': '# Root\n',
-    'Scripts/library.js': LIB,
-  });
+(HAVE_FIXTURES ? describe : describe.skip)('diffTree — the Scripts/ relocation guard', () => {
+  test('a per-leaf script lifted to the root is reported as relocated, not changed', () => {
+    const expected = tree({
+      'Label.md': '# Root\n',
+      'Branches/a/Scripts/library.js': LIB,
+      'Branches/b/Scripts/library.js': LIB,
+    });
+    const actual = tree({
+      'Label.md': '# Root\n',
+      'Scripts/library.js': LIB,
+    });
 
-  const report = diffTree(actual, expected, { markdownOnly: true });
+    const report = diffTree(actual, expected, { markdownOnly: true });
 
-  expect(report.relocated).toHaveLength(1);
-  expect(report.relocated[0].to).toBe('Scripts/library.js');
-  expect(report.relocated[0].from.sort()).toEqual([
-    'Branches/a/Scripts/library.js',
-    'Branches/b/Scripts/library.js',
-  ]);
-  expect(report.removed).toEqual([]);
-  expect(report.added).toEqual([]);
-  expect([...report.classes]).toEqual([]);
-});
-
-test('a one-byte change to a lifted script aborts — no relocation, OPAQUE class', () => {
-  const expected = tree({
-    'Branches/a/Scripts/library.js': LIB,
-    'Branches/b/Scripts/library.js': LIB,
-  });
-  const actual = tree({
-    'Scripts/library.js': LIB.replace('shared = 1', 'shared = 2'),
+    expect(report.relocated).toHaveLength(1);
+    expect(report.relocated[0].to).toBe('Scripts/library.js');
+    expect(report.relocated[0].from.sort()).toEqual([
+      'Branches/a/Scripts/library.js',
+      'Branches/b/Scripts/library.js',
+    ]);
+    expect(report.removed).toEqual([]);
+    expect(report.added).toEqual([]);
+    expect([...report.classes]).toEqual([]);
   });
 
-  const report = diffTree(actual, expected, { markdownOnly: true });
+  test('a one-byte change to a lifted script aborts — no relocation, OPAQUE class', () => {
+    const expected = tree({
+      'Branches/a/Scripts/library.js': LIB,
+      'Branches/b/Scripts/library.js': LIB,
+    });
+    const actual = tree({
+      'Scripts/library.js': LIB.replace('shared = 1', 'shared = 2'),
+    });
 
-  expect(report.relocated).toEqual([]);
-  expect([...report.classes]).toContain(OPAQUE);
-});
+    const report = diffTree(actual, expected, { markdownOnly: true });
 
-test('a script edited in place (same path, changed bytes) still aborts', () => {
-  const expected = tree({ 'Scripts/library.js': LIB });
-  const actual = tree({ 'Scripts/library.js': LIB.replace('shared = 1', 'shared = 9') });
+    expect(report.relocated).toEqual([]);
+    expect([...report.classes]).toContain(OPAQUE);
+  });
 
-  const report = diffTree(actual, expected, { markdownOnly: true });
+  test('a script edited in place (same path, changed bytes) still aborts', () => {
+    const expected = tree({ 'Scripts/library.js': LIB });
+    const actual = tree({ 'Scripts/library.js': LIB.replace('shared = 1', 'shared = 9') });
 
-  expect([...report.classes]).toContain(OPAQUE);
-});
+    const report = diffTree(actual, expected, { markdownOnly: true });
 
-test('a script that vanishes with no counterpart aborts', () => {
-  const expected = tree({ 'Branches/a/Scripts/library.js': LIB });
-  const actual = tree({ 'Label.md': '# only markdown now\n' });
+    expect([...report.classes]).toContain(OPAQUE);
+  });
 
-  const report = diffTree(actual, expected, { markdownOnly: true });
+  test('a script that vanishes with no counterpart aborts', () => {
+    const expected = tree({ 'Branches/a/Scripts/library.js': LIB });
+    const actual = tree({ 'Label.md': '# only markdown now\n' });
 
-  expect(report.relocated).toEqual([]);
-  expect([...report.classes]).toContain(OPAQUE);
-});
+    const report = diffTree(actual, expected, { markdownOnly: true });
 
-test('identical trees produce no relocation and no diff class', () => {
-  const files = { 'Label.md': '# Root\n', 'Scripts/library.js': LIB };
-  const report = diffTree(tree(files), tree(files), { markdownOnly: true });
+    expect(report.relocated).toEqual([]);
+    expect([...report.classes]).toContain(OPAQUE);
+  });
 
-  expect(report.relocated).toEqual([]);
-  expect(report.changed).toEqual([]);
-  expect([...report.classes]).toEqual([]);
+  test('identical trees produce no relocation and no diff class', () => {
+    const files = { 'Label.md': '# Root\n', 'Scripts/library.js': LIB };
+    const report = diffTree(tree(files), tree(files), { markdownOnly: true });
+
+    expect(report.relocated).toEqual([]);
+    expect(report.changed).toEqual([]);
+    expect([...report.classes]).toEqual([]);
+  });
 });
