@@ -365,7 +365,10 @@ describe('every diagnostic the config surface can emit', () => {
       // `lint.packs` was the last one and Phase 14 implemented it (§8.2.2).
       // CL0207 (VALUE_OUT_OF_RANGE): no CONFIG_SCHEMA key declares `min`/`max`; the pack
       // schema surface does, covered by schema.test.js and lint-packs.test.js.
+      // CL0208 (PATTERN_MISMATCH): same story — no CONFIG_SCHEMA key declares `pattern:`;
+      // the convention-pack schema surface does (Phase 15, §8.2.2), covered there.
       SCHEMA_CODES.NOT_YET_IMPLEMENTED, SCHEMA_CODES.VALUE_OUT_OF_RANGE,
+      SCHEMA_CODES.PATTERN_MISMATCH,
       CODES.SNAPSHOT_DIR_MISSING, CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
       CODES.SNAPSHOT_MISSING_ENTRY, CODES.SNAPSHOT_FILE_UNTRACKED, CODES.SNAPSHOT_HASH_MISMATCH,
       // CL0116 (LIBRARY_ROLE_SCAN_REFUSED, Phase 8 Decision 2) joins the same family for the

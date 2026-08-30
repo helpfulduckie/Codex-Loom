@@ -401,4 +401,27 @@ describe('runLintMode', () => {
     fs.rmSync(tmp, { recursive: true });
     fs.rmSync(outDir, { recursive: true });
   });
+
+  test('a wtg requireCard rule fires per leaf offline — names only the branch with no card', () => {
+    const tmp = makeTmp();
+    const outDir = makeTmp();
+    const TC = [
+      '## WTG Time Config', '~~~', 'encapsulate: false', '~~~',
+      'Starting Date: 6/28/1326', 'Starting Era: AD', 'Starting Time: 9:00 AM', 'Initialized: true',
+    ].join('\n');
+    // Branch A resolves a WTG Time Config card; branch B does not.
+    write(path.join(tmp, 'Branches', 'A', 'Story Cards', 'zz_Settings', 'tc.md'), TC);
+    write(path.join(tmp, 'Branches', 'B', 'Story Cards', 'Character', 'y.md'), '## Y\n~~~\nencapsulate: false\n~~~\nbody\n');
+
+    const result = runLintMode(tmp, outDir, false, { config: { lint: { packs: { wtg: {} } } } });
+    const reportText = fs.readFileSync(result.reportPath, 'utf8');
+
+    const hits = reportText.split('\n').filter((l) => l.includes('CL-wtg/0002') || l.includes('(pack:wtg)'));
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toContain('leaf "B"');
+    expect(hits[0]).not.toContain('leaf "A"');
+
+    fs.rmSync(tmp, { recursive: true });
+    fs.rmSync(outDir, { recursive: true });
+  });
 });

@@ -1,10 +1,11 @@
 # Convention Packs
 
 A convention pack is declarative data — never code — that the opinion layer runs over a
-leaf's compiled story cards to check a mod's `notes:` configuration. A pack carries a
-selector (`appliesTo`), an optional schema over the card's `notes:` structure, and a small
-predicate vocabulary (key presence, value equality, regex over the notes text and body).
-Packs are opt-in: one runs only when a project names it in `lint.packs`.
+leaf's compiled story cards to check a mod's configuration. A pack carries a selector
+(`appliesTo`), an optional schema over the card's `notes:` structure (or its entry, with
+`over: body`), a per-leaf card-existence check (`requireCard`), and a small predicate
+vocabulary (key presence, value equality, regex over the notes text and body). Packs are
+opt-in: one runs only when a project names it in `lint.packs`.
 
 ---
 
@@ -106,11 +107,28 @@ rules:
     appliesTo: <predicate>    # omitted = every card
     forbid: <predicate>       # a match contributes one finding (the rule's message)
     require: <predicate>      # a NON-match contributes one finding
-    schema: <descriptor>      # a src/schema.js descriptor over the parsed notes: mapping
+    requireCard: <predicate>  # a per-leaf existence check — see below
+    schema: <descriptor>      # a src/schema.js descriptor over the card's notes: mapping
+    over: body                # route the schema at the card entry instead of notes:
     message: "…"
 ```
 
-A rule may carry any mix of `forbid`, `require`, and `schema`.
+A rule may carry any mix of `forbid`, `require`, `requireCard`, and `schema`.
+
+### `requireCard` — a per-leaf existence check
+
+`forbid` / `require` / `schema` are *per-card* — they run against every card a rule's
+`appliesTo` matches. `requireCard: <predicate>` is the existential: on a branch leaf that
+binds the pack and resolves **no** card satisfying the predicate, the rule contributes one
+finding naming that branch (the same per-leaf cadence as `CL0118`).
+
+The compiler cannot detect where a mod is active, so a rule that requires a mod's config
+card fires on every leaf by default; an author who does not run that mod on a branch
+unbinds the pack there (`wtg: ~`, see [Declaring packs](#declaring-packs)). Offline
+(`--lint`) the check still resolves each leaf's inherited card set from the compiled tree
+and names the branch, but it applies the project-root `lint.packs` to every leaf — it does
+not walk `branches:` — so a branch that unbound the pack still gets the offline finding.
+The inline compile pass is branch-merge-aware and authoritative.
 
 ### Predicate vocabulary
 
@@ -130,17 +148,26 @@ normalizes the position itself, so `wtg`'s marker rule scans both.
 
 ### The schema check
 
-A rule's `schema:` block is a `src/schema.js` descriptor tree evaluated over the re-parsed
-`notes:` mapping. The descriptor keys the engine understands:
+A rule's `schema:` block is a `src/schema.js` descriptor tree evaluated over a mapping
+recovered from the card. By default that mapping is the re-parsed `notes:` block; `over:
+body` on the rule routes it at the card **entry** instead, parsed as tolerant `Key: Value`
+lines (an optional `>` prefix stripped, first colon splits, first occurrence of a key
+wins) — the shape a mod reads a settings card in. The descriptor keys the engine
+understands:
 
 - **`type`** — `map`, `record`, `seq`, `string`, `number`, `boolean`, `any` (or a list of
   them for a union).
-- **`keys`** — for `map`: the declared key set. An undeclared key is a `CL0201` ERROR with
-  a Damerau-Levenshtein typo suggestion.
+- **`keys`** — for `map`: the declared key set is the whole set; an undeclared key is a
+  `CL0201` ERROR with a Damerau-Levenshtein typo suggestion. Also honored on `record`,
+  where it means the opposite: the declared keys are validated and everything else passes
+  untouched. Use `map` for "these keys and no others," `record` + `keys` for "these keys,
+  plus anything."
 - **`of`** — for `seq` / `record`: the descriptor every element or value must match.
 - **`required`** — the key must be present.
 - **`values`** — a closed set; a value outside it is `CL0206`.
 - **`min`** / **`max`** — inclusive numeric bounds; a value outside them is `CL0207`.
+- **`pattern`** — for `string`: a regex the value must match, compiled case-insensitively;
+  a value that does not match is `CL0208`.
 
 Every finding the check raises is re-coded to the rule's `CL-<pack>/NNNN`, so a pack's
 findings suppress as one unit and show their origin.
@@ -156,18 +183,23 @@ uses) is stripped before the parse.
 
 ## The bundled `wtg` pack
 
-`packs/wtg.cl.yaml` is the first bundled pack. Two rules:
+`packs/wtg.cl.yaml` is the first bundled pack. Three rules:
 
 - **`CL-wtg/0001` — contradictory timestamp markers (ERROR, every card).** `[e]` /
   `[wtg-no-timestamp]` excludes a card from WTG timestamps entirely; `/]` marks where a
   timestamp should be inserted. A card carrying both is self-contradictory. The rule scans
   the notes text and the body together, since WTG accepts either marker in Notes or Entry.
-- **`CL-wtg/0002` — the settings card (ERROR, title match). Provisional.** This rule is
-  aimed at the wrong card: it matches "Configure WTG" (which WTG generates at runtime),
-  where the card a scenario author actually ships is "WTG Time Config" (starting date,
-  era, time, `Initialized`, in the card body). As written it is effectively inert. A
-  corrected rule — existence and field-presence WARNs plus value-validity ERRORs over the
-  "WTG Time Config" body — is planned; it needs schema-over-body, a card-existence
-  predicate, and a `pattern:` schema key that the engine does not have yet.
+- **`CL-wtg/0002` — the `WTG Time Config` card exists and is complete (WARN).** Fires per
+  leaf when no `WTG Time Config` card resolves; per card when it is present but missing any
+  of `Starting Date` / `Starting Era` / `Starting Time` / `Initialized`, or carrying a key
+  outside the recognized set (the four core fields plus WTG's 28 `DEFAULT_SETTINGS`
+  override names). WTG deletes this card after initialization, so a key it does not read is
+  silently lost — hence the closed set. Read from the card body (`over: body`).
+- **`CL-wtg/0003` — the `WTG Time Config` core fields are well-formed (ERROR).** For a
+  present card: `Starting Date` must be `M/D/year` (1–6-digit year), `Starting Time` must
+  be `H:MM AM|PM`, `Starting Era` must be one of `AD` / `CE` / `BC` / `BCE`, and
+  `Initialized` must be `true` / `false` — all matched case-insensitively. The 28 override
+  keys and any stray key pass here; unknown-key is `CL-wtg/0002`'s job. An open `record`
+  with `keys:` over just the four fields.
 
 Enable it with `lint: { packs: { wtg: {} } }`.

@@ -12,8 +12,10 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 
-const { loadPack, evaluatePack, clampFinding, CODES } = require('../../src/lint/packs');
-const { parseNotesBlock } = require('../../src/emit/vl');
+const {
+  loadPack, evaluatePack, evaluatePackExistence, clampFinding, CODES,
+} = require('../../src/lint/packs');
+const { parseNotesBlock, parseSettingsBlock } = require('../../src/emit/vl');
 const { walkBranchChain } = require('../../src/model/branches');
 const { Diagnostics } = require('../../src/diag');
 
@@ -174,6 +176,31 @@ describe('parseNotesBlock', () => {
   });
 });
 
+// ── parseSettingsBlock ───────────────────────────────────────────────────────
+
+describe('parseSettingsBlock', () => {
+  test('a plain Key: Value block, values kept as strings (no YAML coercion)', () => {
+    expect(parseSettingsBlock('Starting Era: AD\nInitialized: true'))
+      .toEqual({ 'Starting Era': 'AD', Initialized: 'true' });
+  });
+  test('a leading "> " is stripped per line', () => {
+    expect(parseSettingsBlock('> Starting Date: 1/1/2024')).toEqual({ 'Starting Date': '1/1/2024' });
+  });
+  test('only the first colon splits — the rest is the value', () => {
+    expect(parseSettingsBlock('Foo: a: b')).toEqual({ Foo: 'a: b' });
+  });
+  test('a blank line and a line with no colon are skipped', () => {
+    expect(parseSettingsBlock('A: 1\n\njust prose\nB: 2')).toEqual({ A: '1', B: '2' });
+  });
+  test('a repeated key keeps the first occurrence', () => {
+    expect(parseSettingsBlock('A: first\nA: second')).toEqual({ A: 'first' });
+  });
+  test('empty / all-blank input is {}', () => {
+    expect(parseSettingsBlock('')).toEqual({});
+    expect(parseSettingsBlock('  \n\n ')).toEqual({});
+  });
+});
+
 // ── the schema min/max extension ─────────────────────────────────────────────
 
 describe('src/schema.js numeric min/max (CL0207)', () => {
@@ -257,6 +284,64 @@ describe('evaluatePack', () => {
     expect(f.message).toContain('[wtg]');
     expect(f.message).toContain('"Gate"');
     expect(f.message).toContain('branch "a/x"');
+  });
+});
+
+describe('over: body routes the schema at the card entry', () => {
+  // A body authored as a settings block; `notes` carries nothing.
+  const bodyCard = parseCards(
+    ['## WTG Time Config', '~~~', 'triggers: [tc]', 'encapsulate: false', '~~~',
+      'Starting Era: AD', 'Starting Time: 9:00 AM'].join('\n'),
+    { type: 'zz_Settings' },
+  );
+  const rule = {
+    appliesTo: { titleMatch: '^WTG Time Config$' },
+    schema: { type: 'record', keys: { 'Starting Era': { type: 'string', pattern: '^(AD|CE|BC|BCE)$' } } },
+  };
+
+  test('with over: body the schema sees the entry keys', () => {
+    expect(runRule({ ...rule, over: 'body' }, bodyCard)).toHaveLength(0);
+    const bad = parseCards(
+      ['## WTG Time Config', '~~~', 'triggers: [tc]', 'encapsulate: false', '~~~',
+        'Starting Era: Anno Domini'].join('\n'),
+      { type: 'zz_Settings' },
+    );
+    const found = runRule({ ...rule, over: 'body' }, bad);
+    expect(found).toHaveLength(1);
+    expect(found[0].message).toContain('Starting Era');
+  });
+
+  test('without over: the same rule reads notes and finds nothing in the body', () => {
+    expect(runRule(rule, bodyCard)).toHaveLength(0);
+  });
+});
+
+describe('evaluatePackExistence', () => {
+  const pack = {
+    name: 'wtg',
+    rules: [{
+      id: '2', code: 'CL-wtg/0002', severity: 'warn', message: 'a card should exist',
+      requireCard: { titleMatch: '^WTG Time Config$' },
+    }],
+  };
+
+  test('one finding when no card matches the requireCard predicate', () => {
+    const found = evaluatePackExistence(pack, card({ title: 'Aria' }), { branchLabel: 'main' });
+    expect(found).toHaveLength(1);
+    expect(found[0].code).toBe('CL-wtg/0002');
+    expect(found[0].severity).toBe('warn');
+    expect(found[0].leaf).toBe('main');
+    expect(found[0].message).toContain('branch "main"');
+  });
+
+  test('nothing when a card does match', () => {
+    expect(evaluatePackExistence(pack, card({ title: 'WTG Time Config' }), { branchLabel: 'main' }))
+      .toHaveLength(0);
+  });
+
+  test('a rule without requireCard is ignored here', () => {
+    const plain = { name: 'p', rules: [{ id: '1', code: 'CL-p/0001', severity: 'error', message: 'm', forbid: {} }] };
+    expect(evaluatePackExistence(plain, card({ title: 'X' }), {})).toHaveLength(0);
   });
 });
 

@@ -14,16 +14,23 @@
  *
  * ── Descriptor shape ────────────────────────────────────────────────────────
  *
- *   { type, keys, of, required, values, min, max, note, alias }
+ *   { type, keys, of, required, values, min, max, pattern, note, alias }
  *
  *   type      one of the TYPES below, or an array of them for a union
- *   keys      for 'map': the declared key set — anything else is an unknown-key ERROR
+ *   keys      for 'map': the declared key set — anything else is an unknown-key ERROR.
+ *             Also honored on 'record' (Phase 15): a declared key is validated against its
+ *             child descriptor, an undeclared key passes with no CL0201 — the open-mapping
+ *             counterpart to 'map', for a convention-pack rule that must check a few named
+ *             fields and ignore the rest (§8.2.2).
  *   of        for 'seq' and 'record': the descriptor every element/value must match
  *   required  the key must be present
  *   values    a closed set — a value outside it is CL0206
  *   min/max   for 'number': inclusive bounds — a value outside them is CL0207. Added in
  *             Phase 14 for convention-pack schemas, whose mod-config cards carry
  *             open-ended positive rate settings (§8.2.2).
+ *   pattern   for 'string': a regex the value must match, compiled case-insensitively — a
+ *             value that does not match is CL0208. Added in Phase 15 for convention-pack
+ *             schemas over human-typed mod-config fields (§8.2.2).
  *   note      the key is recognized but not yet implemented; presence is a WARN
  *   alias     the key is a superseded spelling; `alias` names its replacement
  */
@@ -51,6 +58,8 @@ const CODES = Object.freeze({
   VALUE_NOT_ALLOWED: 'CL0206',
   /** A number outside its descriptor's inclusive `min`/`max` bounds (§8.2.2). */
   VALUE_OUT_OF_RANGE: 'CL0207',
+  /** A string that does not match its descriptor's `pattern:` regex (§8.2.2). */
+  PATTERN_MISMATCH: 'CL0208',
   /** The canonical §4.3 case: a valid key written at the wrong level. */
   MISPLACED_KEY: 'CL0210',
 });
@@ -358,6 +367,30 @@ function validate(value, schema, options = {}) {
       }
     }
 
+    // A regex a string value must match. Checked after the type test, so a non-string
+    // reports as a type error rather than a pattern miss. Compiled with the `i` flag
+    // unconditionally — the callers are convention-pack schemas over human-typed
+    // mod-config fields (§8.2.2), where case is never the thing being pinned.
+    if (typeof normalized === 'string' && descriptor.pattern !== undefined) {
+      let re;
+      try {
+        re = new RegExp(String(descriptor.pattern), 'i');
+      } catch (err) {
+        re = null;
+      }
+      if (re && !re.test(normalized)) {
+        if (diagnostics) {
+          diagnostics.error(
+            CODES.PATTERN_MISMATCH,
+            `"${display(currentPath) || '<root>'}" is ${JSON.stringify(normalized)}, but must match `
+            + `${JSON.stringify(String(descriptor.pattern))}${inContext}.`,
+            locate(currentPath)
+          );
+        }
+        return normalized;
+      }
+    }
+
     if (types.includes(TYPES.SEQ) && Array.isArray(normalized)) {
       if (descriptor.of) {
         normalized.forEach((item, i) => {
@@ -408,6 +441,26 @@ function validate(value, schema, options = {}) {
 
         for (const [key, child] of Object.entries(descriptor.keys)) {
           if (child.required && normalized[key] === undefined && diagnostics) {
+            diagnostics.error(
+              CODES.MISSING_REQUIRED,
+              `Missing required key "${key}"${display(currentPath) ? ` under "${display(currentPath)}"` : ''}${inContext}.`,
+              locate(currentPath)
+            );
+          }
+        }
+        return normalized;
+      }
+
+      // An open mapping with a few named keys to check (Phase 15). A declared key is
+      // validated against its child descriptor and its `required:` flag; an undeclared
+      // key passes untouched — no CL0201. This is the counterpart to the `map` branch
+      // above, which rejects the undeclared. A descriptor carries `keys` or `of`, not
+      // both; no current schema combines `record` with `keys`.
+      if (types.includes(TYPES.RECORD) && descriptor.keys) {
+        for (const [key, child] of Object.entries(descriptor.keys)) {
+          if (normalized[key] !== undefined) {
+            normalized[key] = walk(normalized[key], child, [...currentPath, key]);
+          } else if (child.required && diagnostics) {
             diagnostics.error(
               CODES.MISSING_REQUIRED,
               `Missing required key "${key}"${display(currentPath) ? ` under "${display(currentPath)}"` : ''}${inContext}.`,

@@ -10,7 +10,10 @@ const {
 } = require('./util');
 const { parseCards } = require('./emit/vl');
 const { CODES: DIAG_CODES, LINT_LEVELS, applyLintLevel, Diagnostics } = require('./diag');
-const { loadPack, evaluatePack, clampFinding } = require('./lint/packs');
+const {
+  loadPack, evaluatePack, evaluatePackExistence, clampFinding,
+} = require('./lint/packs');
+const { buildTree, leafNodes } = require('./compiledTree');
 
 // ── mechanical syntax checks ────────────────────────────────────────────────
 //
@@ -381,7 +384,9 @@ function formatReport(rootDirName, fileResults) {
     out.push(`## ${relPath}`, '');
     for (const f of findings) {
       if (f.severity === 'ERROR') errorCount++; else warnCount++;
-      if (f.card) {
+      if (f.leaf) {
+        out.push(`- [${f.severity}] (${f.category}) leaf "${f.leaf}": ${f.hint}`);
+      } else if (f.card) {
         out.push(`- [${f.severity}] (${f.category}) card "${f.card}": ${f.hint}`);
       } else {
         out.push(`- [${f.severity}] (${f.category}) \`${f.match}\` at line ${formatLines(f.lines)} — ${f.hint}`);
@@ -443,13 +448,48 @@ function runLintMode(scenarioRoot, outputDir, verbose = false, options = {}) {
     }
   }
 
-  const { text, errorCount, warnCount } = formatReport(rootDirName, fileResults);
+  // §8.2.2 — a `requireCard` rule is a per-leaf existence check, not a per-file one: a
+  // compiled directory does not hold the cards a leaf *inherits*, so scanning files would
+  // false-positive on every non-owning node. Resolve each leaf's full card set from the
+  // compiled tree, which folds VL's own card inheritance (`compiledTree.resolved.cards`).
+  // Offline still applies the root `lint.packs` to every leaf — it does not walk
+  // `config.branches`, so a branch that unbound the pack still gets the finding. The
+  // inline compile pass is branch-merge-aware and authoritative (see `## Watch`).
+  const existenceResults = [];
+  if (loadedPacks.some(({ pack }) => (pack.rules || []).some((r) => r.requireCard))) {
+    const findings = [];
+    for (const leaf of leafNodes(buildTree(rootAbs))) {
+      const label = leaf.branchNames.join('/') || '(root)';
+      for (const { pack, packLevel } of loadedPacks) {
+        for (const f of evaluatePackExistence(pack, leaf.resolved.cards, { branchLabel: label })) {
+          const severity = clampFinding(f.severity, packLevel, null);
+          if (severity === null) continue;
+          findings.push({
+            category: `pack:${pack.name}`,
+            severity: severity.toUpperCase(),
+            layer: 'opinion',
+            code: f.code,
+            leaf: f.leaf,
+            hint: f.detail,
+          });
+        }
+      }
+    }
+    const leveled = applyLevel(findings, level);
+    if (leveled.length > 0) existenceResults.push({ relPath: '(convention packs)', findings: leveled });
+  }
+
+  const allResults = [...fileResults, ...existenceResults];
+  const { text, errorCount, warnCount } = formatReport(rootDirName, allResults);
   const reportPath = path.join(outputDir, `${rootDirName}.lint.md`);
   fs.writeFileSync(reportPath, text, 'utf8');
 
-  for (const { relPath, findings } of fileResults) {
+  for (const { relPath, findings } of allResults) {
     for (const f of findings) {
-      const loc = f.card ? `card "${f.card}" in ${relPath}` : `${relPath}:${f.lines[0]}`;
+      let loc;
+      if (f.leaf) loc = `leaf "${f.leaf}"`;
+      else if (f.card) loc = `card "${f.card}" in ${relPath}`;
+      else loc = `${relPath}:${f.lines[0]}`;
       console.warn(`  ${f.severity} [${f.category}]: ${loc} — ${f.hint}`);
     }
   }

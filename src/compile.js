@@ -24,7 +24,9 @@ const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
 const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES, LINT_LEVELS } = require('./diag');
 const { renderCard, cardTitle, parseCards } = require('./emit/vl');
-const { loadPack, evaluatePack, clampFinding } = require('./lint/packs');
+const {
+  loadPack, evaluatePack, evaluatePackExistence, clampFinding,
+} = require('./lint/packs');
 const {
   FILENAME: PLACEHOLDERS_FILENAME, writeNodePlaceholders, checkUndeclaredPlaceholders,
   checkPlaceholderContext, reportUnusedPlaceholders, reportDuplicateQuestions, localKeysOf,
@@ -850,15 +852,26 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
       const pack = loaded.get(name);
       if (!pack) continue;
 
+      // Phase 15: gather the leaf's whole resolved card set once, so the per-card rules
+      // (`evaluatePack`) and the per-leaf existence check (`evaluatePackExistence`, for a
+      // `requireCard` rule) both see every card the leaf rendered. `evaluatePack` still
+      // evaluates each card exactly once — moving it out of the group loop is only a
+      // regrouping.
+      const leafCards = [];
       for (const [type, entries] of leaf.grouped) {
         for (const rendered of entries) {
-          const cards = parseCards(rendered.rendered, { type });
-          for (const f of evaluatePack(pack, cards, { branchLabel: label })) {
-            const sev = clampFinding(f.severity, packLevel, branchLevel);
-            if (sev === null) continue;
-            diagnostics.add(sev, f.code, f.message, loc);
-          }
+          leafCards.push(...parseCards(rendered.rendered, { type }));
         }
+      }
+
+      const routed = [
+        ...evaluatePack(pack, leafCards, { branchLabel: label }),
+        ...evaluatePackExistence(pack, leafCards, { branchLabel: label }),
+      ];
+      for (const f of routed) {
+        const sev = clampFinding(f.severity, packLevel, branchLevel);
+        if (sev === null) continue;
+        diagnostics.add(sev, f.code, f.message, loc);
       }
     }
   }

@@ -51,7 +51,7 @@ const YAML = require('yaml');
 const { applyLintLevel, Diagnostics } = require('../diag');
 const { expandTokens } = require('../tokens');
 const { validate, TYPES, CODES: SCHEMA_CODES } = require('../schema');
-const { parseNotesBlock } = require('../emit/vl');
+const { parseNotesBlock, parseSettingsBlock } = require('../emit/vl');
 
 /** Bundled packs live at the repo root, beside `src/`. */
 const BUNDLED_DIR = path.join(__dirname, '..', '..', 'packs');
@@ -141,6 +141,13 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
       forbid: rule.forbid || null,
       require: rule.require || null,
       schema: rule.schema || null,
+      // `over: body` routes a rule's `schema:` at the card entry (parsed by
+      // `parseSettingsBlock`) instead of at `notes:` (§8.2.2, Phase 15). Anything else,
+      // including absent, is `notes`.
+      over: rule.over === 'body' ? 'body' : 'notes',
+      // `requireCard: <predicate>` — a per-leaf existence check run by
+      // `evaluatePackExistence`, not by the per-card loop below.
+      requireCard: rule.requireCard || null,
       message: rule.message || `pack "${name}" rule ${id}`,
     });
   }
@@ -294,9 +301,49 @@ function evaluatePack(pack, cards, { branchLabel = null } = {}) {
         emit({ severity: rule.severity, code: rule.code, message: rule.message });
       }
       if (rule.schema) {
-        runSchemaCheck(rule, notes, view, emit);
+        const input = rule.over === 'body' ? parseSettingsBlock(card.body) : notes;
+        runSchemaCheck(rule, input, view, emit);
       }
     }
+  }
+  return findings;
+}
+
+/**
+ * The existence half of a pack, kept separate from `evaluatePack` so the two never
+ * double-run — `evaluatePack` is called per card (per file, offline), and a `requireCard`
+ * check asked once per card would fire once per card that is *not* the required one.
+ *
+ * For each rule carrying `requireCard: <predicate>`, if no card in `cards` satisfies the
+ * predicate, returns one finding at the rule's severity. `cards` is a whole leaf's
+ * resolved card set (inline: every rendered card across `leaf.grouped`; offline:
+ * `compiledTree`'s per-leaf `resolved.cards`), so "no card matches" is a real per-leaf
+ * fact and the finding names the branch — the same cadence as `CL0118` (Decision 1). The
+ * author suppresses it on a WTG-free branch by unbinding the pack there; Codex Loom
+ * cannot detect where a mod is active.
+ */
+function evaluatePackExistence(pack, cards, { branchLabel = null } = {}) {
+  const findings = [];
+  const where = branchLabel && branchLabel !== '(root)' ? ` on branch "${branchLabel}"` : '';
+
+  for (const rule of pack.rules) {
+    if (!rule.requireCard) continue;
+
+    const satisfied = cards.some((card) => evalPredicate(rule.requireCard, {
+      title: card.title,
+      body: card.body || '',
+      notesText: String(card.notes || ''),
+      notes: parseNotesBlock(card.notes),
+    }));
+    if (satisfied) continue;
+
+    findings.push({
+      severity: rule.severity,
+      code: rule.code,
+      leaf: branchLabel || '(root)',
+      detail: rule.message,
+      message: `[${pack.name}]${where}: ${rule.message}`,
+    });
   }
   return findings;
 }
@@ -315,4 +362,6 @@ function clampFinding(severity, packLevel, branchLevel) {
   return sev;
 }
 
-module.exports = { loadPack, evaluatePack, clampFinding, CODES, SCHEMA_CODES };
+module.exports = {
+  loadPack, evaluatePack, evaluatePackExistence, clampFinding, CODES, SCHEMA_CODES,
+};

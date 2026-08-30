@@ -224,6 +224,77 @@ describe('closed value sets', () => {
   });
 });
 
+/**
+ * `pattern:` — a case-insensitive regex on a string field, added in Phase 15 for
+ * convention-pack schemas over human-typed mod-config values (§8.2.2).
+ */
+describe('string pattern', () => {
+  const desc = { type: TYPES.MAP, keys: { d: { type: TYPES.STRING, pattern: '^(AD|CE|BC|BCE)$' } } };
+  const codesFor = (obj) => {
+    const d = new Diagnostics();
+    validate(obj, desc, { diagnostics: d });
+    return d.all.map((x) => x.code);
+  };
+
+  test('a matching string passes', () => {
+    expect(codesFor({ d: 'AD' })).toEqual([]);
+  });
+
+  test('a non-matching string is CL0208 naming the value and the pattern', () => {
+    const d = new Diagnostics();
+    validate({ d: 'AnnoDomini' }, desc, { diagnostics: d });
+    expect(d.all.map((x) => x.code)).toEqual([CODES.PATTERN_MISMATCH]);
+    expect(d.errors[0].message).toContain('"AnnoDomini"');
+    expect(d.errors[0].message).toContain('AD|CE|BC|BCE');
+  });
+
+  test('the match is case-insensitive — the `i` flag is always on', () => {
+    expect(codesFor({ d: 'bce' })).toEqual([]);
+    expect(codesFor({ d: 'Ad' })).toEqual([]);
+  });
+
+  test('a non-string skips the pattern check and reports the type error instead', () => {
+    expect(codesFor({ d: 42 })).toEqual([CODES.WRONG_TYPE]);
+    expect(codesFor({ d: 42 })).not.toContain(CODES.PATTERN_MISMATCH);
+  });
+
+  test('an absent key is not a violation — `pattern:` does not imply required', () => {
+    expect(codesFor({})).toEqual([]);
+  });
+});
+
+/**
+ * `keys:` on `type: record` — declared keys validated, undeclared keys allowed through
+ * with no CL0201 (Phase 15). The open-mapping counterpart to `type: map`.
+ */
+describe('keys on a record', () => {
+  const desc = {
+    type: TYPES.RECORD,
+    keys: {
+      Known: { type: TYPES.STRING, pattern: '^\\d+$' },
+      Needed: { type: TYPES.STRING, required: true },
+    },
+  };
+  const codesFor = (obj) => {
+    const d = new Diagnostics();
+    validate(obj, desc, { diagnostics: d });
+    return d.all.map((x) => x.code);
+  };
+
+  test('a present declared key is validated against its child descriptor', () => {
+    expect(codesFor({ Known: 'x7', Needed: 'ok' })).toEqual([CODES.PATTERN_MISMATCH]);
+    expect(codesFor({ Known: '123', Needed: 'ok' })).toEqual([]);
+  });
+
+  test('an undeclared key passes with no CL0201', () => {
+    expect(codesFor({ Whatever: 'anything', Needed: 'ok' })).toEqual([]);
+  });
+
+  test('a missing required declared key is CL0203', () => {
+    expect(codesFor({ Known: '1' })).toEqual([CODES.MISSING_REQUIRED]);
+  });
+});
+
 describe('buildKeyIndex', () => {
   test('indexes nested keys by their dotted path', () => {
     expect(buildKeyIndex(SCHEMA).get('canon')).toEqual(['structure.input.canon']);

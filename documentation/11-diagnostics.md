@@ -128,6 +128,7 @@ resting on nothing. Sync still runs and the entry's files are still frozen; only
 | `CL0205` | WARN | Key has been superseded by another spelling. |
 | `CL0206` | ERROR | Key takes a closed set of values and got something else. |
 | `CL0207` | ERROR | A number is outside its descriptor's inclusive `min`/`max` bounds. Used by convention-pack schemas (§8.2.2); no `compile.yaml` key declares bounds. |
+| `CL0208` | ERROR | A string does not match its descriptor's `pattern:` regex, compiled case-insensitively. Used by convention-pack schemas (§8.2.2); no `compile.yaml` key declares a pattern. |
 | `CL0210` | ERROR | Key is valid, but at a different level — with the level named. |
 
 ### CL0210 in detail

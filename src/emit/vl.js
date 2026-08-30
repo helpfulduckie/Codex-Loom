@@ -199,6 +199,34 @@ function stripBlockquote(text) {
   return lines.map((line) => line.replace(/^\s*>\s?/, '')).join('\n');
 }
 
+/**
+ * Parse a `Key: Value` block the way WTG's own reader does — a line parser, not a YAML
+ * re-parse.
+ *
+ * `parseNotesBlock` re-parses its block as YAML because a convention pack keyed on
+ * `hasKey` wants real types back. WTG's "WTG Time Config" card is different: WTG reads it
+ * with `content.match(/Starting Date:\s*([^\n]+)/i)` per field (`library.js:1671`) and by
+ * iterating `DEFAULT_SETTINGS` entry names — plain string extraction, tolerant of an
+ * optional `>` prefix and of arbitrary content after the first colon. A pack rule with
+ * `over: body` validates against *this* shape, so the parser has to match it: no YAML
+ * coercion of `true` / `24h` / a bare number, first occurrence of a key wins, a line with
+ * no colon is skipped. Returns `{}` for empty, all-blank, or no-colon input.
+ */
+function parseSettingsBlock(text) {
+  const source = String(text === undefined || text === null ? '' : text);
+  const out = {};
+  for (const rawLine of source.split('\n')) {
+    const line = rawLine.replace(/^\s*>\s?/, '');
+    if (line.trim() === '') continue;
+    const colon = line.indexOf(':');
+    if (colon === -1) continue;
+    const key = line.slice(0, colon).trim();
+    if (key === '' || key in out) continue;
+    out[key] = line.slice(colon + 1).trim();
+  }
+  return out;
+}
+
 /** Render the `notes:` fence line(s), or null when there is nothing to write. */
 function notesLines(text) {
   const value = String(text === undefined || text === null ? '' : text);
@@ -424,6 +452,7 @@ module.exports = {
   decodeTriggerPadding,
   defaultNotesText,
   parseNotesBlock,
+  parseSettingsBlock,
   writeScalar,
   FENCE,
 };

@@ -50,7 +50,8 @@ function compileProject(files) {
 
 const find = (d, code) => d.all.filter((x) => x.code === code);
 const MARKER = 'CL-wtg/0001';
-const SETTINGS = 'CL-wtg/0002';
+const SETTINGS = 'CL-wtg/0002';   // WARN — existence + completeness + unknown key
+const MALFORMED = 'CL-wtg/0003';  // ERROR — a core field is not well-formed
 
 const TEMPLATE = { 'templates/Card.template': '{$body.Text}' };
 
@@ -112,57 +113,119 @@ describe('CL-wtg/0001 — [e] / [wtg-no-timestamp] used together with /]', () =>
   });
 });
 
-// ── Rule 2 — the Configure WTG settings card ────────────────────────────────
+// ── Rules 2 & 3 — the "WTG Time Config" card, read from the body ─────────────
+//
+// The card is authored as plain `Key: Value` in the card ENTRY, which is the Codex Loom
+// `body` — so these items carry the settings block as `text`, not `notes`.
 
-const GOOD_SETTINGS = [
-  '> Enable WTG: true',
-  '> Clock Format: 24h',
-  '> Date Format: iso',
-  '> Debug Mode: 0',
-  '> Number of Turns per Hour: 30',
-  '> Instruction Injection Mode: cached-invisible',
-  '> Exclude Card Types: [zz_Settings, zz_Debug, _WTG]',
+const VALID_TC = [
+  'Starting Date: 6/28/1326',
+  'Starting Era: AD',
+  'Starting Time: 9:00 AM',
+  'Initialized: true',
 ].join('\n');
 
-const BAD_SETTINGS = [
-  '> Clock Format: 25h',            // not in {12h, 24h}
-  '> Debug Mode: 7',                // not in {0, 1, 2}
-  '> Number of Turns per Hour: 0',  // below min 1
-  '> Clok Format: 12h',            // misspelled key
-].join('\n');
+const tcItem = (text) => item({ id: 'tc', title: 'WTG Time Config', text });
 
-describe('CL-wtg/0002 — the "Configure WTG" settings card', () => {
-  test('a bad value, an out-of-range number, and a misspelled key all fire', () => {
+describe('CL-wtg/0002 — the "WTG Time Config" card exists and is complete', () => {
+  test('(a) no card at all → one WARN naming the leaf', () => {
     const d = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
-      'Codex/items.yaml': item({ id: 'cfg', title: 'Configure WTG', notes: BAD_SETTINGS }),
+      'Codex/items.yaml': item({ id: 'aria', title: 'Aria', text: 'just a character' }),
     });
     const hits = find(d, SETTINGS);
-    expect(hits.length).toBe(4);
-    const joined = hits.map((h) => h.message).join('\n');
-    expect(joined).toContain('Clock Format');
-    expect(joined).toContain('Debug Mode');
-    expect(joined).toContain('at least 1');
-    expect(joined).toContain('Did you mean "Clock Format"');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].severity).toBe('warn');
+    expect(hits[0].message).toContain('branch "main"');
   });
 
-  test('a fully valid settings card is silent — the blockquote form still parses', () => {
+  test('(b) a core field missing → one WARN naming that field', () => {
     const d = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
-      'Codex/items.yaml': item({ id: 'cfg', title: 'Configure WTG', notes: GOOD_SETTINGS }),
+      'Codex/items.yaml': tcItem('Starting Date: 6/28/1326\nStarting Time: 9:00 AM\nInitialized: true'),
     });
-    expect(find(d, SETTINGS)).toHaveLength(0);
+    const hits = find(d, SETTINGS);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].message).toContain('Starting Era');
   });
 
-  test('the rule is scoped by title — a bad value on any other card is ignored', () => {
+  test('(c) a key WTG will not read → one WARN naming it, with a typo hint when close', () => {
     const d = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
-      'Codex/items.yaml': item({ id: 'aria', title: 'Aria', notes: '> Clock Format: 25h' }),
+      'Codex/items.yaml': tcItem(`${VALID_TC}\nNotes: remember to update this`),
+    });
+    const hits = find(d, SETTINGS);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].message).toContain('Notes');
+  });
+
+  test('(d) a recognized override key → silent', () => {
+    const d = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
+      'Codex/items.yaml': tcItem(`${VALID_TC}\nClock Format: 24h`),
     });
     expect(find(d, SETTINGS)).toHaveLength(0);
+    expect(find(d, MALFORMED)).toHaveLength(0);
+  });
+
+  test('(f) a fully valid card → silent', () => {
+    const d = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
+      'Codex/items.yaml': tcItem(VALID_TC),
+    });
+    expect(find(d, SETTINGS)).toHaveLength(0);
+    expect(find(d, MALFORMED)).toHaveLength(0);
+  });
+});
+
+describe('CL-wtg/0003 — the "WTG Time Config" core fields are well-formed', () => {
+  test('(e) an ISO date is an ERROR — WTG wants M/D/year', () => {
+    const d = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
+      'Codex/items.yaml': tcItem('Starting Date: 2024-01-01\nStarting Era: AD\nStarting Time: 9:00 AM\nInitialized: true'),
+    });
+    const hits = find(d, MALFORMED);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].severity).toBe('error');
+    expect(hits[0].message).toContain('Starting Date');
+    expect(find(d, SETTINGS)).toHaveLength(0);
+  });
+
+  test('the four fields are matched case-insensitively — bc / 9:00 am / TRUE pass', () => {
+    const d = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
+      'Codex/items.yaml': tcItem('Starting Date: 6/28/1326\nStarting Era: bc\nStarting Time: 9:00 am\nInitialized: TRUE'),
+    });
+    expect(find(d, MALFORMED)).toHaveLength(0);
+    expect(find(d, SETTINGS)).toHaveLength(0);
+  });
+
+  test('an out-of-set era is an ERROR — {AD, CE, BC, BCE} only, dotted forms rejected', () => {
+    const d = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
+      'Codex/items.yaml': tcItem('Starting Date: 6/28/1326\nStarting Era: A.D.\nStarting Time: 9:00 AM\nInitialized: true'),
+    });
+    const hits = find(d, MALFORMED);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].message).toContain('Starting Era');
+  });
+
+  test('the rule is scoped by title — a malformed field on any other card is ignored', () => {
+    const d = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
+      'Codex/items.yaml': item({ id: 'aria', title: 'Aria', text: 'Starting Date: nonsense' }),
+    });
+    expect(find(d, MALFORMED)).toHaveLength(0);
+    expect(find(d, SETTINGS)).toHaveLength(1); // still no WTG Time Config card
   });
 });
 
@@ -195,6 +258,52 @@ describe('level: and declaration control whether the pack runs', () => {
       'compile.yaml': config(['lint: {packs: {wtg: {level: off}}}']),
     });
     expect(find(d, MARKER)).toHaveLength(0);
+  });
+
+  test('(g) level: warn demotes the CL-wtg/0003 ERROR to WARN and the build survives', () => {
+    const d = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(['lint: {packs: {wtg: {level: warn}}}']),
+      'Codex/items.yaml': tcItem('Starting Date: 2024-01-01\nStarting Era: AD\nStarting Time: 9:00 AM\nInitialized: true'),
+    });
+    const hits = find(d, MALFORMED);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((h) => h.severity === 'warn')).toBe(true);
+  });
+
+  test('(h) level: off silences both WTG Time Config rules', () => {
+    const d = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(['lint: {packs: {wtg: {level: off}}}']),
+      'Codex/items.yaml': tcItem('Starting Date: 2024-01-01'),
+    });
+    expect(find(d, SETTINGS)).toHaveLength(0);
+    expect(find(d, MALFORMED)).toHaveLength(0);
+  });
+
+  test('requireCard fires per binding leaf with no card — once, and not on an unbound branch', () => {
+    const d = compileProject({
+      ...TEMPLATE,
+      // No WTG Time Config card anywhere; every item is global to both leaves.
+      'Codex/items.yaml': item({ id: 'aria', title: 'Aria', text: 'a character' }),
+      'compile.yaml': [
+        'version: 4',
+        'structure:',
+        '  input:',
+        '    items: [%TMP%/Codex]',
+        '    templates: [%TMP%/templates]',
+        '  output: %TMP%/output',
+        'lint: {packs: {wtg: {}}}',
+        'branches:',
+        '  bound: {}',
+        '  freed:',
+        '    lint: {packs: {wtg: ~}}',
+      ].join('\n'),
+    });
+    const hits = find(d, SETTINGS);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].message).toContain('branch "bound"');
+    expect(hits.some((h) => /branch "freed"/.test(h.message))).toBe(false);
   });
 
   test('wtg: ~ on a branch unbinds it there while a sibling branch still fires', () => {
