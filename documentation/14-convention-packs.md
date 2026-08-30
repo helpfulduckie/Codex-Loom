@@ -162,11 +162,12 @@ uses) is stripped before the parse.
   `[wtg-no-timestamp]` excludes a card from WTG timestamps entirely; `/]` marks where a
   timestamp should be inserted. A card carrying both is self-contradictory. The rule scans
   the notes text and the body together, since WTG accepts either marker in Notes or Entry.
-- **`CL-wtg/0002` — the "Configure WTG" settings card (ERROR, title match).** WTG stores
-  its settings in a card titled "Configure WTG", one per line as `> Setting Name: value`.
-  The rule checks each present setting against WTG 3.0's Full Settings table — enum values
-  for `Clock Format`, `Date Format`, `Debug Mode`, the three injection/command modes;
-  numeric floors on the rate settings; a typo suggestion for a misspelled setting name,
-  which WTG would otherwise ignore in silence. Only settings actually present are checked.
+- **`CL-wtg/0002` — the settings card (ERROR, title match). Provisional.** This rule is
+  aimed at the wrong card: it matches "Configure WTG" (which WTG generates at runtime),
+  where the card a scenario author actually ships is "WTG Time Config" (starting date,
+  era, time, `Initialized`, in the card body). As written it is effectively inert. A
+  corrected rule — existence and field-presence WARNs plus value-validity ERRORs over the
+  "WTG Time Config" body — is planned; it needs schema-over-body, a card-existence
+  predicate, and a `pattern:` schema key that the engine does not have yet.
 
 Enable it with `lint: { packs: { wtg: {} } }`.
