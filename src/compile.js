@@ -558,6 +558,7 @@ function buildCompileContext(config, branchPath, options = {}) {
     // shape — would silently put a deleted root key right back.
     rootVariables: config._variables || config.variables || {},
     rootRoles: config.roles || {},
+    rootLint: config.lint || null,
     onWarn: options.onWarn || null,
   });
   const variables = chain.variables;
@@ -620,6 +621,11 @@ function buildCompileContext(config, branchPath, options = {}) {
   // wanted together.
   return {
     variables, componentRefs, render, templateFor, placeholders: chain.placeholders, roles,
+    // The branch-merged `lint.packs` table and per-branch `level:` (§8.2.2). Returned so
+    // `runPackChecks` reads it off the one walk that already ran here — with `onWarn`
+    // wired, so a `<pack>: ~` unbinding nothing raises `CL0118` exactly once — rather than
+    // re-walking `walkBranchChain` with its own, warn-less seed.
+    lint: chain.lint,
   };
 }
 
@@ -809,12 +815,13 @@ function branchTreeDeclares(branches, predicate) {
  * the per-pack ceiling, then the per-branch one; the bus applies the global `lint.level`
  * on top at `add` time, because a `CL-<pack>/…` code is opinion-layer (`diag.js`).
  *
- * A complete no-op — no walk, no IO — for any project that declares no `lint.packs`
- * anywhere, which is every golden.
+ * A complete no-op — no IO — for any project that declares no `lint.packs` anywhere,
+ * which is every golden. The branch-merge is *not* recomputed here: each leaf carries its
+ * merged `lint` table from `buildCompileContext`, the one walk that already ran with
+ * `onWarn` wired.
  */
 function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
-  const rootLint = config.lint || {};
-  const rootPacks = rootLint.packs || {};
+  const rootPacks = (config.lint && config.lint.packs) || {};
   const anyBranchPacks = branchTreeDeclares(
     config.branches, (node) => node.lint && node.lint.packs
       && Object.keys(node.lint.packs).length > 0,
@@ -826,20 +833,18 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
   const loc = { file: configPath };
 
   for (const leaf of deferredCardLeaves) {
+    const lint = leaf.lint || { packs: {}, level: null };
+    if (!lint.packs || Object.keys(lint.packs).length === 0) continue;
     const label = leaf.branchPath.length > 0 ? leaf.branchPath.join('/') : '(root)';
-    const chain = walkBranchChain(config.branches, leaf.branchPath, {
-      rootVariables: config._variables || config.variables || {},
-      rootLint,
-    });
-    const branchLevel = chain.lint.level || null;
+    const branchLevel = lint.level || null;
 
-    for (const [name, entry] of Object.entries(chain.lint.packs)) {
+    for (const [name, entry] of Object.entries(lint.packs)) {
       const packLevel = (entry && typeof entry === 'object' && entry.level) || null;
       if (packLevel === 'off') continue;
 
       if (!loaded.has(name)) {
         loaded.set(name, loadPack(name, entry, {
-          baseDir, variables: chain.variables, diagnostics, loc,
+          baseDir, variables: leaf.variables || {}, diagnostics, loc,
         }));
       }
       const pack = loaded.get(name);
@@ -2630,7 +2635,13 @@ function compileRun(configPath, options, buses) {
     // Phase 11 Step 5: story cards are written after the loop, at the node that owns each
     // one, so a card constant across a subtree is written once and inherited rather than
     // copied to every leaf. `totalFiles` is credited there.
-    deferredCardLeaves.push({ branchPath, folderPath, outputDir, grouped: leafCardGroups });
+    deferredCardLeaves.push({
+      branchPath, folderPath, outputDir, grouped: leafCardGroups,
+      // For the post-loop `runPackChecks`: this leaf's branch-merged `lint` table and the
+      // variables a pack `source:` path expands against. Captured here so the pack pass
+      // does not re-walk the branch chain (§8.2.2).
+      lint: ctx.lint, variables: ctx.variables,
+    });
     reportCompileDiagnostics();
 
     if (options.inventory) {

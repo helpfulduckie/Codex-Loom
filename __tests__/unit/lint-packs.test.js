@@ -123,6 +123,25 @@ describe('walkBranchChain merges lint.packs like roles', () => {
     const chain = walkBranchChain({}, [], { rootLint });
     expect(Object.keys(chain.lint.packs).sort()).toEqual(['b', 'root']);
   });
+
+  test('~ on a pack never inherited raises CL0118 through onWarn', () => {
+    const warns = [];
+    walkBranchChain(
+      { a: { lint: { packs: { ghost: null } } } },
+      ['a'],
+      { rootLint: { packs: {} }, onWarn: (code, msg) => warns.push({ code, msg }) },
+    );
+    expect(warns).toHaveLength(1);
+    expect(warns[0].code).toBe('CL0118');
+    expect(warns[0].msg).toContain('ghost');
+  });
+
+  test('no onWarn: the merge still deletes, it just says nothing', () => {
+    const chain = walkBranchChain(
+      { a: { lint: { packs: { b: null } } } }, ['a'], { rootLint: { packs: { b: {} } } },
+    );
+    expect(chain.lint.packs).not.toHaveProperty('b');
+  });
 });
 
 // ── parseNotesBlock ──────────────────────────────────────────────────────────
