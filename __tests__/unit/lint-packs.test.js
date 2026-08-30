@@ -163,6 +163,15 @@ describe('parseNotesBlock', () => {
   test('malformed YAML returns {} rather than throwing', () => {
     expect(parseNotesBlock('a: [1, 2\nb: {')).toEqual({});
   });
+  test('a uniform "> " blockquote prefix is stripped (WTG\'s Configure WTG card)', () => {
+    expect(parseNotesBlock('> Clock Format: 24h\n> Debug Mode: 0'))
+      .toEqual({ 'Clock Format': '24h', 'Debug Mode': 0 });
+    // blank lines between entries do not defeat the strip
+    expect(parseNotesBlock('> a: 1\n\n> b: 2')).toEqual({ a: 1, b: 2 });
+  });
+  test('a non-uniform "> " is left alone — a partial match is real YAML', () => {
+    expect(parseNotesBlock('a: 1\n> quoted aside')).toEqual({});
+  });
 });
 
 // ── the schema min/max extension ─────────────────────────────────────────────

@@ -70,7 +70,7 @@ placeholders:
 lint:
   level: warn
   packs:
-    discovery-markers: {}
+    wtg: {}
     stat-tracker:
       source: '{%here}/lint/stat-tracker.cl.yaml'
       level: error

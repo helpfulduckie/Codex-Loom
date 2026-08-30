@@ -1,0 +1,78 @@
+# World Time Generator — convention pack (v4 spec §8.2.2).
+#
+# Validates a scenario's use of WTG 3.0, read from its README's "Storycard Markers" and
+# "Full Settings" sections (Scripts/WTG/World-Time-Generator-3.0/README.md). Two rules:
+#
+#   1. the two per-card timestamp markers used together, which contradict;
+#   2. the "Configure WTG" settings card, checked key by key against the settings table.
+#
+# Enable with `lint: { packs: { wtg: {} } }`. Findings are coded `CL-wtg/NNNN`.
+
+name: wtg
+rules:
+  # ── CL-wtg/0001 — contradictory timestamp markers ────────────────────────────
+  #
+  # `[e]` / `[wtg-no-timestamp]` excludes a card from WTG timestamps entirely; `/]`
+  # marks where on the card a timestamp should be inserted. A card carrying both is
+  # self-contradictory — the exclusion wins in WTG, so the `/]` placement can never
+  # apply. WTG accepts either marker in a card's Notes *or* its Entry and normalizes
+  # the position itself, so the check scans the notes text and the body together
+  # (`match`), not the parsed mapping. This re-homes v3 lint's `e-marker-conflict`.
+  - id: 1
+    severity: error
+    forbid:
+      all:
+        - match: '\[(?:e|wtg-no-timestamp)\]'
+        - match: '/\]'
+    message: >-
+      This card carries both an exclude-from-timestamps marker ([e] /
+      [wtg-no-timestamp]) and a timestamp-placement marker (/]). They contradict:
+      the first tells WTG never to timestamp this card, the second positions a
+      timestamp that will then never be written. Keep one.
+
+  # ── CL-wtg/0002 — the "Configure WTG" settings card ──────────────────────────
+  #
+  # WTG stores its settings in a card titled "Configure WTG", one setting per line as
+  # `> Setting Name: value` (parseNotesBlock strips the blockquote prefix). A
+  # misspelled setting name is silently ignored by WTG, so an unknown key is an error
+  # here with a typo suggestion; a value outside a setting's allowed set or numeric
+  # range is an error too. Only settings actually present are checked — a partial
+  # config is normal.
+  - id: 2
+    severity: error
+    appliesTo: { titleMatch: '^Configure WTG' }
+    schema:
+      type: map
+      keys:
+        Enable WTG: { type: boolean }
+        Time Duration Multiplier: { type: number, min: 0 }
+        Text Characters per Turn: { type: number, min: 1 }
+        Number of Turns per Hour: { type: number, min: 1 }
+        Clock Format: { type: string, values: ['12h', '24h'] }
+        Date Format: { type: string, values: ['american', 'european', 'iso'] }
+        Enable Generated Cards: { type: boolean }
+        Generated Card Type: { type: string }
+        Enable Generated Card Deletion: { type: boolean }
+        Enable Dynamic Time: { type: boolean }
+        AI Command Nudge: { type: boolean }
+        Enable Fuzzy Duplicate Matching: { type: boolean }
+        Player Command Clean Mode: { type: string, values: ['prepend', 'in-place', 'full'] }
+        Player Command Merge Mode: { type: string, values: ['none', 'command-based', 'all'] }
+        Enable Card Timestamps: { type: boolean }
+        Exclude Card Types: { type: seq, of: { type: string } }
+        Enable Localization: { type: boolean }
+        Debug Mode: { type: number, values: [0, 1, 2] }
+        Nudge Show Date: { type: boolean }
+        Nudge Show Era: { type: boolean }
+        Nudge Show Time: { type: boolean }
+        Nudge Show Day of Week: { type: boolean }
+        Nudge Show Phase: { type: boolean }
+        Instruction Injection Mode:
+          { type: string, values: ['invisible', 'visible', 'cached-invisible'] }
+        Show Date: { type: boolean }
+        Show Era: { type: boolean }
+        Show Time: { type: boolean }
+        Show Day of Week: { type: boolean }
+        Show Phase: { type: boolean }
+        DateTime Card Show Phase: { type: boolean }
+    message: 'The "Configure WTG" settings card has a problem — see the detail.'

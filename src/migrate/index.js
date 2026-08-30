@@ -352,6 +352,29 @@ function migratePlaceholders() {
 }
 
 /**
+ * `lint.conventions` (a list) → `lint.packs` (a mapping) — §8.2.2 / §14.2.
+ *
+ * v4 replaced v3's `lint.conventions:` list with a `lint.packs:` mapping so packs can be
+ * overridden and unbound per branch by name (§8.2.2). §14.2's table carries the migration
+ * row as "High — no v3 projects use it yet."
+ *
+ * **Deliberately empty, and checkable rather than absent — see migratePlaceholders.** No
+ * v3 project holds a `lint.conventions:` key: `lint:` never shipped in the v3 compiler's
+ * config surface, so there is no list to fold into a mapping. `migrate/v3.js` has no
+ * `lint` handling and needs none. This stage exists so §15's rule — a phase that changes
+ * a config key names its migration step — is satisfied with a note-returning function
+ * instead of a silent gap. If a `lint.conventions:` list is ever found in the wild, the
+ * conversion is mechanical (each entry becomes a `<name>: {}` mapping entry) and belongs
+ * here.
+ */
+function migrateLintConventions() {
+  return {
+    changed: false,
+    notes: [],
+  };
+}
+
+/**
  * Rename the entry point to `compile.cl.yaml` (§4.6), when asked and only when asked.
  *
  * §4.6 settles the default: plain `.yaml` is not deprecated, every loader accepts both
@@ -453,6 +476,10 @@ function migrateProjectFully(configPath, options = {}) {
   const placeholders = migratePlaceholders();
   notes.push(...placeholders.notes);
 
+  // Phase 14 / §8.2.2. Deliberately empty — see migrateLintConventions.
+  const lintConventions = migrateLintConventions();
+  notes.push(...lintConventions.notes);
+
   // §4.6, opt-in. After every stage that reads the project back through configPath.
   let finalConfigPath = configPath;
   if (options.renameToCl) {
@@ -469,6 +496,6 @@ function migrateProjectFully(configPath, options = {}) {
 }
 
 module.exports = {
-  migrateProjectFully, wireNotesTemplate, migratePlaceholders, renameConfigToCl,
+  migrateProjectFully, wireNotesTemplate, migratePlaceholders, migrateLintConventions, renameConfigToCl,
   migratePseudoRoles, rewritePseudoRoleTokens, GENDERED_PRONOUN_RE, GENDERED_PRONOUN_WORDS,
 };

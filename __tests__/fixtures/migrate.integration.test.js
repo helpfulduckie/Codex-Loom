@@ -30,7 +30,7 @@ const path = require('path');
 const YAML = require('yaml');
 
 const { compile } = require('../../src/compile');
-const { migrateProjectFully, migratePlaceholders } = require('../../src/migrate');
+const { migrateProjectFully, migratePlaceholders, migrateLintConventions } = require('../../src/migrate');
 
 const GOLDEN_DIR = path.resolve(__dirname, '..', '..', 'goldenFixtures');
 
@@ -249,6 +249,33 @@ function migrateAndCompile(tmpDir, project) {
         const config = YAML.parse(fs.readFileSync(configPath, 'utf8'));
         const input = (config && config.structure && config.structure.input) || {};
         expect([project.name, input.snapshot]).toEqual([project.name, undefined]);
+      }
+    });
+  });
+
+  describe('Phase 14 — lint.conventions has no v3 spelling to migrate, proven rather than assumed', () => {
+    // §8.2.2 / §14.2: v4 replaces v3's `lint.conventions:` list with a `lint.packs:`
+    // mapping. The migration row is "no v3 projects use it yet" — `lint:` never shipped in
+    // the v3 config surface, so there is nothing to fold. Same discipline as Phase 4 and
+    // Phase 7: a note-returning stage rather than a silent gap, and the corpus checked.
+
+    test('the stage exists and reports no change', () => {
+      expect(migrateLintConventions()).toEqual({ changed: false, notes: [] });
+    });
+
+    test('no v3 project declares lint.conventions, and no migrated config grows lint.packs', () => {
+      for (const project of PROJECTS) {
+        const v3Config = YAML.parse(
+          fs.readFileSync(path.join(GOLDEN_DIR, project.dir, LOOM_SUBDIR, 'compile.yaml'), 'utf8'),
+        );
+        const v3Lint = (v3Config && v3Config.lint) || {};
+        expect([project.name, 'conventions' in v3Lint]).toEqual([project.name, false]);
+
+        const migrated = YAML.parse(
+          fs.readFileSync(path.join(tmpDir, project.dir, LOOM_SUBDIR, 'compile.yaml'), 'utf8'),
+        );
+        const migratedLint = (migrated && migrated.lint) || {};
+        expect([project.name, migratedLint.packs]).toEqual([project.name, undefined]);
       }
     });
   });

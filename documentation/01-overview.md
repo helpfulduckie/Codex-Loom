@@ -300,3 +300,5 @@ Each is covered in its own reference document.
 - [Diagnostic Codes](11-diagnostics.md)
 - [The Library Snapshot](12-snapshot.md)
 - [Roles](13-roles.md)
+- [Convention Packs](14-convention-packs.md)
+- [Context Tiering](15-context-tiering.md)

@@ -169,9 +169,18 @@ function defaultNotesText(notes) {
  * convention pack (§8.2.2) keyed on `hasKey` runs against this. Anything that is not a
  * mapping — a scalar like `'[e]'`, a bare sentence of prose, a parse failure — returns
  * `{}`, which the predicate layer reads as "carries no config."
+ *
+ * A uniform Markdown blockquote prefix is stripped first: WTG's "Configure WTG" settings
+ * card is authored as `> Setting Name: value`, one per line, and its README makes the
+ * `> ` mandatory. A `>`-led line is a YAML folded scalar, so without this the whole
+ * block parses to a string and a pack's `schema:` check silently no-ops. The strip only
+ * fires when *every* non-blank line carries the marker — a partial match is real YAML
+ * and is left alone.
  */
 function parseNotesBlock(notesString) {
-  const text = String(notesString === undefined || notesString === null ? '' : notesString);
+  const text = stripBlockquote(
+    String(notesString === undefined || notesString === null ? '' : notesString),
+  );
   if (text.trim() === '') return {};
   let parsed;
   try {
@@ -181,6 +190,13 @@ function parseNotesBlock(notesString) {
     return {};
   }
   return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+}
+
+function stripBlockquote(text) {
+  const lines = text.split('\n');
+  const nonBlank = lines.filter((line) => line.trim() !== '');
+  if (nonBlank.length === 0 || !nonBlank.every((line) => /^\s*>\s?/.test(line))) return text;
+  return lines.map((line) => line.replace(/^\s*>\s?/, '')).join('\n');
 }
 
 /** Render the `notes:` fence line(s), or null when there is nothing to write. */
