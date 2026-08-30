@@ -331,6 +331,8 @@ value, and the property belongs to the template, not to each field.
 | `CL0627` | WARN | An `aid.type` names an AID built-in category in non-lowercase form; it is folded to lowercase. |
 | `CL0628` | WARN | An `aid.type` has leading whitespace; it is trimmed. |
 | `CL0629` | ERROR | `adventureDescription` declares `advanced:` or `description:` in `metadata:` — both belong to the scenario blurb only. |
+| `CL0630` | WARN | A branch leaf resolves neither an `opening:` nor an `adventureDescription:`, inherited or its own — Velvet Lattice would start it with an empty prompt. |
+| `CL0631` | WARN | A branch leaf resolves no `aiInstructions:`, inherited or its own — Velvet Lattice writes an empty-string AI Instructions, which suppresses AID's model default rather than falling back to it. |
 
 `CL0601` is an error rather than a resolved precedence because the two readings differ in
 output and neither is obviously right: text inside a slot could sit before or after the
@@ -399,6 +401,19 @@ wrong in a way that reads as deliberate: the file is present, well-formed, and s
 paragraph the author wrote. In v3 the pairing could not be constructed at all, since a
 description was only ever written at the output root where there is no opening to be
 confused with, so this check arrived with `adventureDescription:` and is inseparable from it.
+
+`CL0630` and `CL0631` are the other side of `CL0616` — a leaf that resolves *nothing* for
+a prompt-bearing component, not one that resolves the wrong thing. `CL0630` fires when a
+leaf has neither an `opening:` nor an `adventureDescription:` in its inheritance chain, so
+Velvet Lattice's `components["Opening"] or node.description` yields an empty first turn;
+a leaf that has a description but no opening is `CL0616`'s ERROR instead, and `CL0630`
+steps aside for it. `CL0631` is the harsher case even though it is also a WARN: a leaf
+with no `aiInstructions:` anywhere in its chain gets `aiInstructions: ""` written on AID's
+side, and an empty string is not the same as an absent one — AID falls back to its model
+default only when the field is absent, so an empty string silently turns the default off.
+Both are WARN rather than ERROR because a deliberately bare leaf is a legitimate choice;
+both fire on no shipped project, because every corpus leaf inherits both components from
+its root.
 
 `CL0617`, `CL0618` and `CL0619` are the three ways a section's source fails, and all three
 are errors because each ends with a section that renders nothing while looking authored.

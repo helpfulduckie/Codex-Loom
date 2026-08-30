@@ -558,3 +558,101 @@ describe('an unbranched project is its own leaf, so both keys aim at one file', 
     expect(codes(diagnostics, CODES.DESCRIPTION_KEYS_COLLIDE)).toHaveLength(0);
   });
 });
+
+// ── §7.3 / §6.3: a leaf that resolves nothing for a prompt component ─────────
+
+const structPreamble = [
+  'version: 4',
+  'structure:',
+  '  input:',
+  '    items: [%TMP%/Codex]',
+  '    templates: [%TMP%/templates]',
+  '  output: %TMP%/output',
+];
+
+describe('a leaf with neither an opening nor a description is CL0630 (Phase 14 Step 2)', () => {
+  test('the leaf that resolves nothing is named at WARN; the one with an opening is not', () => {
+    const { diagnostics } = compileProject({
+      ...BASE,
+      'compile.yaml': [
+        ...structPreamble,
+        'branches:',
+        '  calm:',
+        '    components: {opening: ./openings/calm.md}',
+        '  storm: {}',
+      ].join('\n'),
+    });
+    const raised = codes(diagnostics, CODES.LEAF_NO_OPENING);
+    expect(raised).toHaveLength(1);
+    expect(raised[0].message).toContain('"storm"');
+    expect(raised[0].severity).toBe('warn');
+  });
+
+  test('a description with no opening is CL0616, and CL0630 stands aside for it', () => {
+    const { diagnostics } = compileProject({
+      ...BASE,
+      'components/adv.cl.yaml': 'sections:\n  pitch:\n    text: You wake on the docks.\n',
+      'compile.yaml': [
+        ...structPreamble,
+        'components:',
+        '  adventureDescription: ./components/adv.cl.yaml',
+        'branches:',
+        '  calm:',
+        '    components: {opening: ./openings/calm.md}',
+        '  storm: {}',
+      ].join('\n'),
+    });
+    expect(codes(diagnostics, CODES.LEAF_DESCRIPTION_NO_OPENING)
+      .map((d) => d.message.match(/"(\w+)"/)[1])).toEqual(['storm']);
+    expect(codes(diagnostics, CODES.LEAF_NO_OPENING)).toHaveLength(0);
+  });
+
+  test('an inherited opening keeps every leaf quiet', () => {
+    const { diagnostics } = compileProject({
+      ...BASE,
+      'compile.yaml': [
+        ...structPreamble,
+        'components:',
+        '  opening: ./openings/calm.md',
+        'branches:',
+        '  calm: {}',
+        '  storm: {}',
+      ].join('\n'),
+    });
+    expect(codes(diagnostics, CODES.LEAF_NO_OPENING)).toHaveLength(0);
+  });
+});
+
+describe('a leaf that resolves no aiInstructions is CL0631 (Phase 14 Step 2)', () => {
+  const openBoth = [
+    'branches:',
+    '  calm:',
+    '    components: {opening: ./openings/calm.md}',
+    '  storm:',
+    '    components: {opening: ./openings/storm.md}',
+  ];
+
+  test('every leaf with no AI Instructions in its chain is named, at WARN', () => {
+    const { diagnostics } = compileProject({
+      ...BASE,
+      'compile.yaml': [...structPreamble, ...openBoth].join('\n'),
+    });
+    const raised = codes(diagnostics, CODES.LEAF_NO_AIN);
+    expect(raised.map((d) => d.message.match(/"(\w+)"/)[1]).sort()).toEqual(['calm', 'storm']);
+    expect(raised.every((d) => d.severity === 'warn')).toBe(true);
+  });
+
+  test('AI Instructions inherited from the root silences it', () => {
+    const { diagnostics } = compileProject({
+      ...BASE,
+      'components/ain.cl.yaml': 'sections:\n  role:\n    text: Narrate tightly.\n',
+      'compile.yaml': [
+        ...structPreamble,
+        'components:',
+        '  aiInstructions: ./components/ain.cl.yaml',
+        ...openBoth,
+      ].join('\n'),
+    });
+    expect(codes(diagnostics, CODES.LEAF_NO_AIN)).toHaveLength(0);
+  });
+});

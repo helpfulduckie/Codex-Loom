@@ -101,8 +101,15 @@ const ABSENT = {
  * reference that resolves once `writeFramingRecursive` and the root Description render
  * receive a roles table (`compile.js`) — everything else in both projects is untouched
  * source, so a diff anywhere else is the regression this scoping exists to catch.
+ *
+ * Phase 14 Step 0 resets both to the byte-identical obligation (`[]` / `null`). The corpus
+ * has been byte-for-byte since Phase 10 Step 4 landed — every phase since (11, 12, 13) was
+ * output-preserving and neither constant was consulted — so carrying the Phase 10 allowance
+ * forward is the same stale accumulation those resets exist to stop. Step 0's own change
+ * (the `renderPlacementBody` ladder guard) is output-preserving: no golden tiers a
+ * component, so its rung 2 is empty and rung 1 still resolves `aid.type` unchanged.
  */
-const EXPECTED_DIFF_CLASSES = ['body'];
+const EXPECTED_DIFF_CLASSES = [];
 
 /**
  * The files the phase in progress is allowed to change, when the class alone cannot say.
@@ -133,8 +140,12 @@ const EXPECTED_DIFF_CLASSES = ['body'];
  * project's 31 other `Who owns you?`/`Do they love or hate you?` occurrences stays a
  * literal string outside `renderSectionedComponent` entirely, so this pattern is the
  * whole of what should move.
+ *
+ * Phase 14 Step 0 sets this back to `null` alongside emptying `EXPECTED_DIFF_CLASSES` —
+ * with no allowed classes there is no file scoping to do, and the Phase 10 pattern has
+ * been unconsulted for three phases.
  */
-const EXPECTED_DIFF_FILES = /^(Description\.md|Branches\/Free Form\/Branches\/Aness\/Components\/Opening\.md)$/;
+const EXPECTED_DIFF_FILES = null;
 
 // The fixture set itself lives beside the fixtures, because `scripts/rebaseline.js`
 // regenerates what this file checks and the two must not drift apart.

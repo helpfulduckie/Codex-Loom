@@ -363,6 +363,34 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
 }
 
 /**
+ * Every field list a project's `templateFor` slot files produce, across the branch tree —
+ * `[{ branch, role, name, list }]`, one row per `<role>.<name>` a node's slot files define.
+ *
+ * One walk of the tree rather than per leaf: the slot files resolve per node, but both
+ * consumers — the `--schema-tables` report (§13.8) and the field audit's dead-declaration
+ * sweep (§13.6, CL0428) — want the whole-project set. Empty for a project that declares no
+ * `templateFor:`. `diagnostics` is null here: a bad slot path is reported by the leaf
+ * loop's own `resolveTemplateForMaps` call.
+ */
+function gatherTierTemplates(config, configPath) {
+  const variables = config._variables || config.variables || {};
+  const rows = [];
+  walkBranchTree(config, ({ node, path: nodePath, isRoot }) => {
+    if (!node || !node.templateFor) return;
+    const maps = resolveTemplateForMaps(
+      node.templateFor, config._resolvedTemplates || [], config._base || '.',
+      variables, null, configPath,
+    );
+    for (const [role, typeMap] of Object.entries(maps)) {
+      for (const [name, list] of Object.entries(typeMap)) {
+        rows.push({ branch: isRoot ? '(root)' : nodePath.join('/'), role, name, list });
+      }
+    }
+  });
+  return rows;
+}
+
+/**
  * Case-insensitive lookup of a name in a `templateFor` role map.
  *
  * A slot file's `templates:` keys are usually `aid.type` names, but nothing stops one from
@@ -397,6 +425,27 @@ function lookupNamedTemplate(name, templates, fieldTable) {
 }
 
 /**
+ * Is a `render.template` / component-target `template:` value an authorial choice, or the
+ * `model/item.js` normaliser fill?
+ *
+ * `model/item.js` fills `render.template` (`:280`) and a component target's `template:`
+ * (`:384`) with `aid.type` for every card that names neither, and every type has a
+ * shared-table field list of its own name — so a resolver rung that honoured that fill
+ * would shadow a branch's `templateFor.*` map for the whole corpus. Fix A removed that from
+ * the body ladder in Phase 13; Phase 14 Step 0 extends the same guard to the component-target
+ * ladder. A value equal to `aid.type` (case-insensitively) is treated as absent; anything
+ * else — a cross-type name, `Character.hint`, or a Pattern-2 name a branch slot file defines
+ * (§13.4) — is a real choice and wins at rung 1.
+ *
+ * The notes ladder needs no call here: nothing fills `render.notesTemplate`, so its rung 1
+ * already fires only on a real choice.
+ */
+function isTemplateChoice(name, type) {
+  if (!name) return false;
+  return String(name).toLowerCase() !== String(type || '').toLowerCase();
+}
+
+/**
  * The body ladder (§13.4): a *chosen* item `render.template` → `templateFor.base` keyed on
  * `aid.type` → `aid.type` as a template name → verbatim (null).
  *
@@ -404,20 +453,16 @@ function lookupNamedTemplate(name, templates, fieldTable) {
  * no field table and no `templateFor`, this is `getTemplate` exactly — the two extra rungs
  * only ever fire once a project declares one or the other.
  *
- * **A `render.template` equal to `aid.type` is not a choice.** `model/item.js` fills that in
- * for every card that names no template, and every type has a shared-table template of its
- * own name, so honouring it here would let rung 1 shadow a branch's `templateFor.base` for
- * the entire corpus (Phase 13 finding). It is treated as absent — rung 3 renders the type's
- * default. A `render.template` that differs from `aid.type` *is* a choice: a cross-type
- * name, `Character.hint`, or a name the branch's slot file defines to opt one card back into
- * a fuller list on a tiered branch (§13.4 Pattern 2). That still wins at rung 1.
+ * **A `render.template` equal to `aid.type` is not a choice** — see `isTemplateChoice`. It is
+ * treated as absent, so rung 3 renders the type's default and a tiered branch's rung 2 takes
+ * effect.
  */
 function resolveBodyRender(item, templates, fieldTable, templateForMaps) {
   const type = item.aid && item.aid.type;
   const baseMap = (templateForMaps && templateForMaps.base) || {};
 
   const explicit = item.render && item.render.template;
-  if (explicit && String(explicit).toLowerCase() !== String(type || '').toLowerCase()) {
+  if (isTemplateChoice(explicit, type)) {
     const slot = lookupSlotList(explicit, baseMap);
     if (slot) return { kind: 'fieldList', list: slot, name: String(explicit) };
     const hit = lookupNamedTemplate(explicit, templates, fieldTable);
@@ -906,18 +951,31 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
   const context = itemContext(item, { render: { ...(item.render || {}), wrapper: 'none' } });
   const label = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
 
-  // The component-target ladder (§13.4): the target's own `template:` (a named text or
-  // field-list template) → `templateFor.<component>` keyed on `aid.type` → `templateFor.base`
-  // → verbatim. A per-item `render.<component>.template` reaches here as `target.template`,
-  // so rung 1 keeps it winning over the branch's slot.
+  // The component-target ladder (§13.4): a *chosen* target `template:` (a named text or
+  // field-list template, or a Pattern-2 name in a slot file) → `templateFor.<component>`
+  // keyed on `aid.type` → `templateFor.base` keyed on `aid.type` → `aid.type` as a template
+  // name → verbatim. A per-item `render.<component>.template` reaches here as
+  // `target.template`, so a real choice keeps winning over the branch's slot — but the
+  // `model/item.js:384` fill of `target.template` from `aid.type` is not a choice, and
+  // honouring it at rung 1 would shadow `templateFor.<component>` / `templateFor.base` for
+  // the whole corpus, the same bug fix A removed from the body ladder in Phase 13
+  // (`isTemplateChoice`).
   const type = item.aid && item.aid.type;
-  let hit = target.template ? lookupNamedTemplate(target.template, templates, fieldTable) : null;
+  const compMap = templateFor[target.component] || {};
+  const baseMap = templateFor.base || {};
+
+  let hit = null;
+  if (isTemplateChoice(target.template, type)) {
+    const slot = lookupSlotList(target.template, compMap) || lookupSlotList(target.template, baseMap);
+    hit = slot
+      ? { kind: 'fieldList', list: slot, name: String(target.template) }
+      : lookupNamedTemplate(target.template, templates, fieldTable);
+  }
   if (!hit && type) {
-    const compMap = templateFor[target.component] || {};
-    const baseMap = templateFor.base || {};
     const list = compMap[type] || baseMap[type];
     if (list) hit = { kind: 'fieldList', list, name: `${target.component}:${type}` };
   }
+  if (!hit && type) hit = lookupNamedTemplate(type, templates, fieldTable);
 
   if (hit) {
     try {
@@ -1718,7 +1776,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     // the field-list body only — a `.template` text body names nothing to check against.
     // Findings are deduped compile-wide and emitted once, after every leaf.
     if (fieldAudit && bodyRender.kind === 'fieldList') {
-      fieldAudit.auditBody(item, bodyRender.list, bodyRender.name);
+      fieldAudit.auditBody(item, bodyRender.list, bodyRender.name, { templateFor });
     }
 
     // Build render context: top-level item fields + body for {$body.X} access
@@ -2244,7 +2302,9 @@ function compileRun(configPath, options, buses) {
 
   // §13.6 — built once so the unread-field audit's `(item id, field path)` dedupe spans
   // the whole compile. `finish()` runs after the leaf loop, beside reportUnusedRoles.
-  const fieldAudit = buildFieldAudit({ fieldTable, partials });
+  // `tierTemplates` also feeds `--schema-tables` below; gathered once here.
+  const tierTemplates = config ? gatherTierTemplates(config, configPath) : [];
+  const fieldAudit = buildFieldAudit({ fieldTable, partials, tierTemplates });
   const cardTypeAudit = buildCardTypeAudit();
 
   // Build canon registry
@@ -3005,6 +3065,34 @@ function compileRun(configPath, options, buses) {
       { file: configPath },
     );
   }
+
+  // §7.3 / §6.3: a leaf that resolves neither an opening nor AI Instructions. Both are
+  // ordinary inherited components (`buildCompileContext` merges them down the chain), so a
+  // `false` here means nothing in the leaf's ancestry set one — not merely that this node
+  // did not. Read from `leafSummaries` because a leaf's opening status is only final once
+  // every component write, inherited ones included, has run. A leaf covered by the CL0616
+  // ERROR above (has a description, no opening) is not also flagged CL0630.
+  for (const s of leafSummaries) {
+    if (!openingLeaves.has(s.label) && !descriptionLeaves.has(s.label)) {
+      compileDiagnostics.warn(
+        DIAG_CODES.LEAF_NO_OPENING,
+        `branch "${s.label}" resolves no opening: and no adventureDescription:, so Velvet `
+        + 'Lattice would start this leaf with an empty prompt. Give the branch an opening:, '
+        + 'or one an ancestor passes down.',
+        { file: configPath },
+      );
+    }
+    if (!s.hasAIN) {
+      compileDiagnostics.warn(
+        DIAG_CODES.LEAF_NO_AIN,
+        `branch "${s.label}" resolves no aiInstructions:. Velvet Lattice writes an `
+        + 'empty-string AI Instructions on AID\'s side for it, and an empty string suppresses '
+        + 'AID\'s model-default instructions rather than falling back to them — the leaf plays '
+        + 'with none at all. Give the branch an aiInstructions:, or one an ancestor passes down.',
+        { file: configPath },
+      );
+    }
+  }
   reportCompileDiagnostics();
 
   // Per-leaf summary table (printed after all component writes so Opening status is known)
@@ -3079,23 +3167,8 @@ function compileRun(configPath, options, buses) {
   if (options.schemaTables) {
     const { runSchemaTablesMode } = require('./schematables');
     // §13.4 — every template a branch's `templateFor` slot files produce, so a tier author
-    // can diff a terse list against the full type in one place. Gathered here rather than
-    // in the leaf loop: the slot files resolve per node, but the report is whole-project.
-    // Empty for any project that declares no `templateFor:`.
-    const stVariables = config._variables || config.variables || {};
-    const tierTemplates = [];
-    walkBranchTree(config, ({ node, path: nodePath, isRoot }) => {
-      if (!node || !node.templateFor) return;
-      const maps = resolveTemplateForMaps(
-        node.templateFor, config._resolvedTemplates || [], config._base || '.',
-        stVariables, null, configPath,
-      );
-      for (const [role, typeMap] of Object.entries(maps)) {
-        for (const [name, list] of Object.entries(typeMap)) {
-          tierTemplates.push({ branch: isRoot ? '(root)' : nodePath.join('/'), role, name, list });
-        }
-      }
-    });
+    // can diff a terse list against the full type in one place. `tierTemplates` was
+    // gathered once beside the field audit (`gatherTierTemplates`), which needs the same set.
     const w = runSchemaTablesMode(fieldTable, path.join(reportBase, 'schema-tables'),
       { title: config.title || rootDirName, tierTemplates });
     reportSummary.push(`${w.length} schema-tables file(s)`);
@@ -3186,6 +3259,7 @@ module.exports = {
   resolveNotesRender,
   resolveTemplateForMaps,
   renderPlacementBody,
+  isTemplateChoice,
   checkConfigNotesTemplates,
   CODES,
   validateCardType,

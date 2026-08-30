@@ -238,6 +238,26 @@ const CODES = Object.freeze({
   ADVENTURE_DESCRIPTION_ADVANCED: 'CL0629',
 
   /**
+   * A branch leaf that resolves no `opening:` and no `adventureDescription:` — neither its
+   * own nor one inherited down the chain (§7.3). Velvet Lattice sets a node's prompt to
+   * `components["Opening"] or node.description`, so a leaf with neither opens the adventure
+   * with an empty prompt. WARN, not ERROR: an empty first turn is a degraded start, not a
+   * broken compile. A leaf that has an `adventureDescription:` but no opening is the more
+   * specific `CL0616` (ERROR) and is not also flagged here.
+   */
+  LEAF_NO_OPENING: 'CL0630',
+
+  /**
+   * A branch leaf that resolves no `aiInstructions:` — neither its own nor one inherited
+   * (§6.3). Worse than a missing opening: Velvet Lattice writes `aiInstructions: ""` on
+   * AID's side for such a leaf, and an empty string *suppresses* AID's model-default
+   * instructions rather than falling back to them, so the leaf plays with no AI Instructions
+   * at all. WARN because a project can intend that, but it is rarely what an author who
+   * forgot the component wanted.
+   */
+  LEAF_NO_AIN: 'CL0631',
+
+  /**
    * `aid.type` as a path segment, and what a case-insensitive filesystem does with two of
    * them (§8).
    *

@@ -137,6 +137,54 @@ describe('renderPlacementBody — component-target ladder', () => {
     expect(out).toBe('PE: Aness');
   });
 
+  test('a target.template equal to aid.type is the model/item.js:384 fill, not a choice — it falls to templateFor.<component>', () => {
+    // Phase 14 Step 0: the parallel of the body ladder's fix A. `model/item.js:384` fills a
+    // component target's `template:` from `aid.type` for every card that names none, so
+    // honouring it at rung 1 shadowed `templateFor.plotEssential` corpus-wide.
+    const tf = { plotEssential: { Character: [{ field: 'name', label: 'Branch PE' }] } };
+    const out = renderPlacementBody(
+      item, { component: 'plotEssential', template: 'Character' }, new Map(), new Map(), {},
+      new Diagnostics(), { fieldTable, templateFor: tf },
+    );
+    expect(out).toBe('Branch PE: Aness');
+  });
+
+  test('a target.template equal to aid.type also falls through to templateFor.base', () => {
+    const tf = { base: { Character: [{ field: 'name', label: 'Branch Base' }] } };
+    const out = renderPlacementBody(
+      item, { component: 'plotEssential', template: 'Character' }, new Map(), new Map(), {},
+      new Diagnostics(), { fieldTable, templateFor: tf },
+    );
+    expect(out).toBe('Branch Base: Aness');
+  });
+
+  test('a target.template equal to aid.type with no templateFor still resolves the type template (output-preserving)', () => {
+    // The corpus relies on this: pre-Step-0 the type-fill `target.template` was what
+    // resolved the shared-table `Character` list at rung 1. It now resolves at the lower
+    // aid.type rung, unchanged.
+    const out = renderPlacementBody(
+      item, { component: 'plotEssential', template: 'Character' }, textTemplates, new Map(), {},
+      new Diagnostics(), { fieldTable, templateFor: {} },
+    );
+    // `lookupNamedTemplate('Character', …)` — the text template 'character' wins over the
+    // shared field list of the same name, exactly as the body ladder's rung 3 does.
+    expect(out).toBe('Aness');
+  });
+
+  test('Pattern 2: a differing target.template names a free-standing list in the component slot file', () => {
+    const tf = {
+      plotEssential: {
+        Character: [{ field: 'name', label: 'Terse' }],
+        CharacterFull: [{ field: 'name', label: 'Full PE' }],
+      },
+    };
+    const out = renderPlacementBody(
+      item, { component: 'plotEssential', template: 'CharacterFull' }, new Map(), new Map(), {},
+      new Diagnostics(), { fieldTable, templateFor: tf },
+    );
+    expect(out).toBe('Full PE: Aness');
+  });
+
   test('rung 3: falls back to templateFor.base', () => {
     const tf = { base: { Character: [{ field: 'name', label: 'Base' }] } };
     const out = renderPlacementBody(

@@ -152,6 +152,60 @@ describe('buildFieldAudit — classification', () => {
   });
 });
 
+describe('buildFieldAudit — templateFor slot files (§13.4, Phase 14 Step 1)', () => {
+  // A terse Person list — `name` only. Against the shared `Person` template it omits the
+  // declared `vibe` and the `personality` group.
+  const terseList = ['name'];
+  const templateFor = { base: { Person: terseList } };
+  const tierTemplates = [{ branch: 'lowContext', role: 'base', name: 'Person', list: terseList }];
+
+  test('CL0428: a field named only by a tier list is not a dead declaration', () => {
+    const d = sink();
+    // `deadField` is in no shared template; naming it in a tier list clears the sweep.
+    const tt = [{ branch: 'low', role: 'base', name: 'Terse', list: ['name', 'deadField'] }];
+    const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS, tierTemplates: tt });
+    a.finish(d);
+    expect(d.codes().filter((c) => c === 'CL0428')).toEqual([]);
+  });
+
+  test('CL0428: a field named by neither a shared template nor any tier list still fires', () => {
+    const d = sink();
+    const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS, tierTemplates });
+    a.finish(d);
+    const dead = d.calls.filter((c) => c.code === 'CL0428');
+    expect(dead).toHaveLength(1);
+    expect(dead[0].message).toMatch(/deadField/);
+  });
+
+  test('CL0427: a declared field a tier list omits is not a misroute when the branch templateFor is in hand', () => {
+    const d = sink();
+    const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS, tierTemplates });
+    a.auditBody(
+      mk('Aness', 'Person', { name: 'A', vibe: 'v' }), terseList, 'Person', { templateFor },
+    );
+    a.finish(d);
+    expect(d.codes().filter((c) => c === 'CL0427')).toEqual([]);
+  });
+
+  test('CL0427: the same omission on the same list still fires without the templateFor context', () => {
+    const d = sink();
+    const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS, tierTemplates });
+    a.auditBody(mk('Aness', 'Person', { name: 'A', vibe: 'v' }), terseList, 'Person');
+    a.finish(d);
+    expect(d.codes()).toContain('CL0427');
+  });
+
+  test('CL0426: a genuinely unknown key is still flagged inside a tier render', () => {
+    const d = sink();
+    const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS, tierTemplates });
+    a.auditBody(
+      mk('Aness', 'Person', { name: 'A', strength: 'uncanny' }), terseList, 'Person', { templateFor },
+    );
+    a.finish(d);
+    expect(d.codes()).toContain('CL0426');
+  });
+});
+
 describe('buildFieldAudit — dedupe on (item id, field path)', () => {
   test('auditing the same item on many leaves reports each field once', () => {
     const d = sink();

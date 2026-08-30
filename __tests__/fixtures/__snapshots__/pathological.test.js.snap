@@ -1,7 +1,15 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`pathological fixture a body key no field reads, deduped across leaves 1`] = `
-"WARN CL0426 Codex/items.cl.yaml
+"WARN CL0630 compile.cl.yaml
+  branch "north" resolves no opening: and no adventureDescription:, so Velvet Lattice would start this leaf with an empty prompt. Give the branch an opening:, or one an ancestor passes down.
+WARN CL0631 compile.cl.yaml
+  branch "north" resolves no aiInstructions:. Velvet Lattice writes an empty-string AI Instructions on AID's side for it, and an empty string suppresses AID's model-default instructions rather than falling back to them — the leaf plays with none at all. Give the branch an aiInstructions:, or one an ancestor passes down.
+WARN CL0630 compile.cl.yaml
+  branch "south" resolves no opening: and no adventureDescription:, so Velvet Lattice would start this leaf with an empty prompt. Give the branch an opening:, or one an ancestor passes down.
+WARN CL0631 compile.cl.yaml
+  branch "south" resolves no aiInstructions:. Velvet Lattice writes an empty-string AI Instructions on AID's side for it, and an empty string suppresses AID's model-default instructions rather than falling back to them — the leaf plays with none at all. Give the branch an aiInstructions:, or one an ancestor passes down.
+WARN CL0426 Codex/items.cl.yaml
   body key "strength" on item "Alba" is read by no field in template "Person" and no declaration names it — its content is dropped from the compiled card.
 WARN CL0427 Codex/items.cl.yaml
   body key "homeland" on item "Cairn" is a declared field but group \`origin\`, which template "Person" does not include — its content is dropped from the compiled card.
@@ -14,6 +22,10 @@ exports[`pathological fixture a committed manifest that disagrees with the confi
   Library "alpha" has no entry in manifest.json.
 WARN CL0114
   Library "beta": snapshot/beta/extra.yaml has no entry in the manifest.
+WARN CL0630 compile.cl.yaml
+  branch "(root)" resolves no opening: and no adventureDescription:, so Velvet Lattice would start this leaf with an empty prompt. Give the branch an opening:, or one an ancestor passes down.
+WARN CL0631 compile.cl.yaml
+  branch "(root)" resolves no aiInstructions:. Velvet Lattice writes an empty-string AI Instructions on AID's side for it, and an empty string suppresses AID's model-default instructions rather than falling back to them — the leaf plays with none at all. Give the branch an aiInstructions:, or one an ancestor passes down.
 WARN CL0627 Codex/items.cl.yaml
   aid.type "Character" names a built-in AI Dungeon category; writing it as "character".
   hint: AID's built-in categories are lowercase and it matches the type string exactly, so "Character" would arrive as a custom category beside "character" rather than inside it. Declare it lowercase to silence this."
@@ -256,6 +268,10 @@ WARN CL0536 compile.cl.yaml
 exports[`pathological fixture two cards share a name across types 1`] = `
 "ERROR CL0622 Codex/items.cl.yaml
   story cards named "Shared Name" collide on branch "main" (character in items.cl.yaml and location in items.cl.yaml). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
+WARN CL0630 compile.cl.yaml
+  branch "main" resolves no opening: and no adventureDescription:, so Velvet Lattice would start this leaf with an empty prompt. Give the branch an opening:, or one an ancestor passes down.
+WARN CL0631 compile.cl.yaml
+  branch "main" resolves no aiInstructions:. Velvet Lattice writes an empty-string AI Instructions on AID's side for it, and an empty string suppresses AID's model-default instructions rather than falling back to them — the leaf plays with none at all. Give the branch an aiInstructions:, or one an ancestor passes down.
 WARN CL0628 Codex/items.cl.yaml
   aid.type " Gadget" has leading whitespace; writing it as "Gadget".
   hint: A leading space survives in a directory name, so the type would reach AI Dungeon as a category whose name differs from the obvious one by an invisible character.
