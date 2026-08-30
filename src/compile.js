@@ -25,7 +25,7 @@ const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
 const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES, LINT_LEVELS } = require('./diag');
 const { renderCard, cardTitle, parseCards } = require('./emit/vl');
 const {
-  loadPack, evaluatePack, evaluatePackExistence, clampFinding,
+  loadPack, evaluatePack, evaluatePackExistence, evaluatePackItemRules, clampFinding,
 } = require('./lint/packs');
 const {
   FILENAME: PLACEHOLDERS_FILENAME, writeNodePlaceholders, checkUndeclaredPlaceholders,
@@ -867,6 +867,9 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
       const routed = [
         ...evaluatePack(pack, leafCards, { branchLabel: label }),
         ...evaluatePackExistence(pack, leafCards, { branchLabel: label }),
+        // Phase 16: the per-resolved-item rules (`count` / `mutexHint`). Inline only —
+        // the offline `--lint` arm has no structured item to hand them (Decision 5).
+        ...evaluatePackItemRules(pack, leaf.resolvedItems, { branchLabel: label }),
       ];
       for (const f of routed) {
         const sev = clampFinding(f.severity, packLevel, branchLevel);
@@ -2652,8 +2655,10 @@ function compileRun(configPath, options, buses) {
       branchPath, folderPath, outputDir, grouped: leafCardGroups,
       // For the post-loop `runPackChecks`: this leaf's branch-merged `lint` table and the
       // variables a pack `source:` path expands against. Captured here so the pack pass
-      // does not re-walk the branch chain (§8.2.2).
-      lint: ctx.lint, variables: ctx.variables,
+      // does not re-walk the branch chain (§8.2.2). `resolvedItems` is the structured,
+      // branch-merged item set — `item.body.<field>` in its authored shape — which the
+      // Phase 16 `count` / `mutexHint` rules read (`evaluatePackItemRules`).
+      lint: ctx.lint, variables: ctx.variables, resolvedItems,
     });
     reportCompileDiagnostics();
 

@@ -14,6 +14,12 @@ lint:
 loads `packs/wtg.cl.yaml`. A pack referenced with `source:` instead is a project- or
 canon-hosted file and does not live here.
 
+Two are bundled: **`wtg`** validates a scenario's use of the World Time Generator mod
+(marker conflicts, the `WTG Time Config` card); **`duckieConv`** encodes the card-authoring
+conventions in `Scenarios/_CodexLoom/Design/SCHEMA.md` §7 — per-role length budgets, list
+caps, the faction-field redundancy nudge — via the `meta:` channel and the `budget:` /
+`count:` / `mutexHint:` rule primitives.
+
 ## Pack file shape
 
 ```yaml

@@ -424,4 +424,32 @@ describe('runLintMode', () => {
     fs.rmSync(tmp, { recursive: true });
     fs.rmSync(outDir, { recursive: true });
   });
+
+  test('duckieConv offline runs budget + the meta role rule and does not crash on the item-rules path', () => {
+    const tmp = makeTmp();
+    const outDir = makeTmp();
+    // A card whose fence carries meta.duckieConv.role, with an over-budget body and a
+    // typo'd role — both of which the offline arm (evaluatePack) can see.
+    const over = [
+      '## Big NPC', '~~~', 'encapsulate: false',
+      'meta:', '  duckieConv:', '    role: minr', '~~~',
+      'x'.repeat(500),
+    ].join('\n');
+    write(path.join(tmp, 'Story Cards', 'Character', 'big.md'), over);
+
+    const result = runLintMode(tmp, outDir, false, { config: { lint: { packs: { duckieConv: {} } } } });
+    const reportText = fs.readFileSync(result.reportPath, 'utf8');
+    const packLines = reportText.split('\n').filter((l) => l.includes('(pack:duckieConv)'));
+
+    // budget fired (fell back to standard), and the meta role rule flagged the bad value.
+    expect(packLines.some((l) => /role "standard" targets 400/.test(l))).toBe(true);
+    expect(packLines.some((l) => /"role" is "minr"/.test(l))).toBe(true);
+    // count / mutexHint never run offline (Decision 5) — no item-count or merge-down text,
+    // and no throw reached this line.
+    expect(reportText).not.toMatch(/expected at (least|most) \d+/);
+    expect(reportText).not.toContain('audit for overlap');
+
+    fs.rmSync(tmp, { recursive: true });
+    fs.rmSync(outDir, { recursive: true });
+  });
 });

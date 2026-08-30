@@ -227,6 +227,28 @@ function parseSettingsBlock(text) {
   return out;
 }
 
+/**
+ * Render the `meta:` fence block, or null when there is nothing to write (§8.2.2, Phase 16).
+ *
+ * `meta:` is a tooling annotation channel — a convention pack reads `meta.<packName>.<key>`
+ * off `parseCards` output, in both the inline and the offline `--lint` arms. It is emitted
+ * only for a non-empty plain object, so every card that carries no `meta:` renders exactly
+ * as before. VL parks it in `StoryCard.metadata` and forwards it to AID nowhere
+ * (`loader.py:78`), the same path `kind: reference` relies on.
+ *
+ * Written as nested YAML rather than a string: unlike `notes:` (typed `str` by VL, so a
+ * mapping would reach AID as a Python dict), `meta:` is read by no consumer that types it,
+ * and `parseCards` round-trips the nested form. `YAML.stringify` of a plain object emits no
+ * `---` marker; its trailing newline is dropped here and the closing fence is pushed
+ * separately.
+ */
+function metaLines(meta) {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null;
+  if (Object.keys(meta).length === 0) return null;
+  const dumped = YAML.stringify(meta, { indent: 2 }).replace(/\n+$/, '').split('\n');
+  return ['meta:', ...dumped.map((line) => `  ${line}`)];
+}
+
 /** Render the `notes:` fence line(s), or null when there is nothing to write. */
 function notesLines(text) {
   const value = String(text === undefined || text === null ? '' : text);
@@ -310,6 +332,11 @@ function renderCard({ item, bodyText = '', notesText, diagnostics, loc = {}, que
   // `empty-triggers` lint exists to find, and inference would make it indistinguishable
   // from a reference card, retiring that check by accident.
   if (item && item.kind === 'reference') lines.push('kind: reference');
+
+  // §8.2.2 (Phase 16): a convention-pack annotation channel, emitted only when the item
+  // carries a non-empty `meta:` mapping — so every existing card renders byte-identically.
+  const meta = metaLines(item && item.meta);
+  if (meta) lines.push(...meta);
 
   // `description:` never reaches here — `model/item.js` collapses it into `notes:` at
   // resolution (§4.5), so the emitter knows exactly one spelling.

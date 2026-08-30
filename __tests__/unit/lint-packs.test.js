@@ -13,7 +13,7 @@ const path = require('path');
 const fs = require('fs');
 
 const {
-  loadPack, evaluatePack, evaluatePackExistence, clampFinding, CODES,
+  loadPack, evaluatePack, evaluatePackExistence, evaluatePackItemRules, clampFinding, CODES,
 } = require('../../src/lint/packs');
 const { parseNotesBlock, parseSettingsBlock } = require('../../src/emit/vl');
 const { walkBranchChain } = require('../../src/model/branches');
@@ -313,6 +313,169 @@ describe('over: body routes the schema at the card entry', () => {
 
   test('without over: the same rule reads notes and finds nothing in the body', () => {
     expect(runRule(rule, bodyCard)).toHaveLength(0);
+  });
+});
+
+// ── Phase 16: over: meta + the budget primitive ─────────────────────────────
+
+/** A one-card compiled file carrying a `meta:` fence block. */
+function metaCard({ title = 'C', body = 'text', meta = {} }) {
+  const dumped = require('yaml').stringify(meta, { indent: 2 }).replace(/\n+$/, '').split('\n');
+  const fence = ['~~~', 'triggers: [k]', 'encapsulate: false',
+    'meta:', ...dumped.map((l) => `  ${l}`), '~~~'];
+  return parseCards(`## ${title}\n${fence.join('\n')}\n${body}\n`, { type: 'character' });
+}
+
+describe('over: meta routes the schema at meta[pack.name]', () => {
+  const rule = {
+    over: 'meta',
+    schema: { type: 'map', keys: { role: { type: 'string', values: ['anchor', 'standard', 'minor'] } } },
+  };
+  const packOf = (r) => ({ name: 'dc', rules: [{ id: '1', code: 'CL-dc/0001', severity: 'warn', message: 'm', ...r }] });
+
+  test('a good role value is silent', () => {
+    const found = evaluatePack(packOf(rule), metaCard({ meta: { dc: { role: 'anchor' } } }));
+    expect(found).toHaveLength(0);
+  });
+  test('a bad role value is one finding, re-coded to the rule', () => {
+    const found = evaluatePack(packOf(rule), metaCard({ meta: { dc: { role: 'minr' } } }));
+    expect(found).toHaveLength(1);
+    expect(found[0].code).toBe('CL-dc/0001');
+  });
+  test('a stray sub-key in the pack namespace is a finding (closed map)', () => {
+    const found = evaluatePack(packOf(rule), metaCard({ meta: { dc: { rolle: 'anchor' } } }));
+    expect(found.length).toBeGreaterThan(0);
+  });
+  test('a card with no meta: at all is silent — empty input against a keyless map', () => {
+    expect(evaluatePack(packOf(rule), card({ title: 'X' }))).toHaveLength(0);
+  });
+  test('another pack\'s meta namespace is invisible', () => {
+    const found = evaluatePack(packOf(rule), metaCard({ meta: { other: { role: 'bogus' } } }));
+    expect(found).toHaveLength(0);
+  });
+});
+
+describe('the budget primitive', () => {
+  const packOf = (budget) => ({
+    name: 'dc',
+    rules: [{ id: '1', code: 'CL-dc/0001', severity: 'warn', message: 'over budget', budget }],
+  });
+  const B = { anchor: 800, standard: 400, minor: 200 };
+
+  test('an absent role is measured as standard', () => {
+    const found = evaluatePack(packOf(B), metaCard({ body: 'x'.repeat(500), meta: { note: 1 } }));
+    expect(found).toHaveLength(1);
+    expect(found[0].message).toContain('role "standard"');
+    expect(found[0].message).toContain('500');
+  });
+  test('the same body is silent at role: anchor', () => {
+    expect(evaluatePack(packOf(B), metaCard({ body: 'x'.repeat(500), meta: { dc: { role: 'anchor' } } })))
+      .toHaveLength(0);
+  });
+  test('an unrecognized role falls back to standard — a typo does not suppress the check', () => {
+    const found = evaluatePack(packOf(B), metaCard({ body: 'x'.repeat(500), meta: { dc: { role: 'minr' } } }));
+    expect(found).toHaveLength(1);
+    expect(found[0].message).toContain('role "standard"');
+  });
+  test('an unrecognized role with standard absent from the map skips (no cap to measure)', () => {
+    const found = evaluatePack(packOf({ anchor: 800 }), metaCard({ body: 'x'.repeat(5000), meta: { dc: { role: 'minr' } } }));
+    expect(found).toHaveLength(0);
+  });
+  test('a body at exactly the cap does not fire', () => {
+    expect(evaluatePack(packOf(B), metaCard({ body: 'x'.repeat(400), meta: { dc: { role: 'standard' } } })))
+      .toHaveLength(0);
+  });
+});
+
+// ── Phase 16: evaluatePackItemRules — count / mutexHint over resolved items ──
+
+describe('evaluatePackItemRules — count', () => {
+  const packOf = (count) => ({
+    name: 'dc',
+    rules: [{ id: '2', code: 'CL-dc/0002', severity: 'warn', message: 'count', count }],
+  });
+  const run = (count, body, opts) => evaluatePackItemRules(packOf(count), [{ id: 'I', body }], opts);
+
+  test('a named list field below min fires', () => {
+    const found = run({ fields: { vibe: { min: 3, max: 5 } } }, { vibe: ['a', 'b'] });
+    expect(found).toHaveLength(1);
+    expect(found[0].code).toBe('CL-dc/0002');
+    expect(found[0].message).toContain('vibe');
+  });
+  test('a named list field in range is silent', () => {
+    expect(run({ fields: { vibe: { min: 3, max: 5 } } }, { vibe: ['a', 'b', 'c', 'd'] })).toHaveLength(0);
+  });
+  test('a dotted path resolves case-insensitively', () => {
+    const found = run(
+      { fields: { 'personality.keywords': { min: 2, max: 4 } } },
+      { Personality: { Keywords: ['only-one'] } },
+    );
+    expect(found).toHaveLength(1);
+  });
+  test('a map field is counted by its key count', () => {
+    const found = run({ fields: { pantheon: { max: 2 } } }, { pantheon: { A: 1, B: 2, C: 3 } });
+    expect(found).toHaveLength(1);
+    expect(found[0].message).toContain('3 items');
+  });
+  test('a bare comma string is NOT split — one value, skipped', () => {
+    expect(run({ fields: { vibe: { min: 3, max: 5 } } }, { vibe: 'a, b, c, d, e, f, g' })).toHaveLength(0);
+  });
+  test('words: counts whitespace tokens on a string', () => {
+    const found = run({ fields: { tagline: { words: { min: 3, max: 5 } } } }, { tagline: 'The Sultan' });
+    expect(found).toHaveLength(1);
+    expect(found[0].message).toContain('2 words');
+  });
+  test('default applies to every un-named list/map field, not to strings', () => {
+    const found = run(
+      { default: { max: 5 }, fields: {} },
+      { background: ['1', '2', '3', '4', '5', '6'], summary: 'a, b, c, d, e, f, g' },
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0].message).toContain('background');
+  });
+  test('the branch label rides the finding, with the (root) special-case', () => {
+    const onBranch = run({ fields: { vibe: { min: 3 } } }, { vibe: ['a'] }, { branchLabel: 'a/x' });
+    expect(onBranch[0].message).toContain('on branch "a/x"');
+    expect(onBranch[0].leaf).toBe('a/x');
+    const atRoot = run({ fields: { vibe: { min: 3 } } }, { vibe: ['a'] }, { branchLabel: '(root)' });
+    expect(atRoot[0].message).not.toContain('branch');
+    expect(atRoot[0].leaf).toBe('(root)');
+  });
+});
+
+describe('evaluatePackItemRules — mutexHint', () => {
+  const pack = {
+    name: 'dc',
+    rules: [{
+      id: '3', code: 'CL-dc/0003', severity: 'warn', message: 'merge down',
+      mutexHint: { fields: ['overview', 'purpose', 'structure', 'methods'], max: 3, message: 'audit for overlap' },
+    }],
+  };
+  const run = (body) => evaluatePackItemRules(pack, [{ id: 'F', body }]);
+
+  test('four of four present → one finding carrying the rule message', () => {
+    const found = run({ overview: 'o', purpose: 'p', structure: 's', methods: 'm' });
+    expect(found).toHaveLength(1);
+    expect(found[0].detail).toBe('audit for overlap');
+    expect(found[0].message).toContain('4 of 4 present');
+  });
+  test('three of four present → silent (max: 3)', () => {
+    expect(run({ overview: 'o', purpose: 'p', structure: 's' })).toHaveLength(0);
+  });
+  test('an empty-string field does not count as present', () => {
+    expect(run({ overview: 'o', purpose: 'p', structure: 's', methods: '   ' })).toHaveLength(0);
+  });
+});
+
+describe('evaluatePackItemRules — a rule with neither count nor mutexHint is ignored', () => {
+  test('a forbid-only rule contributes nothing here', () => {
+    const plain = { name: 'p', rules: [{ id: '1', code: 'CL-p/0001', severity: 'error', message: 'm', forbid: {} }] };
+    expect(evaluatePackItemRules(plain, [{ id: 'X', body: { vibe: ['a'] } }])).toHaveLength(0);
+  });
+  test('an empty / non-array items argument is safe', () => {
+    const pack = { name: 'p', rules: [{ id: '2', code: 'CL-p/0002', severity: 'warn', message: 'm', count: { default: { max: 1 } } }] };
+    expect(evaluatePackItemRules(pack, undefined)).toEqual([]);
+    expect(evaluatePackItemRules(pack, [])).toEqual([]);
   });
 });
 

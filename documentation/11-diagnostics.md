@@ -740,6 +740,13 @@ opinion-layer ERROR in a pack, and `lint.level` — plus the per-pack and per-br
 card, and the branch it fired on, because a pack can validate one branch's `notes:`
 config and not another's (§8.2.2).
 
+The two bundled packs are `wtg` (`CL-wtg/0001`–`CL-wtg/0003`, the World Time Generator mod
+— see Convention Packs) and `duckieConv` (`CL-duckieConv/0001`–`CL-duckieConv/0004`, the
+card-authoring conventions of `SCHEMA.md` §7 — a per-role length budget, list caps, a
+faction-field redundancy nudge, and a `meta.duckieConv.role` value check). Both are all
+WARN. `duckieConv`'s `count` and `mutexHint` rules run only in the inline compile pass, not
+in offline `--lint`; its `budget` and role rules run in both.
+
 The pack layer's own core codes are `CL0117` (malformed pack), `CL0118` (`~` on a pack
 never inherited) and `CL0119` (`name:` disagrees with the config key) — all in the loading
 band, because loading a pack file is a loading concern.

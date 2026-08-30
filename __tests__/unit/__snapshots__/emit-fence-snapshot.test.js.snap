@@ -5,6 +5,9 @@ exports[`emit/vl.js fence — kitchen-sink corpus renders the envelope for every
 ~~~
 triggers: [Aness, Vale, ' Aria', 'Voss ']
 encapsulate: false
+meta:
+  duckieConv:
+    role: anchor
 notes: '[e]'
 ~~~
 <body of Aness>

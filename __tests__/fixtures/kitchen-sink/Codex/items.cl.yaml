@@ -4,6 +4,7 @@
 # `__tests__/unit/kitchen-sink.test.js` walks ITEM_SCHEMA and fails if a declared key is
 # missing here. Phase 2 added notes:, description: and render.notesTemplate to this
 # surface, and removed aid.known and aid.encapsulate with the envelope (§8.2.1, §8.4).
+# Phase 16 added meta: — the §8.2.2 convention-pack annotation channel.
 #
 # It is validated, not compiled. `import:` and `include:` name items and files that do not
 # exist, because the subject is the key surface rather than resolution — nothing in the
@@ -32,6 +33,11 @@
     Role: Journeyman of the {%setting}
   v:
     rank: journeyman
+  # §8.2.2 (Phase 16): the `meta:` annotation channel — unvalidated by the loader,
+  # pack-namespaced, written into the card fence for the offline `--lint` arm.
+  meta:
+    duckieConv:
+      role: anchor
   render:
     template: Character
     wrapper: curly

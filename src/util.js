@@ -129,8 +129,13 @@ const VAR_ALIASES = new Set(['v', 'var', 'vars', 'variable', 'variables']);
  * component as a swappable alternate makes *that* copy reference material while the canon
  * item stays narrative. Author intent is what `kind:` carries, and the importer is an
  * author.
+ *
+ * `meta` is present so the §8.2.2 annotation channel is branch-addressable: a variant may
+ * set `meta.duckieConv.role` on one branch and leave it default on another, and it must
+ * resolve per leaf like every other whole-value field. Without it a variant `meta:` delta
+ * falls through to `body.meta` and never reaches the card fence (Phase 16).
  */
-const ITEM_TOP_LEVEL_FIELDS = Object.freeze(['name', 'pronouns', 'aid', 'render', 'v', 'notes', 'kind']);
+const ITEM_TOP_LEVEL_FIELDS = Object.freeze(['name', 'pronouns', 'aid', 'render', 'v', 'notes', 'kind', 'meta']);
 
 /**
  * `description:` is an accepted alias for `notes:` (§4.5), normalized at the boundary so

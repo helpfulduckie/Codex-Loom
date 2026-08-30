@@ -245,6 +245,36 @@ describe('renderCard', () => {
       expect(text).toMatch(/encapsulate: false\nkind: reference/);
     });
   });
+
+  /**
+   * §8.2.2's `meta:` channel (Phase 16): a convention-pack annotation written into the
+   * fence so `parseCards` carries it into both the inline and the offline `--lint` arm.
+   * Emitted only for a non-empty plain object, so no existing card moves.
+   */
+  describe('meta: in the fence', () => {
+    test('a nested meta: object round-trips through parseCards', () => {
+      const item = { ...aness(), meta: { duckieConv: { role: 'anchor' } } };
+      const { text } = renderCard({ item, bodyText: 'x' });
+      expect(text).toContain('\nmeta:\n  duckieConv:\n    role: anchor\n');
+      // parseCards returns the whole fence as `.meta`; the channel is its `meta:` key.
+      expect(parseCards(text)[0].meta.meta.duckieConv.role).toBe('anchor');
+    });
+
+    test('no meta:, an empty object, and a non-object all emit nothing', () => {
+      expect(renderCard({ item: aness(), bodyText: 'x' }).text).not.toContain('meta:');
+      expect(renderCard({ item: { ...aness(), meta: {} }, bodyText: 'x' }).text).not.toContain('meta:');
+      expect(renderCard({ item: { ...aness(), meta: ['a'] }, bodyText: 'x' }).text).not.toContain('meta:');
+    });
+
+    test('it sits after kind: reference, before notes:', () => {
+      const item = {
+        id: 'R', kind: 'reference', aid: { type: 'System', triggers: [] },
+        notes: '[e]', meta: { duckieConv: { role: 'minor' } },
+      };
+      const { text } = renderCard({ item, bodyText: 'x' });
+      expect(text).toMatch(/kind: reference\nmeta:\n {2}duckieConv:\n {4}role: minor\nnotes: '\[e\]'/);
+    });
+  });
 });
 
 describe('defaultNotesText', () => {

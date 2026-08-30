@@ -52,6 +52,7 @@ const { applyLintLevel, Diagnostics } = require('../diag');
 const { expandTokens } = require('../tokens');
 const { validate, TYPES, CODES: SCHEMA_CODES } = require('../schema');
 const { parseNotesBlock, parseSettingsBlock } = require('../emit/vl');
+const { resolveField } = require('../render/eval');
 
 /** Bundled packs live at the repo root, beside `src/`. */
 const BUNDLED_DIR = path.join(__dirname, '..', '..', 'packs');
@@ -141,13 +142,21 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
       forbid: rule.forbid || null,
       require: rule.require || null,
       schema: rule.schema || null,
-      // `over: body` routes a rule's `schema:` at the card entry (parsed by
-      // `parseSettingsBlock`) instead of at `notes:` (§8.2.2, Phase 15). Anything else,
-      // including absent, is `notes`.
-      over: rule.over === 'body' ? 'body' : 'notes',
+      // `over:` routes a rule's `schema:` away from the default `notes:` mapping:
+      // `body` parses the card entry with `parseSettingsBlock` (§8.2.2, Phase 15); `meta`
+      // reads `card.meta[<packName>]`, the pack's own annotation sub-namespace (Phase 16).
+      // Anything else, including absent, is `notes`.
+      over: rule.over === 'body' ? 'body' : rule.over === 'meta' ? 'meta' : 'notes',
       // `requireCard: <predicate>` — a per-leaf existence check run by
       // `evaluatePackExistence`, not by the per-card loop below.
       requireCard: rule.requireCard || null,
+      // Phase 16 primitives. `budget` (role→char-cap map) runs per card in `evaluatePack`,
+      // so it rides the offline arm. `count` (field→bounds) and `mutexHint` (a field-set
+      // co-occurrence ceiling) run per resolved item in `evaluatePackItemRules`, which is
+      // inline-only — the offline arm has no structured item (Decision 5).
+      budget: rule.budget || null,
+      count: rule.count || null,
+      mutexHint: rule.mutexHint || null,
       message: rule.message || `pack "${name}" rule ${id}`,
     });
   }
@@ -165,6 +174,11 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
 function toRegExp(spec) {
   if (spec instanceof RegExp) return spec;
   return new RegExp(String(spec));
+}
+
+/** A value if it is a plain (non-array) object, else `{}`. */
+function plainObjOrEmpty(value) {
+  return (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
 }
 
 function evalPredicate(pred, view) {
@@ -278,6 +292,11 @@ function evaluatePack(pack, cards, { branchLabel = null } = {}) {
       body: card.body || '',
       notesText: String(card.notes || ''),
       notes,
+      // Phase 16: the card's `meta:` annotation channel, so `over: meta` and the `budget`
+      // role lookup can read `meta[pack.name]`. `parseCards` returns the whole fence
+      // mapping as `card.meta`, and the channel is its `meta:` key — hence `card.meta.meta`.
+      // Absent → `{}`.
+      meta: plainObjOrEmpty(card.meta && card.meta.meta),
     };
 
     for (const rule of pack.rules) {
@@ -301,8 +320,28 @@ function evaluatePack(pack, cards, { branchLabel = null } = {}) {
         emit({ severity: rule.severity, code: rule.code, message: rule.message });
       }
       if (rule.schema) {
-        const input = rule.over === 'body' ? parseSettingsBlock(card.body) : notes;
+        const input = rule.over === 'meta'
+          ? ((view.meta && view.meta[pack.name]) || {})
+          : rule.over === 'body' ? parseSettingsBlock(card.body) : notes;
         runSchemaCheck(rule, input, view, emit);
+      }
+      if (rule.budget) {
+        // An absent role is `standard`; so is an unrecognized one — a typo in `role`
+        // (`minr`) is the role rule's to flag, and it must not also suppress the budget
+        // check by resolving to a cap-less key. `standard` may itself be absent from a
+        // pack's map, in which case `cap` is `undefined` and the check simply skips.
+        const rawRole = String((view.meta[pack.name] || {}).role || 'standard');
+        const role = Object.prototype.hasOwnProperty.call(rule.budget, rawRole)
+          ? rawRole : 'standard';
+        const cap = rule.budget[role];
+        if (typeof cap === 'number' && view.body.length > cap) {
+          emit({
+            severity: rule.severity,
+            code: rule.code,
+            message: `${rule.message} — role "${role}" targets ${cap} characters, this `
+              + `card's body is ${view.body.length}.`,
+          });
+        }
       }
     }
   }
@@ -334,6 +373,7 @@ function evaluatePackExistence(pack, cards, { branchLabel = null } = {}) {
       body: card.body || '',
       notesText: String(card.notes || ''),
       notes: parseNotesBlock(card.notes),
+      meta: plainObjOrEmpty(card.meta && card.meta.meta),
     }));
     if (satisfied) continue;
 
@@ -344,6 +384,127 @@ function evaluatePackExistence(pack, cards, { branchLabel = null } = {}) {
       detail: rule.message,
       message: `[${pack.name}]${where}: ${rule.message}`,
     });
+  }
+  return findings;
+}
+
+// ── the per-item rules ───────────────────────────────────────────────────────
+//
+// `count` and `mutexHint` (§8.2.2, Phase 16) read the *structured* resolved item — where
+// `item.body.vibe` is a real array and `item.body.overview` is a detectable key — which
+// `parseCards` output cannot give back (`overview` renders with no label, and a rendered
+// `Vibe: [a; b; c]` line does not distinguish an authored list from an authored string).
+// So this is a third sibling to `evaluatePack` / `evaluatePackExistence`, called ONLY from
+// `compile.js:runPackChecks`, once per leaf — never from the offline `--lint` arm
+// (Decision 5). Field paths resolve through `render/eval.js:resolveField`, the same
+// case-insensitive dotted-path walk the render layer uses.
+
+/** Non-empty list or map → its length; anything else (string, scalar, empty, null) → null. */
+function collectionSize(value) {
+  if (Array.isArray(value)) return value.length;
+  if (value && typeof value === 'object') return Object.keys(value).length;
+  return null;
+}
+
+/**
+ * Check one `count` field against its bounds and push a finding per violation.
+ *
+ * `bounds` is `{ min?, max? }` for a list/map length, or `{ words: { min?, max? } }` for a
+ * whitespace-token count on a string. A multi-value field authored as a bare `,`/`;`
+ * string is NOT split — `count` sees one value and skips it (Beth's call: no field-name
+ * list baked into the compiler). Write multi-value fields as YAML lists for the check to
+ * see them.
+ */
+function checkCountField(rule, pack, where, label, fieldPath, value, bounds, findings) {
+  if (!bounds || typeof bounds !== 'object') return;
+  const push = (msg) => findings.push({
+    severity: rule.severity,
+    code: rule.code,
+    leaf: where.leaf,
+    detail: msg,
+    message: `[${pack.name}]${where.suffix} — item "${label}", ${fieldPath}: ${msg}`,
+  });
+
+  if (bounds.words && typeof bounds.words === 'object') {
+    if (typeof value !== 'string') return;
+    const n = value.split(/\s+/).filter(Boolean).length;
+    const { min, max } = bounds.words;
+    if (typeof min === 'number' && n < min) push(`${n} word${n === 1 ? '' : 's'}, expected at least ${min}.`);
+    else if (typeof max === 'number' && n > max) push(`${n} word${n === 1 ? '' : 's'}, expected at most ${max}.`);
+    return;
+  }
+
+  const n = collectionSize(value);
+  if (n === null) return; // a string or scalar — count cannot see multiplicity
+  const { min, max } = bounds;
+  if (typeof min === 'number' && n < min) push(`${n} item${n === 1 ? '' : 's'}, expected at least ${min}.`);
+  else if (typeof max === 'number' && n > max) push(`${n} item${n === 1 ? '' : 's'}, expected at most ${max}.`);
+}
+
+/**
+ * Run a pack's `count` / `mutexHint` rules over a leaf's resolved item objects.
+ *
+ * `items` is `resolveBranchItems` output for one leaf. Returns findings shaped like
+ * `evaluatePackExistence`'s — `{ severity, code, leaf, detail, message }` — and names the
+ * branch the same way, with the `(root)` special-case.
+ */
+function evaluatePackItemRules(pack, items, { branchLabel = null } = {}) {
+  const findings = [];
+  const list = Array.isArray(items) ? items : [];
+  const where = {
+    leaf: branchLabel || '(root)',
+    suffix: branchLabel && branchLabel !== '(root)' ? ` on branch "${branchLabel}"` : '',
+  };
+
+  for (const rule of pack.rules) {
+    if (!rule.count && !rule.mutexHint) continue;
+
+    for (const item of list) {
+      const data = { body: (item && item.body) || {} };
+      const label = (item && (item.id || (item.name && (item.name.full || item.name.display)))) || '(item)';
+
+      if (rule.count) {
+        const fields = (rule.count.fields && typeof rule.count.fields === 'object')
+          ? rule.count.fields : {};
+        const def = rule.count.default || null;
+        const named = new Set(Object.keys(fields).map((k) => k.toLowerCase()));
+
+        for (const [fieldPath, bounds] of Object.entries(fields)) {
+          const value = resolveField(`$body.${fieldPath}`, data);
+          checkCountField(rule, pack, where, label, fieldPath, value, bounds, findings);
+        }
+
+        // `default` applies to every top-level body field that resolves to a non-empty
+        // list or map and was not named above. A bare-string field is skipped — the
+        // compiler does not guess which strings are lists.
+        if (def) {
+          for (const key of Object.keys(data.body)) {
+            if (named.has(key.toLowerCase())) continue;
+            const value = resolveField(`$body.${key}`, data);
+            if (collectionSize(value) === null) continue;
+            checkCountField(rule, pack, where, label, key, value, def, findings);
+          }
+        }
+      }
+
+      if (rule.mutexHint) {
+        const mh = rule.mutexHint;
+        const names = Array.isArray(mh.fields) ? mh.fields : [];
+        const max = typeof mh.max === 'number' ? mh.max : 3;
+        const present = names.filter((f) => resolveField(`$body.${f}`, data) !== null);
+        if (present.length > max) {
+          const msg = mh.message || rule.message;
+          findings.push({
+            severity: rule.severity,
+            code: rule.code,
+            leaf: where.leaf,
+            detail: msg,
+            message: `[${pack.name}]${where.suffix} — item "${label}": ${msg} `
+              + `(${present.length} of ${names.length} present: ${present.join(', ')})`,
+          });
+        }
+      }
+    }
   }
   return findings;
 }
@@ -363,5 +524,11 @@ function clampFinding(severity, packLevel, branchLevel) {
 }
 
 module.exports = {
-  loadPack, evaluatePack, evaluatePackExistence, clampFinding, CODES, SCHEMA_CODES,
+  loadPack,
+  evaluatePack,
+  evaluatePackExistence,
+  evaluatePackItemRules,
+  clampFinding,
+  CODES,
+  SCHEMA_CODES,
 };

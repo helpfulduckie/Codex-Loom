@@ -140,6 +140,13 @@ const ITEM_SCHEMA = {
     notes: ANY,
     description: ANY,
 
+    // `meta:` is an annotation channel for tooling (§8.2.2, Phase 16) — never validated
+    // by the loader, never proposed as a relocation target, and distinct from `v:`: a
+    // reviewer seeing `meta:` knows no template reads it. A convention pack keys rules off
+    // `meta.<packName>.<key>` via `over: meta`, and `emit/vl.js` writes it into the card
+    // fence so the offline `--lint` arm can read it back.
+    meta: ANY,
+
     // Composition.
     variants: ANY,
     branches: ANY,

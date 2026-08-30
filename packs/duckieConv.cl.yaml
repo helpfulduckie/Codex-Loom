@@ -1,0 +1,100 @@
+# duckieConv — authoring-conventions convention pack (v4 spec §8.2.2).
+#
+# The first bundled pack that encodes authoring JUDGMENT rather than a mod's config
+# contract. It is a transcription of the lintable half of the card-authoring conventions
+# in `Scenarios/_CodexLoom/Design/SCHEMA.md` §7 — budget targets, list-length caps on the
+# short keyword fields, a word-count check on `tagline`, and the faction-field redundancy
+# nudge. These are Beth's opinion on what makes a good card and are expected to drift as
+# her house style does; when §7 changes, this pack changes with it.
+#
+# Enable with `lint: { packs: { duckieConv: {} } }`. Findings are coded `CL-duckieConv/NNNN`
+# and are all WARN — a convention is a nudge, never a build failure.
+#
+# Four rules:
+#
+#   1. budget — compiled body length against a per-role character cap. The role is read
+#      from `meta.duckieConv.role` (absent → `standard`); the caps are the three size
+#      buckets §7's five-role spectrum collapses to. Raw compiled length, not
+#      placeholder-expanded (the hard platform cap is CL0712's job, and it measures
+#      expanded).
+#   2. count — list-length bounds on the fields §7 gives explicit counts for, plus a `*`
+#      default of "at most 5" over every other list- or map-valued body field. A
+#      multi-value field authored as a bare comma string is NOT split — write it as a
+#      YAML list for this rule to see it. `tagline` is word-counted (3–5 words).
+#   3. mutexHint — WARN when more than three of overview / purpose / structure / methods
+#      are present on one card. §7: those four "frequently overlap in practice — audit
+#      for redundancy and merge down." Unscoped, which is safe: no non-faction template
+#      exposes all four.
+#   4. role — `meta.duckieConv.role`, if set, must be one of anchor / standard / minor.
+#      A closed `map` over the `meta` sub-namespace (`over: meta`), so a typo'd key is a
+#      stray-key WARN and a bad value is an out-of-set WARN, both re-coded here.
+
+name: duckieConv
+rules:
+  # ── CL-duckieConv/0001 — per-role character budget ──────────────────────────
+  #
+  # SCHEMA.md §7 "Budget Targets" / "Card Role Spectrum": ~400 compiled characters is the
+  # soft target for a standard card; an anchor (central faction/location, love interest,
+  # deuteragonist) may run to 500–800+; a dead/offscreen NPC should be minimal. Collapsed
+  # to three buckets. An absent `meta.duckieConv.role` is measured as `standard`.
+  - id: 1
+    severity: warn
+    budget:
+      anchor: 800
+      standard: 400
+      minor: 200
+    message: >-
+      This card's compiled body exceeds its role's soft character budget (SCHEMA.md §7).
+      Compression preserves load-bearing content over the target — if the excess is
+      distinct facts, name the reason; if it is restated fields or mood prose, cut it.
+
+  # ── CL-duckieConv/0002 — list-length caps on the keyword fields ─────────────
+  #
+  # §4 partial docs give explicit counts: `vibe` is "3–5 evocative sensory/tone
+  # keywords", `personality.keywords` is "2–4 trait adjectives", `tagline` is a "3–5 word
+  # identifying descriptor". The `*` default catches an over-long list anywhere else — a
+  # six-bullet `background`, a sprawling `keyPeople`. Only fields authored as YAML lists
+  # or maps are counted; a bare `"a, b, c"` string is one value here.
+  - id: 2
+    severity: warn
+    count:
+      default: { max: 5 }
+      fields:
+        vibe: { min: 3, max: 5 }
+        personality.keywords: { min: 2, max: 4 }
+        tagline: { words: { min: 3, max: 5 } }
+    message: >-
+      A list-valued field is outside its conventional length (SCHEMA.md §4, §7).
+
+  # ── CL-duckieConv/0003 — faction field redundancy ─────────────────────────────
+  #
+  # §7 "Field Conventions": overview / purpose / structure / methods "frequently overlap
+  # in practice. Audit for redundancy and merge down. Two fields ... is usually
+  # sufficient for a faction at ~400–600 characters." Fires only when more than three
+  # co-occur, which no non-faction card can do — so the rule is left unscoped.
+  - id: 3
+    severity: warn
+    mutexHint:
+      fields: [overview, purpose, structure, methods]
+      max: 3
+      message: >-
+        A faction rarely needs more than three of overview / purpose / structure /
+        methods — audit for overlap and merge down (SCHEMA.md §7). Two fields carrying
+        genuinely distinct content is usually enough at ~400–600 characters.
+
+  # ── CL-duckieConv/0004 — the role annotation is a known value ─────────────────
+  #
+  # `meta.duckieConv.role` drives rule 1's budget lookup. A closed `map` over the pack's
+  # own `meta` sub-namespace: an unrecognized key is CL0201 (with a typo suggestion), a
+  # `role` value outside the set is CL0206 — both demoted to WARN and re-coded here. The
+  # key is optional; a card with no `meta:` at all is silently measured as `standard`.
+  - id: 4
+    severity: warn
+    over: meta
+    schema:
+      type: map
+      keys:
+        role: { type: string, values: [anchor, standard, minor] }
+    message: >-
+      `meta.duckieConv.role` must be one of anchor / standard / minor — it selects the
+      character budget rule 1 measures this card against.

@@ -109,11 +109,17 @@ rules:
     require: <predicate>      # a NON-match contributes one finding
     requireCard: <predicate>  # a per-leaf existence check — see below
     schema: <descriptor>      # a src/schema.js descriptor over the card's notes: mapping
-    over: body                # route the schema at the card entry instead of notes:
+    over: body                # route the schema at notes: (default), the card entry (body), or meta
+    budget: <role→cap map>   # per card — compiled body length against a per-role char cap
+    count: <field→bounds>    # per resolved item — list/map length or word count, per field
+    mutexHint: <field-set>   # per resolved item — WARN when more than N of a field set are present
     message: "…"
 ```
 
-A rule may carry any mix of `forbid`, `require`, `requireCard`, and `schema`.
+A rule may carry any mix of `forbid`, `require`, `requireCard`, `schema`, `budget`, `count`,
+and `mutexHint`. `forbid` / `require` / `schema` / `budget` run per card (and ride the
+offline `--lint` arm); `requireCard` runs once per leaf; `count` / `mutexHint` run per
+resolved item and are **inline only** — see [Per-item rules](#per-item-rules--budget-count-mutexhint).
 
 ### `requireCard` — a per-leaf existence check
 
@@ -179,6 +185,63 @@ predicate layer reads as "carries no config," and a `hasKey` rule correctly does
 A uniform Markdown blockquote prefix (`> Setting Name: value`, the form WTG's settings card
 uses) is stripped before the parse.
 
+### The `meta:` channel and `over: meta`
+
+**`meta:` is an item key for tooling — an unvalidated annotation channel, parallel to
+`v:`.** The loader accepts any shape under it and never proposes it as a relocation target;
+it is distinct from `v:` in that no template ever reads it. `emit/vl.js` writes it into the
+card's `~~~` fence when it is a non-empty mapping, so `parseCards` carries it into both the
+inline pass and the offline `--lint` arm — and, like `kind: reference`, it reaches AID
+nowhere (`to_latitude_dict` forwards only title / type / keys / value / description).
+
+**It is pack-namespaced: a pack reads `meta.<packName>.<key>`,** where `<packName>` is the
+pack's declared `name:` — the same binding that ties the `lint.packs` key and the
+`CL-<name>/NNNN` code prefix. `duckieConv` reads `meta.duckieConv.role`; a `stat-tracker`
+pack would read `meta.statTracker.*`, and the two never collide.
+
+**`over: meta` is the third schema route.** `over: notes` (default) validates the parsed
+`notes:` mapping; `over: body` validates the card entry; `over: meta` validates
+`meta[<thisPack>]` — the pack's own sub-namespace, reached automatically. A rule cannot
+assert about another pack's `meta` sub-namespace through the bare route. `duckieConv`'s role
+rule is `{ over: meta, schema: { type: map, keys: { role: { values: [anchor, standard,
+minor] } } } }` — a closed `map`, so a typo'd sub-key is a stray-key finding and a bad
+`role` value is an out-of-set finding, both re-coded to `CL-duckieConv/NNNN`.
+
+### Per-item rules — `budget`, `count`, `mutexHint`
+
+Three primitives added for authoring-convention checks. A primitive is a recognized rule
+key the pack engine dispatches on, the same way `forbid` / `schema` / `requireCard` are.
+
+- **`budget: { anchor: 800, standard: 400, minor: 200 }`** — per card. Reads the card's
+  role from `meta.<packName>.role` (absent *or unrecognized* → `standard`), compares the
+  **raw compiled body length** to the mapped cap, and WARNs when over. Raw, not
+  placeholder-expanded: a sub-budget is a soft authorial target, and the hard platform cap
+  is `CL0712`'s job (and `CL0712` measures the expanded string). Runs in the per-card pass,
+  so `--lint` picks it up. A role with no entry in the map — and no `standard` fallback —
+  is skipped rather than measured against nothing.
+- **`count: { default: { max: 5 }, fields: { vibe: { min: 3, max: 5 }, "personality.keywords":
+  { min: 2, max: 4 }, tagline: { words: { min: 3, max: 5 } } } }`** — per resolved item.
+  `default` applies to every body field that resolves to a **non-empty list or map**;
+  `fields` overrides by case-insensitive dotted path. `words` counts whitespace tokens on a
+  string value. **A multi-value field authored as a bare `"a, b, c"` string is not split** —
+  `count` sees one value and skips it. Write multi-value fields as YAML lists for the check
+  to see them.
+- **`mutexHint: { fields: [overview, purpose, structure, methods], max: 3, message: "…" }`**
+  — per resolved item. WARNs when more than `max` of the listed body fields resolve to a
+  non-empty value. This is a redundancy nudge; it carries its own `message`.
+
+**`count` and `mutexHint` are inline only.** They read the *structured* resolved item —
+`item.body.vibe` as a real array, `item.body.overview` as a detectable key — which the
+compiled `.md` cannot give back: `overview` renders with no label, and a rendered `Vibe:
+[a; b; c]` line does not distinguish an authored list from an authored string. So they run
+only inside the compile pass, never from `--lint`. `budget` and the `over: meta` role check
+*do* run offline. An author who wants the full check runs a compile, not `--lint` — the
+same strict-subset shape `requireCard` already has.
+
+The `meta:` channel is branch-addressable: a variant may set `meta.<packName>.role` on one
+branch and leave it default on another, and it resolves per leaf like every other
+whole-value item field.
+
 ---
 
 ## The bundled `wtg` pack
@@ -203,3 +266,28 @@ uses) is stripped before the parse.
   with `keys:` over just the four fields.
 
 Enable it with `lint: { packs: { wtg: {} } }`.
+
+---
+
+## The bundled `duckieConv` pack
+
+`packs/duckieConv.cl.yaml` is the second bundled pack and the first that encodes authoring
+**judgment** rather than a mod's config contract. It transcribes the lintable half of the
+card-authoring conventions in `Scenarios/_CodexLoom/Design/SCHEMA.md` §7 and is expected to
+drift as that document does. All four rules are WARN — a convention is a nudge.
+
+- **`CL-duckieConv/0001` — per-role character budget.** Compiled body length against a
+  per-role cap: `anchor` 800, `standard` 400, `minor` 200. The role is
+  `meta.duckieConv.role` (absent or unrecognized → `standard`). A `budget:` rule.
+- **`CL-duckieConv/0002` — list-length caps.** `vibe` 3–5, `personality.keywords` 2–4,
+  `tagline` 3–5 words, and a `*` default of "at most 5" over every other list- or map-valued
+  body field. A `count:` rule — inline only, and only fields authored as YAML lists/maps are
+  seen.
+- **`CL-duckieConv/0003` — faction field redundancy.** WARNs when more than three of
+  `overview` / `purpose` / `structure` / `methods` are present on one card (§7: "audit for
+  redundancy and merge down"). A `mutexHint:` rule — inline only. Unscoped, which is safe:
+  no non-faction template exposes all four.
+- **`CL-duckieConv/0004` — the role annotation is a known value.** `meta.duckieConv.role`,
+  if set, must be `anchor` / `standard` / `minor`. An `over: meta` closed-`map` schema.
+
+Enable it with `lint: { packs: { duckieConv: {} } }`.
