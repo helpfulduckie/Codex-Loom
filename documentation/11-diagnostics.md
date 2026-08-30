@@ -76,6 +76,9 @@ guard still recognizes the sigil so a half-migrated project fails clearly.)
 | `CL0114` | WARN | A file under `snapshot/<name>/` on disk has no entry in the manifest. |
 | `CL0115` | ERROR | A file under `snapshot/<name>/` no longer matches its own manifest-recorded hash. |
 | `CL0116` | ERROR | `--snapshot` cannot compute `requiresRoles` for a library entry because the entry's own items do not validate. |
+| `CL0117` | ERROR | A convention pack (§8.2.2) is missing, unparseable, or not shaped like a pack — the pack is named. |
+| `CL0118` | WARN | `lint.packs.<name>: ~` on a branch that never inherited that pack — nothing was unbound. |
+| `CL0119` | ERROR | A convention pack's declared `name:` disagrees with the `lint.packs` key it was loaded under — both are named. |
 | `CL0120` | WARN | A declared input path does not exist on disk. |
 | `CL0130` | WARN | An `include:` path does not exist. |
 | `CL0131` | ERROR | The same file was included more than once. |
@@ -124,6 +127,7 @@ resting on nothing. Sync still runs and the entry's files are still frozen; only
 | `CL0204` | WARN | Key is recognized but its phase has not landed; it is ignored. |
 | `CL0205` | WARN | Key has been superseded by another spelling. |
 | `CL0206` | ERROR | Key takes a closed set of values and got something else. |
+| `CL0207` | ERROR | A number is outside its descriptor's inclusive `min`/`max` bounds. Used by convention-pack schemas (§8.2.2); no `compile.yaml` key declares bounds. |
 | `CL0210` | ERROR | Key is valid, but at a different level — with the level named. |
 
 ### CL0210 in detail
@@ -687,9 +691,10 @@ of keys visible together is the set that can collide — and reported once per d
 group, because a duplicate declared at the root is otherwise re-found at every node beneath
 it and is still one mistake to fix.
 
-It is scoped to placeholders today. §6.4 gives `~` the same meaning for variables, roles,
-scripts and lint packs, none of which implement it yet — a `~` there sets the key to null
-instead of removing it, so there is nothing for this check to say about them.
+It is scoped to placeholders today. §6.4 gives `~` the same meaning for variables, roles
+and lint packs — each carries its own unbind-unknown WARN (`CL0512`, `CL0544`, `CL0118`)
+rather than being folded into this one. `scripts:` alone still sets the key to null on a
+`~` instead of removing it, so there is nothing for this check to say about it.
 
 `CL0521` exists because library names are auto-exposed as variables (§6.1), so the two share
 one namespace. A collision is an ERROR rather than a silent precedence rule: there is no
@@ -720,3 +725,20 @@ Codes for the remaining bands are registered as the phases that mint them land. 
 (unresolvable branch dispatch) is named by the spec, not yet implemented, and reserved at
 that number. `CL04xx` holds the template checks and the leaked-artifact sweep; the render
 rewrite (§13) is what fills the rest of the band.
+
+### `CL-<pack>/NNNN` — convention-pack findings
+
+A convention pack (§8.2.2) codes its findings **outside the numeric bands**:
+`CL-<pack>/<rule-id>`, zero-padded to four digits — `CL-wtg/0001`. The prefix is the
+pack's declared `name:`, not whatever key the project used, so a pack hosted in a canon
+set yields the same codes in every project that loads it and a suppression stays portable.
+
+Every `CL-` code is opinion-layer by construction (`diag.js:isOpinion`): §12.5 puts every
+opinion-layer ERROR in a pack, and `lint.level` — plus the per-pack and per-branch
+`level:` ceilings — has to be able to reach them. A pack finding names the pack, the
+card, and the branch it fired on, because a pack can validate one branch's `notes:`
+config and not another's (§8.2.2).
+
+The pack layer's own core codes are `CL0117` (malformed pack), `CL0118` (`~` on a pack
+never inherited) and `CL0119` (`name:` disagrees with the config key) — all in the loading
+band, because loading a pack file is a loading concern.

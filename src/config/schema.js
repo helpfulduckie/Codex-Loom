@@ -134,15 +134,24 @@ const TEMPLATE_FOR = {
  * a leaked `{$she}` — are not silenceable at any level, and that is the property that makes
  * `off` a safe thing for an author to write.
  *
- * `packs:` stays a declared-but-inert key: convention packs (§8.2.2) have no phase yet.
+ * `packs:` went live in Phase 14 (§8.2.2). An entry is a mapping: `{}` names a bundled
+ * pack, `{ source: <path> }` a hosted one, and either may carry a per-pack `level:`
+ * ceiling. `~` unbinds an inherited pack on a branch.
  */
-const LINT_PACKS = {
-  type: TYPES.RECORD,
-  of: { type: [TYPES.MAP, TYPES.ANY] },
-  note: 'convention packs (§8.2.2) are not scheduled into a phase yet',
+const LINT_LEVEL = { type: TYPES.STRING, values: ['off', 'error', 'warn'] };
+
+const LINT_PACK_ENTRY = {
+  type: TYPES.MAP,
+  keys: {
+    source: STRING,
+    level: LINT_LEVEL,
+  },
 };
 
-const LINT_LEVEL = { type: TYPES.STRING, values: ['off', 'error', 'warn'] };
+const LINT_PACKS = {
+  type: TYPES.RECORD,
+  of: LINT_PACK_ENTRY,
+};
 
 const LINT = {
   type: TYPES.MAP,
@@ -155,25 +164,16 @@ const LINT = {
 /**
  * The branch-node spelling of `lint:`, and it differs from the root one in exactly one key.
  *
- * **`packs:` belongs on a branch and `level:` does not yet.** §6's merge table branch-merges
- * `lint.packs.*.source` deliberately — which packs validate a branch's `notes:` depends on
- * which mods that branch ships — so the `lint:` key has to exist at every branch position.
- * §12.5 names `level:` in the global and per-pack positions and never in a per-branch one.
- *
- * **A per-branch ceiling needs a diagnostic to know which branch raised it, which is the same
- * machinery per-pack ceilings need.** Both arrive with convention packs (§8.2.2), which have no
- * phase. Until then the key is recognized and reported as unimplemented rather than accepted
- * silently: a branch-level `level: off` that looks like it works and does nothing is the worse
- * of the two failures, because nothing ever tells the author which one they got.
+ * **Both `packs:` and `level:` are live on a branch as of Phase 14 (§8.2.2).** `lint.packs.*`
+ * branch-merges key-wise — which packs validate a branch's `notes:` depends on which mods
+ * that branch ships — and a branch-declared `level:` is a per-branch ceiling that names the
+ * branch in any finding it clamps. The project-level `lint.level` still governs the whole
+ * compile on top of both.
  */
 const BRANCH_LINT = {
   type: TYPES.MAP,
   keys: {
-    level: {
-      ...LINT_LEVEL,
-      note: 'a per-branch severity ceiling arrives with convention packs (§8.2.2); '
-        + 'the project-level lint.level governs the whole compile',
-    },
+    level: LINT_LEVEL,
     packs: LINT_PACKS,
   },
 };

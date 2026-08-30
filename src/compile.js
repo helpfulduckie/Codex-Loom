@@ -23,7 +23,8 @@ const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, 
 const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
 const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES, LINT_LEVELS } = require('./diag');
-const { renderCard, cardTitle } = require('./emit/vl');
+const { renderCard, cardTitle, parseCards } = require('./emit/vl');
+const { loadPack, evaluatePack, clampFinding } = require('./lint/packs');
 const {
   FILENAME: PLACEHOLDERS_FILENAME, writeNodePlaceholders, checkUndeclaredPlaceholders,
   checkPlaceholderContext, reportUnusedPlaceholders, reportDuplicateQuestions, localKeysOf,
@@ -792,6 +793,70 @@ function branchTreeDeclares(branches, predicate) {
     if (branchTreeDeclares(node.branches, predicate)) return true;
   }
   return false;
+}
+
+/**
+ * The inline convention-pack pass (§8.2.2).
+ *
+ * Runs after the leaf loop, over the story cards each leaf rendered — `deferredCardLeaves`
+ * still holds them per leaf, before Phase 11's frontier collapse, which is what lets a
+ * finding name the branch it fired on. For each leaf it resolves that branch's merged
+ * `lint.packs` (root packs, key-wise-overridden and `~`-unbound down the chain), loads
+ * each pack once, and evaluates it against `parseCards` of every rendered card.
+ *
+ * Findings route onto the compile bus, so a pack ERROR fails the build — the behavior
+ * §12.5 built the per-pack `level:` dial to make safe. The severity is clamped through
+ * the per-pack ceiling, then the per-branch one; the bus applies the global `lint.level`
+ * on top at `add` time, because a `CL-<pack>/…` code is opinion-layer (`diag.js`).
+ *
+ * A complete no-op — no walk, no IO — for any project that declares no `lint.packs`
+ * anywhere, which is every golden.
+ */
+function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
+  const rootLint = config.lint || {};
+  const rootPacks = rootLint.packs || {};
+  const anyBranchPacks = branchTreeDeclares(
+    config.branches, (node) => node.lint && node.lint.packs
+      && Object.keys(node.lint.packs).length > 0,
+  );
+  if (Object.keys(rootPacks).length === 0 && !anyBranchPacks) return;
+
+  const baseDir = config._base || '.';
+  const loaded = new Map(); // pack name -> normalized pack | null (failed, already reported)
+  const loc = { file: configPath };
+
+  for (const leaf of deferredCardLeaves) {
+    const label = leaf.branchPath.length > 0 ? leaf.branchPath.join('/') : '(root)';
+    const chain = walkBranchChain(config.branches, leaf.branchPath, {
+      rootVariables: config._variables || config.variables || {},
+      rootLint,
+    });
+    const branchLevel = chain.lint.level || null;
+
+    for (const [name, entry] of Object.entries(chain.lint.packs)) {
+      const packLevel = (entry && typeof entry === 'object' && entry.level) || null;
+      if (packLevel === 'off') continue;
+
+      if (!loaded.has(name)) {
+        loaded.set(name, loadPack(name, entry, {
+          baseDir, variables: chain.variables, diagnostics, loc,
+        }));
+      }
+      const pack = loaded.get(name);
+      if (!pack) continue;
+
+      for (const [type, entries] of leaf.grouped) {
+        for (const rendered of entries) {
+          const cards = parseCards(rendered.rendered, { type });
+          for (const f of evaluatePack(pack, cards, { branchLabel: label })) {
+            const sev = clampFinding(f.severity, packLevel, branchLevel);
+            if (sev === null) continue;
+            diagnostics.add(sev, f.code, f.message, loc);
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -2758,6 +2823,11 @@ function compileRun(configPath, options, buses) {
     leafSummaries.push({ label, leafItems, leafVariants, hasPE, hasAIN, hasAN });
   }
 
+  // §8.2.2 — convention packs, run over the cards each leaf just rendered while they are
+  // still keyed per leaf. Dormant unless a project declares `lint.packs`.
+  runPackChecks(config, deferredCardLeaves, configPath, compileDiagnostics);
+  reportCompileDiagnostics();
+
   // ── Phase 11 Step 4: component and script inheritance ──────────────────────
   //
   // Each deferred component (and the `Scripts/` dir) is written once at the output root
@@ -3644,7 +3714,16 @@ if (require.main === module) {
         const { runLintMode } = require('./lint');
         const dir = path.join(outputDir, 'lint');
         fs.mkdirSync(dir, { recursive: true });
-        const result = runLintMode(scenarioRoot, dir, flags.verbose, { lintLevel: effectiveLintLevel });
+        // A compiled tree carries no branch context, so `--lint` runs the project-root
+        // `lint.packs` against every file (§8.2.2). With no `compile.yaml` to find, it has
+        // no packs to run — the same honest gap `--lint` already has for `lint.level`.
+        let lintConfig = null;
+        if (configPath) {
+          try { lintConfig = loadCompileConfig(configPath); } catch (err) { lintConfig = null; }
+        }
+        const result = runLintMode(scenarioRoot, dir, flags.verbose, {
+          lintLevel: effectiveLintLevel, config: lintConfig, configPath,
+        });
         if (result) summaryParts.push(`a lint report (${result.errorCount} error(s), ${result.warnCount} warning(s))`);
       }
 

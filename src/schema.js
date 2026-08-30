@@ -14,12 +14,16 @@
  *
  * ── Descriptor shape ────────────────────────────────────────────────────────
  *
- *   { type, keys, of, required, note, alias }
+ *   { type, keys, of, required, values, min, max, note, alias }
  *
  *   type      one of the TYPES below, or an array of them for a union
  *   keys      for 'map': the declared key set — anything else is an unknown-key ERROR
  *   of        for 'seq' and 'record': the descriptor every element/value must match
  *   required  the key must be present
+ *   values    a closed set — a value outside it is CL0206
+ *   min/max   for 'number': inclusive bounds — a value outside them is CL0207. Added in
+ *             Phase 14 for convention-pack schemas, whose mod-config cards carry
+ *             open-ended positive rate settings (§8.2.2).
  *   note      the key is recognized but not yet implemented; presence is a WARN
  *   alias     the key is a superseded spelling; `alias` names its replacement
  */
@@ -45,6 +49,8 @@ const CODES = Object.freeze({
   SUPERSEDED_KEY: 'CL0205',
   /** A key whose descriptor declares `values:` — a closed set — got something else. */
   VALUE_NOT_ALLOWED: 'CL0206',
+  /** A number outside its descriptor's inclusive `min`/`max` bounds (§8.2.2). */
+  VALUE_OUT_OF_RANGE: 'CL0207',
   /** The canonical §4.3 case: a valid key written at the wrong level. */
   MISPLACED_KEY: 'CL0210',
 });
@@ -224,6 +230,14 @@ function describeType(value) {
   return `a ${typeof value}`;
 }
 
+/** "at least 0", "at most 2", or "between 0 and 2" — for the CL0207 message. */
+function rangeText(descriptor) {
+  const { min, max } = descriptor;
+  if (min !== undefined && max !== undefined) return `between ${min} and ${max}`;
+  if (min !== undefined) return `at least ${min}`;
+  return `at most ${max}`;
+}
+
 function typeName(types) {
   const readable = {
     [TYPES.STRING]: 'a string',
@@ -324,6 +338,24 @@ function validate(value, schema, options = {}) {
         );
       }
       return normalized;
+    }
+
+    // Inclusive numeric bounds. Checked after the type test, so a non-number reports as a
+    // type error rather than as an out-of-range one.
+    if (typeof normalized === 'number'
+      && (descriptor.min !== undefined || descriptor.max !== undefined)) {
+      const below = descriptor.min !== undefined && normalized < descriptor.min;
+      const above = descriptor.max !== undefined && normalized > descriptor.max;
+      if (below || above) {
+        if (diagnostics) {
+          diagnostics.error(
+            CODES.VALUE_OUT_OF_RANGE,
+            `"${display(currentPath) || '<root>'}" is ${normalized}, but must be ${rangeText(descriptor)}${inContext}.`,
+            locate(currentPath)
+          );
+        }
+        return normalized;
+      }
     }
 
     if (types.includes(TYPES.SEQ) && Array.isArray(normalized)) {

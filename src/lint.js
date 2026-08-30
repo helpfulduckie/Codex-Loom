@@ -9,7 +9,8 @@ const {
   maskFencedRegions,
 } = require('./util');
 const { parseCards } = require('./emit/vl');
-const { CODES: DIAG_CODES, LINT_LEVELS, applyLintLevel } = require('./diag');
+const { CODES: DIAG_CODES, LINT_LEVELS, applyLintLevel, Diagnostics } = require('./diag');
+const { loadPack, evaluatePack, clampFinding } = require('./lint/packs');
 
 // ── mechanical syntax checks ────────────────────────────────────────────────
 //
@@ -286,6 +287,60 @@ function scanStoryCardStructure(content) {
   return findings;
 }
 
+// ── convention packs (§8.2.2), the offline arm ──────────────────────────────
+//
+// The inline pass in `compile.js` resolves each leaf's branch-merged `lint.packs` and
+// feeds the compile bus. Here there is only a compiled tree and no branch context, so
+// the project-root `lint.packs` runs against every Story Cards file — the same honest
+// limit `--lint` already has for `lint.level` when it cannot find a `compile.yaml`.
+
+/**
+ * Load every root-declared pack once. Returns `[{ name, pack, packLevel }]`, skipping a
+ * pack whose entry is `level: off` and one that failed to load (the loader raised the
+ * ERROR onto `diagnostics`).
+ */
+function loadDeclaredPacks(config, configPath, diagnostics) {
+  const entries = (config && config.lint && config.lint.packs) || {};
+  const baseDir = (config && config._base) || (configPath ? path.dirname(configPath) : '.');
+  const variables = (config && (config._variables || config.variables)) || {};
+  const out = [];
+  for (const [name, entry] of Object.entries(entries)) {
+    const packLevel = (entry && typeof entry === 'object' && entry.level) || null;
+    if (packLevel === 'off') continue;
+    const pack = loadPack(name, entry, { baseDir, variables, diagnostics, loc: { file: configPath } });
+    if (pack) out.push({ name, pack, packLevel });
+  }
+  return out;
+}
+
+/**
+ * Run each loaded pack over one compiled Story Cards file. Findings match
+ * `scanStoryCardStructure`'s shape — `card`/`hint` carry the message — plus a namespaced
+ * `code` and `layer: 'opinion'`, so `applyLevel` and the report formatter treat them
+ * like any other opinion finding. Per-pack `level:` is applied here; the global ceiling
+ * is `applyLevel`'s job.
+ */
+function scanPacks(content, type, loadedPacks) {
+  const findings = [];
+  if (!loadedPacks || loadedPacks.length === 0) return findings;
+  const cards = parseCards(content, { type });
+  for (const { pack, packLevel } of loadedPacks) {
+    for (const f of evaluatePack(pack, cards)) {
+      const severity = clampFinding(f.severity, packLevel, null);
+      if (severity === null) continue;
+      findings.push({
+        category: `pack:${pack.name}`,
+        severity: severity.toUpperCase(),
+        layer: 'opinion',
+        code: f.code,
+        card: f.card,
+        hint: f.detail,
+      });
+    }
+  }
+  return findings;
+}
+
 // ── the opinion-layer ceiling (§12.5) ────────────────────────────────────────
 
 /**
@@ -359,14 +414,27 @@ function runLintMode(scenarioRoot, outputDir, verbose = false, options = {}) {
     return null;
   }
 
+  // §8.2.2 — project-root convention packs, loaded once. A malformed pack raises a
+  // `CL0117` here; it is echoed and counted, not swallowed.
+  const packDiags = new Diagnostics();
+  const loadedPacks = options.config
+    ? loadDeclaredPacks(options.config, options.configPath || null, packDiags)
+    : [];
+  for (const d of packDiags.all) console.warn(`  ${d.severity.toUpperCase()} [${d.code}]: ${d.message}`);
+  const packLoadErrors = packDiags.errors.length;
+
   const fileResults = [];
   for (const file of files) {
     const content  = fs.readFileSync(file, 'utf8');
     const relPath  = path.relative(rootAbs, file);
+    const segs = relPath.split(path.sep);
+    const scIdx = segs.indexOf('Story Cards');
+    const cardType = scIdx >= 0 && segs[scIdx + 1] ? segs[scIdx + 1] : null;
     const raw = scanText(content);
     raw.push(...scanNativePlaceholders(content));
     if (path.dirname(file).split(path.sep).includes('Story Cards')) {
       raw.push(...scanStoryCardStructure(content));
+      raw.push(...scanPacks(content, cardType, loadedPacks));
     }
     const findings = applyLevel(raw, level);
     fileResults.push({ relPath, findings });
@@ -386,12 +454,13 @@ function runLintMode(scenarioRoot, outputDir, verbose = false, options = {}) {
     }
   }
 
-  console.log(`\nLint: ${errorCount} error(s), ${warnCount} warning(s) across ${files.length} file(s).`);
+  const totalErrors = errorCount + packLoadErrors;
+  console.log(`\nLint: ${totalErrors} error(s), ${warnCount} warning(s) across ${files.length} file(s).`);
 
-  return { reportPath, errorCount, warnCount };
+  return { reportPath, errorCount: totalErrors, warnCount };
 }
 
 module.exports = {
   runLintMode, findLintableFiles, scanText, scanStoryCardStructure,
-  scanNativePlaceholders, applyLevel, CHECKS, LINT_LEVELS,
+  scanNativePlaceholders, scanPacks, loadDeclaredPacks, applyLevel, CHECKS, LINT_LEVELS,
 };

@@ -23,6 +23,14 @@ const { CODES } = require('../diag');
 const VARIABLE_UNBIND_UNKNOWN = 'CL0512';
 
 /**
+ * `lint.packs.<name>: ~` on a branch that never inherited that pack. Declared as a
+ * literal for the same reason as `VARIABLE_UNBIND_UNKNOWN` above — `src/lint/packs.js`
+ * owns the code (loading band, beside `CL0117`), and `model/` may not import a module
+ * that touches `fs`.
+ */
+const PACK_UNBIND_UNKNOWN = 'CL0118';
+
+/**
  * Resolve the branch spec for an item/block, walking the branch path.
  *
  * Returns:
@@ -189,7 +197,8 @@ function getBranchConfig(branches, branchPath) {
  */
 function walkBranchChain(branches, branchPath, options = {}) {
   const {
-    rootPlaceholders = null, rootVariables = null, rootRoles = null, onWarn = null,
+    rootPlaceholders = null, rootVariables = null, rootRoles = null, rootLint = null,
+    onWarn = null,
   } = options;
   const result = {
     nodes: [],
@@ -210,6 +219,13 @@ function walkBranchChain(branches, branchPath, options = {}) {
     components: {},
     render: {},
     placeholders: Object.assign({}, rootPlaceholders || {}),
+    // `lint.packs` merges key-wise down the chain exactly as `roles` does (§8.2.2): a
+    // branch overrides one pack or unbinds it with `wtg: ~`, because which packs validate
+    // a branch's `notes:` depends on which mods that branch ships. `level` seeds `null` —
+    // the project-level `lint.level` is the compile bus's job — and a branch node that
+    // declares its own `lint.level` sets it here, last-wins, so a per-branch ceiling can
+    // name the branch that raised the finding.
+    lint: { packs: Object.assign({}, (rootLint && rootLint.packs) || {}), level: null },
     scripts: undefined,
     node: null,
     complete: true,
@@ -261,6 +277,16 @@ function walkBranchChain(branches, branchPath, options = {}) {
       // `scripts:` is top-level rather than a component (§6.3) but merges the same way,
       // so a branch can swap one hook bundle and inherit the rest.
       if (node.scripts !== undefined) result.scripts = node.scripts;
+      // `lint.packs` merges key-wise with `~` deleting (§8.2.2); a branch-declared
+      // `lint.level` is the per-branch ceiling, taken last-wins down the chain.
+      if (node.lint && typeof node.lint === 'object') {
+        result.lint.packs = mergeUnbindable(result.lint.packs, node.lint.packs, {
+          code: PACK_UNBIND_UNKNOWN, kind: 'convention pack', onWarn,
+        });
+        if (node.lint.level !== undefined && node.lint.level !== null) {
+          result.lint.level = node.lint.level;
+        }
+      }
     }
 
     currentMap = node && node.branches ? node.branches : null;

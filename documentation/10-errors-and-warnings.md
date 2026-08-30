@@ -121,10 +121,13 @@ at a project directory or a config path and it reads the key; point it at a bare
 and there is no config to read, so only the flag applies. The flag wins over the key either
 way — it is what you typed for this run, the key is what the project says every run.
 
-**`lint.level` written on a *branch* is not applied, and says so.** A per-branch ceiling
-needs a diagnostic to know which branch raised it, which arrives with convention packs; until
-then a branch-level `level:` draws a `CL0204` "not yet implemented" warning rather than
-looking like it worked. `lint.packs` on a branch is fine and merges down the chain normally.
+**`lint.level` on a *branch* is a per-branch ceiling (§8.2.2).** It clamps the opinion
+layer for that branch's subtree only, and a finding it clamps names the branch that raised
+it. `lint.packs` on a branch merges down the chain key-wise — a branch can add a pack,
+override one, or unbind it with `<name>: ~` — so which packs validate a branch's `notes:`
+config can follow which mods that branch ships. The order of the ceilings is per-pack
+`level:`, then per-branch `lint.level`, then the project-level `lint.level`; the tightest
+wins.
 
 ---
 

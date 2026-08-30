@@ -164,9 +164,16 @@ branches:
       # The bundle case: one hook swapped, the other three inherited (§6.3).
       library: '{%scriptDir}/bundles/modA.js'
     lint:
+      # A per-branch severity ceiling (§8.2.2, Phase 14) — live, no longer a NYI WARN.
       level: error
       packs:
+        # `~` unbinds an inherited pack on this branch.
         stat-tracker: ~
+        # A branch pack entry carrying both a `source:` path and a per-pack `level:`, so
+        # `branches.*.lint.packs.*.source` and `.level` are covered.
+        wtg:
+          source: '{%here}/lint/wtg.cl.yaml'
+          level: warn
     branches:
       year-one:
         title: First Year

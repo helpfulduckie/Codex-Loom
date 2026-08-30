@@ -161,6 +161,28 @@ function defaultNotesText(notes) {
   return String(notes);
 }
 
+/**
+ * Recover the mapping form of a `notes:` block from the flat string `parseCards` returns.
+ *
+ * The inverse of `defaultNotesText`: mod config is authored as YAML key/value lines and
+ * emitted verbatim inside a `|-` block (§4.5), so a re-parse gets the structure back. A
+ * convention pack (§8.2.2) keyed on `hasKey` runs against this. Anything that is not a
+ * mapping — a scalar like `'[e]'`, a bare sentence of prose, a parse failure — returns
+ * `{}`, which the predicate layer reads as "carries no config."
+ */
+function parseNotesBlock(notesString) {
+  const text = String(notesString === undefined || notesString === null ? '' : notesString);
+  if (text.trim() === '') return {};
+  let parsed;
+  try {
+    // YAML 1.1 to match `parseCards` and PyYAML — the same resolver that read the fence.
+    parsed = YAML.parse(text, { version: '1.1' });
+  } catch (err) {
+    return {};
+  }
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+}
+
 /** Render the `notes:` fence line(s), or null when there is nothing to write. */
 function notesLines(text) {
   const value = String(text === undefined || text === null ? '' : text);
@@ -385,6 +407,7 @@ module.exports = {
   cardTitle,
   decodeTriggerPadding,
   defaultNotesText,
+  parseNotesBlock,
   writeScalar,
   FENCE,
 };

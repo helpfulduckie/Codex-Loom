@@ -324,9 +324,9 @@ describe('every diagnostic the config surface can emit', () => {
     ['a v3 key that was renamed', SCHEMA_CODES.UNKNOWN_KEY, 'overview: ./Review\n', {}],
     ['wrong type, non-empty', SCHEMA_CODES.WRONG_TYPE, 'variables:\n  - a\n  - b\n', {}],
     ['missing required key', SCHEMA_CODES.MISSING_REQUIRED, 'version: 4\nstructure:\n  input:\n    items: []\n', { raw: true }],
-    // `roles:` lost its `note:` in Phase 8 — it is an implemented key now (§9.2) — so
-    // `lint.packs` (still declared-but-inert, §8.2.2) carries this case instead.
-    ['not yet implemented', SCHEMA_CODES.NOT_YET_IMPLEMENTED, 'lint:\n  packs:\n    discovery-markers: {}\n', {}],
+    // No CL0204 case: `lint.packs` went live in Phase 14 (§8.2.2) and it held the last
+    // `note:` on the config surface, so NOT_YET_IMPLEMENTED is now unreachable here —
+    // recorded in the `unreachable` set below.
     // The §4.3 case: a correctly spelled key one level too high.
     ['a valid key at the wrong level', SCHEMA_CODES.MISPLACED_KEY, 'items: [./Codex]\n', {}],
     ['a document that is not a mapping', CODES.CONFIG_NOT_A_MAPPING, '- a\n- list\n', {}],
@@ -361,6 +361,11 @@ describe('every diagnostic the config surface can emit', () => {
     // __tests__/integration/component-imports.integration.test.js instead.
     const unreachable = new Set([
       SCHEMA_CODES.SUPERSEDED_KEY, SCHEMA_CODES.VALUE_NOT_ALLOWED,
+      // CL0204 (NOT_YET_IMPLEMENTED): no key in CONFIG_SCHEMA carries a `note:` any more —
+      // `lint.packs` was the last one and Phase 14 implemented it (§8.2.2).
+      // CL0207 (VALUE_OUT_OF_RANGE): no CONFIG_SCHEMA key declares `min`/`max`; the pack
+      // schema surface does, covered by schema.test.js and lint-packs.test.js.
+      SCHEMA_CODES.NOT_YET_IMPLEMENTED, SCHEMA_CODES.VALUE_OUT_OF_RANGE,
       CODES.SNAPSHOT_DIR_MISSING, CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
       CODES.SNAPSHOT_MISSING_ENTRY, CODES.SNAPSHOT_FILE_UNTRACKED, CODES.SNAPSHOT_HASH_MISMATCH,
       // CL0116 (LIBRARY_ROLE_SCAN_REFUSED, Phase 8 Decision 2) joins the same family for the
@@ -380,40 +385,39 @@ describe('every diagnostic the config surface can emit', () => {
   });
 });
 
-describe('later-phase keys are recognized, not rejected', () => {
-  test.each([
-    // `roles:` moved off this list in Phase 8 — see the `roles:` describe block below for
-    // its own coverage now that it is implemented (§9.2).
-    ['lint.packs', 'lint:\n  packs:\n    discovery-markers: {}\n'],
-  ])('%s WARNs as unimplemented rather than erroring', (_name, yaml) => {
-    const { diagnostics } = load(yaml);
+describe('lint: is a fully implemented key surface (§8.2.2, Phase 14)', () => {
+  test('lint.packs at the root validates with no error and no not-yet-implemented WARN', () => {
+    const { diagnostics } = load('lint:\n  packs:\n    wtg: {}\n');
     expect(diagnostics.hasErrors()).toBe(false);
-    expect(diagnostics.warnings.some((d) => d.message.includes('not yet implemented'))).toBe(true);
+    expect(diagnostics.warnings.some((d) => d.message.includes('not yet implemented'))).toBe(false);
+  });
+
+  test('a pack entry carrying source: and level: validates', () => {
+    const { diagnostics } = load(
+      'lint:\n  packs:\n    wtg:\n      source: ./lint/wtg.cl.yaml\n      level: warn\n');
+    expect(diagnostics.hasErrors()).toBe(false);
+  });
+
+  test('an out-of-set pack level: is a CL0206', () => {
+    const { codes } = load('lint:\n  packs:\n    wtg:\n      level: loud\n');
+    expect(codes).toContain(SCHEMA_CODES.VALUE_NOT_ALLOWED);
   });
 
   /**
-   * The inverse, and the half a stale `note:` would otherwise pass. `placeholders:` moved
-   * off the list above in Phase 4 Step 1; a note left on an implemented key tells authors
-   * their declaration will be ignored while the compiler honors it, which is worse than no
-   * note at all — the same failure `kitchen-sink.test.js` pins for slotted components.
+   * `lint:` exists on a branch node because §8.2.2 branch-merges `lint.packs`. As of
+   * Phase 14 a branch-declared `level:` is also live — a per-branch ceiling that names the
+   * branch — so it no longer draws a not-yet-implemented WARN.
    */
-  /**
-   * `lint:` has to exist on a branch node because §6 branch-merges `lint.packs`. `level:` is
-   * global-only until a diagnostic knows which branch raised it, so the branch spelling says
-   * so rather than accepting a `level: off` that looks like it works and does nothing.
-   */
-  test('lint.level on a branch node WARNs as unimplemented rather than passing silently', () => {
+  test('lint.level on a branch node is accepted silently', () => {
     const { diagnostics } = load(
       'branches:\n  hero:\n    lint:\n      level: off\n');
     expect(diagnostics.hasErrors()).toBe(false);
-    const warn = diagnostics.warnings.find((d) => d.message.includes('not yet implemented'));
-    expect(warn.message).toContain('"level"');
-    expect(warn.message).toContain('per-branch severity ceiling');
+    expect(diagnostics.warnings.some((d) => d.message.includes('not yet implemented'))).toBe(false);
   });
 
-  test('lint.packs on a branch node stays legal — §6 branch-merges it', () => {
+  test('lint.packs on a branch node stays legal — §8.2.2 branch-merges it', () => {
     const { diagnostics } = load(
-      'branches:\n  hero:\n    lint:\n      packs:\n        discovery-markers: {}\n');
+      'branches:\n  hero:\n    lint:\n      packs:\n        wtg: {}\n');
     expect(diagnostics.hasErrors()).toBe(false);
   });
 

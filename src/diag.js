@@ -398,8 +398,14 @@ const OPINION_CODES = Object.freeze(new Set([
   'CL0536', // two placeholder keys declaring the same question text
 ]));
 
+/**
+ * A `CL-<pack>/NNNN` code is always opinion-layer: §12.5 puts every opinion-layer ERROR
+ * in a convention pack, and `lint.level` (plus the per-pack and per-branch ceilings) has
+ * to be able to reach them. `severityOf` still defaults an unregistered code to WARN, so
+ * a pack code that somehow skipped its explicit severity is reported, never dropped.
+ */
 function isOpinion(code) {
-  return OPINION_CODES.has(code);
+  return OPINION_CODES.has(code) || (typeof code === 'string' && code.startsWith('CL-'));
 }
 
 /** The three values `lint.level` and `--lint-level` accept, in the order they say less. */
