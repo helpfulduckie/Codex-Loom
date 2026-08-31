@@ -376,6 +376,32 @@ describe('CLI --compile flag', () => {
     expect(fs.existsSync(path.join(tmp, 'project', 'output'))).toBe(true);
   });
 
+  test('-C with a directory arg auto-detects compile.cl.yaml (the --rename-cl name)', () => {
+    write(path.join(tmp, 'project', 'compile.cl.yaml'), MINIMAL_COMPILE_YAML);
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '-C', path.join(tmp, 'project')],
+      { encoding: 'utf8', cwd: tmp }
+    );
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(tmp, 'project', 'output'))).toBe(true);
+  });
+
+  test('-C with a directory holding two configs errors instead of picking one', () => {
+    write(path.join(tmp, 'project', 'compile.yaml'), MINIMAL_COMPILE_YAML);
+    write(path.join(tmp, 'project', 'compile.cl.yaml'), MINIMAL_COMPILE_YAML);
+
+    const result = spawnSync(
+      process.execPath,
+      [CLI, '-C', path.join(tmp, 'project')],
+      { encoding: 'utf8', cwd: tmp }
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/More than one compile config/i);
+    expect(fs.existsSync(path.join(tmp, 'project', 'output'))).toBe(false);
+  });
+
   test('-C with no compile.yaml but -l present warns and still runs leaf-review', () => {
     write(path.join(tmp, 'scenario', 'Story Cards', 'T', 'c.md'), 'c');
 

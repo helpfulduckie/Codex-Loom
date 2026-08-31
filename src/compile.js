@@ -21,7 +21,7 @@ const { CODES: FIELD_TABLE_CODES } = require('./loader/field-table');
 const { buildFieldAudit } = require('./render/field-audit');
 const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts, itemContext, CONFIG_BASENAMES, normalizeVarKey } = require('./util');
 const { expandTokens } = require('./tokens');
-const { resolveIncludes, buildCanonRegistry } = require('./loader/registry');
+const { resolveIncludes, buildCanonRegistry, findConfigEntry } = require('./loader/registry');
 const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES, LINT_LEVELS } = require('./diag');
 const { renderCard, cardTitle, parseCards } = require('./emit/vl');
 const {
@@ -3379,7 +3379,13 @@ module.exports = {
 
 /**
  * Resolve configPath, scenarioRoot, and outputDir from a CLI positional argument.
- * Accepts a folder (looks for compile.yaml inside), a compile.yaml path, or undefined (uses cwd).
+ * Accepts a folder (searched for a config entry point, §4.6), a config-file path, or
+ * undefined (searches cwd).
+ *
+ * The directory search goes through `findConfigEntry`, so all four `CONFIG_BASENAMES`
+ * spellings are found — including the `compile.cl.yaml` that `--migrate --rename-cl`
+ * leaves behind — and a directory holding two configs throws rather than silently
+ * compiling one and ignoring the other.
  *
  * @param {string|undefined} positional
  * @returns {{ configPath: string|null, scenarioRoot: string|null, outputDir: string|null, hasConfig: boolean }}
@@ -3387,16 +3393,11 @@ module.exports = {
 function resolveArgs(positional) {
   let cfgPath = null;
 
-  if (positional) {
-    if (/\.ya?ml$/i.test(positional)) {
-      cfgPath = path.resolve(positional);
-    } else {
-      const candidate = path.join(path.resolve(positional), 'compile.yaml');
-      if (fs.existsSync(candidate)) cfgPath = candidate;
-    }
+  if (positional && /\.ya?ml$/i.test(positional)) {
+    cfgPath = path.resolve(positional);
   } else {
-    const candidate = path.join(process.cwd(), 'compile.yaml');
-    if (fs.existsSync(candidate)) cfgPath = candidate;
+    const dir = positional ? path.resolve(positional) : process.cwd();
+    cfgPath = findConfigEntry(dir, CONFIG_BASENAMES);
   }
 
   if (cfgPath) {
@@ -3438,9 +3439,10 @@ function resolveArgs(positional) {
  * Deliberately not `resolveArgs`: that function calls `loadCompileConfig`, and the schema
  * requires `version: 4` with no compatibility mode — a v3 project has no such key by
  * definition, so routing `--migrate` through the shared resolver would reject exactly the
- * input it exists to accept. This does only the filename search half, reusing
- * `CONFIG_BASENAMES` (`util.js`) so it recognizes all four entry-point spellings rather
- * than the two `resolveArgs`'s own `/\.ya?ml$/i` test knows.
+ * input it exists to accept. This does only the filename search half — the same
+ * `CONFIG_BASENAMES` search `resolveArgs` runs via `findConfigEntry`, minus the config
+ * load — and it tolerates a directory with two configs (a half-finished migration) rather
+ * than throwing on it.
  */
 function resolveMigrateConfigPath(positional) {
   if (positional && /\.ya?ml$/i.test(positional)) {
@@ -3614,7 +3616,15 @@ if (require.main === module) {
     process.exit(0);
   }
 
-  const { configPath, scenarioRoot, outputDir, hasConfig, configLintLevel } = resolveArgs(positional[0]);
+  let resolved;
+  try {
+    resolved = resolveArgs(positional[0]);
+  } catch (err) {
+    // findConfigEntry throws when a directory holds more than one config entry point.
+    console.error(`\nFatal: ${err.message}`);
+    process.exit(1);
+  }
+  const { configPath, scenarioRoot, outputDir, hasConfig, configLintLevel } = resolved;
 
   // The flag is what someone typed for this run; the config is what the project says every
   // run. Same precedence the compile applies internally, stated once here so the report
