@@ -5,12 +5,16 @@ const path = require('path');
 const fs = require('fs');
 const {
   compile,
-  getTemplate, validateCardType, normalizeCardType, buildCardTypeAudit,
-  writeOpening, resolveOpeningContent, resolveBranchFolderPath,
-  buildBranchOutputDir, buildCompileContext, writeOutput,
-  resolveIncludes, resolveBranchItems, cleanAndArchive,
-  resolveCrossItemRenderFunctions,
+  getTemplate,
+  writeOpening, resolveOpeningContent,
+  buildCompileContext,
+  resolveIncludes, resolveBranchItems,
 } = require('../../src/compile');
+const { validateCardType, normalizeCardType, buildCardTypeAudit } = require('../../src/cardType');
+const {
+  writeOutput, buildBranchOutputDir, resolveBranchFolderPath, cleanAndArchive,
+} = require('../../src/outputPaths');
+const { resolveCrossItemRenderFunctions } = require('../../src/crossItem');
 const { buildRegistry } = require('../../src/loader/registry');
 const { Diagnostics, CODES: DIAG_CODES } = require('../../src/diag');
 const template = require('../../src/template');

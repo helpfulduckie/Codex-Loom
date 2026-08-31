@@ -15,13 +15,18 @@ const { resolvePlacements } = require('./model/item');
 const { slotsForBranch, normalizeComponent, applySectionSelector } = require('./model/component');
 const { loadComponentDocument } = require('./loader/component');
 const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
-const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
+const { render, applyFieldInterpolation, applyVariableInterpolation } = require('./template');
 const { renderFieldList } = require('./render/field-list');
-const { FUNCTION_NAMES } = require('./render/parse');
 const { CODES: FIELD_TABLE_CODES } = require('./loader/field-table');
 const { buildFieldAudit } = require('./render/field-audit');
-const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts, itemContext, ITEM_CONTEXT_KEYS, CONFIG_BASENAMES, normalizeVarKey, PATH_UNSAFE_CHARS } = require('./util');
+const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts, itemContext, CONFIG_BASENAMES } = require('./util');
 const { expandTokens } = require('./tokens');
+const { validateCardType, buildCardTypeAudit } = require('./cardType');
+const {
+  writeOutput, cleanAndArchive, buildBranchOutputDir, resolveBranchFolderPath,
+} = require('./outputPaths');
+const { resolveCrossItemRenderFunctions } = require('./crossItem');
+const { branchTreeDeclares } = require('./model/branches');
 const { resolveIncludes, buildCanonRegistry, findConfigEntry } = require('./loader/registry');
 const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES, LINT_LEVELS } = require('./diag');
 const { renderCard, cardTitle, parseCards } = require('./emit/vl');
@@ -29,7 +34,7 @@ const {
   loadPack, evaluatePack, evaluatePackExistence, evaluatePackItemRules, clampFinding,
 } = require('./lint/packs');
 const {
-  FILENAME: PLACEHOLDERS_FILENAME, writeNodePlaceholders, checkUndeclaredPlaceholders,
+  writeNodePlaceholders, checkUndeclaredPlaceholders,
   checkPlaceholderContext, reportUnusedPlaceholders, reportDuplicateQuestions, localKeysOf,
   expandQuestions,
 } = require('./emit/placeholders');
@@ -42,156 +47,6 @@ const { syncLibrary, checkDrift } = require('./snapshot');
 const { CODES: LOAD_CODES, isOutOfBase, normalize } = require('./config/load');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-// Characters illegal in a Windows/Unix path segment, plus control chars — built on
-// util.js's PATH_UNSAFE_CHARS, the single definition it shares with overview.js's
-// sanitizeFilename. aid.type becomes both a folder and a filename, so it must be safe.
-const INVALID_TYPE_CHARS = new RegExp('[' + PATH_UNSAFE_CHARS + '\\x00-\\x1f]');
-
-/**
- * Validate an item's aid.type after variable expansion. aid.type is written to disk
- * as Story Cards/{type}/{type}.md, so it must be a legal path segment. No-op when the
- * item has no aid.type (that case is already warned about during item resolution).
- *
- * Without `options.diagnostics`, throws (aborts the compile) on an invalid type — the
- * behavior every caller outside the leaf loop still wants. With `options.diagnostics`,
- * raises `CARD_TYPE_INVALID` on the bus and returns instead, so the leaf loop that calls
- * it can continue to the next item and report every bad type in one run.
- */
-function validateCardType(item, { diagnostics } = {}) {
-  const type = item.aid && item.aid.type;
-  if (typeof type !== 'string' || type === '') return;
-  const trimmed = type.trim();
-  const name = item.id || (typeof item.name === 'string' ? item.name : '(unknown)');
-  const src = item._source ? ` (${item._source})` : '';
-  let reason = null;
-  if (trimmed === '') reason = 'is empty/whitespace';
-  else if (INVALID_TYPE_CHARS.test(type)) reason = 'contains an illegal path character (one of < > : " / \\ | ? *)';
-  else if (trimmed === '.' || trimmed === '..') reason = 'is "." or ".."';
-  else if (/[ .]$/.test(type)) reason = 'ends with a space or period';
-  if (!reason) return;
-  const message = `Invalid aid.type "${type}" for item "${name}"${src}: ${reason}. aid.type becomes a folder/file name and must be a legal path segment.`;
-  if (diagnostics) {
-    diagnostics.error(DIAG_CODES.CARD_TYPE_INVALID, message, { file: item._source });
-    return;
-  }
-  throw new Error(message);
-}
-
-/**
- * AI Dungeon's five built-in story-card categories, in the casing AID itself stores.
- *
- * Confirmed against the platform rather than inherited from Velvet Lattice's old list: a
- * card pushed as `Race` comes back as `Race` and does not group with `race` in the editor,
- * so AID stores the string verbatim and matches it exactly. Anything not in this set is a
- * custom category and keeps whatever casing the author gave it — `Character - Dalor` and
- * `Spell - Ice` are deliberate groupings, not misspellings of a built-in.
- */
-const AID_BUILTIN_TYPES = new Set(['character', 'class', 'race', 'location', 'faction']);
-
-/**
- * Normalize one `aid.type` for emit: trim leading space, fold a built-in to lowercase.
- *
- * Pure, and separate from `validateCardType` because the two answer different questions —
- * that one asks whether the string can be a path at all and throws when it cannot, this one
- * asks what should actually be written. Trailing space and period never reach here; they
- * are fatal above, since Windows strips them and the type would silently become another.
- *
- * @returns {{ type: string, folded: boolean, trimmed: boolean }}
- */
-function normalizeCardType(raw) {
-  if (typeof raw !== 'string' || raw === '') return { type: raw, folded: false, trimmed: false };
-  const trimmedText = raw.replace(/^\s+/, '');
-  const lower = trimmedText.toLowerCase();
-  const folded = AID_BUILTIN_TYPES.has(lower) && trimmedText !== lower;
-  return { type: folded ? lower : trimmedText, folded, trimmed: trimmedText !== raw };
-}
-
-/**
- * Compile-wide accumulator for `aid.type` normalization and collisions (CL0626–CL0628).
- *
- * Shaped like `buildFieldAudit`: record as the compile walks branches, report once at the
- * end. Both halves need that shape for the same reason — a type is resolved per item per
- * branch, so per-site reporting would print one line per card per branch for a single
- * authoring decision, and the collision check cannot run until every branch's types are in.
- */
-function buildCardTypeAudit() {
-  // authored value → { to, file }. Keyed on the authored string so one warning covers
-  // every card that spells the type that way.
-  const foldedValues = new Map();
-  const trimmedValues = new Map();
-  // final type → the first source file that produced it, for the collision message.
-  const originOf = new Map();
-
-  function resolve(raw, loc = {}) {
-    const { type, folded, trimmed } = normalizeCardType(raw);
-    if (typeof type !== 'string' || type === '') return type;
-    const file = loc.file || null;
-    if (folded && !foldedValues.has(raw)) foldedValues.set(raw, { to: type, file });
-    if (trimmed && !trimmedValues.has(raw)) trimmedValues.set(raw, { to: type, file });
-    if (!originOf.has(type)) originOf.set(type, file);
-    return type;
-  }
-
-  function finish(diagnostics) {
-    if (!diagnostics) return;
-
-    for (const [authored, { to, file }] of trimmedValues) {
-      diagnostics.warn(
-        DIAG_CODES.CARD_TYPE_LEADING_SPACE,
-        `aid.type "${authored}" has leading whitespace; writing it as "${to}".`,
-        { file },
-        {
-          hint: 'A leading space survives in a directory name, so the type would reach AI '
-            + 'Dungeon as a category whose name differs from the obvious one by an '
-            + 'invisible character.',
-        },
-      );
-    }
-
-    for (const [authored, { to, file }] of foldedValues) {
-      // One line per authored value, not two: a leading-space type that is also a built-in
-      // has already been reported by CL0628, whose message names the same final value.
-      if (trimmedValues.has(authored)) continue;
-      diagnostics.warn(
-        DIAG_CODES.CARD_TYPE_NORMALIZED,
-        `aid.type "${authored}" names a built-in AI Dungeon category; writing it as "${to}".`,
-        { file },
-        {
-          hint: 'AID\'s built-in categories are lowercase and it matches the type string '
-            + `exactly, so "${authored}" would arrive as a custom category beside `
-            + `"${to}" rather than inside it. Declare it lowercase to silence this.`,
-        },
-      );
-    }
-
-    // Collision is checked on the *normalized* values: a pair that folded to one built-in
-    // has already been merged on purpose, and only a pair that still differs still collides.
-    const byPath = new Map();
-    for (const type of originOf.keys()) {
-      const key = type.trim().toLowerCase();
-      if (!byPath.has(key)) byPath.set(key, []);
-      byPath.get(key).push(type);
-    }
-    for (const [, variants] of byPath) {
-      if (variants.length < 2) continue;
-      const sorted = variants.slice().sort();
-      diagnostics.error(
-        DIAG_CODES.CARD_TYPE_CASE_COLLISION,
-        `aid.type values ${sorted.map((v) => `"${v}"`).join(' and ')} differ only by case, `
-        + 'and are written to the same file on a case-insensitive filesystem.',
-        { file: originOf.get(sorted[0]) },
-        {
-          hint: 'Story Cards/{type}/{type}.md is one path for all of them on Windows and '
-            + 'macOS, so the group written last overwrites the others and their cards never '
-            + 'reach AI Dungeon. Pick one spelling.',
-        },
-      );
-    }
-  }
-
-  return { resolve, finish };
-}
 
 /** Codes this module reports. CL04xx is the render/template band (§4.4). */
 const CODES = {
@@ -639,178 +494,6 @@ function buildCompileContext(config, branchPath, options = {}) {
     // re-walking `walkBranchChain` with its own, warn-less seed.
     lint: chain.lint,
   };
-}
-
-/**
- * Write compiled items to output directory.
- * One .md file per item type: Story Cards/{type}/{type}.md
- */
-function writeOutput(outputDir, type, renderedItems) {
-  const typeDir = path.join(outputDir, 'Story Cards', type);
-  fs.mkdirSync(typeDir, { recursive: true });
-  const outputPath = path.join(typeDir, `${type}.md`);
-  fs.writeFileSync(outputPath, renderedItems.join('\n\n') + '\n', 'utf8');
-  return outputPath;
-}
-
-/**
- * Delete Story Cards, Components, Scripts subdirs and Label.md from a branch output dir.
- */
-function cleanBranchOutputDir(dir) {
-  for (const sub of ['Story Cards', 'Components', 'Scripts']) {
-    const target = path.join(dir, sub);
-    if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
-  }
-  for (const file of ['Label.md', PLACEHOLDERS_FILENAME]) {
-    const target = path.join(dir, file);
-    if (fs.existsSync(target)) fs.rmSync(target);
-  }
-}
-
-/**
- * Every branch *node* dir on disk beneath a `Branches/` container, deepest first.
- *
- * Was `findLeafDirsOnDisk`, which stopped at leaves. An interior node is a node: it owns
- * a `Label.md` and, since Phase 4, a `Placeholders.yaml`, and Velvet Lattice reads both
- * and inherits them down the subtree. A sweep that only sees leaves cannot clean an
- * interior node and cannot tell that one has gone stale.
- *
- * Deepest first so a caller removing empty directories meets a child before its parent.
- */
-function findNodeDirsOnDisk(dir) {
-  if (!fs.existsSync(dir)) return [];
-  const nodes = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const child = path.join(dir, entry.name);
-    nodes.push(...findNodeDirsOnDisk(path.join(child, 'Branches')));
-    nodes.push(child);
-  }
-  return nodes;
-}
-
-/**
- * Every node dir from `leafDir` up to and including `baseOutput`.
- *
- * The `Branches` containers between them are skipped: they hold nodes and are not nodes,
- * so they carry no `Label.md` and nothing to clean.
- */
-function nodeDirsUpTo(leafDir, baseOutput) {
-  const chain = [];
-  let current = path.resolve(leafDir);
-  const stop = path.resolve(baseOutput);
-  while (current.length >= stop.length) {
-    if (path.basename(current) !== 'Branches') chain.push(current);
-    if (current === stop) break;
-    const parent = path.dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
-  return chain;
-}
-
-function isDirEmpty(dir) {
-  if (!fs.existsSync(dir)) return true;
-  return fs.readdirSync(dir).length === 0;
-}
-
-/**
- * Pre-build clean: wipe output-type folders from every active branch node, then detect
- * and archive (or delete) any stale node on disk.
- *
- * **Nodes, not leaves.** This swept only leaf directories until Phase 4 raised it: a
- * declaration deleted from an interior node — its `Placeholders.yaml`, or the `Label.md`
- * that has the same shape and predates placeholders — survived in the output tree, and
- * Velvet Lattice went on reading it and inheriting it down the subtree. The compiler
- * rewrites what it emits, so only a key that stopped being emitted was affected, which is
- * exactly the edit an author makes when they mean to remove one.
- *
- * The root is a node too, and had the same hole: it was added to the expected set only
- * for a project with no branches at all, so a branched project's root `Label.md` and
- * `Placeholders.yaml` were never swept either.
- *
- * Ancestors of an expected leaf are expected, which gives the stale pass an invariant it
- * needs: a stale node can never contain a live descendant, so archiving one whole is safe.
- */
-function cleanAndArchive(config, leaves) {
-  const baseOutput = config._resolvedOutput;
-
-  const expectedDirs = new Set();
-  for (const branchPath of leaves) {
-    const folderPath = resolveBranchFolderPath(config.branches, branchPath);
-    const leafDir = buildBranchOutputDir(baseOutput, folderPath);
-    for (const dir of nodeDirsUpTo(leafDir, baseOutput)) expectedDirs.add(dir);
-  }
-  expectedDirs.add(path.resolve(baseOutput));
-
-  for (const dir of expectedDirs) {
-    cleanBranchOutputDir(dir);
-    console.log(`  Cleaned: ${path.relative(baseOutput, dir) || '(root)'}`);
-  }
-
-  const branchesRoot = path.join(baseOutput, 'Branches');
-  const diskNodes = findNodeDirsOnDisk(branchesRoot);
-  const stale = diskNodes.filter(d => !expectedDirs.has(path.resolve(d)));
-  if (stale.length === 0) return;
-
-  const ts = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 15);
-  const archiveBase = path.join(baseOutput, 'Archive', ts);
-
-  for (const staleDir of stale) {
-    cleanBranchOutputDir(staleDir);
-    // `stale` is deepest first, so a stale node's own stale children have already been
-    // dealt with by the time it is reached — leaving behind an empty `Branches` container
-    // that would otherwise read as content and get the node archived as a hollow shell.
-    const container = path.join(staleDir, 'Branches');
-    if (fs.existsSync(container) && isDirEmpty(container)) fs.rmSync(container, { recursive: true });
-    if (isDirEmpty(staleDir)) {
-      fs.rmSync(staleDir, { recursive: true, force: true });
-      console.log(`  Removed empty stale branch: ${path.relative(baseOutput, staleDir)}`);
-    } else {
-      const rel = path.relative(baseOutput, staleDir);
-      const dest = path.join(archiveBase, rel);
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.renameSync(staleDir, dest);
-      console.log(`  Archived stale branch → Archive/${ts}/${rel}`);
-    }
-  }
-}
-
-/**
- * Build the output directory path for a branch leaf.
- */
-function buildBranchOutputDir(baseOutput, branchPath) {
-  if (branchPath.length === 0) return baseOutput;
-  return path.join(baseOutput, ...branchPath.flatMap(b => ['Branches', b]));
-}
-
-/**
- * Resolve the output folder path for a branch identifier path.
- * Uses the internal key name (case-preserved from the YAML) for each folder segment.
- *
- * @param {object|null} branches - root branches mapping from config
- * @param {string[]}    idPath   - branch identifier path (e.g. ['tier2', 'alpha'])
- * @returns {string[]}           - folder name path (e.g. ['tier2', 'alpha'])
- */
-function resolveBranchFolderPath(branches, idPath) {
-  return walkBranchChain(branches, idPath).folderPath;
-}
-
-/**
- * True when any branch node anywhere below the root satisfies `predicate` — used by the
- * Phase 11 Step 4 inheritance pass to check whether a component key or `scripts:` is
- * redeclared below the project root. A key declared only at the root can be written once
- * there and left for Velvet Lattice to inherit; a key some branch overrides has to be
- * resolved per leaf.
- */
-function branchTreeDeclares(branches, predicate) {
-  if (!branches || typeof branches !== 'object') return false;
-  for (const node of Object.values(branches)) {
-    if (!node || typeof node !== 'object') continue;
-    if (predicate(node)) return true;
-    if (branchTreeDeclares(node.branches, predicate)) return true;
-  }
-  return false;
 }
 
 /**
@@ -1495,212 +1178,6 @@ function reportUnusedRoles(declarations, usage, { diagnostics, file } = {}) {
     }
   }
   return unused;
-}
-
-/**
- * The fixed keys `itemContext` (`util.js`) attaches to every item's render context, from
- * util.js's own `ITEM_CONTEXT_KEYS` rather than a hand-restated copy. A render function's
- * first path segment matching one of these resolves against the *current* item —
- * `resolveField`'s (`render/eval.js`) itemMap pivot only fires when the segment matches
- * neither this set nor the current item, so the dependency graph below must exclude them the
- * same way or it would draw an edge for every plain `$body.x` reference.
- */
-const ITEM_CONTEXT_KEY_SET = new Set(ITEM_CONTEXT_KEYS);
-
-/**
- * The render-function call syntax `processFieldRenderFunctions` (`template.js`) dispatches on.
- * Derived from the canonical `FUNCTION_NAMES` (`render/parse.js`) so a new render function
- * is registered in exactly one place.
- */
-const RENDER_FN_PREFIXES = FUNCTION_NAMES.map((n) => n + '(');
-
-/**
- * Scan one item's body for cross-item render-function references (Phase 9 Step 2).
- *
- * An edge exists only when a render function's *first* path segment names another item —
- * exactly the case `resolveField`'s itemMap pivot resolves — so this scan has to mirror that
- * pivot's rule precisely rather than approximate it, or the graph would draw edges the
- * evaluator never actually chases (or miss ones it does). Plain `{$Other.body.X}` field
- * substitutions are `applyCrossItemRefs`'s pass, a different token family already resolved
- * before this runs, and are not scanned here.
- *
- * Returns `[{ target, field }]` — `target` the referenced item's lowercase id, `field` the
- * dotted body path the reference was found in, for `CL0418`'s message.
- */
-function scanCrossItemRefs(body, resolvedById, selfId) {
-  const refs = [];
-  const scanString = (str, fieldPath) => {
-    str.replace(/\{([^{}]+)\}/g, (match, inner) => {
-      inner = inner.trim();
-      if (!RENDER_FN_PREFIXES.some((prefix) => inner.startsWith(prefix))) return match;
-      const tokens = inner.match(/\$[A-Za-z0-9_-]+/g) || [];
-      for (const token of tokens) {
-        const first = normalizeVarKey(token.slice(1)).toLowerCase();
-        if (ITEM_CONTEXT_KEY_SET.has(first)) continue;
-        if (first === selfId) continue;
-        if (!resolvedById.has(first)) continue;
-        refs.push({ target: first, field: fieldPath });
-      }
-      return match;
-    });
-  };
-  const walk = (obj, fieldPath) => {
-    if (!obj || typeof obj !== 'object') return;
-    for (const key of Object.keys(obj)) {
-      const val = obj[key];
-      const nextPath = fieldPath ? `${fieldPath}.${key}` : key;
-      if (typeof val === 'string') {
-        scanString(val, nextPath);
-      } else if (Array.isArray(val)) {
-        for (const entry of val) {
-          if (typeof entry === 'string') scanString(entry, nextPath);
-        }
-      } else if (typeof val === 'object' && val !== null) {
-        walk(val, nextPath);
-      }
-    }
-  };
-  walk(body, '');
-  return refs;
-}
-
-/**
- * Tarjan's SCC over the cross-item dependency graph. Returns only the multi-node groups —
- * every genuine cycle — because a single-node SCC is acyclic by construction once self-loops
- * are excluded from the graph (Decision 3's Unknowns: self-reference is tolerated, not a
- * cycle, and `scanCrossItemRefs` never records one).
- */
-function findCycles(graph) {
-  let counter = 0;
-  const index = new Map();
-  const lowlink = new Map();
-  const onStack = new Set();
-  const stack = [];
-  const groups = [];
-
-  const strongconnect = (v) => {
-    index.set(v, counter);
-    lowlink.set(v, counter);
-    counter++;
-    stack.push(v);
-    onStack.add(v);
-    for (const w of graph.get(v) || []) {
-      if (!index.has(w)) {
-        strongconnect(w);
-        lowlink.set(v, Math.min(lowlink.get(v), lowlink.get(w)));
-      } else if (onStack.has(w)) {
-        lowlink.set(v, Math.min(lowlink.get(v), index.get(w)));
-      }
-    }
-    if (lowlink.get(v) === index.get(v)) {
-      const group = [];
-      let w;
-      do {
-        w = stack.pop();
-        onStack.delete(w);
-        group.push(w);
-      } while (w !== v);
-      if (group.length > 1) groups.push(group);
-    }
-  };
-
-  for (const v of graph.keys()) {
-    if (!index.has(v)) strongconnect(v);
-  }
-  return groups;
-}
-
-/**
- * Post-order DFS topological order: a dependency is pushed onto `order` before the item that
- * depends on it, because it is fully visited (recursed into) first. Safe to run on a graph
- * that contains cycles — a node already on the current stack (`state === 1`) is skipped
- * rather than re-entered, so every node still resolves to exactly one position in `order`.
- * The caller excludes cyclic nodes from evaluation; their position in this order is otherwise
- * unused.
- */
-function topoOrder(graph) {
-  const state = new Map();
-  const order = [];
-  const visit = (node) => {
-    if (state.has(node)) return;
-    state.set(node, 1);
-    for (const dep of graph.get(node) || []) {
-      visit(dep);
-    }
-    state.set(node, 2);
-    order.push(node);
-  };
-  for (const node of graph.keys()) visit(node);
-  return order;
-}
-
-/** `CL0418`, naming every item and field on the cycle's edges rather than the uncoded warning it replaces. */
-function reportCycle(group, edgeFields, resolvedById, diagnostics) {
-  if (!diagnostics) return;
-  const groupSet = new Set(group);
-  const parts = [];
-  for (const from of group) {
-    for (const to of groupSet) {
-      const key = `${from}->${to}`;
-      const fields = edgeFields.get(key);
-      if (!fields) continue;
-      const fromItem = resolvedById.get(from);
-      const toItem = resolvedById.get(to);
-      for (const field of fields) {
-        parts.push(`"${fromItem.id}".${field} → "${toItem.id}"`);
-      }
-    }
-  }
-  diagnostics.error(
-    DIAG_CODES.CROSS_ITEM_CYCLE,
-    `Circular cross-item render dependency: ${parts.join(', ')}`,
-  );
-}
-
-/**
- * Dependency-ordered cross-item render-function resolution (v4 spec §13, Phase 9 Step 2).
- *
- * Replaces the fixpoint loop that iterated to convergence: build the dependency graph the
- * corpus's cross-item render functions imply, evaluate it in one topological pass, and report
- * a genuine cycle by name instead of an uncoded warning after N passes.
- *
- * A render function that migrates from item `B` into item `A` is evaluated in `B`'s context —
- * where the author wrote it — because `B` is resolved (and its body mutated in place) before
- * `A` ever reads it. This is Decision 3's divergence, and the one place in the phase whose
- * compiled output may legitimately move.
- */
-function resolveCrossItemRenderFunctions(resolvedItems, resolvedById, diagnostics) {
-  const graph = new Map();
-  const edgeFields = new Map();
-
-  for (const item of resolvedItems) {
-    const idLower = (item.id || '').toLowerCase();
-    if (!idLower) continue;
-    const deps = graph.get(idLower) || new Set();
-    graph.set(idLower, deps);
-    if (!item.body) continue;
-    for (const { target, field } of scanCrossItemRefs(item.body, resolvedById, idLower)) {
-      deps.add(target);
-      const key = `${idLower}->${target}`;
-      if (!edgeFields.has(key)) edgeFields.set(key, new Set());
-      edgeFields.get(key).add(field);
-    }
-  }
-
-  const cyclic = new Set();
-  for (const group of findCycles(graph)) {
-    for (const id of group) cyclic.add(id);
-    reportCycle(group, edgeFields, resolvedById, diagnostics);
-  }
-
-  for (const id of topoOrder(graph)) {
-    // Left unexpanded: the item's leaked render-function text is caught downstream by the
-    // output sweep's CL0432 LEAKED_RENDER_FUNCTION, per Decision 3's Unknowns — two reports,
-    // both correct, rather than a guess at which side of the cycle to break.
-    if (cyclic.has(id)) continue;
-    const item = resolvedById.get(id);
-    applyFieldRenderFunctions(item, resolvedById, { diagnostics, file: item._source });
-  }
 }
 
 function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, variables = {}, options = {}) {
@@ -3355,7 +2832,6 @@ module.exports = {
   compile,
   resolveBranchItems,
   renderBranchItems,
-  resolveCrossItemRenderFunctions,
   getTemplate,
   getTemplateName,
   resolveBodyRender,
@@ -3365,21 +2841,12 @@ module.exports = {
   isTemplateChoice,
   checkConfigNotesTemplates,
   CODES,
-  validateCardType,
-  normalizeCardType,
-  buildCardTypeAudit,
-  AID_BUILTIN_TYPES,
-  writeOutput,
   resolveIncludes,
   buildCompileContext,
   resolveVariables,
-  buildBranchOutputDir,
-  resolveBranchFolderPath,
   resolveOpeningContent,
   writeOpening,
   writeFramingRecursive,
-  cleanAndArchive,
-  RENDER_FN_PREFIXES,
 };
 
 /**

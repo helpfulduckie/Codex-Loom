@@ -4,15 +4,15 @@ const fs = require('fs');
 const path = require('path');
 
 // Isolated in its own file (rather than folded into compile.test.js) because the pass-count
-// proof below needs `applyFieldRenderFunctions` spied on *before* `compile.js` is required —
-// compile.js destructures the function into a local binding at its own module load time
+// proof below needs `applyFieldRenderFunctions` spied on *before* `crossItem.js` is required —
+// crossItem.js destructures the function into a local binding at its own module load time
 // (`const { applyFieldRenderFunctions } = require('./template')`), so a spy installed after
-// compile.js is already cached elsewhere would never be seen. A dedicated file gets a fresh,
+// crossItem.js is already cached elsewhere would never be seen. A dedicated file gets a fresh,
 // ordered require chain for free; Jest gives each test file its own module registry, so
-// nothing else in the suite has required `compile.js` (or `template.js`) yet.
+// nothing else in the suite has required `crossItem.js` (or `template.js`) yet.
 const templateModule = require('../../src/template');
 const applyFieldRenderFunctionsSpy = jest.spyOn(templateModule, 'applyFieldRenderFunctions');
-const { resolveCrossItemRenderFunctions } = require('../../src/compile');
+const { resolveCrossItemRenderFunctions } = require('../../src/crossItem');
 const { Diagnostics, CODES: DIAG_CODES } = require('../../src/diag');
 
 function byId(...items) {

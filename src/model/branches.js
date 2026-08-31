@@ -411,7 +411,24 @@ function isLeafNode(node) {
   return !sub || typeof sub !== 'object' || Object.keys(sub).length === 0;
 }
 
+/**
+ * True when any branch node anywhere below the root satisfies `predicate` — used by the
+ * inheritance pass to check whether a component key or `scripts:` is redeclared below the
+ * project root. A key declared only at the root can be written once there and left for
+ * Velvet Lattice to inherit; a key some branch overrides has to be resolved per leaf.
+ */
+function branchTreeDeclares(branches, predicate) {
+  if (!branches || typeof branches !== 'object') return false;
+  for (const node of Object.values(branches)) {
+    if (!node || typeof node !== 'object') continue;
+    if (predicate(node)) return true;
+    if (branchTreeDeclares(node.branches, predicate)) return true;
+  }
+  return false;
+}
+
 module.exports = {
   resolveBranchSpec, enumerateLeaves,
   walkBranchChain, walkBranchTree, mergePlaceholders, mergeUnbindable, localRoleKeysOf,
+  branchTreeDeclares,
 };
