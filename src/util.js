@@ -37,6 +37,16 @@ const CONFIG_BASENAMES = Object.freeze([
  */
 const RESERVED_LIBRARY_BASENAMES = Object.freeze(['canon.cl.yaml']);
 
+/**
+ * Characters illegal in a Windows/Unix path segment, as a character-class source
+ * fragment rather than a finished `RegExp` — the one definition `overview.js`'s
+ * `sanitizeFilename` and `compile.js`'s `aid.type` check both build on, since they need
+ * different flags (`g` for a global replace, none for a single test) and one extends the
+ * class with control characters. Callers wrap it in `[...]` and add whatever flags they
+ * need: `new RegExp('[' + PATH_UNSAFE_CHARS + ']', 'g')`.
+ */
+const PATH_UNSAFE_CHARS = '<>:"/\\\\|?*';
+
 function hasSuffix(name, suffixes) {
   const lower = name.toLowerCase();
   return suffixes.some((s) => lower.endsWith(s));
@@ -200,6 +210,14 @@ function walkItemTextFields(item, transform) {
     if (section && typeof section === 'object') walkTextRecursive(section, transform);
   }
 }
+
+/**
+ * The fixed top-level keys `itemContext` attaches to every item's render context.
+ * Exported so a caller that needs to recognize "one of the keys every context carries"
+ * (e.g. compile.js's cross-item reference scan, distinguishing those from a body field)
+ * reads this list rather than restating it by hand.
+ */
+const ITEM_CONTEXT_KEYS = Object.freeze(['id', 'name', 'pronouns', 'aid', 'render', 'body', 'v', 'notes']);
 
 /**
  * The render context for an item: its top-level fields, with the open namespaces
@@ -389,8 +407,8 @@ function checkMechanicalArtifacts(text, label, sink) {
 module.exports = {
   findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
   ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
-  YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix,
-  resolveVariables, checkUnexpandedVariables, walkItemTextFields, walkTextRecursive, itemContext, checkUnresolvedFieldTokens,
+  YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix, PATH_UNSAFE_CHARS,
+  resolveVariables, checkUnexpandedVariables, walkItemTextFields, walkTextRecursive, itemContext, ITEM_CONTEXT_KEYS, checkUnresolvedFieldTokens,
   checkMechanicalArtifacts, maskFencedRegions,
   FIELD_TOKEN_RE, VAR_TOKEN_RE, TEMPLATE_FN_RE, TEMPLATE_TAG_RE, VERB_MARKER_RE, SUSPECT_VERB_MARKER_RE, JS_ARTIFACT_RE, JS_WORD_RE,
 };

@@ -34,7 +34,9 @@ const SEVERITY_LABEL = Object.freeze({
  *   CL03xx  items — resolution, variants, imports, branch dispatch
  *   CL04xx  render — templates, functions, lint checks
  *   CL05xx  tokens — variables, roles, placeholders, scoping
- *   CL06xx  components — slots, sections, missing component sources
+ *   CL06xx  components — slots, sections, missing component sources; the `aid.type`
+ *           path-safety and card-type family also lives here, by cohesion with
+ *           `CARD_TYPE_CASE_COLLISION`/`_NORMALIZED`/`_LEADING_SPACE` rather than by band
  *   CL07xx  emit — output layout, platform limits
  */
 const CODES = Object.freeze({
@@ -302,6 +304,20 @@ const CODES = Object.freeze({
    */
   CARD_TYPE_LEADING_SPACE: 'CL0628',
 
+  /**
+   * `aid.type` fails `validateCardType`'s legality check (empty/whitespace, an illegal path
+   * character, "." or "..", or a trailing space/period) — see `compile.js`. Raised on the
+   * bus rather than thrown, so one bad type does not abort a run that would otherwise report
+   * every other one; the leaf loop continues past it.
+   */
+  CARD_TYPE_INVALID: 'CL0632',
+
+  /** `branchFraming` on a node with nothing below it to frame — the root or a leaf (§7.3). */
+  BRANCH_FRAMING_IGNORED: 'CL0633',
+
+  /** A requested component produced no output anywhere in the compile (§7.2/§7.7). */
+  COMPONENT_NO_OUTPUT: 'CL0634',
+
   // Emit (§8). Both are facts about what Velvet Lattice can carry to AID, not opinions
   // about content — which is why they live in the compiler rather than in lint (§12.5).
   TRIGGER_CONTAINS_COMMA: 'CL0701',
@@ -367,6 +383,9 @@ const SEVERITY_BY_CODE = Object.freeze({
   CL0543: SEVERITY.ERROR,
   CL0544: SEVERITY.WARN,
   CL0545: SEVERITY.WARN,
+  CL0632: SEVERITY.ERROR,
+  CL0633: SEVERITY.WARN,
+  CL0634: SEVERITY.ERROR,
 });
 
 /** WARN is the default: an unregistered code is still reported, never silently dropped. */

@@ -664,6 +664,14 @@ describe('validateCardType', () => {
   test('error names the offending type and the item', () => {
     expect(() => validateCardType(item('a/b'))).toThrow(/"a\/b".*"X"/);
   });
+
+  test('with diagnostics, raises CL0632 and does not throw', () => {
+    const diagnostics = new Diagnostics();
+    expect(() => validateCardType(item('a/b'), { diagnostics })).not.toThrow();
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0].code).toBe(DIAG_CODES.CARD_TYPE_INVALID);
+    expect(diagnostics.errors[0].message).toMatch(/"a\/b".*"X"/);
+  });
 });
 
 // ── normalizeCardType / buildCardTypeAudit (CL0626–CL0628) ────────────────────

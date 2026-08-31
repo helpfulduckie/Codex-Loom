@@ -348,6 +348,9 @@ value, and the property belongs to the template, not to each field.
 | `CL0629` | ERROR | `adventureDescription` declares `advanced:` or `description:` in `metadata:` — both belong to the scenario blurb only. |
 | `CL0630` | WARN | A branch leaf resolves neither an `opening:` nor an `adventureDescription:`, inherited or its own — Velvet Lattice would start it with an empty prompt. |
 | `CL0631` | WARN | A branch leaf resolves no `aiInstructions:`, inherited or its own — Velvet Lattice writes an empty-string AI Instructions, which suppresses AID's model default rather than falling back to it. |
+| `CL0632` | ERROR | `aid.type` fails path-legality: empty/whitespace, an illegal path character, `.`/`..`, or a trailing space/period. |
+| `CL0633` | WARN | `branchFraming` on a node with nothing below it to frame — the root with no branches, or a leaf. |
+| `CL0634` | ERROR | A requested component produced no output anywhere in the compile. |
 
 `CL0601` is an error rather than a resolved precedence because the two readings differ in
 output and neither is obviously right: text inside a slot could sit before or after the

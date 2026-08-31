@@ -20,7 +20,7 @@ const { renderFieldList } = require('./render/field-list');
 const { FUNCTION_NAMES } = require('./render/parse');
 const { CODES: FIELD_TABLE_CODES } = require('./loader/field-table');
 const { buildFieldAudit } = require('./render/field-audit');
-const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts, itemContext, CONFIG_BASENAMES, normalizeVarKey } = require('./util');
+const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts, itemContext, ITEM_CONTEXT_KEYS, CONFIG_BASENAMES, normalizeVarKey, PATH_UNSAFE_CHARS } = require('./util');
 const { expandTokens } = require('./tokens');
 const { resolveIncludes, buildCanonRegistry, findConfigEntry } = require('./loader/registry');
 const { Diagnostics, busWarner, severityOf, CODES: DIAG_CODES, LINT_LEVELS } = require('./diag');
@@ -43,17 +43,22 @@ const { CODES: LOAD_CODES, isOutOfBase, normalize } = require('./config/load');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Characters illegal in a Windows/Unix path segment (mirrors overview.js sanitizeFilename
-// plus control chars). aid.type becomes both a folder and a filename, so it must be safe.
-const INVALID_TYPE_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
+// Characters illegal in a Windows/Unix path segment, plus control chars — built on
+// util.js's PATH_UNSAFE_CHARS, the single definition it shares with overview.js's
+// sanitizeFilename. aid.type becomes both a folder and a filename, so it must be safe.
+const INVALID_TYPE_CHARS = new RegExp('[' + PATH_UNSAFE_CHARS + '\\x00-\\x1f]');
 
 /**
  * Validate an item's aid.type after variable expansion. aid.type is written to disk
- * as Story Cards/{type}/{type}.md, so it must be a legal path segment. Throws (aborts
- * the compile) on an invalid type. No-op when the item has no aid.type (that case is
- * already warned about during item resolution).
+ * as Story Cards/{type}/{type}.md, so it must be a legal path segment. No-op when the
+ * item has no aid.type (that case is already warned about during item resolution).
+ *
+ * Without `options.diagnostics`, throws (aborts the compile) on an invalid type — the
+ * behavior every caller outside the leaf loop still wants. With `options.diagnostics`,
+ * raises `CARD_TYPE_INVALID` on the bus and returns instead, so the leaf loop that calls
+ * it can continue to the next item and report every bad type in one run.
  */
-function validateCardType(item) {
+function validateCardType(item, { diagnostics } = {}) {
   const type = item.aid && item.aid.type;
   if (typeof type !== 'string' || type === '') return;
   const trimmed = type.trim();
@@ -64,9 +69,13 @@ function validateCardType(item) {
   else if (INVALID_TYPE_CHARS.test(type)) reason = 'contains an illegal path character (one of < > : " / \\ | ? *)';
   else if (trimmed === '.' || trimmed === '..') reason = 'is "." or ".."';
   else if (/[ .]$/.test(type)) reason = 'ends with a space or period';
-  if (reason) {
-    throw new Error(`Invalid aid.type "${type}" for item "${name}"${src}: ${reason}. aid.type becomes a folder/file name and must be a legal path segment.`);
+  if (!reason) return;
+  const message = `Invalid aid.type "${type}" for item "${name}"${src}: ${reason}. aid.type becomes a folder/file name and must be a legal path segment.`;
+  if (diagnostics) {
+    diagnostics.error(DIAG_CODES.CARD_TYPE_INVALID, message, { file: item._source });
+    return;
   }
+  throw new Error(message);
 }
 
 /**
@@ -1489,13 +1498,14 @@ function reportUnusedRoles(declarations, usage, { diagnostics, file } = {}) {
 }
 
 /**
- * The fixed keys `itemContext` (`util.js`) attaches to every item's render context. A render
- * function's first path segment matching one of these resolves against the *current* item —
+ * The fixed keys `itemContext` (`util.js`) attaches to every item's render context, from
+ * util.js's own `ITEM_CONTEXT_KEYS` rather than a hand-restated copy. A render function's
+ * first path segment matching one of these resolves against the *current* item —
  * `resolveField`'s (`render/eval.js`) itemMap pivot only fires when the segment matches
  * neither this set nor the current item, so the dependency graph below must exclude them the
  * same way or it would draw an edge for every plain `$body.x` reference.
  */
-const ITEM_CONTEXT_KEYS = new Set(['id', 'name', 'pronouns', 'aid', 'render', 'body', 'v', 'notes']);
+const ITEM_CONTEXT_KEY_SET = new Set(ITEM_CONTEXT_KEYS);
 
 /**
  * The render-function call syntax `processFieldRenderFunctions` (`template.js`) dispatches on.
@@ -1526,7 +1536,7 @@ function scanCrossItemRefs(body, resolvedById, selfId) {
       const tokens = inner.match(/\$[A-Za-z0-9_-]+/g) || [];
       for (const token of tokens) {
         const first = normalizeVarKey(token.slice(1)).toLowerCase();
-        if (ITEM_CONTEXT_KEYS.has(first)) continue;
+        if (ITEM_CONTEXT_KEY_SET.has(first)) continue;
         if (first === selfId) continue;
         if (!resolvedById.has(first)) continue;
         refs.push({ target: first, field: fieldPath });
@@ -1848,8 +1858,10 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     });
 
     // Validate the fully-resolved aid.type (it becomes a folder/file name). Runs here,
-    // after all {%}/{$} passes, so it sees the final on-disk type. Aborts on invalid.
-    validateCardType(item);
+    // after all {%}/{$} passes, so it sees the final on-disk type. Raises CL0632 and
+    // continues on invalid — the leaf loop moves to the next item rather than aborting,
+    // so a run reports every bad type instead of only the first.
+    validateCardType(item, { diagnostics });
 
 
     const bodyRender = resolveBodyRender(item, templates, fieldTable, templateFor);
@@ -2002,27 +2014,11 @@ function writeComponentFile(outputDir, filename, content, sink) {
  * `Opening.md`, the name a leaf's `opening:` uses, because Velvet Lattice reads a node's
  * prompt from that filename at every level.
  *
- * **The opening half of this walker moved into the leaf loop in Phase 6 Step 6.** An
- * `opening:` is an ordinary inherited component now, so the chain-merge this function used
- * to do by hand — `declaredOpening !== undefined ? … : state.inheritedOpening` — is what
- * `buildCompileContext` already does for every component. What is left here is the node
- * write the leaf loop genuinely cannot reach.
- *
- * **Phase 10 Step 4 threads roles and a resolved protagonist through the same state channel
- * `variables` and `table` already ride.** `walkBranchTree`'s visitor returns the state its
- * children inherit, so per-node `roles`/`branchProtagonist` need no change to that mechanism
- * — they merge into `state` exactly the way `branchVars`/`table` already do, via
- * `mergeUnbindable`, the same key-wise `~`-deleting merge `walkBranchChain` uses for roles
- * (`model/branches.js`), reused rather than reimplemented so the two cannot disagree.
- * `onRoleUsed`, the sink the leaf loop's `resolveRole` already calls on every successful
- * resolution, arrives as an input because this is a top-level function with no closure over
- * `compile()`'s scope. Neither is `roles` or `branchProtagonist` itself: those still ride
- * via state, computed fresh per node.
- *
- * **Phase 11 Step 0 walks the project root like every other node.** The walker takes the
- * root now, so the old hand-rolled root rung is gone: the root's own `branchFraming`
- * arrives through the visitor's `isRoot` arm, and `config.roles` / `config.placeholders`
- * are seeded by the root visit through the same merges the branch nodes use.
+ * Per-node `roles`/`branchProtagonist` merge into the visitor's `state` the same way
+ * `branchVars`/`table` do, via `mergeUnbindable` — the same key-wise `~`-deleting merge
+ * `walkBranchChain` (`model/branches.js`) uses for roles, reused rather than reimplemented
+ * so the two cannot disagree. `onRoleUsed` arrives as a parameter rather than a closure
+ * because this is a top-level function with no closure over `compile()`'s scope.
  */
 function writeFramingRecursive(rootNode, outputBase, configBase, configPath, variables, verbose = false, diagnostics = null, usage = null, loadSectioned = null, registry = null, onRoleUsed = null) {
   // The walker visits the project root as a node (Phase 11 Step 0), so an unbranched
@@ -2089,8 +2085,13 @@ function writeFramingRecursive(rootNode, outputBase, configBase, configPath, var
         // The same rule at both levels: nothing below this node means nothing to frame.
         // The walker's root visit reaches the project rung here (Phase 11 Step 0), and
         // the message is the one the old root rung wrote.
-        if (isRoot) console.warn(`  WARN: root branchFraming with no branches — ignoring`);
-        else console.warn(`  WARN: branchFraming on leaf branch "${name}" — ignoring`);
+        diagnostics.warn(
+          DIAG_CODES.BRANCH_FRAMING_IGNORED,
+          isRoot
+            ? 'root branchFraming with no branches — ignoring'
+            : `branchFraming on leaf branch "${name}" — ignoring`,
+          { file: configPath },
+        );
       } else {
         // Phase 11 Step 1: the root renders through the same sectioned path an interior
         // node uses, rather than the literal/`{%variable}`-only `resolveOpeningContent`
@@ -2836,20 +2837,12 @@ function compileRun(configPath, options, buses) {
         branchPath,
         fileBase: branchPath.length ? branchPath.join(' - ') : rootDirName,
         items: renderedById,
-        // Every sectioned component reports per section, keyed by section name. The
-        // cross-branch reports diff component content by segment key, so per-section
-        // keys localize a difference to the section that carries it rather than
-        // reporting the whole component as changed — which is what §7.2's naming bought
-        // Plot Essentials, and there is no reason the prose components report worse.
-        //
-        // Spread rather than named, and keyed by `descriptor.key` rather than by a name of
-        // its own: this site listed three of `SLOTTED_COMPONENTS`' six by hand, so `summary`,
-        // `opening` and `adventureDescription` were captured by the loop above and then
-        // dropped here, invisible to `--diff` and `--annotate` since Phase 6 added them. A
-        // list that has to be extended by hand when a component is added is a list that will
-        // not be, so there is no list. `description:` is absent for a real reason rather than
-        // this one — the scenario blurb is written once at the root and has no per-leaf value
-        // to diff.
+        // Every sectioned component reports per section, keyed by section name, so a
+        // cross-branch diff localizes a change to the section that carries it. Spread
+        // rather than named, so every one of `SLOTTED_COMPONENTS` reaches `--diff`/
+        // `--annotate` without this site needing to list them by hand; `description:` is
+        // absent on purpose, since the scenario blurb is written once at the root and has
+        // no per-leaf value to diff.
         components: { ...sectionedSegments },
       });
     }
@@ -3316,15 +3309,21 @@ function compileRun(configPath, options, buses) {
   reportDuplicateQuestions(placeholderDuplicates, {
     diagnostics: compileDiagnostics, file: configPath,
   });
-  reportCompileDiagnostics();
 
   // Requested-but-unwritten components: surface as an error so the gap is never silent.
+  // Raised before `reportCompileDiagnostics()` below, so these reach the printed output —
+  // a bus error raised after that call would never be rendered.
+  for (const g of componentGaps) {
+    compileDiagnostics.error(
+      DIAG_CODES.COMPONENT_NO_OUTPUT,
+      `[${g.leaf}] ${g.component}: ${g.reason} (spec: ${g.spec})`,
+      { file: configPath },
+    );
+  }
+
+  reportCompileDiagnostics();
+
   if (componentGaps.length > 0) {
-    console.error(`\nERROR: ${componentGaps.length} requested component(s) produced no output:`);
-    for (const g of componentGaps) {
-      console.error(`  - [${g.leaf}] ${g.component}: ${g.reason}`);
-      console.error(`      spec: ${g.spec}`);
-    }
     throw new Error(
       `${componentGaps.length} requested component(s) were not written — see errors above. ` +
       `Fix the source path/reference, or remove the component from compile.yaml if it is not wanted.`

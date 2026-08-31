@@ -4,6 +4,7 @@ const fs   = require('fs');
 const path = require('path');
 
 const { buildTree, flattenNodes, leafNodes } = require('./compiledTree');
+const { PATH_UNSAFE_CHARS } = require('./util');
 
 // ── private helpers ──────────────────────────────────────────────────────────
 
@@ -34,8 +35,10 @@ function collectMarkdownFiles(dir) {
   return results;
 }
 
+const UNSAFE_FILENAME_CHARS = new RegExp('[' + PATH_UNSAFE_CHARS + ']', 'g');
+
 function sanitizeFilename(name) {
-  return name.replace(/[<>:"/\\|?*]/g, '_').trim();
+  return name.replace(UNSAFE_FILENAME_CHARS, '_').trim();
 }
 
 function shiftHeadings(content, shift) {
