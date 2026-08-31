@@ -158,23 +158,6 @@ function enumerateLeaves(branches, prefix) {
 }
 
 /**
- * Get branch config for a given path.
- * Returns the branch config object at that path, or {} if not found.
- */
-function getBranchConfig(branches, branchPath) {
-  let currentMap = branches;
-  let currentNode = null;
-  for (const part of branchPath) {
-    if (!currentMap || typeof currentMap !== 'object') return {};
-    const actualKey = Object.keys(currentMap).find(k => k.toLowerCase() === part.toLowerCase());
-    if (!actualKey) return {};
-    currentNode = currentMap[actualKey];
-    currentMap = currentNode && currentNode.branches ? currentNode.branches : null;
-  }
-  return currentNode || {};
-}
-
-/**
  * Walk a branch chain, accumulating everything that merges down it.
  *
  * v3 hand-rolled this traversal four times — for variables and components, for folder
@@ -429,6 +412,6 @@ function isLeafNode(node) {
 }
 
 module.exports = {
-  resolveBranchSpec, enumerateLeaves, getBranchConfig,
+  resolveBranchSpec, enumerateLeaves,
   walkBranchChain, walkBranchTree, mergePlaceholders, mergeUnbindable, localRoleKeysOf,
 };

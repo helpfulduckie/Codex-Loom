@@ -38,6 +38,8 @@
  * while `{if $body.personality}` on its own does not wave the whole subtree through.
  */
 
+const { entryName } = require('./parse');
+
 const CODES = Object.freeze({
   FIELD_UNREAD_UNKNOWN: 'CL0426',
   FIELD_UNREAD_MISROUTED: 'CL0427',
@@ -46,13 +48,6 @@ const CODES = Object.freeze({
 
 function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
-}
-
-/** Every field/group name a template-list or group entry references (bare or `{ field: }`). */
-function entryName(entry) {
-  if (typeof entry === 'string') return entry;
-  if (isPlainObject(entry)) return entry.field || entry.name || null;
-  return null;
 }
 
 /** `from:` as an array, or `[name]` when absent. */

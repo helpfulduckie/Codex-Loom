@@ -295,18 +295,14 @@ describe('findSwallowedTokens', () => {
     expect(found[0]).toMatchObject({ key: '$Aness', path: ['Tagline'] });
   });
 
-  // Only `$` produces the silent failure. `%` and `@` are reserved indicators in YAML,
-  // so an unquoted `{%role}` or `{@pe}` is a hard parse error rather than a mapping that
-  // quietly reaches the compiler. The guard still covers all three — a mapping of that
-  // shape can arrive from a source other than a plain parse — but these two cases have
-  // to be built directly, because YAML will not produce them.
+  // Only `$` produces the silent failure. An unquoted `{%role}` is a hard parse error on
+  // YAML's `%` directive indicator, not a mapping that quietly reaches the compiler — but
+  // `%` stays in the guard's set because `{%…}` is a live token family, so a mapping of
+  // that shape arriving by any route is worth flagging and has to be built directly here.
+  // `@` is not guarded: the `{@}` family was removed in v4 §6.1.
 
   test('only the $ sigil is reachable by parsing — % is a hard parse error', () => {
     expect(() => YAML.parse('k: {%role}')).toThrow(/directive indicator character %/);
-  });
-
-  test('only the $ sigil is reachable by parsing — @ is a hard parse error', () => {
-    expect(() => YAML.parse('k: {@pe}')).toThrow(/reserved character @/);
   });
 
   test('the $ sigil, by contrast, parses silently into a wrong-typed value', () => {
@@ -317,8 +313,8 @@ describe('findSwallowedTokens', () => {
     expect(findSwallowedTokens({ k: { '%role': null } })[0].token).toBe('{%role}');
   });
 
-  test('finds an at-sigil token when one is constructed', () => {
-    expect(findSwallowedTokens({ k: { '@pe': null } })[0].token).toBe('{@pe}');
+  test('does not flag an at-sigil mapping — {@} is not a v4 token family', () => {
+    expect(findSwallowedTokens({ k: { '@pe': null } })).toEqual([]);
   });
 
   test('reports nothing for a correctly quoted document', () => {

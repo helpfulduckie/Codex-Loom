@@ -4,25 +4,10 @@
  * The component descriptor table (v4 spec §7.3, §3.3).
  *
  * §3.3 asks for components to be table-driven so that adding one is a table row rather
- * than another bespoke block in `compile()`. This is the Phase 1 slice of that: the
- * wiring becomes a table, the behavior and the emitted bytes do not change. The item/slot
- * model (§7.2) is Phase 3.
- *
- * ── The table describes declaration, not file locations ─────────────────────
- *
- * §7.3 gives each component an "Inherits down the tree?" column, which reads as a
- * property of the component. It is not — it is a property of Codex Loom's emitter.
- * Velvet Lattice inherits components, scripts, placeholders and story cards down the
- * branch tree by itself (`velvet_lattice/scenario.py`), local entries overriding parent
- * ones by key. Codex Loom writes a copy into every leaf because that was simpler when
- * branches were first built, and the cost is large: 90% of The Institute's compiled
- * output is byte-identical duplication.
- *
- * So `declaration` below says how a component *merges down the branch chain*, which is a
- * real and permanent property, and where the bytes land is the emit strategy's business.
- * Today there is one strategy — duplicate to every leaf, exactly as v3 did. Adopting
- * VL-native inheritance later is a strategy swap and a re-baseline, not a table rewrite.
- * See the vault note "VL inheritance and output duplication".
+ * than another bespoke block in `compile()`. Each descriptor carries the output filename,
+ * heading default and per-component flags the emitter and renderer read; where a file
+ * lands in the branch tree is `compile.js`'s Phase 11 frontier placement, not a column
+ * here.
  */
 
 const fs = require('fs');
@@ -37,33 +22,20 @@ const {
 } = require('../util');
 
 /**
- * How a component's spec merges down the branch chain.
- *
- *   INHERITED  a child inherits the parent's value unless it declares its own
- *   NODE       belongs to the declaring node alone; never inherited
- *   PROJECT    declared once at the root; there is nothing to merge
- */
-const DECLARATION = Object.freeze({
-  INHERITED: 'inherited',
-  NODE: 'node',
-  PROJECT: 'project',
-});
-
-/**
  * Components built from `sections:`, some of which are slots items route into (§7.2).
  *
- * All four rows now, which is the point of §7.3's table: the four differ by output file
- * and heading default and by nothing else. AI Instructions and Author's Note reached this
- * table by having their own document layer deleted rather than ported — `ain.js` ran a
- * second branch walker and a second delta vocabulary for what a section's own `branches:`
- * and `variants:` already do. See `loader/component-schema.js` for what went and why.
+ * The rows differ by output file and heading default and by little else. AI Instructions
+ * and Author's Note reached this table by having their own document layer deleted rather
+ * than ported — `ain.js` ran a second branch walker and a second delta vocabulary for what
+ * a section's own `branches:` and `variants:` already do. See `loader/component-schema.js`
+ * for what went and why.
  *
  * `defaultHeadingLevel` is a column rather than a constant because v3's two formats
  * disagree about what a bare `heading:` means — Plot Essentials reads it as level 0 and
  * AI Instructions as level 2 — and both are right for their own output.
  * `model/component.js` therefore carries `headingLevel` through unset, and the default is
  * applied here, where the component is known. That disagreement is the whole reason the
- * four rows are not one constant, and it survives the merge intact.
+ * rows are not one constant, and it survives the merge intact.
  */
 const SLOTTED_COMPONENTS = Object.freeze([
   {
@@ -71,7 +43,6 @@ const SLOTTED_COMPONENTS = Object.freeze([
     label: 'Plot Essentials',
     file: 'Plot Essentials.md',
     dir: 'Components',
-    declaration: DECLARATION.INHERITED,
     verboseLabel: 'PlotEssentials',
     defaultHeadingLevel: 0,
   },
@@ -84,7 +55,6 @@ const SLOTTED_COMPONENTS = Object.freeze([
     label: 'Summary',
     file: 'Summary.md',
     dir: 'Components',
-    declaration: DECLARATION.INHERITED,
     verboseLabel: 'Summary',
     defaultHeadingLevel: 0,
   },
@@ -93,7 +63,6 @@ const SLOTTED_COMPONENTS = Object.freeze([
     label: 'AI Instructions',
     file: 'AI Instructions.md',
     dir: 'Components',
-    declaration: DECLARATION.INHERITED,
     verboseLabel: 'AIInstructions',
     // v3's AI Instructions format reads a bare `heading:` as level 2, and every shipped
     // file was written against that reading.
@@ -106,7 +75,6 @@ const SLOTTED_COMPONENTS = Object.freeze([
     label: "Author's Note",
     file: 'Author Notes.md',
     dir: 'Components',
-    declaration: DECLARATION.INHERITED,
     verboseLabel: 'AuthorsNote',
     defaultHeadingLevel: 2,
   },
@@ -117,7 +85,7 @@ const SLOTTED_COMPONENTS = Object.freeze([
      * the output root; the two share `Description.md` at different levels exactly as
      * `opening:` and `branchFraming:` share `Opening.md`.
      *
-     * INHERITED rather than node-local, which is what makes it an ordinary row here: a
+     * It inherits down the branch tree, which is what makes it an ordinary row here: a
      * value declared at an interior node flows down to the leaves beneath it and is written
      * there, so there is no interior-node render path and no half-routed component. The
      * scenario description cannot work this way — inheriting it would copy one blurb into
@@ -130,7 +98,6 @@ const SLOTTED_COMPONENTS = Object.freeze([
     label: 'Adventure Description',
     file: 'Description.md',
     dir: null,
-    declaration: DECLARATION.INHERITED,
     verboseLabel: 'AdventureDescription',
     inlineProse: false,
     // v3's descriptions carry no headings at all, so neither reading is established by the
@@ -157,7 +124,6 @@ const SLOTTED_COMPONENTS = Object.freeze([
     label: 'Opening',
     file: 'Opening.md',
     dir: 'Components',
-    declaration: DECLARATION.INHERITED,
     verboseLabel: 'Opening',
     // An opening is the story's first message, so a bare `heading:` is a plain line rather
     // than a Markdown heading — Plot Essentials' reading, for the same reason.
@@ -185,7 +151,6 @@ const DESCRIPTION_DESCRIPTOR = Object.freeze({
   label: 'Description',
   file: 'Description.md',
   dir: null,
-  declaration: DECLARATION.PROJECT,
   verboseLabel: 'Description',
   defaultHeadingLevel: 0,
   frontmatter: true,
@@ -209,19 +174,11 @@ const FRAMING_DESCRIPTOR = Object.freeze({
   label: 'Branch framing',
   file: 'Opening.md',
   dir: 'Components',
-  declaration: DECLARATION.NODE,
   verboseLabel: 'BranchFraming',
   defaultHeadingLevel: 0,
   inlineProse: true,
   limitKey: 'opening',
 });
-
-/** Components handled by their own pipelines, listed so the table is the whole picture. */
-const OTHER_COMPONENTS = Object.freeze([
-  { ...DESCRIPTION_DESCRIPTOR, note: 'sections, not routable — the scenario blurb, written once at the output root' },
-  { ...FRAMING_DESCRIPTOR, note: 'sections, not routable — written at non-leaf nodes; v3 spelling openingChoice' },
-  { key: 'scripts', label: 'Scripts', declaration: DECLARATION.INHERITED, note: 'file copy, not a rendered document (§6.3)' },
-]);
 
 const PASSTHROUGH_EXTENSIONS = new Set(['.md', '.txt']);
 
@@ -419,9 +376,7 @@ function renderFrontmatter(metadata) {
 }
 
 module.exports = {
-  DECLARATION,
   SLOTTED_COMPONENTS,
-  OTHER_COMPONENTS,
   DESCRIPTION_DESCRIPTOR,
   FRAMING_DESCRIPTOR,
   isPassthrough,

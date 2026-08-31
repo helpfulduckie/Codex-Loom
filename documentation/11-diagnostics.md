@@ -59,11 +59,11 @@ wrong-typed value that surfaces far from where it was written. The preparser (§
 quotes tokens in the positions it can identify; this check catches the whole class
 regardless of position, and costs one walk of the parsed tree.
 
-Only `$` reaches this check. `%` and `@` are reserved indicators in YAML, so an unquoted
-`{%role}` or `{@pe}` is a hard parse error (`CL0101`) rather than a silent swallow. The
-check covers all three sigils anyway, because a mapping of that shape can arrive from
-somewhere other than a plain parse. (`{@}` is removed as a token family in §6.1, but the
-guard still recognizes the sigil so a half-migrated project fails clearly.)
+Only `$` reaches this check from a plain parse. An unquoted `{%role}` is a hard parse
+error (`CL0101`) on YAML's `%` directive indicator, not a silent swallow — but `%` stays
+in the guard's set because `{%…}` is a live token family, so a mapping of that shape
+arriving by any route is still worth flagging. `@` is not covered: the `{@}` token family
+was removed in §6.1, so a `{'@pe': null}` mapping names nothing this check could report.
 
 ### CL01xx continued
 

@@ -61,7 +61,7 @@ mergeRegistries(canon, project)  → full registry
 enumerateLeaves(branches)        → [[path], [path], ...]
     ↓
 FOR EACH LEAF:
-  getBranchConfig()              → branchProtagonist, protagonist
+  walkBranchChain()             → merged variables/roles/placeholders/components; branchProtagonist
   buildCompileContext()          → variables (merged), componentRefs (resolved paths)
   resolveBranchItems()           → resolvedItems[]
     FOR EACH itemDef:

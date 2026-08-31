@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const YAML = require('yaml');
 const {
-  migrateConfigFile, migrateProject, collectComponentAliases, collectCanonNames,
+  migrateConfigFile, migrateProjectFiles, collectComponentAliases, collectCanonNames,
   rewriteAtTokens, migrateItemDocument, migrateItemFiles, stripTemplateHeader,
   encodeTriggerPadding,
 } = require('../../src/migrate/v3');
@@ -173,7 +173,15 @@ describe('rewriteAtTokens', () => {
   });
 });
 
-describe('migrateProject — the whole tree, not just compile.yaml', () => {
+describe('migrateProjectFiles — the whole tree, not just compile.yaml', () => {
+  // The config stage produces the alias/canon maps; this stage rewrites every other YAML
+  // file beside it. `migrateProjectFully` composes the two — these cases exercise the
+  // sibling-file half directly, on the maps `migrateConfigFile` returns.
+  const migrateSiblings = (cfg) => {
+    const config = migrateConfigFile(cfg);
+    return migrateProjectFiles(path.dirname(cfg), config.aliases, config.canonNames, { configPath: cfg });
+  };
+
   test('rewrites {@} in item and component files beside the config', () => {
     // `include: '{@characters}/You.yaml'` in an item file is the common case; migrating
     // only compile.yaml would leave the project half-converted.
@@ -192,21 +200,21 @@ describe('migrateProject — the whole tree, not just compile.yaml', () => {
     fs.writeFileSync(path.join(tmpDir, 'Codex', 'items.yaml'), "- include: '{@characters}/You.yaml'\n", 'utf8');
     fs.writeFileSync(path.join(tmpDir, 'desc.yaml'), "body: '{@body}'\n", 'utf8');
 
-    const report = migrateProject(cfg);
+    const files = migrateSiblings(cfg);
 
     expect(fs.readFileSync(path.join(tmpDir, 'Codex', 'items.yaml'), 'utf8'))
       .toContain('{%characters}/You.yaml');
     expect(fs.readFileSync(path.join(tmpDir, 'desc.yaml'), 'utf8'))
       .toContain('./components/body.md');
-    expect(report.filesTouched).toHaveLength(2);
-    expect(report.unresolved).toEqual([]);
+    expect(files.touched).toHaveLength(2);
+    expect(files.unresolved).toEqual([]);
   });
 
   test('reports an unresolved reference rather than silently leaving it', () => {
     const cfg = writeConfig('structure:\n  output: ./out\n');
     fs.writeFileSync(path.join(tmpDir, 'x.yaml'), "a: '{@mystery}'\n", 'utf8');
-    const report = migrateProject(cfg);
-    expect(report.unresolved.map((u) => u.name)).toContain('mystery');
+    const files = migrateSiblings(cfg);
+    expect(files.unresolved.map((u) => u.name)).toContain('mystery');
   });
 });
 

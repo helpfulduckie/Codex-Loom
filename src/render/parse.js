@@ -29,6 +29,20 @@ const { CODES } = require('../diag');
 const FUNCTION_NAMES = ['inline', 'join', 'list', 'and', 'prose', 'block', 'keys'];
 
 /**
+ * The field/group name a template-list or group entry references: a bare string, or the
+ * `field:` / `name:` key of a `{ field: … }` / `{ name: … }` object. `null` for anything
+ * else. The one reading of a template entry's identity, shared by the loader's field-table
+ * validation, the unread-field audit, the schema-table generator and the field-list renderer.
+ */
+function entryName(entry) {
+  if (typeof entry === 'string') return entry;
+  if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+    return entry.field || entry.name || null;
+  }
+  return null;
+}
+
+/**
  * Split `source` into a flat token stream. Each token carries `{line, column, length}` —
  * a 1-based source span, computed as the scan proceeds rather than reconstructed afterward.
  */
@@ -283,4 +297,4 @@ function parse(tokens, report) {
   return { type: 'Program', children };
 }
 
-module.exports = { tokenize, parse, FUNCTION_NAMES };
+module.exports = { tokenize, parse, FUNCTION_NAMES, entryName };

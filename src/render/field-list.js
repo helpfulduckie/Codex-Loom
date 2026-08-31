@@ -19,7 +19,7 @@
  */
 
 const { render } = require('../template');
-const { FUNCTION_NAMES } = require('./parse');
+const { FUNCTION_NAMES, entryName } = require('./parse');
 
 /** Bracket pairs `wrap:` understands. A two-character string is taken as open+close. */
 function wrapChars(wrap) {
@@ -74,7 +74,7 @@ function expandList(list, table) {
       return;
     }
     if (entry && typeof entry === 'object') {
-      const name = entry.field || entry.name;
+      const name = entryName(entry);
       const base = (name && table.fields && table.fields[name]) || {};
       const { field: _f, name: _n, ...override } = entry;
       out.push({ name, decl: { ...base, ...override } });

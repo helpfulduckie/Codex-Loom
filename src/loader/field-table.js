@@ -27,7 +27,7 @@ const path = require('path');
 
 const { findFiles } = require('../util');
 const { loadYaml } = require('./yaml');
-const { FUNCTION_NAMES } = require('../render/parse');
+const { FUNCTION_NAMES, entryName } = require('../render/parse');
 const { levenshtein } = require('../schema');
 
 /**
@@ -145,16 +145,6 @@ function foldDocument(doc, file, acc, diagnostics) {
 }
 
 /**
- * Every field/group name a template list entry references, for the cross-reference check.
- * An entry is a bare name or a `{ field: NAME, ... }` inline override (§13.3).
- */
-function entryName(entry) {
-  if (typeof entry === 'string') return entry;
-  if (isPlainObject(entry)) return entry.field || entry.name || null;
-  return null;
-}
-
-/**
  * After the merge, every name a group or template names must resolve to a declared field
  * or (for template lists) a group. An unresolved name is content going nowhere, so it
  * reports — but as a load-time WARN, since a shared library table may legitimately carry a
@@ -240,4 +230,4 @@ function loadFieldTable(dirs, options = {}) {
   return acc;
 }
 
-module.exports = { CODES, FIELD_TABLE_BASENAMES, loadFieldTable, entryName };
+module.exports = { CODES, FIELD_TABLE_BASENAMES, loadFieldTable };

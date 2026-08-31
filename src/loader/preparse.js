@@ -38,7 +38,7 @@
  */
 
 /** Sigils that mark a mapping key as a Codex Loom token the YAML parser swallowed. */
-const SWALLOWED_SIGILS = new Set(['$', '%', '@']);
+const SWALLOWED_SIGILS = new Set(['$', '%']);
 
 /** A block scalar header: `|`, `>`, with optional chomping and explicit indent. */
 const BLOCK_SCALAR_RE = /^[|>][+-]?\d*[+-]?\s*(#.*)?$/;
@@ -369,11 +369,12 @@ function preparse(text) {
  * Returns `[{ path, key, token }]`, where `path` addresses the offending mapping's
  * parent so a `SourceMap` can locate it.
  *
- * Of the three sigils, only `$` is reachable by parsing: `%` and `@` are reserved
- * indicators in YAML, so an unquoted `{%role}` or `{@pe}` is a hard parse error and
- * never reaches here. They are covered anyway because a mapping of that shape can
- * arrive from somewhere other than a plain parse, and because the cost is one character
- * in a set membership test.
+ * Only `$` reaches here from a plain parse (`triggers: [{$name}]` — a valid flow sequence
+ * of a one-key flow mapping). An unquoted `{%role}` hard-errors on YAML's `%` directive
+ * indicator before a mapping forms; `%` stays in the set anyway because `{%…}` is still a
+ * live token family, so a mapping of that shape arriving by any route is worth flagging.
+ * `@` is gone: the `{@}` family was removed in v4 §6.1, so a `{'@x': null}` mapping names
+ * no token this guard could warn about.
  */
 function findSwallowedTokens(value) {
   const found = [];

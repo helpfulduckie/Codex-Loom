@@ -525,22 +525,7 @@ function migrateProjectFiles(rootDir, aliases, canonNames, options = {}) {
   return { touched, unresolved };
 }
 
-/** Migrate a whole project: its config, then every other YAML file beside it. */
-function migrateProject(configPath, options = {}) {
-  const config = migrateConfigFile(configPath, options);
-  const files = migrateProjectFiles(path.dirname(configPath), config.aliases, config.canonNames, {
-    ...options,
-    configPath,
-  });
-  return {
-    changes: config.changes,
-    filesTouched: files.touched,
-    unresolved: [...config.unresolved.map((name) => ({ file: configPath, name })), ...files.unresolved],
-  };
-}
-
 module.exports = {
-  migrateProject,
   migrateConfigFile,
   migrateConfigDocument,
   migrateProjectFiles,

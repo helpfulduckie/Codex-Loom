@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
-  DECLARATION, SLOTTED_COMPONENTS, OTHER_COMPONENTS, DESCRIPTION_DESCRIPTOR, FRAMING_DESCRIPTOR,
+  SLOTTED_COMPONENTS, DESCRIPTION_DESCRIPTOR, FRAMING_DESCRIPTOR,
   isPassthrough, readPassthrough,
   renderSectionedComponent, writeSectionedComponent, renderFrontmatter,
 } = require('../../src/emit/components');
@@ -40,7 +40,6 @@ describe('the descriptor table', () => {
       expect(descriptor.label).toEqual(expect.any(String));
       expect(descriptor.verboseLabel).toEqual(expect.any(String));
       expect(typeof descriptor.defaultHeadingLevel).toBe('number');
-      expect(descriptor.declaration).toBe(DECLARATION.INHERITED);
     }
   });
 
@@ -62,10 +61,6 @@ describe('the descriptor table', () => {
   test('opening and branch framing share Opening.md at two levels', () => {
     const opening = SLOTTED_COMPONENTS.find((d) => d.key === 'opening');
     expect([opening.file, FRAMING_DESCRIPTOR.file]).toEqual(['Opening.md', 'Opening.md']);
-    // The same split the two description keys have, and for the same reason: one is written
-    // where items resolve and the other is not.
-    expect(opening.declaration).toBe(DECLARATION.INHERITED);
-    expect(FRAMING_DESCRIPTOR.declaration).toBe(DECLARATION.NODE);
   });
 
   test('the caps are a column, so a new one is a row rather than a call site', () => {
@@ -87,9 +82,6 @@ describe('the descriptor table', () => {
     expect([adventure.file, DESCRIPTION_DESCRIPTOR.file]).toEqual(['Description.md', 'Description.md']);
     // `dir: null` is the node root; every other sectioned row writes into Components/.
     expect([adventure.dir, DESCRIPTION_DESCRIPTOR.dir]).toEqual([null, null]);
-    // The split exists because inheriting the scenario blurb would copy it into every leaf.
-    expect(adventure.declaration).toBe(DECLARATION.INHERITED);
-    expect(DESCRIPTION_DESCRIPTOR.declaration).toBe(DECLARATION.PROJECT);
   });
 
   test('frontmatter is a column, and only the two description rows carry it', () => {
@@ -106,20 +98,16 @@ describe('the descriptor table', () => {
     expect([level('aiInstructions'), level('authorsNote')]).toEqual([2, 2]);
   });
 
-  test('declaration describes branch-chain merging, not a write location', () => {
-    // The distinction matters: VL inherits components itself, so "written at every leaf"
-    // is the emitter's current strategy rather than a property of the component.
-    expect(AIN.declaration).toBe(DECLARATION.INHERITED);
-    expect(OTHER_COMPONENTS.find((d) => d.key === 'branchFraming').declaration).toBe(DECLARATION.NODE);
-    expect(OTHER_COMPONENTS.find((d) => d.key === 'description').declaration).toBe(DECLARATION.PROJECT);
-  });
-
-  test('the two tables together cover the §7.3 component set', () => {
-    const covered = [...SLOTTED_COMPONENTS, ...OTHER_COMPONENTS].map((d) => d.key).sort();
+  test('the sectioned rows are the §7.3 routable component set', () => {
+    const covered = SLOTTED_COMPONENTS.map((d) => d.key).sort();
     expect(covered).toEqual([
-      'adventureDescription', 'aiInstructions', 'authorsNote', 'branchFraming', 'description',
-      'opening', 'plotEssential', 'scripts', 'summary',
+      'adventureDescription', 'aiInstructions', 'authorsNote',
+      'opening', 'plotEssential', 'summary',
     ]);
+    // The two non-routable sectioned components have their own descriptors; scripts is a
+    // file copy, not a rendered document (§6.3).
+    expect(DESCRIPTION_DESCRIPTOR.key).toBe('description');
+    expect(FRAMING_DESCRIPTOR.key).toBe('branchFraming');
   });
 });
 

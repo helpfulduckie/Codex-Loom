@@ -26,14 +26,10 @@
  * keying on `(type, name)` instead. See `mergeCardsByName` below for why that would be
  * the wrong fix rather than a safer one.
  *
- * `resolved.scripts` is not a merge in this module: it carries `own.scripts` verbatim.
- * The actual resolution is VL's — since Phase 12 Step 6 a project's `Scripts/` dir is
- * written once at the node that declares it (the output root, when every leaf resolved the
- * same spec and no branch redeclared it) and VL inherits it down the subtree
+ * Scripts are not modelled here. Since Phase 12 Step 6 a project's `Scripts/` dir is
+ * written once at the node that declares it and VL inherits it down the subtree
  * (`scenario.py`: `self.scripts = {**parent, **local}`), exactly as it does components and
- * placeholders. This module does not model that inheritance for scripts; `own.scripts` is
- * carried for a future consumer that wants a per-node script inventory, and nothing in
- * this phase reads it.
+ * placeholders — nothing in a report needs this module to reproduce that.
  */
 
 const fs = require('fs');
@@ -63,22 +59,6 @@ function collectMdFiles(dir) {
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) walk(full);
       else if (entry.isFile() && entry.name.endsWith('.md')) results.push(full);
-    }
-  }
-  walk(dir);
-  return results;
-}
-
-/** Every file under `dir`, depth-first, sorted — for `own.scripts`. */
-function collectFiles(dir) {
-  const results = [];
-  if (!fs.existsSync(dir)) return results;
-  function walk(current) {
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })
-      .sort((a, b) => a.name.localeCompare(b.name))) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else results.push(full);
     }
   }
   walk(dir);
@@ -162,7 +142,6 @@ function readOwn(nodeDir) {
     components: readOwnComponents(nodeDir),
     cards: readOwnCards(nodeDir),
     placeholders: readOwnPlaceholders(nodeDir),
-    scripts: collectFiles(path.join(nodeDir, 'Scripts')),
   };
 }
 
@@ -193,14 +172,13 @@ function mergeCardsByName(parentCards, ownCards) {
   return [...byName.values()];
 }
 
-const EMPTY_RESOLVED = { components: {}, cards: [], placeholders: {}, scripts: [] };
+const EMPTY_RESOLVED = { components: {}, cards: [], placeholders: {} };
 
 function foldResolved(parentResolved, own) {
   return {
     components: mergeDict(parentResolved.components, own.components),
     cards: mergeCardsByName(parentResolved.cards, own.cards),
     placeholders: mergeDict(parentResolved.placeholders, own.placeholders),
-    scripts: own.scripts,
   };
 }
 
@@ -265,7 +243,6 @@ module.exports = {
   ancestorDirs,
   childBranches,
   collectMdFiles,
-  collectFiles,
   mergeDict,
   mergeCardsByName,
 };
