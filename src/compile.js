@@ -32,17 +32,15 @@ const { renderCard, cardTitle, parseCards } = require('./emit/vl');
 const {
   loadPack, evaluatePack, evaluatePackExistence, evaluatePackItemRules, clampFinding,
 } = require('./lint/packs');
-const {
-  checkUndeclaredPlaceholders, checkPlaceholderContext,
-  reportUnusedPlaceholders, reportDuplicateQuestions,
-} = require('./emit/placeholders');
+const { checkUndeclaredPlaceholders, checkPlaceholderContext } = require('./emit/placeholders');
 const { checkDrift } = require('./snapshot');
-const { loadCompileConfig, CODES: LOAD_CODES, isOutOfBase, normalize } = require('./config/load');
+const { loadCompileConfig } = require('./config/load');
 const { checkTargetSlot } = require('./slots');
 const { resolveComponentSpec, questionsForMeasurement } = require('./treeWrite');
 const { placeInheritedFiles } = require('./inherit');
 const { runLeafLoop } = require('./leafLoop');
 const { writeTreeFiles, writeScenarioBlurb } = require('./treeFiles');
+const { finalizeDiagnostics } = require('./reportDispatch');
 const {
   PlaceholderTracker, RoleTracker, GapList, ComponentLoader,
 } = require('./compileState');
@@ -207,21 +205,6 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
       }
     }
   }
-}
-
-/**
- * Build a library dependency manifest for the output JSON file.
- */
-function buildLibraryManifest(config) {
-  const { findFiles } = require('./util');
-  const manifest = {};
-  for (const [name, resolvedPath] of config._resolvedLibrary) {
-    const expression = config._libraryRaw ? String(config._libraryRaw[name] ?? resolvedPath) : resolvedPath;
-    const missing = !fs.existsSync(resolvedPath);
-    const files = missing ? [] : findFiles(resolvedPath, '.yaml');
-    manifest[name] = { expression, resolvedPath, files, ...(missing ? { missing: true } : {}) };
-  }
-  return manifest;
 }
 
 /**
@@ -435,32 +418,6 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
  * component content, then reconciled them through a suppression side channel. There is
  * nothing to reconcile when one pass over one resolved item decides both.
  */
-
-/**
- * `CL0545`: a role declared and never referenced by a resolved token anywhere in the
- * compile (§9.2's WARN half — `resolveRole` in `model/pronouns.js` calls `onRoleUsed` only
- * on success, so `roleUsage` names every role that actually did something).
- *
- * Whole-compile rather than `CL0535`'s subtree-scoped check, deliberately simpler: no
- * golden declares a role yet, so there is no corpus case where a role is legitimately used
- * on one branch and unused on a sibling that this coarser check would miss.
- */
-function reportUnusedRoles(declarations, usage, { diagnostics, file } = {}) {
-  if (!diagnostics) return [];
-  const unused = [];
-  for (const { label, keys } of declarations) {
-    for (const key of keys) {
-      if (usage.has(key.toLowerCase())) continue;
-      unused.push(key);
-      diagnostics.warn(
-        DIAG_CODES.ROLE_UNUSED,
-        `role "${key}" is declared ${label} but no resolved token anywhere references it.`,
-        { file: file == null ? undefined : String(file) },
-      );
-    }
-  }
-  return unused;
-}
 
 function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, variables = {}, options = {}) {
   const {
@@ -1039,182 +996,15 @@ function compileRun(configPath, options, buses) {
   });
 
   // ── 9. Project diagnostics, summary, reports, finalize ────────────────────────
-  // §7.7's one guard. Velvet Lattice sets a node's prompt to
-  // `components["Opening"] or node.description`, so a leaf carrying a description and no
-  // Opening.md does not produce an empty prompt — it produces the blurb as the opening
-  // scene. v3 could not reach this, because descriptions were written only at the output
-  // root; `adventureDescription:` is what makes the pairing possible, and this is its price.
-  for (const leafLabel of descriptionLeaves) {
-    if (openingLeaves.has(leafLabel)) continue;
-    compileDiagnostics.error(
-      DIAG_CODES.LEAF_DESCRIPTION_NO_OPENING,
-      `branch "${leafLabel}" has an adventure description and no Opening.md. Velvet Lattice `
-      + 'reads a node\'s prompt as its Opening or, failing that, its description — so this '
-      + 'leaf would open the adventure with its own blurb rather than a scene. Give the '
-      + 'branch an opening:, or drop the adventureDescription: it inherits.',
-      { file: configPath },
-    );
-  }
-
-  // §7.3 / §6.3: a leaf that resolves neither an opening nor AI Instructions. Both are
-  // ordinary inherited components (`buildCompileContext` merges them down the chain), so a
-  // `false` here means nothing in the leaf's ancestry set one — not merely that this node
-  // did not. Read from `leafSummaries` because a leaf's opening status is only final once
-  // every component write, inherited ones included, has run. A leaf covered by the CL0616
-  // ERROR above (has a description, no opening) is not also flagged CL0630.
-  for (const s of leafSummaries) {
-    if (!openingLeaves.has(s.label) && !descriptionLeaves.has(s.label)) {
-      compileDiagnostics.warn(
-        DIAG_CODES.LEAF_NO_OPENING,
-        `branch "${s.label}" resolves no opening: and no adventureDescription:, so Velvet `
-        + 'Lattice would start this leaf with an empty prompt. Give the branch an opening:, '
-        + 'or one an ancestor passes down.',
-        { file: configPath },
-      );
-    }
-    if (!s.hasAIN) {
-      compileDiagnostics.warn(
-        DIAG_CODES.LEAF_NO_AIN,
-        `branch "${s.label}" resolves no aiInstructions:. Velvet Lattice writes an `
-        + 'empty-string AI Instructions on AID\'s side for it, and an empty string suppresses '
-        + 'AID\'s model-default instructions rather than falling back to them — the leaf plays '
-        + 'with none at all. Give the branch an aiInstructions:, or one an ancestor passes down.',
-        { file: configPath },
-      );
-    }
-  }
-  reportCompileDiagnostics();
-
-  // Per-leaf summary table (printed after all component writes so Opening status is known)
-  for (const s of leafSummaries) {
-    s.hasOpening = openingLeaves.has(s.label);
-  }
-  const maxLabelLen = Math.max(...leafSummaries.map(s => s.label.length), 'Branch'.length);
-  const lp = maxLabelLen + 2;
-  const c = b => b ? ' ✓ ' : ' - ';
-  console.log(`\n  ${'Branch'.padEnd(lp)} ${'Items'.padStart(5)}  ${'Var'.padStart(3)}   Open   PE  AIN   AN`);
-  for (const s of leafSummaries) {
-    console.log(
-      `  ${s.label.padEnd(lp)} ${String(s.leafItems).padStart(5)}  ${String(s.leafVariants).padStart(3)}  ` +
-      ` ${c(s.hasOpening)}  ${c(s.hasPE)} ${c(s.hasAIN)} ${c(s.hasAN)}`
-    );
-  }
-  console.log(`\n${allItemIds.size} unique items across project. Wrote ${totalFiles} file(s).`);
-
-  // Library dependency manifest
-  const libraryManifest = buildLibraryManifest(config);
-  if (Object.keys(libraryManifest).length > 0) {
-    const manifestPath = path.join(config._resolvedOutput, 'library-dependencies.json');
-    const manifestData = {
-      generatedAt: new Date().toISOString(),
-      compileYaml: path.resolve(configPath),
-      variables: config.variables || {},
-      library: libraryManifest,
-    };
-    fs.writeFileSync(manifestPath, JSON.stringify(manifestData, null, 2), 'utf8');
-    if (verbose) console.log(`  OK: Library manifest → ${manifestPath}`);
-  }
-
-  // Dependency-coverage check (Phase 7 Step 4, floated out of Step 0): `dependencyLedger` is
-  // every resolved component path this compile actually read, `imports:` chains included
-  // (built above, in `loadSectioned`/`loadComponentDocument`). A component that lives
-  // outside the project but under no `structure.input.library` entry compiles and renders
-  // correctly today and is invisible to `--snapshot` — the freeze walks declared entries,
-  // not resolved dependencies, so nothing else notices the gap. Checked once, here, rather
-  // than per leaf: the ledger is already deduplicated by resolved path.
-  const libraryDirs = [...config._resolvedLibrarySource.values()];
-  for (const specPath of componentLoader.dependencyLedger) {
-    if (!isOutOfBase(specPath, config._base)) continue;
-    const norm = normalize(specPath);
-    const covered = libraryDirs.some((dir) => {
-      const normDir = normalize(dir);
-      return norm === normDir || norm.startsWith(`${normDir}/`);
-    });
-    if (!covered) {
-      compileDiagnostics.warn(
-        LOAD_CODES.LIBRARY_DEPENDENCY_UNCOVERED,
-        `This component is read from outside the project (${specPath}), and no `
-        + 'structure.input.library entry covers it — --snapshot will not freeze it, and '
-        + 'a live edit to this file changes every project that reaches it. Declare its '
-        + 'directory as a library entry so the freeze and the {%name} it is reached '
-        + 'through are the same thing.',
-        { file: specPath },
-      );
-    }
-  }
-
-  // Cross-branch review reports — emitted from the per-leaf data captured above.
-  const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
-  const reportSummary = [];
-
-  // §17.2 provenance report — always emitted from registry data, independent of leaf loop.
-  const { runProvenanceMode } = require('./provenance');
-  const provenanceWritten = runProvenanceMode(registry, reportBase, rootDirName);
-  reportSummary.push(`${provenanceWritten.length} provenance file(s)`);
-
-  // §13.8 — the generated field reference, opt-in. Derived from the merged field table,
-  // not the leaf loop, and written where SCHEMA.md's §3–§5 tables can be copied from.
-  if (options.schemaTables) {
-    const { runSchemaTablesMode } = require('./schematables');
-    // §13.4 — every template a branch's `templateFor` slot files produce, so a tier author
-    // can diff a terse list against the full type in one place. `tierTemplates` was
-    // gathered once beside the field audit (`gatherTierTemplates`), which needs the same set.
-    const w = runSchemaTablesMode(fieldTable, path.join(reportBase, 'schema-tables'),
-      { title: config.title || rootDirName, tierTemplates });
-    reportSummary.push(`${w.length} schema-tables file(s)`);
-  }
-
-  if ((captureReports && leafData.length > 0) || (options.inventory && inventoryData.length > 0)) {
-    const { runDiffMode, runAnnotateMode } = require('./diff');
-    if (options.inventory) {
-      fs.mkdirSync(reportBase, { recursive: true });
-      const w = require('./inventory').runInventoryMode(inventoryData, reportBase);
-      reportSummary.push(`${w.length} inventory file(s)`);
-    }
-    if (options.diff) {
-      const diffDir = path.join(reportBase, 'diff');
-      fs.mkdirSync(diffDir, { recursive: true });
-      const w = runDiffMode(leafData, diffDir);
-      reportSummary.push(`${w.length} diff file(s) (Shared + deltas)`);
-    }
-    if (options.annotate) {
-      const annotateDir = path.join(reportBase, 'annotate');
-      fs.mkdirSync(annotateDir, { recursive: true });
-      const w = runAnnotateMode(leafData, allItemDefs, registry, annotateDir);
-      reportSummary.push(`${w.length} annotation file(s)`);
-    }
-  }
-  if (reportSummary.length > 0) {
-    console.log(`\nWrote ${reportSummary.join(' and ')} to:\n  ${reportBase}`);
-  }
-
-  // Last, because "unused" is only knowable once every write point has run — and the
-  // Description and the scenario title are written after the branch tree.
-  reportUnusedRoles(roleState.declarations, roleState.usage, { diagnostics: compileDiagnostics, file: configPath });
-  // §13.6: the deduped unread-field findings, then the whole-table dead-declaration sweep.
-  fieldAudit.finish(compileDiagnostics);
-  // CL0626–CL0628, here for the same reason: the fold warns once per authored value across
-  // the whole compile, and a case collision is only visible once every branch's types are in.
-  cardTypeAudit.finish(compileDiagnostics);
-  reportUnusedPlaceholders(placeholderState.declarations, placeholderState.usage, {
-    diagnostics: compileDiagnostics, file: configPath,
+  finalizeDiagnostics({
+    config, configPath, options, verbose,
+    diagnostics: compileDiagnostics, flushDiagnostics: reportCompileDiagnostics,
+    descriptionLeaves, openingLeaves, leafSummaries,
+    allItemIds, totalFiles, componentLoader,
+    roleState, placeholderState, gaps, fieldAudit, cardTypeAudit,
+    registry, rootDirName, fieldTable, tierTemplates,
+    captureReports, leafData, inventoryData, allItemDefs,
   });
-  reportDuplicateQuestions(placeholderState.duplicates, {
-    diagnostics: compileDiagnostics, file: configPath,
-  });
-
-  // Requested-but-unwritten components: surface as an error so the gap is never silent.
-  // Raised before `reportCompileDiagnostics()` below, so these reach the printed output —
-  // a bus error raised after that call would never be rendered.
-  for (const g of gaps.entries) {
-    compileDiagnostics.error(
-      DIAG_CODES.COMPONENT_NO_OUTPUT,
-      `[${g.leaf}] ${g.component}: ${g.reason} (spec: ${g.spec})`,
-      { file: configPath },
-    );
-  }
-
-  reportCompileDiagnostics();
 
   if (gaps.length > 0) {
     throw new Error(
