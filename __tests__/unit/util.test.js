@@ -209,6 +209,23 @@ describe('resolveVariables', () => {
   test('string with no tokens passes through unchanged', () => {
     expect(resolveVariables('plain text', { x: 'y' })).toBe('plain text');
   });
+
+  // ── the {@} replacement (§6.1) ──────────────────────────────────────────────
+  // v3's second naming system, `{@name}` for canon/component resources, is gone.
+  // Canon names are auto-exposed as `{%}` variables, so a canon reference in an
+  // `include:` path now resolves through this function like any other variable.
+
+  test('a canon name expands mid-path, exactly as {@name} used to', () => {
+    const variables = { characters: '/canon/_General/Characters' };
+    expect(resolveVariables('{%characters}/Aness.yaml', variables))
+      .toBe('/canon/_General/Characters/Aness.yaml');
+  });
+
+  test('a leftover {@name} token is left untouched, not resolved', () => {
+    // Nothing consumes `{@}` any more; the migrator rewrites these before v4 sees them.
+    expect(resolveVariables('{@characters}/Aness.yaml', { characters: '/x' }))
+      .toBe('{@characters}/Aness.yaml');
+  });
 });
 
 // ── checkUnexpandedVariables ──────────────────────────────────────────────────
