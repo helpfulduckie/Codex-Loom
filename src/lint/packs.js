@@ -49,7 +49,7 @@ const path = require('path');
 
 const YAML = require('yaml');
 const { applyLintLevel, Diagnostics } = require('../diag');
-const { expandTokens } = require('../tokens');
+const { resolveVariables } = require('../util');
 const { validate, TYPES, CODES: SCHEMA_CODES } = require('../schema');
 const { parseNotesBlock, parseSettingsBlock } = require('../emit/vl');
 const { resolveField } = require('../render/eval');
@@ -74,7 +74,7 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
 
   let filePath;
   if (source) {
-    const expanded = expandTokens(String(source), { variables });
+    const expanded = resolveVariables(String(source), variables);
     filePath = path.isAbsolute(expanded) ? expanded : path.resolve(baseDir || '.', expanded);
   } else {
     filePath = path.join(BUNDLED_DIR, `${name}.cl.yaml`);

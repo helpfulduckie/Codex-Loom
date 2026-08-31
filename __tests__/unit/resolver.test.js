@@ -1,13 +1,9 @@
 'use strict';
 
-const {
-  applyFieldOp,
-  collectVariantDeltas,
-  enumerateLeaves,
-  resolveItem,
-  resolveBranchSpec,
-  deepClone,
-} = require('../../src/resolver');
+const { applyFieldOp } = require('../../src/model/fieldops');
+const { collectVariantDeltas, resolveItem } = require('../../src/model/item');
+const { enumerateLeaves, resolveBranchSpec } = require('../../src/model/branches');
+const { deepClone } = require('../../src/util');
 const { ItemRegistry } = require('../../src/loader/registry');
 
 describe('applyFieldOp', () => {

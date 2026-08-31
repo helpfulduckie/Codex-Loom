@@ -18,7 +18,8 @@ const silentWarner = () => {};
 
 const fs   = require('fs');
 const path = require('path');
-const { resolveItem, resolveBranchSpec, collectVariantDeltas } = require('./resolver');
+const { resolveItem, collectVariantDeltas } = require('./model/item');
+const { resolveBranchSpec } = require('./model/branches');
 const { resolveItemRef } = require('./model/refs');
 const { SLOTTED_COMPONENTS } = require('./emit/components');
 

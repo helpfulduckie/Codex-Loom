@@ -66,7 +66,7 @@ function convertDescription(doc) {
  * Essentials stage reaches for the compiler's own loader instead of a private copy.
  */
 function migrateDescriptionFiles(configPath, options = {}) {
-  const { loadCompileConfig } = require('../loader');
+  const { loadCompileConfig } = require('../config/load');
   const { buildCompileContext } = require('../compile');
 
   const saved = { log: console.log, warn: console.warn, error: console.error };

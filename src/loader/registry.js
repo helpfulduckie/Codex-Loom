@@ -15,11 +15,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const { findFiles, deepClone, VAR_ALIASES, YAML_SUFFIXES, RESERVED_LIBRARY_BASENAMES } = require('../util');
+const { findFiles, deepClone, resolveVariables, VAR_ALIASES, YAML_SUFFIXES, RESERVED_LIBRARY_BASENAMES } = require('../util');
 const { loadYamlDocument } = require('./yaml');
 const { validate } = require('../schema');
 const { ITEM_SCHEMA } = require('./schema');
-const { expandTokens } = require('../tokens');
 const { CODES: DIAG_CODES } = require('../diag');
 const { splitRef, normalizeRef } = require('../model/refs');
 const { collectVariantDeltas, parseVariantsList } = require('../model/item');
@@ -320,9 +319,8 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
 
   for (const def of includeDefs) {
     // Root variables only: includes resolve once, before branches are enumerated (§5.1).
-    // Root variables only: includes resolve once, before branches are enumerated
-    // (§5.1). Canon names are among those variables as of §6.1.
-    let includePath = expandTokens(String(def.include), { variables: config._variables || config.variables || null });
+    // Canon names are among those variables as of §6.1.
+    let includePath = resolveVariables(String(def.include), config._variables || config.variables || null);
     includePath = path.normalize(includePath);
 
     const fullPath = path.isAbsolute(includePath) ? includePath : path.resolve(config._base, includePath);

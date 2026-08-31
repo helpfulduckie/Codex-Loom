@@ -154,7 +154,7 @@ function convertOpening(blocks, source, base) {
  * the passthrough path carries it into v4 untouched. Only the YAML block list converts.
  */
 function migrateOpeningFiles(configPath, options = {}) {
-  const { loadCompileConfig } = require('../loader');
+  const { loadCompileConfig } = require('../config/load');
   const { buildCompileContext } = require('../compile');
 
   const saved = { log: console.log, warn: console.warn, error: console.error };

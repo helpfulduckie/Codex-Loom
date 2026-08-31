@@ -42,7 +42,9 @@ const { PRONOUN_SETS } = require('../model/pronouns');
  */
 function wireNotesTemplate(configPath, options = {}) {
   const notes = [];
-  const { loadCompileConfig, loadTemplates, loadItemsFromDir } = require('../loader');
+  const { loadTemplates } = require('../loader');
+  const { loadCompileConfig } = require('../config/load');
+  const { loadItemsFromDir } = require('../loader/registry');
   const { buildCanonRegistry } = require('../loader/registry');
 
   const saved = { log: console.log, warn: console.warn, error: console.error };
@@ -183,7 +185,8 @@ function migratePseudoRoles(configPath, options = {}) {
   const reviewQueue = [];
   const projectDir = path.dirname(configPath);
 
-  const { loadCompileConfig, loadItemsFromDir, buildRegistry, mergeRegistries } = require('../loader');
+  const { loadCompileConfig } = require('../config/load');
+  const { loadItemsFromDir, buildRegistry, mergeRegistries } = require('../loader/registry');
   const { buildCanonRegistry } = require('../loader/registry');
 
   const saved = { log: console.log, warn: console.warn, error: console.error };

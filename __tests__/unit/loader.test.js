@@ -3,10 +3,11 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { loadTemplates, CODES } = require('../../src/loader');
 const {
-  buildRegistry, mergeRegistries, loadTemplates,
-  loadItemsFromDir, loadCompileConfig, CODES,
-} = require('../../src/loader');
+  buildRegistry, mergeRegistries, loadItemsFromDir,
+} = require('../../src/loader/registry');
+const { loadCompileConfig } = require('../../src/config/load');
 const { Diagnostics } = require('../../src/diag');
 
 // ---------------------------------------------------------------------------

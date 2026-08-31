@@ -7,9 +7,8 @@
  * the per-item override — still wins over a branch's `templateFor` slot.
  */
 
-const {
-  resolveBodyRender, resolveNotesRender, renderPlacementBody,
-} = require('../../src/compile');
+const { resolveBodyRender, resolveNotesRender } = require('../../src/templateResolve');
+const { renderPlacementBody } = require('../../src/compile');
 const { Diagnostics } = require('../../src/diag');
 
 const textTemplates = new Map([

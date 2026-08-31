@@ -273,7 +273,9 @@ function buildInlineItems(placements) {
  * private copy is what keeps the migrator's idea of a wrapper identical to the compiler's.
  */
 function migratePlotEssentialsFiles(configPath, options = {}) {
-  const { loadCompileConfig, loadItemsFromDir, loadTemplates } = require('../loader');
+  const { loadTemplates } = require('../loader');
+  const { loadCompileConfig } = require('../config/load');
+  const { loadItemsFromDir } = require('../loader/registry');
   const { buildCanonRegistry } = require('../loader/registry');
   const { buildCompileContext } = require('../compile');
   const { convertPlotEssentials, buildItemLookup } = require('./plot-essentials');

@@ -5,11 +5,11 @@ const path = require('path');
 const fs = require('fs');
 const {
   compile,
-  getTemplate,
   writeOpening, resolveOpeningContent,
   buildCompileContext,
   resolveIncludes, resolveBranchItems,
 } = require('../../src/compile');
+const { getTemplate } = require('../../src/templateResolve');
 const { validateCardType, normalizeCardType, buildCardTypeAudit } = require('../../src/cardType');
 const {
   writeOutput, buildBranchOutputDir, resolveBranchFolderPath, cleanAndArchive,

@@ -166,8 +166,19 @@ function normalizeVarKey(key) {
 }
 
 /**
- * Expand {%key} variable references in a string.
- * Cycle-detects via a resolving Set.
+ * Expand {%key} variable references in a string. Cycle-detects via a resolving Set.
+ *
+ * This is the compiler's only variable expander. v3 had a second naming system — `{@key}`
+ * for named resources declared under `structure.input.components` and `structure.input.canon`
+ * — reached through a `tokens.js`/`expandTokens` wrapper that this function has since absorbed.
+ * `{@}` is removed in v4 (§6.1), and the removal cost nothing because most of what it did was
+ * already inert: `lookupReference` searched every per-type component map in sequence and
+ * returned the first name match, so `{@pe}` resolved identically whether declared under
+ * `plotEssential:`, `authorsNote:` or `scripts:` — the grouping never worked, so no project
+ * could have depended on it. Canon names are auto-exposed as `{%}` variables instead, so
+ * `{%characters}/Aness.yaml` works in an `include:` path exactly as `{@characters}/Aness.yaml`
+ * used to, without the unanswerable question of whether a name is a `{%}` thing or a `{@}`
+ * thing.
  */
 function resolveVariables(text, variables, _resolving) {
   if (!variables || typeof text !== 'string') return text;

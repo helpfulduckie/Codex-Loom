@@ -2,11 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { findFiles, loadYaml } = require('./util');
-const { loadCompileConfig } = require('./config/load');
-const {
-  loadItemsFromDir, buildRegistry, mergeRegistries,
-} = require('./loader/registry');
+const { findFiles } = require('./util');
 const { loadFieldTable } = require('./loader/field-table');
 
 /**
@@ -93,19 +89,12 @@ function loadTemplates(dirs, options = {}) {
   return { templates, partials, fieldTable };
 }
 
-// What remains here is template loading. Config loading moved to config/load.js, and
-// item loading, registries and overlays to loader/registry.js (§3.2). The names below
-// are re-exported so call sites move when compile.js is decomposed, rather than in the
-// middle of a step that is already changing how items are validated.
+// This module owns template and named-file loading only. Config loading is config/load.js,
+// and item loading, registries and overlays are loader/registry.js (§3.2).
 
 module.exports = {
   CODES,
-  findFiles,
-  loadYaml,
-  loadItemsFromDir,
   loadNamedFiles,
   loadTemplates,
-  loadCompileConfig,
-  buildRegistry,
-  mergeRegistries,
+  checkNoFences,
 };

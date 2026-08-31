@@ -25,7 +25,7 @@ const { loadYamlDocument } = require('./yaml');
 const { validate } = require('../schema');
 const { COMPONENT_SCHEMA } = require('./component-schema');
 const { normalizeComponent, mergeSectionRecords, applySectionSelector } = require('../model/component');
-const { expandTokens } = require('../tokens');
+const { resolveVariables } = require('../util');
 const { runExtractor, readSource } = require('../extract');
 const { CODES, busWarner } = require('../diag');
 
@@ -134,7 +134,7 @@ function loadComponentDocument(spec, options = {}) {
  *
  * ── Path resolution, and why root variables only ────────────────────────────
  *
- * `from:` expands through `expandTokens` — which is how `{%components}` reaches a canon
+ * `from:` expands through `resolveVariables` — which is how `{%components}` reaches a canon
  * directory, since §6.1 makes canon names variables — and then resolves against the
  * **project base**, which is where `include:` and every `components:` entry already resolve.
  * Resolving against the importing file's own directory was the alternative and reads well
@@ -165,7 +165,7 @@ function resolveImports(doc, spec, options) {
   for (const entry of entries) {
     if (!entry || typeof entry !== 'object' || !entry.from) continue;
 
-    const expanded = expandTokens(String(entry.from), { variables });
+    const expanded = resolveVariables(String(entry.from), variables);
     const resolved = path.isAbsolute(expanded)
       ? path.normalize(expanded)
       : path.resolve(base || path.dirname(spec), expanded);
@@ -325,7 +325,7 @@ function resolveOneSource(def, label, options) {
     return result;
   }
 
-  const expanded = expandTokens(rawPath, { variables });
+  const expanded = resolveVariables(rawPath, variables);
   const resolved = path.isAbsolute(expanded)
     ? path.normalize(expanded)
     : path.resolve(base || path.dirname(spec), expanded);
