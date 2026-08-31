@@ -187,7 +187,7 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
 
   const isDeclared = (name) => Object.prototype.hasOwnProperty.call(fields, name) && fields[name] !== null;
 
-  // (item id   field path) → { code, message, file }
+  // (item id \x00 field path) → { code, message, file }
   const findings = new Map();
 
   function auditBody(item, list, templateName, opts = {}) {
@@ -212,7 +212,7 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
 
     for (const leaf of bodyLeafPaths(body, content)) {
       if (ack.has(leaf)) continue;
-      const key = `${itemId} ${leaf}`;
+      const key = `${itemId}\x00${leaf}`;
       if (findings.has(key)) continue;
 
       const firstSeg = leaf.split('.')[0];
