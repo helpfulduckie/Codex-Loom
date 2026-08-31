@@ -36,19 +36,13 @@ const {
   checkUndeclaredPlaceholders, checkPlaceholderContext,
   reportUnusedPlaceholders, reportDuplicateQuestions,
 } = require('./emit/placeholders');
-const {
-  DESCRIPTION_DESCRIPTOR, isPassthrough, readPassthrough,
-  renderSectionedComponent, writeSectionedComponent,
-} = require('./emit/components');
 const { checkDrift } = require('./snapshot');
 const { loadCompileConfig, CODES: LOAD_CODES, isOutOfBase, normalize } = require('./config/load');
 const { checkTargetSlot } = require('./slots');
-const {
-  resolveComponentSpec, questionsForMeasurement,
-  writeFramingRecursive, writeLabelsRecursive, writePlaceholdersRecursive,
-} = require('./treeWrite');
+const { resolveComponentSpec, questionsForMeasurement } = require('./treeWrite');
 const { placeInheritedFiles } = require('./inherit');
 const { runLeafLoop } = require('./leafLoop');
+const { writeTreeFiles, writeScenarioBlurb } = require('./treeFiles');
 const {
   PlaceholderTracker, RoleTracker, GapList, ComponentLoader,
 } = require('./compileState');
@@ -1029,121 +1023,20 @@ function compileRun(configPath, options, buses) {
   });
 
   // ── 8. Tree-level writes ──────────────────────────────────────────────────────
-  // Write Opening / OpeningChoice files (post-loop)
-  //
-  // Root-level branchFraming lives in `writeFramingRecursive`'s root visit now (Phase 11
-  // Step 0) — the same component written at the node that declares it, landing in the
-  // root output dir where the old hand-rolled rung wrote it.
-
-  // `opening:` is written by the leaf loop above, as an ordinary inherited component. What
-  // is left for the tree visitor is framing, which belongs to a node the leaf loop never
-  // visits.
-  writeFramingRecursive(
-    config, config._resolvedOutput, config._base, configPath,
-    config._variables || config.variables || {},
-    verbose, compileDiagnostics, placeholderState.usage,
-    componentLoader.load, registry, roleState.onUsed,
-  );
-
-  writeLabelsRecursive(
-    config, config._resolvedOutput, config._variables || config.variables || {}, config.variables || {},
-    verbose, compileDiagnostics, configPath, placeholderState.usage,
-  );
-
-  writePlaceholdersRecursive(
-    config, config._resolvedOutput,
-    config._variables || config.variables || {}, configPath, compileDiagnostics, verbose,
-    placeholderState.usage, placeholderState.declarations, placeholderState.duplicates,
-  );
+  // Write Opening / OpeningChoice files (post-loop) — framing, labels and placeholder
+  // questions, each at a node the leaf loop never visits. Root-level branchFraming and the
+  // root Label land in these walkers' root visits now (Phase 11 Step 0), not a hand-rolled rung.
+  writeTreeFiles({
+    config, configPath, verbose, diagnostics: compileDiagnostics,
+    placeholderState, componentLoader, registry, roleState,
+  });
   reportCompileDiagnostics();
 
-  // Root Label is written by `writeLabelsRecursive`'s root visit now (Phase 11 Step 0) —
-  // the hand-rolled rung that used to live here duplicated it, writing the file twice and
-  // double-firing the placeholder-in-title warn.
-
   // The scenario blurb (§7.7), written once to the output root alongside Branches/.
-  //
-  // An ordinary component document since Phase 6, rather than the two-field `description.yaml`
-  // v3 gave it a loader of its own for. `body:` is now a section with `file:` and `script:`
-  // is one with `from: {script:, extract: scriptBanner}`, which is what made the third file
-  // format deletable — and what makes more than one banner expressible, where v3 allowed
-  // exactly one.
-  //
-  // It renders through `renderSectionedComponent` with an empty occupant map, which is not a
-  // second render path but the same one called with nothing to place: a scenario has one
-  // blurb and items are branch-scoped, so there is no branch whose cast could route into it.
-  const descRequested = config.components && config.components.description != null;
-  const descSpec = descRequested
-    ? resolveComponentSpec(config.components.description, config._base, config._variables || config.variables || null)
-    : null;
-  if (descRequested && !(descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec))) {
-    gaps.record('(project)', 'Description', descSpec, 'source not found');
-  } else if (descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec)) {
-    let combined = null;
-    let descMetadata = null;
-
-    if (isPassthrough(descSpec)) {
-      combined = readPassthrough(descSpec);
-    } else {
-      const descComponent = componentLoader.load(descSpec, DESCRIPTION_DESCRIPTOR);
-      if (descComponent) {
-        descMetadata = descComponent.metadata;
-        // `branchProtagonist` stays null: the blurb belongs to the project, not to any
-        // branch, so there is no chain to take a protagonist from (Phase 10 Step 4).
-        // `roles` still reaches the render, gated the same way the leaf loop gates it
-        // (Decision — `buildCompileContext`'s `chain.rolesDeclared ? chain.roles : null`),
-        // so a `{$role}` token in the root description resolves instead of reading as an
-        // undeclared placeholder, and `onRoleUsed` marks it used so `CL0545` agrees.
-        const rootRolesDeclared = !!(config.roles && Object.keys(config.roles).length);
-        ({ text: combined } = renderSectionedComponent(
-          descComponent, [], new Map(),
-          {
-            defaultHeadingLevel: DESCRIPTION_DESCRIPTOR.defaultHeadingLevel,
-            variables: rootVariables || {}, registry, branchProtagonist: null,
-            roles: rootRolesDeclared ? config.roles : null, onRoleUsed: roleState.onUsed,
-            onWarn: busWarner(compileDiagnostics, { file: String(descSpec) }),
-          },
-        ));
-      }
-    }
-
-    // Checked against the root table, and that stays correct where the plan warned it might
-    // not: the blurb belongs to the project, and it is `adventureDescription:` — a different
-    // key, resolved inside the leaf loop against the branch-merged table — that carries the
-    // per-node case §7.7 asked for.
-    checkUndeclaredPlaceholders(combined, config.placeholders, {
-      diagnostics: compileDiagnostics, file: descSpec, where: 'the Description',
-      usage: placeholderState.usage, usagePath: '',
-    });
-    checkPlaceholderContext(combined, {
-      diagnostics: compileDiagnostics,
-      file: descSpec,
-      where: 'the Description',
-      reason: 'AID does not fill placeholders in the Description. It is shown before any '
-        + 'adventure exists to answer them, so the raw text is what a reader sees.',
-    });
-    const descPath = writeSectionedComponent(
-      config._resolvedOutput, DESCRIPTION_DESCRIPTOR, combined,
-      { diagnostics: compileDiagnostics }, descMetadata,
-    );
-    if (descPath) {
-      if (verbose) console.log(`  OK: Description → ${descPath}`);
-      // Both description keys write `Description.md`, and at an unbranched root they write
-      // the same one — the root is its own leaf there, so the leaf loop has already been
-      // through. Reported rather than silently resolved, because which of the two an author
-      // meant to survive is not recoverable from the file that is left.
-      if (descriptionLeaves.has('(root)')) {
-        compileDiagnostics.warn(
-          DIAG_CODES.DESCRIPTION_KEYS_COLLIDE,
-          'this project declares both description: and adventureDescription: and has no '
-          + 'branches, so the root is its own leaf and both write the same Description.md. '
-          + 'The scenario blurb is what survives. Drop one, or add the branch the '
-          + 'adventure description was written for.',
-          { file: configPath },
-        );
-      }
-    } else gaps.record('(project)', 'Description', descSpec, 'compiled to empty content');
-  }
+  writeScenarioBlurb({
+    config, configPath, verbose, diagnostics: compileDiagnostics,
+    rootVariables, registry, placeholderState, roleState, componentLoader, gaps, descriptionLeaves,
+  });
 
   // ── 9. Project diagnostics, summary, reports, finalize ────────────────────────
   // §7.7's one guard. Velvet Lattice sets a node's prompt to
