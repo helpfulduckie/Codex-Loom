@@ -3,19 +3,23 @@
 const {
   resolveField,
   isTruthy,
-  evaluateJoin,
-  evaluateList,
   render,
   applyFieldRenderFunctions,
   normalizeWhitespace,
   applyWrapper,
-  evaluateProse,
-  evaluateBlock,
-  evaluateKeys,
-  evaluateInline,
   applyFieldInterpolation,
   applyVariableInterpolation,
 } = require('../../src/template');
+// The seven render-function evaluators live in render/eval.js; template.js no longer re-exports them.
+const {
+  evaluateInline,
+  evaluateJoin,
+  evaluateList,
+  evaluateAnd,
+  evaluateProse,
+  evaluateBlock,
+  evaluateKeys,
+} = require('../../src/render/eval');
 const { Diagnostics } = require('../../src/diag');
 
 describe('resolveField', () => {

@@ -2,11 +2,11 @@
 
 const { resolveVariables, walkItemTextFields, walkTextRecursive, itemContext } = require('./util');
 const { CODES } = require('./diag');
-const { tokenize, parse } = require('./render/parse');
+const { tokenize, parse, FUNCTION_NAMES } = require('./render/parse');
 const evalMod = require('./render/eval');
 const {
   resolveField, isTruthy, renderScalar, applyWrapper,
-  evaluateInline, evaluateJoin, evaluateList, evaluateAnd, evaluateProse, evaluateBlock, evaluateKeys,
+  FUNCTIONS,
   renderProgram,
 } = evalMod;
 
@@ -190,15 +190,9 @@ function applyRenderFunctionsRecursive(obj, context, options) {
   walkTextRecursive(obj, (s) => processFieldRenderFunctions(s, context, options));
 }
 
-const RENDER_FN_DISPATCH = [
-  ['inline(', evaluateInline],
-  ['join(',   evaluateJoin],
-  ['list(',   evaluateList],
-  ['and(',    evaluateAnd],
-  ['prose(',  evaluateProse],
-  ['block(',  evaluateBlock],
-  ['keys(',   evaluateKeys],
-];
+// `[prefix, implementation]` pairs, derived from the canonical `FUNCTION_NAMES`
+// (`./render/parse`) so a new render function is registered in exactly one place.
+const RENDER_FN_DISPATCH = FUNCTION_NAMES.map((n) => [n + '(', FUNCTIONS[n]]);
 
 function processFieldRenderFunctions(value, context, options) {
   if (typeof value !== 'string') return value;
@@ -322,11 +316,5 @@ module.exports = {
   normalizeWhitespace,
   applyWrapper,
   isTruthy,
-  evaluateJoin,
-  evaluateList,
-  evaluateAnd,
-  evaluateProse,
-  evaluateBlock,
-  evaluateKeys,
-  evaluateInline,
+  RENDER_FN_DISPATCH,
 };

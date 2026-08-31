@@ -17,6 +17,7 @@ const { loadComponentDocument } = require('./loader/component');
 const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation, applyFieldRenderFunctions } = require('./template');
 const { renderFieldList } = require('./render/field-list');
+const { FUNCTION_NAMES } = require('./render/parse');
 const { CODES: FIELD_TABLE_CODES } = require('./loader/field-table');
 const { buildFieldAudit } = require('./render/field-audit');
 const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts, itemContext, CONFIG_BASENAMES, normalizeVarKey } = require('./util');
@@ -1496,8 +1497,12 @@ function reportUnusedRoles(declarations, usage, { diagnostics, file } = {}) {
  */
 const ITEM_CONTEXT_KEYS = new Set(['id', 'name', 'pronouns', 'aid', 'render', 'body', 'v', 'notes']);
 
-/** The render-function call syntax `processFieldRenderFunctions` (`template.js`) dispatches on. */
-const RENDER_FN_PREFIXES = ['inline(', 'join(', 'list(', 'and(', 'prose(', 'block(', 'keys('];
+/**
+ * The render-function call syntax `processFieldRenderFunctions` (`template.js`) dispatches on.
+ * Derived from the canonical `FUNCTION_NAMES` (`render/parse.js`) so a new render function
+ * is registered in exactly one place.
+ */
+const RENDER_FN_PREFIXES = FUNCTION_NAMES.map((n) => n + '(');
 
 /**
  * Scan one item's body for cross-item render-function references (Phase 9 Step 2).
@@ -3375,6 +3380,7 @@ module.exports = {
   writeOpening,
   writeFramingRecursive,
   cleanAndArchive,
+  RENDER_FN_PREFIXES,
 };
 
 /**

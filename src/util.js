@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { loadYaml } = require('./loader/yaml');
 const { CODES: DIAG_CODES, severityOf } = require('./diag');
+const { FUNCTION_NAMES } = require('./render/parse');
 
 /**
  * Every suffix Codex Loom will read a YAML document from (§4.6).
@@ -259,7 +260,10 @@ function walkTextRecursive(obj, transform) {
 
 const FIELD_TOKEN_RE    = /\{\$[^{}]+\}/g;
 const VAR_TOKEN_RE       = /\{%[^}]+\}/g;
-const TEMPLATE_FN_RE     = /\{(?:join|list|and|prose|block|keys|inline)\([^{}]*\)\}/g;
+// Alternation built from the canonical `FUNCTION_NAMES` (`render/parse.js`); the other
+// seven patterns in this block stay hand-written — only the render-function name set
+// is shared. Equivalent to /\{(?:inline|join|list|and|prose|block|keys)\([^{}]*\)\}/g.
+const TEMPLATE_FN_RE     = new RegExp('\\{(?:' + FUNCTION_NAMES.join('|') + ')\\([^{}]*\\)\\}', 'g');
 const TEMPLATE_TAG_RE    = /\{\/?if\b[^{}]*\}|\{\/?wrapper\}|\{\/?preserve\}|\{include\s+[^{}]+\}/g;
 const VERB_MARKER_RE     = /\[(?:s|es|is|was|has)\]/g;
 // A bracketed lowercase word that looks like an *attempted* verb-conjugation

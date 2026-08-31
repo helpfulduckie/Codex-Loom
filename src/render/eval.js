@@ -2,6 +2,7 @@
 
 const { normalizeVarKey } = require('../util');
 const { CODES } = require('../diag');
+const { FUNCTION_NAMES } = require('./parse');
 
 /**
  * The evaluation walk (v4 spec §13, Phase 9 Step 1).
@@ -176,6 +177,9 @@ function evaluateKeys(inner, data) {
   return renderScalar(val);
 }
 
+// Kept as an explicit literal — a hand-audited row per render function reads better than
+// a generated map. The assert below is the drift guard: every name in `FUNCTION_NAMES`
+// (`./parse`, the one canonical list) must have a row here and vice versa.
 const FUNCTIONS = {
   inline: evaluateInline,
   join: evaluateJoin,
@@ -185,6 +189,10 @@ const FUNCTIONS = {
   block: evaluateBlock,
   keys: evaluateKeys,
 };
+
+if (Object.keys(FUNCTIONS).sort().join() !== [...FUNCTION_NAMES].sort().join()) {
+  throw new Error('FUNCTIONS keys and FUNCTION_NAMES disagree');
+}
 
 // ── Tree walk ──────────────────────────────────────────────────────────────────
 
