@@ -10,7 +10,6 @@ const {
   branchTreeDeclares, enumerateLeaves, walkBranchChain, walkBranchTree,
   resolveBranchSpec, localRoleKeysOf,
 } = require('./model/branches');
-const { loadComponentDocument } = require('./loader/component');
 const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation } = require('./template');
 const { renderFieldList } = require('./render/field-list');
@@ -53,6 +52,9 @@ const {
   writeFramingRecursive, writeLabelsRecursive, writePlaceholdersRecursive,
 } = require('./treeWrite');
 const { placeInheritedFiles } = require('./inherit');
+const {
+  PlaceholderTracker, RoleTracker, GapList, ComponentLoader,
+} = require('./compileState');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -911,9 +913,7 @@ function compileRun(configPath, options, buses) {
   // Every declared key referenced by any text this compile writes, keyed by the branch path
   // the text belongs to, and every node that declared one. §12.3's unused check needs both:
   // the declarations say what was promised and where, the usage says what was spent.
-  const placeholderUsage = new Map();
-  const placeholderDeclarations = [];
-  const placeholderDuplicates = new Map();
+  const placeholderState = new PlaceholderTracker();
 
   // `CL0545`: every role name a resolved token actually bound to, project-wide — a
   // whole-compile check rather than `CL0535`'s subtree-scoped one (Decision recorded in
@@ -922,14 +922,12 @@ function compileRun(configPath, options, buses) {
   // build correctly today). `protagonist` is exempt: it is read structurally, by comparing
   // an item id against `branchProtagonist`, wherever any `{$Id}` token resolves — not only
   // where `{$protagonist}` is literally written — so "unused" is never a fact about it.
-  const roleUsage = new Set();
-  const onRoleUsed = (key) => roleUsage.add(String(key).toLowerCase());
-  const roleDeclarations = [];
+  const roleState = new RoleTracker();
   // The walker's root visit replaces the old hand-rolled root rung (Phase 11 Step 0).
   walkBranchTree(config, ({ node, path: path_, isRoot }) => {
     const keys = localRoleKeysOf(node).filter((k) => k.toLowerCase() !== 'protagonist');
     if (keys.length) {
-      roleDeclarations.push(isRoot
+      roleState.declarations.push(isRoot
         ? { path: '', label: 'at the project root', keys }
         : { path: path_.join('/'), label: `on branch "${path_.join('/')}"`, keys });
     }
@@ -966,9 +964,7 @@ function compileRun(configPath, options, buses) {
   // no output file. A requested-but-unwritten component is almost always a silent
   // failure (bad path, unexpanded {%var}/{@key}, empty source) rather than intent —
   // collected here and reported as an error at the end of the compile.
-  const componentGaps = [];
-  const recordGap = (leaf, component, spec, reason) =>
-    componentGaps.push({ leaf, component, spec: spec == null ? '(none)' : String(spec), reason });
+  const gaps = new GapList();
 
   // A sectioned component document is read, validated and normalized once per file rather
   // than once per leaf. Which sections apply is a per-branch question that
@@ -982,65 +978,13 @@ function compileRun(configPath, options, buses) {
   // The Institute. `from:` expands against the *root* variable table for the same reason the
   // cache is keyed by path — a branch-varying `from:` would make one cache key stand for two
   // documents.
-  const sectionedDocs = new Map();
-  // Every resolved path any `loadSectioned` call reads, *including* what its `imports:`
-  // chain pulls in — unlike `sectionedDocs`, which is keyed by top-level spec only and
-  // says nothing about a file reached solely through `imports:`. This is the ledger the
-  // dependency-coverage check (below) actually needs: the gap it exists to catch is a
-  // shared component reached through a plain variable rather than a `components:` spec,
-  // which by definition never appears as a `sectionedDocs` key.
-  const dependencyLedger = new Set();
+  // Cluster 5 (see compileState.js). The `CL0619`–`CL0621` metadata guards and the
+  // `imports:`-inclusive `dependencyLedger` live inside the loader now; `componentLoader.load`
+  // is the stable `(spec, descriptor)` reference the leaf loop and the framing writer take.
   const rootVariables = config._variables || config.variables || null;
-  const loadSectioned = (spec, descriptor) => {
-    if (!sectionedDocs.has(spec)) {
-      const loaded = loadComponentDocument(spec, {
-        diagnostics: compileDiagnostics,
-        label: descriptor.label,
-        variables: rootVariables,
-        base: config._base,
-        dependencyLedger,
-      });
-      // §7.7's `metadata:` is declared on every component and emitted by the ones whose
-      // output has somewhere to put frontmatter — Description today. Reported on the cache
-      // miss so the author hears it once, rather than once per leaf.
-      if (loaded && loaded.metadata && !descriptor.frontmatter) {
-        compileDiagnostics.warn(
-          DIAG_CODES.COMPONENT_METADATA_UNSUPPORTED,
-          `"${descriptor.label}" declares metadata:, which is written as frontmatter and `
-          + `only ${DESCRIPTION_DESCRIPTOR.file} carries any — Velvet Lattice reads scenario `
-          + 'tags from there. The metadata is ignored here.',
-          { file: String(spec) },
-        );
-      }
-      // §7.7 — the other half of the same flag. `adventureDescription` shares
-      // `Description.md` with the scenario blurb and so inherits `frontmatter: true`, but
-      // only the blurb should carry `advanced:` and `description:`. Both are Scenario
-      // fields VL reads at the root and nowhere else, and the markdown one has no adventure
-      // equivalent the player could undo. Checked on the cache miss with CL0620, so an
-      // author hears it once rather than once per leaf.
-      if (loaded && loaded.metadata && descriptor.key === 'adventureDescription') {
-        const offending = ['advanced', 'description']
-          .filter((key) => Object.prototype.hasOwnProperty.call(loaded.metadata, key));
-        if (offending.length > 0) {
-          compileDiagnostics.error(
-            DIAG_CODES.ADVENTURE_DESCRIPTION_ADVANCED,
-            `"${descriptor.label}" declares ${offending.map((k) => `${k}:`).join(' and ')} in `
-            + 'metadata:, which belongs to the scenario blurb only.',
-            { file: String(spec) },
-            {
-              hint: 'Velvet Lattice reads both keys at the root and nowhere else, so they do '
-                + 'nothing at a leaf today. AID has no markdown description for an adventure, '
-                + 'and if it gains one this frontmatter would set a field the player cannot '
-                + `change. Move them to the ${DESCRIPTION_DESCRIPTOR.label} component; other `
-                + 'metadata keys are fine here.',
-            },
-          );
-        }
-      }
-      sectionedDocs.set(spec, loaded);
-    }
-    return sectionedDocs.get(spec);
-  };
+  const componentLoader = new ComponentLoader({
+    diagnostics: compileDiagnostics, variables: rootVariables, base: config._base,
+  });
 
   // The two sets §7.7's guard compares. Both are filled by the leaf loop below, which is
   // what makes CL0616 a comparison of two facts rather than of two passes.
@@ -1115,7 +1059,7 @@ function compileRun(configPath, options, buses) {
     // point that no longer knows which item was responsible. `loadSectioned` caches by
     // resolved path, so a per-leaf hoist costs one Map lookup.
     const sectionedForLeaf = resolveSectionedComponents(compileContext, label, {
-      loadSectioned, recordGap,
+      loadSectioned: componentLoader.load, recordGap: gaps.record,
     });
     const slotIndex = buildSlotIndex(sectionedForLeaf, branchPath);
 
@@ -1128,8 +1072,8 @@ function compileRun(configPath, options, buses) {
         verbose, renderedById,
         projectNotesTemplate: (compileContext.render && compileContext.render.notesTemplate) || null,
         diagnostics: compileDiagnostics, slotIndex, branchLabel: label, placeholders: ctx.placeholders,
-        usage: placeholderUsage, usagePath: branchPath.join('/'),
-        roles: ctx.roles, onRoleUsed,
+        usage: placeholderState.usage, usagePath: branchPath.join('/'),
+        roles: ctx.roles, onRoleUsed: roleState.onUsed,
         fieldTable, templateFor: ctx.templateFor, fieldAudit, cardTypeAudit,
       },
     );
@@ -1187,7 +1131,7 @@ function compileRun(configPath, options, buses) {
           {
             defaultHeadingLevel: descriptor.defaultHeadingLevel,
             variables: ctx.variables, registry, branchProtagonist,
-            roles: ctx.roles, onRoleUsed,
+            roles: ctx.roles, onRoleUsed: roleState.onUsed,
             onWarn: busWarner(compileDiagnostics, { file: String(spec) }),
           },
         ));
@@ -1202,7 +1146,7 @@ function compileRun(configPath, options, buses) {
         where: `component "${descriptor.label}"`,
         branch: label,
         skip: placeholderNoise.get(descriptor.key),
-        usage: placeholderUsage,
+        usage: placeholderState.usage,
         usagePath: branchPath.join('/'),
       });
 
@@ -1285,7 +1229,7 @@ function compileRun(configPath, options, buses) {
       if (!excluded && component && component.render) {
         renderComponentStoryCards(component, descriptor, branchPath, filled, leafCardGroups, {
           variables: ctx.variables, registry, branchProtagonist,
-          roles: ctx.roles, onRoleUsed,
+          roles: ctx.roles, onRoleUsed: roleState.onUsed,
           diagnostics: compileDiagnostics,
           questions: questionsForMeasurement(ctx.placeholders, ctx.variables),
           storyCardType: config.storyCardType,
@@ -1354,19 +1298,19 @@ function compileRun(configPath, options, buses) {
   writeFramingRecursive(
     config, config._resolvedOutput, config._base, configPath,
     config._variables || config.variables || {},
-    verbose, compileDiagnostics, placeholderUsage,
-    loadSectioned, registry, onRoleUsed,
+    verbose, compileDiagnostics, placeholderState.usage,
+    componentLoader.load, registry, roleState.onUsed,
   );
 
   writeLabelsRecursive(
     config, config._resolvedOutput, config._variables || config.variables || {}, config.variables || {},
-    verbose, compileDiagnostics, configPath, placeholderUsage,
+    verbose, compileDiagnostics, configPath, placeholderState.usage,
   );
 
   writePlaceholdersRecursive(
     config, config._resolvedOutput,
     config._variables || config.variables || {}, configPath, compileDiagnostics, verbose,
-    placeholderUsage, placeholderDeclarations, placeholderDuplicates,
+    placeholderState.usage, placeholderState.declarations, placeholderState.duplicates,
   );
   reportCompileDiagnostics();
 
@@ -1390,7 +1334,7 @@ function compileRun(configPath, options, buses) {
     ? resolveComponentSpec(config.components.description, config._base, config._variables || config.variables || null)
     : null;
   if (descRequested && !(descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec))) {
-    recordGap('(project)', 'Description', descSpec, 'source not found');
+    gaps.record('(project)', 'Description', descSpec, 'source not found');
   } else if (descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec)) {
     let combined = null;
     let descMetadata = null;
@@ -1398,7 +1342,7 @@ function compileRun(configPath, options, buses) {
     if (isPassthrough(descSpec)) {
       combined = readPassthrough(descSpec);
     } else {
-      const descComponent = loadSectioned(descSpec, DESCRIPTION_DESCRIPTOR);
+      const descComponent = componentLoader.load(descSpec, DESCRIPTION_DESCRIPTOR);
       if (descComponent) {
         descMetadata = descComponent.metadata;
         // `branchProtagonist` stays null: the blurb belongs to the project, not to any
@@ -1413,7 +1357,7 @@ function compileRun(configPath, options, buses) {
           {
             defaultHeadingLevel: DESCRIPTION_DESCRIPTOR.defaultHeadingLevel,
             variables: rootVariables || {}, registry, branchProtagonist: null,
-            roles: rootRolesDeclared ? config.roles : null, onRoleUsed,
+            roles: rootRolesDeclared ? config.roles : null, onRoleUsed: roleState.onUsed,
             onWarn: busWarner(compileDiagnostics, { file: String(descSpec) }),
           },
         ));
@@ -1426,7 +1370,7 @@ function compileRun(configPath, options, buses) {
     // per-node case §7.7 asked for.
     checkUndeclaredPlaceholders(combined, config.placeholders, {
       diagnostics: compileDiagnostics, file: descSpec, where: 'the Description',
-      usage: placeholderUsage, usagePath: '',
+      usage: placeholderState.usage, usagePath: '',
     });
     checkPlaceholderContext(combined, {
       diagnostics: compileDiagnostics,
@@ -1455,7 +1399,7 @@ function compileRun(configPath, options, buses) {
           { file: configPath },
         );
       }
-    } else recordGap('(project)', 'Description', descSpec, 'compiled to empty content');
+    } else gaps.record('(project)', 'Description', descSpec, 'compiled to empty content');
   }
 
   // ── 9. Project diagnostics, summary, reports, finalize ────────────────────────
@@ -1543,7 +1487,7 @@ function compileRun(configPath, options, buses) {
   // not resolved dependencies, so nothing else notices the gap. Checked once, here, rather
   // than per leaf: the ledger is already deduplicated by resolved path.
   const libraryDirs = [...config._resolvedLibrarySource.values()];
-  for (const specPath of dependencyLedger) {
+  for (const specPath of componentLoader.dependencyLedger) {
     if (!isOutOfBase(specPath, config._base)) continue;
     const norm = normalize(specPath);
     const covered = libraryDirs.some((dir) => {
@@ -1610,23 +1554,23 @@ function compileRun(configPath, options, buses) {
 
   // Last, because "unused" is only knowable once every write point has run — and the
   // Description and the scenario title are written after the branch tree.
-  reportUnusedRoles(roleDeclarations, roleUsage, { diagnostics: compileDiagnostics, file: configPath });
+  reportUnusedRoles(roleState.declarations, roleState.usage, { diagnostics: compileDiagnostics, file: configPath });
   // §13.6: the deduped unread-field findings, then the whole-table dead-declaration sweep.
   fieldAudit.finish(compileDiagnostics);
   // CL0626–CL0628, here for the same reason: the fold warns once per authored value across
   // the whole compile, and a case collision is only visible once every branch's types are in.
   cardTypeAudit.finish(compileDiagnostics);
-  reportUnusedPlaceholders(placeholderDeclarations, placeholderUsage, {
+  reportUnusedPlaceholders(placeholderState.declarations, placeholderState.usage, {
     diagnostics: compileDiagnostics, file: configPath,
   });
-  reportDuplicateQuestions(placeholderDuplicates, {
+  reportDuplicateQuestions(placeholderState.duplicates, {
     diagnostics: compileDiagnostics, file: configPath,
   });
 
   // Requested-but-unwritten components: surface as an error so the gap is never silent.
   // Raised before `reportCompileDiagnostics()` below, so these reach the printed output —
   // a bus error raised after that call would never be rendered.
-  for (const g of componentGaps) {
+  for (const g of gaps.entries) {
     compileDiagnostics.error(
       DIAG_CODES.COMPONENT_NO_OUTPUT,
       `[${g.leaf}] ${g.component}: ${g.reason} (spec: ${g.spec})`,
@@ -1636,9 +1580,9 @@ function compileRun(configPath, options, buses) {
 
   reportCompileDiagnostics();
 
-  if (componentGaps.length > 0) {
+  if (gaps.length > 0) {
     throw new Error(
-      `${componentGaps.length} requested component(s) were not written — see errors above. ` +
+      `${gaps.length} requested component(s) were not written — see errors above. ` +
       `Fix the source path/reference, or remove the component from compile.yaml if it is not wanted.`
     );
   }
