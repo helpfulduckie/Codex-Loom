@@ -9,7 +9,7 @@ const {
 } = require('./outputPaths');
 
 /**
- * Phase 11 Steps 4 & 5 — component/script inheritance and story-card frontier placement.
+ * Component/script inheritance and story-card frontier placement.
  *
  * The leaf loop renders and checks every component and card per leaf, but defers the
  * *file write* to here, where the full set of per-leaf texts is known. A value identical
@@ -25,7 +25,7 @@ function placeInheritedFiles({
 }) {
   let filesWritten = 0;
 
-  // ── Phase 11 Step 4: component and script inheritance ──────────────────────
+  // ── Component and script inheritance ──────────────────────────────────────────
   //
   // Each deferred component (and the `Scripts/` dir) is written once at the output root
   // when its value is identical at every leaf and no branch node redeclares it — the
@@ -69,7 +69,7 @@ function placeInheritedFiles({
     }
   }
 
-  // The `Scripts/` dir rides the same lift test (Phase 12 Step 6). `canLift` compares the
+  // The `Scripts/` dir rides the same lift test. `canLift` compares the
   // resolved spec strings — one distinct spec across every leaf is one identical
   // `fs.cpSync` by construction — but `scripts/rebaseline.js` still asserts byte-identity
   // of the copied files, because this pass is the only thing between a lifted layout and a
@@ -90,7 +90,7 @@ function placeInheritedFiles({
     }
   }
 
-  // ── Phase 11 Step 5: story-card inheritance ────────────────────────────────
+  // ── Story-card inheritance ───────────────────────────────────────────────────
   //
   // A card was rendered once per leaf above. Velvet Lattice inherits a node's cards down
   // its subtree, merging by card name, so a card that renders byte-identically across a
@@ -100,7 +100,7 @@ function placeInheritedFiles({
   // scope (a protagonist-dependent body, say) has each of its versions placed the same
   // way, and one that reaches an irregular set of leaves falls all the way back to a copy
   // per leaf. Every leaf still *resolves* to the same card set it did before; only the
-  // file layout changes (v4 spec §14.3, §15).
+  // file layout changes.
   if (deferredCardLeaves.length <= 1) {
     // One leaf (or none): there is no subtree to inherit down, so the frontier would only
     // relocate the single leaf's cards to the output root for no saving. Write them where

@@ -12,11 +12,11 @@ const {
 } = require('./treeWrite');
 
 /**
- * Phase 8a — the recursive tree writers. `opening:` is written by the leaf loop as an
- * ordinary inherited component; what is left for the tree visitor is framing, labels and
+ * The recursive tree writers. `opening:` is written by the leaf loop as an ordinary
+ * inherited component; what is left for the tree visitor is framing, labels and
  * placeholder questions, each of which belongs to interior nodes the leaf loop never
- * visits. Root-level `branchFraming` and the root `Label` land in these walkers' root
- * visits now (Phase 11 Step 0), not a hand-rolled rung.
+ * visits. Root-level `branchFraming` and the root `Label` land in these walkers' own
+ * root visits.
  */
 function writeTreeFiles({
   config, configPath, verbose, diagnostics,
@@ -42,13 +42,12 @@ function writeTreeFiles({
 }
 
 /**
- * Phase 8b — the scenario blurb (§7.7), written once to the output root alongside
- * `Branches/`. An ordinary component document since Phase 6: `body:` is a section with
- * `file:` and `script:` is one with `from: {script:, extract: scriptBanner}`. It renders
- * through `renderSectionedComponent` with an empty occupant map — the same render path
- * called with nothing to place, because a scenario has one blurb and items are
- * branch-scoped. Gaps and the unbranched-root key collision are recorded on the buses
- * passed in.
+ * The scenario blurb, written once to the output root alongside `Branches/`. An ordinary
+ * component document: `body:` is a section with `file:` and `script:` is one with
+ * `from: {script:, extract: scriptBanner}`. It renders through `renderSectionedComponent`
+ * with an empty occupant map — the same render path called with nothing to place, because
+ * a scenario has one blurb and items are branch-scoped. Gaps and the unbranched-root key
+ * collision are recorded on the buses passed in.
  */
 function writeScenarioBlurb({
   config, configPath, verbose, diagnostics,
@@ -71,11 +70,11 @@ function writeScenarioBlurb({
       if (descComponent) {
         descMetadata = descComponent.metadata;
         // `branchProtagonist` stays null: the blurb belongs to the project, not to any
-        // branch, so there is no chain to take a protagonist from (Phase 10 Step 4).
-        // `roles` still reaches the render, gated the same way the leaf loop gates it
-        // (Decision — `buildCompileContext`'s `chain.rolesDeclared ? chain.roles : null`),
-        // so a `{$role}` token in the root description resolves instead of reading as an
-        // undeclared placeholder, and `onRoleUsed` marks it used so `CL0545` agrees.
+        // branch, so there is no chain to take a protagonist from. `roles` still reaches
+        // the render, gated the same way the leaf loop gates it (pass the table only when
+        // some node declared `roles:`), so a `{$role}` token in the root description
+        // resolves instead of reading as an undeclared placeholder, and `onRoleUsed` marks
+        // it used so `CL0545` agrees.
         const rootRolesDeclared = !!(config.roles && Object.keys(config.roles).length);
         ({ text: combined } = renderSectionedComponent(
           descComponent, [], new Map(),
@@ -89,10 +88,9 @@ function writeScenarioBlurb({
       }
     }
 
-    // Checked against the root table, and that stays correct where the plan warned it might
-    // not: the blurb belongs to the project, and it is `adventureDescription:` — a different
-    // key, resolved inside the leaf loop against the branch-merged table — that carries the
-    // per-node case §7.7 asked for.
+    // Checked against the root placeholder table: the blurb belongs to the project. The
+    // per-node case is carried by `adventureDescription:` — a different key, resolved
+    // inside the leaf loop against the branch-merged table.
     checkUndeclaredPlaceholders(combined, config.placeholders, {
       diagnostics, file: descSpec, where: 'the Description',
       usage: placeholderState.usage, usagePath: '',

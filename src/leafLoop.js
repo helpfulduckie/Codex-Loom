@@ -16,17 +16,17 @@ const { buildBranchOutputDir } = require('./outputPaths');
 //   - `opening` is excluded from the inheritance lift: it shares the `Opening.md` filename
 //     with `branchFraming`, which `writeFramingRecursive` writes at every interior node, so
 //     an inherited opening lifted above a leaf would be shadowed by the nearest ancestor's
-//     framing question (§7.3). It stays written at the leaf.
+//     framing question. It stays written at the leaf.
 //   - `adventureDescription` is excluded: VL reads `Description.md` from the node's own
 //     directory and does not inherit it (`scenario.py`), so the file has to land at each
-//     leaf regardless of Codex Loom's own key-merge (`emit/components.js:120`).
+//     leaf regardless of Codex Loom's own key-merge (`emit/components.js`).
 const LIFT_EXCLUDED_COMPONENTS = new Set(['opening', 'adventureDescription']);
 
 /**
- * Phase 5 — the per-leaf compile. For each branch leaf: walk the chain, build the compile
- * context, resolve and render the story cards and the sectioned components, then either
- * write the two leaf-held components (`opening`, `adventureDescription`) or defer the rest
- * to the post-loop inheritance pass. Every collection this mutates — the deferred maps, the
+ * The per-leaf compile. For each branch leaf: walk the chain, build the compile context,
+ * resolve and render the story cards and the sectioned components, then either write the
+ * two leaf-held components (`opening`, `adventureDescription`) or defer the rest to the
+ * post-loop inheritance pass. Every collection this mutates — the deferred maps, the
  * CL0616 sets, the report-capture arrays, the placeholder/role trackers — is passed in and
  * mutated in place; the only value returned is the count of files actually written here.
  */
@@ -48,9 +48,9 @@ function compileLeaf(branchPath, ctx) {
   const label = branchPath.length > 0 ? branchPath.join('/') : '(root)';
   if (verbose) console.log(`\n  Branch: ${label}`);
 
-  // One traversal now serves what used to be four: the folder path, the inherited
-  // roles table (`protagonist` is `roles.protagonist`, §9.2), the terminal node, and
-  // (inside buildCompileContext) the merged variables and components.
+  // One traversal serves four things at once: the folder path, the inherited roles table
+  // (`protagonist` is `roles.protagonist`), the terminal node, and (inside
+  // buildCompileContext) the merged variables and components.
   const chain = walkBranchChain(config.branches, branchPath, {
     rootRoles: config.roles || {},
   });
@@ -80,7 +80,7 @@ function compileLeaf(branchPath, ctx) {
   const leafVariants = resolvedItems.filter(c => c._hasVariant).length;
 
   // The sectioned components are resolved *before* the items that fill them, because two
-  // of §7.4's placement ERRORs — undeclared slot, and a section that is not a slot — are
+  // of the placement ERRORs — undeclared slot, and a section that is not a slot — are
   // questions about the component that only the item's target can ask. Loading here lets
   // them be raised where the placement is made rather than a hundred lines later, at a
   // point that no longer knows which item was responsible. `componentLoader.load` caches by
@@ -104,16 +104,16 @@ function compileLeaf(branchPath, ctx) {
       fieldTable, templateFor: cctx.templateFor, fieldAudit, cardTypeAudit,
     },
   );
-  // Phase 11 Step 5: story cards are written after the loop, at the node that owns each
-  // one, so a card constant across a subtree is written once and inherited rather than
-  // copied to every leaf. `totalFiles` is credited there.
+  // Story cards are written after the loop, at the node that owns each one, so a card
+  // constant across a subtree is written once and inherited rather than copied to every
+  // leaf. `totalFiles` is credited there.
   deferredCardLeaves.push({
     branchPath, folderPath, outputDir, grouped: leafCardGroups,
     // For the post-loop `runPackChecks`: this leaf's branch-merged `lint` table and the
-    // variables a pack `source:` path expands against. Captured here so the pack pass
-    // does not re-walk the branch chain (§8.2.2). `resolvedItems` is the structured,
-    // branch-merged item set — `item.body.<field>` in its authored shape — which the
-    // Phase 16 `count` / `mutexHint` rules read (`evaluatePackItemRules`).
+    // variables a pack `source:` path expands against. Captured here so the pack pass does
+    // not re-walk the branch chain. `resolvedItems` is the structured, branch-merged item
+    // set — `item.body.<field>` in its authored shape — which the `count` / `mutexHint`
+    // rules read (`evaluatePackItemRules`).
     lint: cctx.lint, variables: cctx.variables, resolvedItems,
   });
   flushDiagnostics();
@@ -126,10 +126,9 @@ function compileLeaf(branchPath, ctx) {
     );
   }
 
-  // Sectioned components (§7.2) — all four of them now. The shape comes from the
-  // component document, the content from the items that named its slots. This runs
-  // *after* story cards: the ordering constraint existed only so suppression could
-  // follow what Plot Essentials had actually emitted, and there is no suppression left.
+  // Sectioned components — all four of them. The shape comes from the component document,
+  // the content from the items that named its slots. Order relative to story cards does
+  // not matter here: nothing suppresses a component based on what a card emitted.
   const sectionedWritten = {};
   const sectionedSegments = {};
   for (const { descriptor, spec, component, passthrough } of sectionedForLeaf) {
@@ -144,9 +143,9 @@ function compileLeaf(branchPath, ctx) {
       segments = [{ key: descriptor.label, text: passthrough }];
     } else {
       warnEmptySlots(descriptor, slotIndex, filled, label, diagnostics, spec);
-      // §7.8: `render.component.variant` selects which section-variant ships in the
-      // component field. Absent (every golden today) it is a no-op and `component` renders
-      // as-is; the slot set is unchanged either way because a variant cannot toggle `slot:`.
+      // `render.component.variant` selects which section-variant ships in the component
+      // field. Absent (every golden today) it is a no-op and `component` renders as-is;
+      // the slot set is unchanged either way because a variant cannot toggle `slot:`.
       const fieldVariant = component && component.render && component.render.component
         && typeof component.render.component.variant === 'string'
         ? component.render.component.variant.trim() : '';
@@ -177,10 +176,10 @@ function compileLeaf(branchPath, ctx) {
       usagePath: branchPath.join('/'),
     });
 
-    // §8.5's platform caps, table-driven rather than per-component. Only `opening:`
-    // carries a `limitKey` today; the point of the column is that Step 4's `notes:` cap
-    // is a row rather than another bespoke call site. Measured post-substitution because
-    // Velvet Lattice expands `%key%` to its question text on the way to AID.
+    // Platform length caps, table-driven rather than per-component. Only `opening:` carries
+    // a `limitKey` today; the point of the `LIMITS` table is that a new cap is a row rather
+    // than another bespoke call site. Measured post-substitution because Velvet Lattice
+    // expands `%key%` to its question text on the way to AID.
     if (descriptor.limitKey && text) {
       checkLimit(
         text,
@@ -195,13 +194,12 @@ function compileLeaf(branchPath, ctx) {
     }
 
     const metadata = component ? component.metadata : null;
-    // Phase 11 Step 4: a component that renders to something is written here only if it
-    // is one of the two the leaf must hold itself; every other component's write is
-    // deferred to the post-loop inheritance pass, which decides between one file at the
-    // declaring node and one per leaf. `sectionedWritten`/`sectionedSegments` and the
-    // CL0616 sets are still filled per leaf either way — the leaf *has* the component,
-    // whether it holds the bytes or inherits them, and `--diff`/`--annotate` read those
-    // in-memory segments, not the tree.
+    // A component that renders to something is written here only if it is one of the two
+    // the leaf must hold itself; every other component's write is deferred to the post-loop
+    // inheritance pass, which decides between one file at the declaring node and one per
+    // leaf. `sectionedWritten`/`sectionedSegments` and the CL0616 sets are still filled
+    // per leaf either way — the leaf *has* the component, whether it holds the bytes or
+    // inherits them, and `--diff`/`--annotate` read those in-memory segments, not the tree.
     let wrote;
     if (text && LIFT_EXCLUDED_COMPONENTS.has(descriptor.key)) {
       const outPath = writeSectionedComponent(
@@ -227,19 +225,18 @@ function compileLeaf(branchPath, ctx) {
       sectionedWritten[descriptor.key] = true;
       sectionedSegments[descriptor.key] = segments;
       if (descriptor.key === 'adventureDescription') descriptionLeaves.add(label);
-      // §7.7's guard used to read this from `writeOpeningsRecursive`'s return value.
-      // Openings are written here now, so the set is built here — the two facts CL0616
+      // Openings are written here, so `openingLeaves` is built here — the two facts CL0616
       // compares are produced by one loop rather than by two passes that had to agree.
       if (descriptor.key === 'opening') openingLeaves.add(label);
     } else if (!excluded) {
-      // §7.4: a component that renders to nothing is an ERROR, not a gap. The gap list
-      // is for a component that was asked for and could not be found; this one was
-      // found, read, and had every section resolve away, which is a statement about
-      // the source that no amount of re-reading the path will explain.
+      // A component that renders to nothing is an ERROR, not a gap. The gap list is for a
+      // component that was asked for and could not be found; this one was found, read, and
+      // had every section resolve away, which is a statement about the source that no
+      // amount of re-reading the path will explain.
       //
-      // A component-level `~` is exempt because it is not that statement. The author
-      // wrote "not on this branch", and §7.6.2a gives `~` that meaning at this position
-      // exactly as it has it at every other. Writing no file is the whole request.
+      // A component-level `~` is exempt because it is not that statement. The author wrote
+      // "not on this branch", and `~` means exactly that at this position as everywhere
+      // else. Writing no file is the whole request.
       diagnostics.error(
         DIAG_CODES.COMPONENT_RENDERS_NOTHING,
         `component "${descriptor.label}" renders to nothing on branch "${label}" — `
@@ -248,8 +245,8 @@ function compileLeaf(branchPath, ctx) {
       );
     }
 
-    // §7.8: after the component field, its `render.storyCards` alternates. They join
-    // `leafCardGroups` here — after `renderBranchItems` has returned — so Phase 11 frontier
+    // After the component field, its `render.storyCards` alternates. They join
+    // `leafCardGroups` here — after `renderBranchItems` has returned — so frontier
     // placement writes them with the real cards. Skipped when the component is excluded
     // from this branch (`~`): the author said "not on this branch", and an alternate copy
     // is still this branch getting the component.
@@ -268,14 +265,13 @@ function compileLeaf(branchPath, ctx) {
   const hasAIN = !!sectionedWritten.aiInstructions;
   const hasAN = !!sectionedWritten.authorsNote;
 
-  // Scripts (Phase 12 Step 6)
+  // Scripts.
   //
-  // Collected here, written by the inheritance pass below. Velvet Lattice inherits a
-  // node's `Scripts/` dir down its subtree (`scenario.py`: `self.scripts = {**parent,
-  // **local}`), so a `scripts:` spec that resolves identically at every leaf and is
-  // redeclared by no branch is written once at the output root, exactly as the deferred
-  // components are. Anything else is written per leaf, at the same `outputDir` this loop
-  // used to copy it to.
+  // Collected here, written by the inheritance pass. Velvet Lattice inherits a node's
+  // `Scripts/` dir down its subtree (`scenario.py`: `self.scripts = {**parent, **local}`),
+  // so a `scripts:` spec that resolves identically at every leaf and is redeclared by no
+  // branch is written once at the output root, exactly as the deferred components are.
+  // Anything else is written per leaf, at this leaf's `outputDir`.
   const scriptsSpec = compileContext.componentRefs.scripts;
   if (scriptsSpec && typeof scriptsSpec === 'string') {
     deferredScripts.set(outputDir, scriptsSpec);
@@ -302,8 +298,8 @@ function compileLeaf(branchPath, ctx) {
 }
 
 /**
- * The leaf loop (§5) — `compileLeaf` per branch leaf, summing the files written. Returns
- * that count for the spine to fold into `totalFiles`.
+ * The leaf loop — `compileLeaf` per branch leaf, summing the files written. Returns that
+ * count for the spine to fold into `totalFiles`.
  */
 function runLeafLoop(ctx) {
   let filesWritten = 0;

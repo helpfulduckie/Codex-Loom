@@ -8,8 +8,8 @@ const { reportUnusedPlaceholders, reportDuplicateQuestions } = require('./emit/p
 
 /**
  * `CL0545`: a role declared and never referenced by a resolved token anywhere in the
- * compile (§9.2's WARN half — `resolveRole` in `model/pronouns.js` calls `onRoleUsed` only
- * on success, so `usage` names every role that actually did something).
+ * compile. `resolveRole` in `model/pronouns.js` calls `onRoleUsed` only on a successful
+ * bind, so `usage` names every role that actually did something.
  *
  * Whole-compile rather than `CL0535`'s subtree-scoped check, deliberately simpler: no
  * golden declares a role yet, so there is no corpus case where a role is legitimately used
@@ -48,9 +48,9 @@ function buildLibraryManifest(config) {
 }
 
 /**
- * The report emitters (§17.2 provenance, §13.8 schema-tables, `--diff` / `--annotate` /
- * `--inventory`). Provenance is always emitted from registry data; the rest are opt-in.
- * Called from `finalizeDiagnostics` at the point the inline code emitted them — after the
+ * The report emitters (provenance, schema-tables, `--diff` / `--annotate` / `--inventory`).
+ * Provenance is always emitted from registry data; the rest are opt-in. Called from
+ * `finalizeDiagnostics` at the point the inline code emitted them — after the
  * dependency-coverage sweep, before the unused-roles / audit drains — so the console
  * ordering the integration snapshots capture does not move.
  */
@@ -62,18 +62,18 @@ function runReports({
   const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
   const reportSummary = [];
 
-  // §17.2 provenance report — always emitted from registry data, independent of leaf loop.
+  // Provenance report — always emitted from registry data, independent of leaf loop.
   const { runProvenanceMode } = require('./provenance');
   const provenanceWritten = runProvenanceMode(registry, reportBase, rootDirName);
   reportSummary.push(`${provenanceWritten.length} provenance file(s)`);
 
-  // §13.8 — the generated field reference, opt-in. Derived from the merged field table,
-  // not the leaf loop, and written where SCHEMA.md's §3–§5 tables can be copied from.
+  // The generated field reference, opt-in. Derived from the merged field table, not the
+  // leaf loop, and written in a form meant to be pasted into a hand-maintained schema doc.
   if (options.schemaTables) {
     const { runSchemaTablesMode } = require('./schematables');
-    // §13.4 — every template a branch's `templateFor` slot files produce, so a tier author
-    // can diff a terse list against the full type in one place. `tierTemplates` was
-    // gathered once beside the field audit (`gatherTierTemplates`), which needs the same set.
+    // Every template a branch's `templateFor` slot files produce, so a tier author can
+    // diff a terse list against the full type in one place. `tierTemplates` was gathered
+    // once beside the field audit (`gatherTierTemplates`), which needs the same set.
     const w = runSchemaTablesMode(fieldTable, path.join(reportBase, 'schema-tables'),
       { title: config.title || rootDirName, tierTemplates });
     reportSummary.push(`${w.length} schema-tables file(s)`);
@@ -105,12 +105,12 @@ function runReports({
 }
 
 /**
- * Phase 9 — everything after the tree is on disk and before the two terminal throws:
- * the project-wide leaf-outcome checks (`CL0616`, `CL0630`/`CL0631`), the summary table,
- * the library manifest, the dependency-coverage sweep, the report emitters, and the
- * "unused" drains (roles, fields, card types, placeholders, duplicate questions) that are
- * only knowable once every write point has run. Everything it touches is read-only except
- * the compile bus. The spine keeps the `gaps.length` and `hasErrors()` throws.
+ * Everything after the tree is on disk and before the two terminal throws: the
+ * project-wide leaf-outcome checks (`CL0616`, `CL0630`/`CL0631`), the summary table, the
+ * library manifest, the dependency-coverage sweep, the report emitters, and the "unused"
+ * drains (roles, fields, card types, placeholders, duplicate questions) that are only
+ * knowable once every write point has run. Everything it touches is read-only except the
+ * compile bus. The spine keeps the `gaps.length` and `hasErrors()` throws.
  */
 function finalizeDiagnostics({
   config, configPath, options, verbose,
@@ -121,11 +121,11 @@ function finalizeDiagnostics({
   registry, rootDirName, fieldTable, tierTemplates,
   captureReports, leafData, inventoryData, allItemDefs,
 }) {
-  // §7.7's one guard. Velvet Lattice sets a node's prompt to
-  // `components["Opening"] or node.description`, so a leaf carrying a description and no
-  // Opening.md does not produce an empty prompt — it produces the blurb as the opening
-  // scene. v3 could not reach this, because descriptions were written only at the output
-  // root; `adventureDescription:` is what makes the pairing possible, and this is its price.
+  // Velvet Lattice sets a node's prompt to `components["Opening"] or node.description`, so
+  // a leaf carrying an adventure description and no Opening.md does not produce an empty
+  // prompt — it opens the adventure with its own blurb rather than a scene. That is the
+  // price of letting `adventureDescription:` be a per-node inherited component, and this
+  // guard is what flags it.
   for (const leafLabel of descriptionLeaves) {
     if (openingLeaves.has(leafLabel)) continue;
     diagnostics.error(
@@ -138,12 +138,12 @@ function finalizeDiagnostics({
     );
   }
 
-  // §7.3 / §6.3: a leaf that resolves neither an opening nor AI Instructions. Both are
-  // ordinary inherited components (`buildCompileContext` merges them down the chain), so a
-  // `false` here means nothing in the leaf's ancestry set one — not merely that this node
-  // did not. Read from `leafSummaries` because a leaf's opening status is only final once
-  // every component write, inherited ones included, has run. A leaf covered by the CL0616
-  // ERROR above (has a description, no opening) is not also flagged CL0630.
+  // A leaf that resolves neither an opening nor AI Instructions. Both are ordinary
+  // inherited components (`buildCompileContext` merges them down the chain), so a `false`
+  // here means nothing in the leaf's ancestry set one — not merely that this node did not.
+  // Read from `leafSummaries` because a leaf's opening status is only final once every
+  // component write, inherited ones included, has run. A leaf covered by the CL0616 ERROR
+  // above (has a description, no opening) is not also flagged CL0630.
   for (const s of leafSummaries) {
     if (!openingLeaves.has(s.label) && !descriptionLeaves.has(s.label)) {
       diagnostics.warn(
@@ -197,13 +197,12 @@ function finalizeDiagnostics({
     if (verbose) console.log(`  OK: Library manifest → ${manifestPath}`);
   }
 
-  // Dependency-coverage check (Phase 7 Step 4, floated out of Step 0): the ledger is
-  // every resolved component path this compile actually read, `imports:` chains included
-  // (built inside `ComponentLoader`). A component that lives outside the project but under
-  // no `structure.input.library` entry compiles and renders correctly today and is
-  // invisible to `--snapshot` — the freeze walks declared entries, not resolved
-  // dependencies, so nothing else notices the gap. Checked once, here, rather than per
-  // leaf: the ledger is already deduplicated by resolved path.
+  // Dependency-coverage check: the ledger is every resolved component path this compile
+  // actually read, `imports:` chains included (built inside `ComponentLoader`). A component
+  // that lives outside the project but under no `structure.input.library` entry compiles
+  // and renders correctly today and is invisible to `--snapshot` — the freeze walks
+  // declared entries, not resolved dependencies, so nothing else notices the gap. Checked
+  // once, here, rather than per leaf: the ledger is already deduplicated by resolved path.
   const libraryDirs = [...config._resolvedLibrarySource.values()];
   for (const specPath of componentLoader.dependencyLedger) {
     if (!isOutOfBase(specPath, config._base)) continue;
@@ -233,7 +232,7 @@ function finalizeDiagnostics({
   // Last, because "unused" is only knowable once every write point has run — and the
   // Description and the scenario title are written after the branch tree.
   reportUnusedRoles(roleState.declarations, roleState.usage, { diagnostics, file: configPath });
-  // §13.6: the deduped unread-field findings, then the whole-table dead-declaration sweep.
+  // The deduped unread-field findings, then the whole-table dead-declaration sweep.
   fieldAudit.finish(diagnostics);
   // CL0626–CL0628, here for the same reason: the fold warns once per authored value across
   // the whole compile, and a case collision is only visible once every branch's types are in.
