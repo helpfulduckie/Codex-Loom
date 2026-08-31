@@ -5,10 +5,10 @@ const path = require('path');
 const fs = require('fs');
 const {
   compile,
-  writeOpening, resolveOpeningContent,
   buildCompileContext,
   resolveIncludes, resolveBranchItems,
 } = require('../../src/compile');
+const { writeOpening, resolveOpeningContent } = require('../../src/treeWrite');
 const { getTemplate } = require('../../src/templateResolve');
 const { validateCardType, normalizeCardType, buildCardTypeAudit } = require('../../src/cardType');
 const {
