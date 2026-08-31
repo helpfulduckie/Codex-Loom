@@ -155,11 +155,7 @@ function buildKeyIndex(schema) {
  * migrator, and that route does not fire once they have added it and are fixing the rest by
  * hand.
  *
- * **The hint names the rename and not a terminal command, because there is no `--migrate`
- * flag (§14.2).** `migrateProjectFully()` in `src/migrate/index.js` is a library reached from
- * tests, and building its CLI belongs to the migration session (§15, Phase 8). A hint that
- * tells an author to run something that exits "unknown option" costs more than the bare
- * unknown-key it was written to improve on.
+ * **The hint names the `--migrate` command, which landed in Phase 8 (§15).**
  */
 const RENAMED = Object.freeze({
   cards: 'items',
@@ -199,8 +195,7 @@ function suggestFor(key, ownPath, declaredHere, keyIndex) {
     return {
       code: CODES.UNKNOWN_KEY,
       hint: `"${key}" was renamed to "${renamedTo}" in v4. Rename it here, or convert the whole `
-        + `project with migrateProjectFully() in src/migrate/index.js — there is no --migrate `
-        + `flag yet (§14.2).`,
+        + `project with codex-loom --migrate <project> (§14.2).`,
     };
   }
 
@@ -422,9 +417,12 @@ function validate(value, schema, options = {}) {
           }
 
           if (child.note && diagnostics) {
+            const message = child.noteFinal
+              ? `"${key}" is recognized but is not a render target and never will be — ${child.note}. It is ignored.`
+              : `"${key}" is recognized but not yet implemented — ${child.note}. It will be ignored.`;
             diagnostics.warn(
               CODES.NOT_YET_IMPLEMENTED,
-              `"${key}" is recognized but not yet implemented — ${child.note}. It will be ignored.`,
+              message,
               locate([...currentPath, key])
             );
           }

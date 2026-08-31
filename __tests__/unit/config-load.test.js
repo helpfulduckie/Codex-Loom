@@ -197,15 +197,12 @@ describe('resolution behavior carried forward', () => {
   });
 
   /**
-   * §14.2: `migrateProjectFully()` is a library and its CLI belongs to the migration session.
-   * The hint used to read "Run codex-loom --migrate to convert the project", which exits
-   * "unknown option" — worse than the bare unknown-key it was written to improve on.
+   * §14.2: the `--migrate` CLI landed in Phase 8, so the rename hint points authors at it.
    */
-  test('the rename hint does not instruct a command that does not exist', () => {
+  test('the rename hint points at the --migrate command', () => {
     const { diagnostics } = load('structure:\n  output: ./out\n  input:\n    cards: [./Codex]\n');
     const diag = diagnostics.errors.find((d) => d.message.includes('cards'));
-    expect(diag.hint).not.toMatch(/Run codex-loom --migrate/);
-    expect(diag.hint).toContain('migrateProjectFully()');
+    expect(diag.hint).toContain('codex-loom --migrate <project>');
   });
 
   test('{%variables} expand inside structure paths', () => {

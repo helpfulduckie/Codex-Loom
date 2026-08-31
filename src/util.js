@@ -278,8 +278,8 @@ const JS_WORD_RE         = /\b(?:undefined|NaN)\b/g;
 
 /**
  * Blank out the content of every VL front-matter fence (`~~~ ... ~~~`),
- * preserving newlines so line numbers stay aligned. The fence only ever holds
- * `triggers: [...]`, `encapsulate: ...`, and `notes: [e]` — a single-word
+ * preserving newlines so line numbers stay aligned. The fence holds
+ * `triggers: [...]` and `encapsulate: ...` — a single-word
  * trigger array like `triggers: [door]` is a legitimate AID trigger, not an
  * attempted (and mistyped) verb-conjugation marker, so the suspect-verb-marker
  * heuristic should never see it. Other checks still scan the fence normally.

@@ -15,7 +15,7 @@ const CODES = Object.freeze({
 });
 
 /**
- * Pronoun resolution for Codex Loom v3.
+ * Pronoun resolution for Codex Loom v4.
  *
  * Braced token forms in templates and field text:
  *   {$she} {$her~} etc.        - unscoped; resolves against item's own pronouns field

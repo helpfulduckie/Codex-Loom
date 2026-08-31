@@ -115,10 +115,6 @@ function loadComponentDocument(spec, options = {}) {
   });
 
   const component = normalizeComponent({ ...doc, sections: sourced }, { onWarn });
-  // `rawSections` is what a *further* import layers over, and it has to be the merged
-  // record rather than this file's own `sections:` — a three-deep chain (house style, world
-  // layer, project) would otherwise see only the middle layer's own declarations and drop
-  // everything the house style contributed.
   // `rawSections` is the *source-resolved* record, which is what a further import layers
   // over. Handing back the unresolved one would mean an importing project's `+{…}` against
   // an inherited `file:` section applied to nothing, because the file's contents would not

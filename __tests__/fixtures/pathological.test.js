@@ -13,9 +13,10 @@
  * rows to a baseline that already exists*, so every change here is a second-run change
  * read against a known state rather than a first run that cannot fail.
  *
- * The two projects are separate because the layers abort differently (§4.3): a schema
- * ERROR stops the compile before anything is written, so a config mistake in the placement
- * project would suppress everything that project exists to demonstrate. See each
+ * The six sub-projects (placement, schema, snapshot-mismatch, snapshot-corrupt,
+ * card-collision, unread-fields) are separate because the layers abort differently (§4.3):
+ * a schema ERROR stops the compile before anything is written, so a config mistake in the
+ * placement project would suppress everything that project exists to demonstrate. See each
  * project's own header.
  *
  * Compiled into a temp copy so the repo never acquires an `out/` tree, and so the snapshot
@@ -58,7 +59,7 @@ function diagnoseProject(name) {
   try {
     compile(path.join(tmpDir, 'compile.cl.yaml'), { diagnostics });
   } catch (err) {
-    // Expected: both projects raise ERRORs by construction. What the ERROR *is* lives in
+    // Expected: each project raises ERRORs by construction. What the ERROR *is* lives in
     // the diagnostics, so the throw itself carries nothing worth asserting.
   } finally {
     spies.forEach((s) => s.mockRestore());
@@ -81,9 +82,7 @@ function diagnoseProject(name) {
 describe('pathological fixture', () => {
   /**
    * The placement project: load-clean on purpose, so the compile phase runs in full and
-   * §7.4's invariants have something to report. Its placeholder content is inert today —
-   * `placeholders:` draws a NOT_YET_IMPLEMENTED WARN and is ignored — and that WARN
-   * disappearing is the first row Phase 4 Step 1 is expected to change.
+   * §7.4's invariants have something to report.
    *
    * Every row here is now a row the fixture means to raise. CL0322 used to fire on `Ghost`
    * and `Silent` — items with `storyCard: false`, which §7.4 says are owed neither

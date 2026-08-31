@@ -1,6 +1,6 @@
 # The pathological fixture
 
-Five projects that are wrong on purpose, and a committed snapshot of every diagnostic they
+Six projects that are wrong on purpose, and a committed snapshot of every diagnostic they
 raise. Added as Step 0 of Phase 4 (see `v4 Phase 4 plan` in the vault); grown one project
 at a time as later phases added checks the golden corpora cannot exercise.
 
@@ -22,7 +22,7 @@ A golden fixture freezes v3-compiled output and asserts byte identity. A project
 wrong on purpose has no v3 baseline worth freezing — v3 would refuse it or compile it
 wrongly, and either way the bytes are not the thing under test.
 
-## Why it is five projects
+## Why it is six projects
 
 **The layers abort differently (§4.3), and Phase 7 added a second axis that aborts the
 same way.** A schema violation is an ERROR that stops the compile before anything is
@@ -38,8 +38,9 @@ rather than a fourth mistake folded into `snapshot-mismatch/`.
   name across `aid.type` values, for `CL0622` (Phase 10 Step 3). **This should have been two
   items added to `placement/Codex/items.cl.yaml`, per the precedent Phase 8 already set for
   role diagnostics**: a card-name collision is a property of two items at a leaf, not of a
-  project's structure, which is exactly the reasoning the role-diagnostics entry below gives
-  for staying out of a fifth project. It was written as a separate project instead, and that
+  project's structure, which is exactly the reasoning that kept the Phase 8 role diagnostics
+  inside `placement/` rather than in a project of their own.
+  It was written as a separate project instead, and that
   was not a considered exception — it is recorded here rather than silently kept. **The
   concrete cost is real**: `placement/` dispatches across three branches (`open`, `gated`,
   `silent`), so folding the pair in would have produced three `CL0622` rows in the snapshot
@@ -117,51 +118,6 @@ duplication does prove one thing worth having — that each report names the bra
 to — but that is a side effect. If the fixture ever grows a fourth leaf for a fourth reason,
 branch-scoping the item set is the change to make first.
 
-## Known-incorrect rows in the snapshot
-
-**The fifteen `CL0321` rows naming items in `canon/lore.cl.yaml` and `canon/rumors.cl.yaml`
-are wrong, and Phase 6 Step 0 deletes them.** Ten come from the `importVariants:` include,
-which resolves on both branches; five from the `branches:` include, which dispatches only on
-`gated`. Both include directives in
-`placement/Codex/items.cl.yaml` are in §7.6.2a's arity-N cell — an `include:` stamps its
-`importVariants:` and its `branches:` onto every item in the file it names — so an item that
-does not define the name is the ordinary case and is owed silence, not a warning. The
-compiler currently applies the arity-1 rule at that position and warns once per item per
-selector per branch. The fixture is authored from the spec, so it pins the disagreement
-rather than being written around it.
-
-**What replaces them is two `CL0326` rows**, one per include directive, naming the
-misspelled selector (`wrm`, `hshed`) that matched none of the three items. That check is
-the whole of what keeps arity-N silence safe: without it a misspelled fanned-out name
-applies to nothing, changes no output, and says nothing at all.
-
-**The bare `import: Anchor` absence was the last entry here, and Phase 5 Step 0 closed it.**
-That def in `placement/Codex/items.cl.yaml` emitted a second `Anchor` — a duplicate entry in
-the `cast` slot and a second `## Anchor` story card carrying the same trigger — while the
-snapshot did not move at all when the def was added or removed, because `buildRegistry`
-skips a bare import by design and nothing downstream asked the question again. `CL0325` now
-asks it in `resolveBranchItems`, and the snapshot carries one row per branch on which both
-defs survive dispatch. This was the fixture's only recorded absence, and the pattern it
-proved is worth keeping: a snapshot cannot hold a row for a diagnostic nobody raised, so a
-missing check leaves no trace and has to be written down in prose instead.
-
-`CL0322` on `Ghost` and `Silent` was an earlier entry here, and was resolved by scoping the
-check rather than by editing the fixture: it now fires only when a story-card target
-exists, which is what §7.4 said all along. `Ghost` is specified by the `template:` on its
-`plotEssential` target and `Silent` emits nothing at all, so neither is owed an `aid.type`.
-Both items keep their `CL0610`, which is the ERROR that actually describes `Silent` — the
-`CL0322` row was a second, weaker report of the same fact.
-
-## What the snapshot is expected to lose and gain in Phase 5
-
-| Step | Expected change |
-|---|---|
-| 0 | `CL0325` appears on the bare `import: Anchor`, once per branch — **landed** |
-| 9 | `CL0710`–`CL0713` appear once the fixture gains over-cap and in-band content — **landed** |
-
-Step 1's `kind:` enum (`CL0206`) is deliberately absent from that table: it is an item-level
-schema ERROR, which the editing rules above explain this fixture cannot hold.
-
 **The four limit rows come from four items and two Openings, and the Openings are the reason
 this fixture exists.** `Bloated` is a card body past 2,000 characters with no placeholders in
 it — the plain case, where compiled length and upload length agree. `Ledger` is a
@@ -184,51 +140,6 @@ declares a single placeholder, so without these two the expansion arithmetic shi
 characters the key expands to a 79-character `${…}`, so a handful of references move a file
 across a cap. Its question text is not a mistake, and it is the fixture's only non-mistake.
 
-## What the snapshot gains in Phase 8
-
-**Step 4 adds `RoleTester` to `placement/Codex/items.cl.yaml`**, and `roles:` to
-`placement/compile.cl.yaml`, per §9.3's four role ERRORs and §6.4's unused-role WARN.
-Unlike Phase 7's snapshot states, a role diagnostic is a property of an item and a
-branch rather than of a whole project's library wiring, so `placement/` carries them as
-rows rather than needing a fifth project — the same reasoning the fixture already used
-for the field-cap items.
-
-`RoleTester` carries no render target, the same shape as `Bloated`/`Ledger`/`Verbose`/
-`Chatty` — it exists only to give the role checks something to fire on, not to exercise
-§7.4 placement. `roles:` is declared at the project root, so all three branches inherit
-it and `RoleTester`'s four tokens fire once per leaf, the same tripling cost already
-named above for root-unrestricted content. `{$Anchor}` resolves as an ordinary item
-reference once its `CL0541` collision is reported — "Anchor" is a real item id — so it
-raises no `CL0430`; `{$Missing}`, `{$Loop}` and `{$Undeclared}` each raise their specific
-role code *and* `CL0540`, because none of them ends up resolving to anything by the time
-the generic unknown-token check runs. That double report is `resolveRole` returning
-`null` on every failure path, same as the `CL0602`-style two-reports trade already
-settled for `CL0430` itself (§9.3, Phase 8 Session A). `LI` is declared and never
-referenced by any token in the project, so it draws one whole-compile `CL0545` — as does
-every other declared role here, since none of the four is ever referenced successfully.
-
-## What the snapshot gains in Phase 6
-
-**Step 4 adds a third field cap: `notes:`, capped at 10,000 characters and measured the same
-way as the other two** — `Verbose` and `Chatty`, both in `Codex/items.cl.yaml`, carry the
-`notes:` case the way `Bloated`/`Ledger` carry the card-body case and the two Openings carry
-theirs. Both are under 10,000 compiled and diverge only after `%longPrompt%` substitution,
-which is the case the other two field caps exist to test and this one needed of its own:
-
-| Item | Compiled | On upload | Code |
-|---|---|---|---|
-| `Verbose` | 9,466 | 10,051 | `CL0714` |
-| `Chatty` | 8,864 | 9,189 | `CL0715` |
-
-Both items are branch-unrestricted like the rest of `Codex/`, so each row appears once per
-leaf — three times in the snapshot, per the `silent`-branch cost the README already names
-above.
-
 **The `kind: reference` fence key is `emit-vl.test.js`'s to pin, not this fixture's.** The
 snapshot holds diagnostics, and a fence key that reaches compiled output correctly raises
 none. `Ledger` proves the source-to-diagnostic path; the source-to-fence path is a unit test.
-
-Phase 4's table, kept for the shape it records: `CL0204` on `placeholders:` disappeared at
-Step 1, undeclared `%ghostName%` in `Greeter` started erroring at Step 3, the invalid-context
-checks appeared on Description and card `type` at Step 4, `neverUsed` started warning at
-Step 6, and `heroName` / `altName` collapsed into one prompt warning at Step 7.

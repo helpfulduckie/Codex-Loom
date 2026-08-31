@@ -24,9 +24,7 @@ const {
  *   {$body.FieldName}            - body field (case-insensitive)
  *   {$body.FieldName.subfield}   - nested body subfield
  *   {$otherid.body.FieldName}    - cross-card reference (second-pass, left as-is here)
- *   {%variable}                  - branch variable (expanded at render step 0)
- *   (note: {@ComponentKey} is a path/prose construct only and is NOT expanded in templates)
- *
+ *   {%variable}                  - branch variable (expanded at render step 0) *
  * Render functions:
  *   {inline($name)}              - space-join all subfields of a mapping
  *   {join("sep", $f1, $f2)}      - join present values with separator
