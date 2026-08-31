@@ -113,6 +113,17 @@ const CODES = Object.freeze({
   SUSPECT_VERB_MARKER: 'CL0436',
   SUSPECT_JS_WORD: 'CL0437',
 
+  /**
+   * Variables (§5.1, §6.1). An undeclared `{%key}` or a reference cycle. `config/load.js`
+   * owns the config-time expander and the rest of the CL051x family (`CL0512` unbind,
+   * `CL0520` pre-branch, `CL0521` library collision); these two are here because
+   * `util.js:resolveVariables` — the expander every item, component and placeholder value
+   * runs through — reports them, and `util.js` cannot import `config/load.js` without a
+   * cycle. `config/load.js` re-imports both so the two expanders raise the same codes.
+   */
+  VARIABLE_UNDECLARED: 'CL0510',
+  VARIABLE_CYCLE: 'CL0511',
+
   // Tokens (§6.4, §12). `~` unbinds an inherited binding; unbinding something that was
   // never inherited is meaningless as written and reliably means the author meant to
   // include, so it warns rather than passing silently.

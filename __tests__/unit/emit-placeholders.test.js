@@ -23,7 +23,7 @@ const {
   checkPlaceholderContext, findAllPlaceholders, findNativePlaceholders,
   reportUnusedPlaceholders, collectDuplicateQuestions, reportDuplicateQuestions, FILENAME,
 } = require('../../src/emit/placeholders');
-const { CODES } = require('../../src/diag');
+const { CODES, Diagnostics } = require('../../src/diag');
 
 const dirs = [];
 afterAll(() => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }); });
@@ -173,6 +173,28 @@ describe('writeNodePlaceholders', () => {
     const question = 'Name: which one? (e.g. "Aness", or leave blank)';
     writeNodePlaceholders(dir, { placeholders: { q: question } }, { q: question }, {});
     expect(YAML.parse(fs.readFileSync(path.join(dir, FILENAME), 'utf8')).q).toBe(question);
+  });
+
+  test('an undeclared {%var} in question text is reported, not shipped silently', () => {
+    // The gap this closes: question text is the one rendered surface that never got a
+    // {%var} sweep, so an undeclared name reached Placeholders.yaml with only a console
+    // warning. `resolveVariables` now raises CL0510 at expansion, and the emitted-output
+    // sweep raises CL0431 as the backstop every other surface already has.
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    const dir = tmp();
+    const diagnostics = new Diagnostics();
+    writeNodePlaceholders(
+      dir,
+      { placeholders: { who: 'Who is {%undeclared}?' } },
+      { who: 'Who is {%undeclared}?' },
+      {},
+      { diagnostics, file: 'compile.cl.yaml' },
+    );
+    const codes = diagnostics.all.map((d) => d.code);
+    expect(codes).toContain(CODES.VARIABLE_UNDECLARED);
+    expect(codes).toContain(CODES.LEAKED_VARIABLE);
+    expect(diagnostics.all.every((d) => d.severity === 'error')).toBe(true);
+    warn.mockRestore();
   });
 });
 

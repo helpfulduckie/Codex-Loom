@@ -166,43 +166,49 @@ function normalizeVarKey(key) {
 }
 
 /**
- * Expand {%key} variable references in a string. Cycle-detects via a resolving Set.
+ * Expand `{%key}` variable references in a string, recursively and cycle-safe.
  *
- * This is the compiler's only variable expander. v3 had a second naming system — `{@key}`
- * for named resources declared under `structure.input.components` and `structure.input.canon`
- * — reached through a `tokens.js`/`expandTokens` wrapper that this function has since absorbed.
- * `{@}` is removed in v4 (§6.1), and the removal cost nothing because most of what it did was
- * already inert: `lookupReference` searched every per-type component map in sequence and
- * returned the first name match, so `{@pe}` resolved identically whether declared under
- * `plotEssential:`, `authorsNote:` or `scripts:` — the grouping never worked, so no project
- * could have depended on it. Canon names are auto-exposed as `{%}` variables instead, so
- * `{%characters}/Aness.yaml` works in an `include:` path exactly as `{@characters}/Aness.yaml`
- * used to, without the unanswerable question of whether a name is a `{%}` thing or a `{@}`
- * thing.
+ * The compiler's only variable expander for item, component and placeholder content;
+ * `config/load.js:expandVariables` is its config-time twin, and the two raise the same
+ * codes — `CL0510` for an undeclared name, `CL0511` for a cycle. Canon and library names
+ * are exposed as `{%}` variables (§6.1), so `{%characters}/Aness.yaml` in an `include:`
+ * path resolves through here like any other reference. v3's separate `{@name}` system is
+ * gone (§6.1); a stray `{@...}` is left untouched, since the migrator rewrites them before
+ * v4 sees the file.
+ *
+ * Pass `sink` (`{ diagnostics, file }`) to route an undeclared name or a cycle onto the
+ * bus as an ERROR. Without it the two fall back to `console.warn`, and the leftover token
+ * is caught downstream by the `CL0431` output sweep instead.
  */
-function resolveVariables(text, variables, _resolving) {
+function resolveVariables(text, variables, sink = {}) {
   if (!variables || typeof text !== 'string') return text;
-  if (!_resolving) _resolving = new Set();
+  const { diagnostics, file } = sink;
 
-  return text.replace(/\{%([^}]+)\}/g, (match, key) => {
+  const report = (message, code) => {
+    if (diagnostics) diagnostics.error(code, message, { file });
+    else console.warn(`  WARN: ${message}`);
+  };
+
+  const expand = (str, chain) => str.replace(/\{%([^}]+)\}/g, (match, key) => {
     const lower = key.trim().toLowerCase();
-    if (_resolving.has(lower)) {
-      console.warn(`  WARN: cycle detected in variable "{%${key}}"`);
+    const cycleAt = chain.indexOf(lower);
+    if (cycleAt >= 0) {
+      const loop = [...chain.slice(cycleAt), lower].join('" → "');
+      report(`variable cycle: "${loop}"`, DIAG_CODES.VARIABLE_CYCLE);
       return match;
     }
-    const actualKey = Object.keys(variables).find(k => k.toLowerCase() === lower);
+    const actualKey = Object.keys(variables).find((k) => k.toLowerCase() === lower);
     // A present-but-null key (`~`, or a bare `key:` with nothing after it) is unbound, not
     // declared — treating it as declared would render the literal string "null" (Decision
     // 1's measured bug: `Object.keys().find()` finds the key regardless of its value).
     if (actualKey === undefined || variables[actualKey] === null || variables[actualKey] === undefined) {
-      console.warn(`  WARN: variable "{%${key}}" not declared`);
+      report(`variable "{%${key}}" is not declared`, DIAG_CODES.VARIABLE_UNDECLARED);
       return match;
     }
-    _resolving.add(lower);
-    const expanded = resolveVariables(String(variables[actualKey]), variables, _resolving);
-    _resolving.delete(lower);
-    return expanded;
+    return expand(String(variables[actualKey]), [...chain, lower]);
   });
+
+  return expand(text, []);
 }
 
 /**

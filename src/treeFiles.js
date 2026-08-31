@@ -55,7 +55,10 @@ function writeScenarioBlurb({
 }) {
   const descRequested = config.components && config.components.description != null;
   const descSpec = descRequested
-    ? resolveComponentSpec(config.components.description, config._base, config._variables || config.variables || null)
+    ? resolveComponentSpec(
+        config.components.description, config._base,
+        config._variables || config.variables || null, { diagnostics, file: configPath },
+      )
     : null;
   if (descRequested && !(descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec))) {
     gaps.record('(project)', 'Description', descSpec, 'source not found');
@@ -83,6 +86,7 @@ function writeScenarioBlurb({
             variables: rootVariables || {}, registry, branchProtagonist: null,
             roles: rootRolesDeclared ? config.roles : null, onRoleUsed: roleState.onUsed,
             onWarn: busWarner(diagnostics, { file: String(descSpec) }),
+            diagnostics, file: String(descSpec),
           },
         ));
       }

@@ -16,9 +16,13 @@ const { LIMITS, checkLimit } = require('./limits');
 
 /**
  * Resolve opening content: file path → read file; otherwise use as inline text.
+ *
+ * `sink` (`{ diagnostics, file }`), when passed, routes an undeclared `{%var}` or a cycle
+ * onto the bus — the literal arm of this function is one of the surfaces where such a token
+ * would otherwise only reach `console.warn`.
  */
-function resolveOpeningContent(opening, base, variables) {
-  const expandedSpec = variables ? resolveVariables(String(opening), variables) : String(opening);
+function resolveOpeningContent(opening, base, variables, sink) {
+  const expandedSpec = variables ? resolveVariables(String(opening), variables, sink) : String(opening);
   const resolved = path.resolve(base, expandedSpec);
   let content;
   if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
@@ -26,7 +30,7 @@ function resolveOpeningContent(opening, base, variables) {
   } else {
     content = expandedSpec.trimEnd();
   }
-  return variables ? resolveVariables(content, variables) : content;
+  return variables ? resolveVariables(content, variables, sink) : content;
 }
 
 /**
@@ -44,11 +48,11 @@ function resolveOpeningContent(opening, base, variables) {
  * `resolveVariables` and still reaches that check, so the reporting is unchanged for the case
  * it was written for.
  */
-function resolveComponentSpec(spec, base, variables) {
+function resolveComponentSpec(spec, base, variables, sink) {
   if (spec == null) return null;
   let resolved = spec;
   if (typeof resolved === 'string') {
-    resolved = resolveVariables(resolved, variables);
+    resolved = resolveVariables(resolved, variables, sink);
   }
   // Try resolving as file or directory path
   const filePath = path.resolve(base, String(resolved));
@@ -116,8 +120,9 @@ function writeFramingRecursive(rootNode, outputBase, configBase, configPath, var
   // project still receives its root visit — that is where the "no branches" warn lands.
   if (!rootNode || typeof rootNode !== 'object') return;
 
+  const framingSink = { diagnostics, file: configPath };
   const renderFraming = (spec, nodePath, vars, table, name, roles, branchProtagonist) => {
-    const resolvedSpec = resolveComponentSpec(spec, configBase, vars);
+    const resolvedSpec = resolveComponentSpec(spec, configBase, vars, framingSink);
     const isFile = typeof resolvedSpec === 'string' && fs.existsSync(resolvedSpec)
       && fs.statSync(resolvedSpec).isFile();
 
@@ -136,10 +141,11 @@ function writeFramingRecursive(rootNode, outputBase, configBase, configPath, var
         variables: vars, registry, branchProtagonist,
         roles, onRoleUsed,
         onWarn: busWarner(diagnostics, { file: String(resolvedSpec) }),
+        diagnostics, file: String(resolvedSpec),
       });
       return text;
     }
-    return resolveOpeningContent(spec, configBase, vars);
+    return resolveOpeningContent(spec, configBase, vars, framingSink);
   };
 
   walkBranchTree(rootNode, ({ name, node, path: nodePath, isLeaf, isRoot, state }) => {
@@ -169,6 +175,8 @@ function writeFramingRecursive(rootNode, outputBase, configBase, configPath, var
     // rather than gating on `rolesDeclared` first, because an inherited protagonist is a
     // real binding whether or not *this* node is the one that declared `roles:`.
     const inheritedProtagonist = roles.protagonist || '';
+    // No bus, matching the leaf loop's resolve of the same string: a per-node walker, and an
+    // undeclared name here is one config mistake rather than one per branch.
     const branchProtagonist = resolveVariables(inheritedProtagonist, branchVars).toLowerCase() || null;
 
     if (framing != null) {
@@ -250,7 +258,7 @@ function writeLabelsRecursive(rootNode, outputBase, variables, rootVariables, ve
       if (node.title == null) {
         return { outputBase: nodeOutput, variables: branchVars, table };
       }
-      const rootLabel = resolveVariables(String(node.title), rootVariables);
+      const rootLabel = resolveVariables(String(node.title), rootVariables, { diagnostics, file: configPath });
       const labelPath = path.join(nodeOutput, 'Label.md');
       checkUndeclaredPlaceholders(rootLabel, table, {
         diagnostics, file: configPath, where: 'the project title',
@@ -274,7 +282,7 @@ function writeLabelsRecursive(rootNode, outputBase, variables, rootVariables, ve
     const rawTitle = (node && node.title) || name;
     fs.mkdirSync(nodeOutput, { recursive: true });
     const outPath = path.join(nodeOutput, 'Label.md');
-    const labelText = resolveVariables(rawTitle, branchVars);
+    const labelText = resolveVariables(rawTitle, branchVars, { diagnostics, file: configPath });
     // A branch title is the one destination where a placeholder half-works: AID fills
     // the prompt correctly, then keeps the raw text in the saved adventure's title.
     // Undeclared is still simply broken, so it errors here like anywhere else; the

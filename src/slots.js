@@ -119,7 +119,7 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
     const { text: notesText } = renderSectionedComponent(sub, branchPath, filled, {
       defaultHeadingLevel: descriptor.defaultHeadingLevel,
       variables, registry, branchProtagonist, roles, onRoleUsed,
-      onWarn: busWarner(diagnostics, loc),
+      onWarn: busWarner(diagnostics, loc), diagnostics, file: loc.file,
     });
 
     if (!notesText || notesText.trim() === '') {

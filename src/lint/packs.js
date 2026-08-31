@@ -74,7 +74,7 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
 
   let filePath;
   if (source) {
-    const expanded = resolveVariables(String(source), variables);
+    const expanded = resolveVariables(String(source), variables, { diagnostics, ...loc });
     filePath = path.isAbsolute(expanded) ? expanded : path.resolve(baseDir || '.', expanded);
   } else {
     filePath = path.join(BUNDLED_DIR, `${name}.cl.yaml`);

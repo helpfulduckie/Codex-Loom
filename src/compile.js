@@ -323,7 +323,7 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagno
     }
 
     applyFieldInterpolation(item);
-    applyVariableInterpolation(item, variables);
+    applyVariableInterpolation(item, variables, { diagnostics, file: item._source });
     resolvedItems.push(item);
   }
 
@@ -394,7 +394,7 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
   // Verbatim pass-through — the last rung of the ladder.
   const raw = item.body && (item.body.text !== undefined ? item.body.text : item.body.content);
   if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
-    return resolveVariables(String(raw).trim(), variables);
+    return resolveVariables(String(raw).trim(), variables, { diagnostics, file: item._source });
   }
 
   diagnostics.error(

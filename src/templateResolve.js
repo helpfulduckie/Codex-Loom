@@ -159,7 +159,7 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
     const files = Array.isArray(spec) ? spec : [spec];
     const merged = {};
     for (const file of files) {
-      const expanded = resolveVariables(String(file), variables);
+      const expanded = resolveVariables(String(file), variables, { diagnostics, file: configPath });
       const abs = findTemplateForFile(expanded, templateDirs, base);
       if (!abs) {
         if (diagnostics) {

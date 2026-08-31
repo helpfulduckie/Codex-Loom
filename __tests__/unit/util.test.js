@@ -177,6 +177,18 @@ describe('resolveVariables', () => {
     warn.mockRestore();
   });
 
+  test('undeclared variable with a bus: raises CL0510 instead of warning, still returns the literal', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    const diagnostics = new Diagnostics();
+    const result = resolveVariables('X {%missing} Y', {}, { diagnostics, file: 'items.cl.yaml' });
+    expect(result).toBe('X {%missing} Y');
+    expect(warn).not.toHaveBeenCalled();
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0]).toMatchObject({ code: 'CL0510', file: 'items.cl.yaml' });
+    expect(diagnostics.errors[0].message).toContain('{%missing}');
+    warn.mockRestore();
+  });
+
   test('a present-but-null (~-unbound) variable is treated as undeclared, not rendered as "null" (Decision 1)', () => {
     // Measured bug this guards: `Object.keys().find()` finds a present-but-null key
     // regardless of its value, so a plain assign would fall through to
@@ -194,6 +206,18 @@ describe('resolveVariables', () => {
     const result = resolveVariables('{%a}', { a: '{%a}' });
     expect(result).toBe('{%a}');
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('cycle'));
+    warn.mockRestore();
+  });
+
+  test('cycle with a bus: raises CL0511 and names every key in the loop', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation();
+    const diagnostics = new Diagnostics();
+    const result = resolveVariables('{%a}', { a: '{%b}', b: '{%a}' }, { diagnostics, file: 'compile.cl.yaml' });
+    expect(result).toBe('{%a}');
+    expect(warn).not.toHaveBeenCalled();
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0].code).toBe('CL0511');
+    expect(diagnostics.errors[0].message).toContain('"a" → "b" → "a"');
     warn.mockRestore();
   });
 

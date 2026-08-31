@@ -165,7 +165,7 @@ function resolveImports(doc, spec, options) {
   for (const entry of entries) {
     if (!entry || typeof entry !== 'object' || !entry.from) continue;
 
-    const expanded = resolveVariables(String(entry.from), variables);
+    const expanded = resolveVariables(String(entry.from), variables, { diagnostics, file: spec });
     const resolved = path.isAbsolute(expanded)
       ? path.normalize(expanded)
       : path.resolve(base || path.dirname(spec), expanded);
@@ -325,7 +325,7 @@ function resolveOneSource(def, label, options) {
     return result;
   }
 
-  const expanded = resolveVariables(rawPath, variables);
+  const expanded = resolveVariables(rawPath, variables, { diagnostics, file: spec });
   const resolved = path.isAbsolute(expanded)
     ? path.normalize(expanded)
     : path.resolve(base || path.dirname(spec), expanded);

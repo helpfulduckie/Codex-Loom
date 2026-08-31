@@ -166,22 +166,22 @@ function applyFieldRenderFunctions(card, itemMap, options) {
   applyRenderFunctionsRecursive(card.body, context, options || {});
 }
 
-function applyVariableInterpolation(card, variables) {
+function applyVariableInterpolation(card, variables, sink) {
   if (!variables) return;
   // card.name is normalized to {display, full, ...} by resolveItem before this runs
   if (card.name && typeof card.name === 'object' && !Array.isArray(card.name)) {
-    applyVariableInterpolationRecursive(card.name, variables);
+    applyVariableInterpolationRecursive(card.name, variables, sink);
   } else if (typeof card.name === 'string') {
-    card.name = resolveVariables(card.name, variables);
+    card.name = resolveVariables(card.name, variables, sink);
   }
-  if (typeof card.id === 'string') card.id = resolveVariables(card.id, variables);
-  if (card.body)   applyVariableInterpolationRecursive(card.body, variables);
-  if (card.aid)    applyVariableInterpolationRecursive(card.aid, variables);
-  if (card.render) applyVariableInterpolationRecursive(card.render, variables);
+  if (typeof card.id === 'string') card.id = resolveVariables(card.id, variables, sink);
+  if (card.body)   applyVariableInterpolationRecursive(card.body, variables, sink);
+  if (card.aid)    applyVariableInterpolationRecursive(card.aid, variables, sink);
+  if (card.render) applyVariableInterpolationRecursive(card.render, variables, sink);
 }
 
-function applyVariableInterpolationRecursive(obj, variables) {
-  walkTextRecursive(obj, (s) => resolveVariables(s, variables));
+function applyVariableInterpolationRecursive(obj, variables, sink) {
+  walkTextRecursive(obj, (s) => resolveVariables(s, variables, sink));
 }
 
 function applyRenderFunctionsRecursive(obj, context, options) {
@@ -245,7 +245,7 @@ function render(template, data, partials, variables, options) {
 
   // Step 0: Resolve {%variable} tokens
   let source = template;
-  if (variables) source = resolveVariables(source, variables);
+  if (variables) source = resolveVariables(source, variables, { diagnostics, file });
 
   const report = diagnostics
     ? (code, message, span) => {

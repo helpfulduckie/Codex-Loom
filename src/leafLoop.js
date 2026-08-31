@@ -65,7 +65,9 @@ function compileLeaf(branchPath, ctx) {
     configPath,
   });
   // Expand {%var} in protagonist using branch-merged variables, before the
-  // case-insensitive match against item ids.
+  // case-insensitive match against item ids. No bus: this runs per leaf, and an undeclared
+  // name in the protagonist string is one config mistake, not one per branch — the config
+  // load and the role resolver own that diagnostic.
   const branchProtagonist = resolveVariables(inheritedProtagonist, cctx.variables).toLowerCase() || null;
   const compileContext = { branchPath, branchProtagonist, ...cctx, diagnostics };
 
@@ -159,6 +161,7 @@ function compileLeaf(branchPath, ctx) {
           variables: cctx.variables, registry, branchProtagonist,
           roles: cctx.roles, onRoleUsed: roleState.onUsed,
           onWarn: busWarner(diagnostics, { file: String(spec) }),
+          diagnostics, file: String(spec),
         },
       ));
     }

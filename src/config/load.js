@@ -51,8 +51,11 @@ const CODES = Object.freeze({
    */
   LIBRARY_ROLE_SCAN_REFUSED: 'CL0116',
   PATH_NOT_FOUND: 'CL0120',
-  VARIABLE_UNDECLARED: 'CL0510',
-  VARIABLE_CYCLE: 'CL0511',
+  // Declared in diag.js and pulled in here so the literal lives in one place: `util.js`'s
+  // `resolveVariables` raises the same two, and the config-time and content-time expanders
+  // must agree on the code.
+  VARIABLE_UNDECLARED: DIAG_CODES.VARIABLE_UNDECLARED,
+  VARIABLE_CYCLE: DIAG_CODES.VARIABLE_CYCLE,
   /**
    * `~` unbinding a variable that was never inherited (§6.4, Decision 1) — raised by
    * `model/branches.js`'s `walkBranchChain`, which duplicates this literal rather than

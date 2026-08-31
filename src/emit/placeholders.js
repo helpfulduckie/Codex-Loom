@@ -45,7 +45,7 @@ const fs = require('fs');
 const path = require('path');
 const YAML = require('yaml');
 const { CODES } = require('../diag');
-const { resolveVariables } = require('../util');
+const { resolveVariables, checkUnexpandedVariables } = require('../util');
 
 /** VL's own pattern, so detection cannot drift from what it will substitute. */
 const PLACEHOLDER_RE = /%(\w+)%/g;
@@ -136,24 +136,27 @@ function checkPlaceholderContext(text, { diagnostics, file, where, branch, sever
  * a node's local question may nest a key it inherited and the emitted value has to carry
  * the inherited question inline.
  *
- * A reference to an undeclared key is left as written rather than reported here. §12.3's
+ * A reference to an undeclared `%key%` is left as written rather than reported here. §12.3's
  * check 1 owns that diagnostic and owns it at every write point, so raising it a second
  * time in this module would double-report the one case it can see and stay silent on the
- * many it cannot.
+ * many it cannot. An undeclared `{%var}` is different — `resolveVariables` reports it on
+ * the bus (`CL0510`) when `diagnostics` is passed, the same as everywhere else it runs.
  *
- * Cycles are the one case that reports. A key in a loop, or a key that can reach one, is
- * left exactly as written and its `%key%` references survive into the emitted file — which
- * looks worse than a partial expansion and is better, because a partially expanded question
- * reads as an intentional nest while carrying a literal `%key%` inside it.
+ * `%key%` cycles are the one case that reports here. A key in a loop, or a key that can
+ * reach one, is left exactly as written and its `%key%` references survive into the emitted
+ * file — which looks worse than a partial expansion and is better, because a partially
+ * expanded question reads as an intentional nest while carrying a literal `%key%` inside it.
  */
-function expandQuestions(table, variables, { onWarn, file } = {}) {
+function expandQuestions(table, variables, { onWarn, file, diagnostics } = {}) {
   const keys = Object.keys(table).filter((k) => table[k] !== null && table[k] !== undefined);
 
   // `{%vars}` first and once. Every later step reads these strings, so a variable that
   // expands *into* a `%key%` reference is picked up by the dependency graph below rather
   // than being missed by it.
   const base = {};
-  for (const key of keys) base[key] = resolveVariables(String(table[key]), variables || {});
+  for (const key of keys) {
+    base[key] = resolveVariables(String(table[key]), variables || {}, { diagnostics, file });
+  }
 
   const refsOf = (text) => {
     const out = [];
@@ -480,7 +483,7 @@ function writeNodePlaceholders(nodeDir, node, mergedTable, variables, { onWarn, 
   // Expanded against the *merged* table: a local question may nest a key declared at an
   // ancestor, and the emitted value has to carry that ancestor's question inline because
   // VL will not resolve the reference itself.
-  const expanded = expandQuestions(mergedTable, variables, { onWarn, file });
+  const expanded = expandQuestions(mergedTable, variables, { onWarn, file, diagnostics });
 
   // Against the merged table rather than the emitted subset: a branch key colliding with an
   // inherited one is the interesting case, and the inherited key is not in what this node
@@ -499,10 +502,15 @@ function writeNodePlaceholders(nodeDir, node, mergedTable, variables, { onWarn, 
   // A `%x%` surviving expansion is unambiguously undeclared: every declared key was
   // available to substitute and did not match. Cyclic keys keep their own references, but
   // those name declared keys and so are not reported here — the cycle ERROR covers them.
+  //
+  // The `{%var}` sweep is the one every other rendered surface already gets (`compile.js`,
+  // `emit/components.js`, `treeWrite.js`); question text was the gap. `resolveVariables`
+  // above reports an undeclared name on the bus too, so this is a backstop for a token
+  // that leaks by some other route, not the primary check.
   for (const [key, question] of Object.entries(emitted)) {
-    checkUndeclaredPlaceholders(question, mergedTable, {
-      diagnostics, file, where: `the question text for placeholder "${key}"`,
-    });
+    const where = `the question text for placeholder "${key}"`;
+    checkUndeclaredPlaceholders(question, mergedTable, { diagnostics, file, where });
+    checkUnexpandedVariables(question, where, { diagnostics, file });
   }
 
   fs.mkdirSync(nodeDir, { recursive: true });

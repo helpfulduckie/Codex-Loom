@@ -320,7 +320,10 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
   for (const def of includeDefs) {
     // Root variables only: includes resolve once, before branches are enumerated (§5.1).
     // Canon names are among those variables as of §6.1.
-    let includePath = resolveVariables(String(def.include), config._variables || config.variables || null);
+    let includePath = resolveVariables(
+      String(def.include), config._variables || config.variables || null,
+      { diagnostics, file: def._source },
+    );
     includePath = path.normalize(includePath);
 
     const fullPath = path.isAbsolute(includePath) ? includePath : path.resolve(config._base, includePath);

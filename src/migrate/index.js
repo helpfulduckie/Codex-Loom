@@ -44,35 +44,39 @@ function wireNotesTemplate(configPath, options = {}) {
   const notes = [];
   const { loadTemplates } = require('../loader');
   const { loadCompileConfig } = require('../config/load');
-  const { loadItemsFromDir } = require('../loader/registry');
-  const { buildCanonRegistry } = require('../loader/registry');
+  const { loadItemsFromDir, buildCanonRegistry } = require('../loader/registry');
+  const { Diagnostics } = require('../diag');
 
-  const saved = { log: console.log, warn: console.warn, error: console.error };
-  let templateNames;
-  let config;
+  // A private bus soaks up the loaders' diagnostics: this pass answers one yes/no question
+  // about the project and reports nothing of its own. `loadCompileConfig` returns null for a
+  // config it cannot load at all (Phase 17 Step 8) — nothing to inspect, so nothing to wire.
+  const diagnostics = new Diagnostics();
+  const config = loadCompileConfig(configPath, { diagnostics });
+  if (!config) {
+    notes.push(
+      'could not load the migrated config to check whether a notes template is needed — '
+      + 'render.notesTemplate is left unwired. Re-run --migrate once the config loads.',
+    );
+    return { notes, changed: false };
+  }
+
+  const { templates } = loadTemplates(config._resolvedTemplates, { diagnostics });
+  const templateNames = new Map([...templates.keys()].map((k) => [String(k).toLowerCase(), k]));
+
+  // Asked of the whole project, not of what this run happened to change. Baseline is the
+  // case that forced it: its items are all canon imports, and the shared canon already
+  // carried `notes: {known: true}` — so nothing local converted, and the marker still
+  // needed a template. A `notes:` string renders verbatim and needs none; only a mapping
+  // does, because a mapping is a field set that something has to lay out.
+  const isMarker = (item) => item && item.notes && typeof item.notes === 'object'
+    && !Array.isArray(item.notes);
   let needsOne = false;
-  try {
-    console.log = () => {}; console.warn = () => {}; console.error = () => {};
-    config = loadCompileConfig(configPath);
-    const { templates } = loadTemplates(config._resolvedTemplates);
-    templateNames = new Map([...templates.keys()].map((k) => [String(k).toLowerCase(), k]));
-
-    // Asked of the whole project, not of what this run happened to change. Baseline is the
-    // case that forced it: its items are all canon imports, and the shared canon already
-    // carried `notes: {known: true}` — so nothing local converted, and the marker still
-    // needed a template. A `notes:` string renders verbatim and needs none; only a mapping
-    // does, because a mapping is a field set that something has to lay out.
-    const isMarker = (item) => item && item.notes && typeof item.notes === 'object'
-      && !Array.isArray(item.notes);
-    const canon = buildCanonRegistry(config._resolvedLibrary);
-    for (const [, item] of canon) if (isMarker(item)) { needsOne = true; break; }
-    if (!needsOne) {
-      for (const item of loadItemsFromDir(config._resolvedItems)) {
-        if (isMarker(item)) { needsOne = true; break; }
-      }
+  const canon = buildCanonRegistry(config._resolvedLibrary, { diagnostics });
+  for (const [, item] of canon) if (isMarker(item)) { needsOne = true; break; }
+  if (!needsOne) {
+    for (const item of loadItemsFromDir(config._resolvedItems, { diagnostics })) {
+      if (isMarker(item)) { needsOne = true; break; }
     }
-  } finally {
-    Object.assign(console, saved);
   }
 
   if (!needsOne) return { notes, changed: false };
@@ -186,27 +190,27 @@ function migratePseudoRoles(configPath, options = {}) {
   const projectDir = path.dirname(configPath);
 
   const { loadCompileConfig } = require('../config/load');
-  const { loadItemsFromDir, buildRegistry, mergeRegistries } = require('../loader/registry');
-  const { buildCanonRegistry } = require('../loader/registry');
+  const { loadItemsFromDir, buildRegistry, mergeRegistries, buildCanonRegistry } = require('../loader/registry');
   const { Diagnostics } = require('../diag');
 
-  // The two registry builders throw a raw `Error` on a duplicate id unless given a bus, and
-  // `--migrate` treats any throw from here as a fatal abort. Passing one routes the clash to
-  // CL0140 / CL0141 instead — the same codes the compile path raises — so the run finishes
-  // and the migration report carries the finding.
+  // Every loader here takes the bus: the registry builders throw a raw `Error` on a
+  // duplicate id without one (and `--migrate` treats any throw from here as a fatal abort),
+  // so a bus routes the clash to CL0140 / CL0141 — the codes the compile path raises — and
+  // the run finishes with the finding in the report. The loader's own path/YAML warnings
+  // land on the same bus and are dropped; only the errors reach the notes below.
   const diagnostics = new Diagnostics();
-  const saved = { log: console.log, warn: console.warn, error: console.error };
-  let registry;
-  try {
-    console.log = () => {}; console.warn = () => {}; console.error = () => {};
-    const config = loadCompileConfig(configPath);
-    const canonRegistry = buildCanonRegistry(config._resolvedLibrary);
-    const projectItems = loadItemsFromDir(config._resolvedItems).filter((d) => !d.include);
-    const projectRegistry = buildRegistry(projectItems, 'project', { diagnostics });
-    registry = mergeRegistries(canonRegistry, projectRegistry, { diagnostics });
-  } finally {
-    Object.assign(console, saved);
+  const config = loadCompileConfig(configPath, { diagnostics });
+  if (!config) {
+    notes.push(
+      'could not load the migrated config, so the pseudo-role pass was skipped. '
+      + 'Re-run --migrate once the config loads.',
+    );
+    return { notes, touched, conversions, reviewQueue };
   }
+  const canonRegistry = buildCanonRegistry(config._resolvedLibrary, { diagnostics });
+  const projectItems = loadItemsFromDir(config._resolvedItems, { diagnostics }).filter((d) => !d.include);
+  const projectRegistry = buildRegistry(projectItems, 'project', { diagnostics });
+  const registry = mergeRegistries(canonRegistry, projectRegistry, { diagnostics });
   for (const diag of diagnostics.errors) {
     notes.push(`${diag.code}: ${diag.message.replace(/\n\s*/g, ' ')}`);
   }
@@ -338,23 +342,14 @@ function migratePseudoRoles(configPath, options = {}) {
 /**
  * Phase 4's migration step, which converts nothing — and says so out loud (§15).
  *
- * There is no v3 Codex Loom syntax for player placeholders. `placeholders:` is a new
- * `compile.cl.yaml` key with no v3 spelling to rename from, and no v3 project holds the
- * data in some other form: measured across `Git\Scenarios`, all eighteen projects with a
- * `compile.yaml` have no `Placeholders.yaml` and no `%key%` anywhere in their sources.
- *
- * The two `Placeholders.yaml` files that do exist in that repo belong to hand-authored
- * Velvet Lattice trees — Traveling Terraces and MonsterEvolution — which have no `Loom/`
- * directory and no config, so the migrator never sees them. Adopting one into Codex Loom
- * means reading a VL tree and producing a project from it, which is a different tool from
- * the v3-to-v4 migrator and is not this function's job.
+ * `placeholders:` is a new `compile.cl.yaml` key with no v3 spelling to rename from, and no
+ * v3 project holds the data in another form (no `Placeholders.yaml`, no `%key%` anywhere in
+ * a project the migrator sees). The two hand-authored VL trees that do carry a
+ * `Placeholders.yaml` have no config, so the migrator never reaches them.
  *
  * **This exists because a no-op that is merely true is indistinguishable from one that was
- * forgotten.** §15's rule — a phase that changes syntax and does not name its migration
- * step has not finished planning — was written after Phase 3 recorded "migrate/v3.js
- * untouched, per plan" and nothing carried the obligation forward, so the migrator silently
- * lacked the one phase that changed structure for months. A stage that returns a note is
- * checkable; an absence is not.
+ * forgotten** — §15's rule is that a phase changing syntax must name its migration step, and
+ * a note-returning stage is checkable where an absence is not.
  */
 function migratePlaceholders() {
   return {
@@ -370,14 +365,10 @@ function migratePlaceholders() {
  * overridden and unbound per branch by name (§8.2.2). §14.2's table carries the migration
  * row as "High — no v3 projects use it yet."
  *
- * **Deliberately empty, and checkable rather than absent — see migratePlaceholders.** No
- * v3 project holds a `lint.conventions:` key: `lint:` never shipped in the v3 compiler's
- * config surface, so there is no list to fold into a mapping. `migrate/v3.js` has no
- * `lint` handling and needs none. This stage exists so §15's rule — a phase that changes
- * a config key names its migration step — is satisfied with a note-returning function
- * instead of a silent gap. If a `lint.conventions:` list is ever found in the wild, the
- * conversion is mechanical (each entry becomes a `<name>: {}` mapping entry) and belongs
- * here.
+ * **Deliberately empty, and checkable rather than absent — see migratePlaceholders.** `lint:`
+ * never shipped in the v3 compiler's config surface, so no v3 project has a
+ * `lint.conventions:` list to fold into a mapping. If one is ever found in the wild, the
+ * conversion is mechanical — each entry becomes a `<name>: {}` mapping entry — and belongs here.
  */
 function migrateLintConventions() {
   return {
