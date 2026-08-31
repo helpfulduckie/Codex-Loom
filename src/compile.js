@@ -55,8 +55,8 @@ function buildCompileContext(config, branchPath, options = {}) {
   const chain = walkBranchChain(config.branches, branchPath, {
     rootPlaceholders: config.placeholders,
     // Seeded here rather than merged afterward: `~` deletes a key from `chain.variables`
-    // directly (Decision 1), and re-merging the root table on top after the fact — the old
-    // shape — would silently put a deleted root key right back.
+    // directly, and re-merging the root table on top afterward would silently put a
+    // deleted root key right back.
     rootVariables: config._variables || config.variables || {},
     rootRoles: config.roles || {},
     rootLint: config.lint || null,
@@ -71,18 +71,18 @@ function buildCompileContext(config, branchPath, options = {}) {
   const components = Object.assign({}, config.components || {}, chain.components);
   const render = Object.assign({}, config.render || {}, chain.render);
 
-  // `scripts:` is top-level as of §6.3: it is a file copy, not a rendered document, and
-  // it was the one row in the component table that shared none of the row's behavior. It
-  // still merges down the branch chain like everything else, so it is folded back in
-  // here rather than resolved separately.
+  // `scripts:` is top-level: it is a file copy, not a rendered document, and it was the
+  // one row in the component table that shared none of the row's behavior. It still merges
+  // down the branch chain like everything else, so it is folded back in here rather than
+  // resolved separately.
   const scripts = chain.scripts !== undefined ? chain.scripts : config.scripts;
   if (scripts !== undefined) components.scripts = scripts;
 
   // Resolve component specs to file paths
-  // `adventureDescription` merges down the chain like the other sectioned components, which
-  // is what makes §7.7's per-node description an ordinary row rather than a second writer:
-  // a value declared at an interior node reaches the leaves beneath it here. `description`
-  // is resolved here too — it is read at the root rather than per branch, but the migrator
+  // `adventureDescription` merges down the chain like the other sectioned components, so a
+  // per-node adventure description is an ordinary row rather than a second writer: a value
+  // declared at an interior node reaches the leaves beneath it here. `description` is
+  // resolved here too — it is read at the root rather than per branch, but the migrator
   // and the root write both want the same expansion the other components get.
   const componentTypes = [
     'aiInstructions', 'opening', 'branchFraming', 'plotEssential', 'summary', 'authorsNote',
@@ -94,12 +94,12 @@ function buildCompileContext(config, branchPath, options = {}) {
     componentRefs[type] = resolveComponentSpec(spec, config._base, variables);
   }
 
-  // §13.4's branch-addressable `templateFor`. What merges down the chain is the
-  // type→field-list map each node's slot files *produce*, not the filenames: a node names
-  // one file for a role and gets that file's types, inheriting every other type from its
-  // ancestors (Decision 6). So each node in the chain — the root config first, then every
-  // branch node — is resolved on its own and the resulting per-role maps are folded
-  // key-wise, root to leaf. Empty and IO-free for any project that declares no `templateFor:`.
+  // Branch-addressable `templateFor`. What merges down the chain is the type→field-list
+  // map each node's slot files *produce*, not the filenames: a node names one file for a
+  // role and gets that file's types, inheriting every other type from its ancestors. So
+  // each node in the chain — the root config first, then every branch node — is resolved
+  // on its own and the resulting per-role maps are folded key-wise, root to leaf. Empty
+  // and IO-free for any project that declares no `templateFor:`.
   const templateFor = {};
   for (const node of [config, ...chain.nodes]) {
     if (!node || !node.templateFor) continue;
@@ -116,13 +116,13 @@ function buildCompileContext(config, branchPath, options = {}) {
     }
   }
 
-  // The branch-merged placeholder table (§12.2). Sits beside `variables` because it is the
-  // same kind of thing — a per-branch mapping every check and the emitter read — and
-  // because §12.3's question text expands against `variables`, so the two are always
-  // wanted together.
+  // The branch-merged placeholder table. Sits beside `variables` because it is the same
+  // kind of thing — a per-branch mapping every check and the emitter read — and because
+  // placeholder question text expands against `variables`, so the two are always wanted
+  // together.
   return {
     variables, componentRefs, render, templateFor, placeholders: chain.placeholders, roles,
-    // The branch-merged `lint.packs` table and per-branch `level:` (§8.2.2). Returned so
+    // The branch-merged `lint.packs` table and per-branch `level:`. Returned so
     // `runPackChecks` reads it off the one walk that already ran here — with `onWarn`
     // wired, so a `<pack>: ~` unbinding nothing raises `CL0118` exactly once — rather than
     // re-walking `walkBranchChain` with its own, warn-less seed.
@@ -131,18 +131,18 @@ function buildCompileContext(config, branchPath, options = {}) {
 }
 
 /**
- * The inline convention-pack pass (§8.2.2).
+ * The inline convention-pack pass.
  *
  * Runs after the leaf loop, over the story cards each leaf rendered — `deferredCardLeaves`
- * still holds them per leaf, before Phase 11's frontier collapse, which is what lets a
- * finding name the branch it fired on. For each leaf it resolves that branch's merged
- * `lint.packs` (root packs, key-wise-overridden and `~`-unbound down the chain), loads
- * each pack once, and evaluates it against `parseCards` of every rendered card.
+ * still holds them per leaf, before the frontier collapse, which is what lets a finding
+ * name the branch it fired on. For each leaf it resolves that branch's merged `lint.packs`
+ * (root packs, key-wise-overridden and `~`-unbound down the chain), loads each pack once,
+ * and evaluates it against `parseCards` of every rendered card.
  *
- * Findings route onto the compile bus, so a pack ERROR fails the build — the behavior
- * §12.5 built the per-pack `level:` dial to make safe. The severity is clamped through
- * the per-pack ceiling, then the per-branch one; the bus applies the global `lint.level`
- * on top at `add` time, because a `CL-<pack>/…` code is opinion-layer (`diag.js`).
+ * Findings route onto the compile bus, so a pack ERROR fails the build — which is what the
+ * per-pack `level:` dial exists to make safe. The severity is clamped through the per-pack
+ * ceiling, then the per-branch one; the bus applies the global `lint.level` on top at
+ * `add` time, because a `CL-<pack>/…` code is opinion-layer (`diag.js`).
  *
  * A complete no-op — no IO — for any project that declares no `lint.packs` anywhere,
  * which is every golden. The branch-merge is *not* recomputed here: each leaf carries its
@@ -179,7 +179,7 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
       const pack = loaded.get(name);
       if (!pack) continue;
 
-      // Phase 15: gather the leaf's whole resolved card set once, so the per-card rules
+      // Gather the leaf's whole resolved card set once, so the per-card rules
       // (`evaluatePack`) and the per-leaf existence check (`evaluatePackExistence`, for a
       // `requireCard` rule) both see every card the leaf rendered. `evaluatePack` still
       // evaluates each card exactly once — moving it out of the group loop is only a
@@ -194,8 +194,8 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
       const routed = [
         ...evaluatePack(pack, leafCards, { branchLabel: label }),
         ...evaluatePackExistence(pack, leafCards, { branchLabel: label }),
-        // Phase 16: the per-resolved-item rules (`count` / `mutexHint`). Inline only —
-        // the offline `--lint` arm has no structured item to hand them (Decision 5).
+        // The per-resolved-item rules (`count` / `mutexHint`). Inline only — the offline
+        // `--lint` arm has no structured item to hand them.
         ...evaluatePackItemRules(pack, leaf.resolvedItems, { branchLabel: label }),
       ];
       for (const f of routed) {
@@ -208,14 +208,13 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
 }
 
 /**
- * CL0326 for an include's `branches:` — the other half of the arity-N guard (§7.6.2a).
+ * CL0326 for an include's `branches:` — the other half of the arity-N dispatch guard.
  *
  * **Per branch, because a branch dispatch has no answer without a branch path.** The
  * `importVariants:` half of this check runs once per compile inside `resolveIncludes`,
  * which is where a selector that does not depend on the branch belongs. These two
- * placements are not an inconsistency: they are the two axes §7.6.2a separates the keys
- * on — `importVariants:` selects from the imported source unconditionally, `branches:`
- * dispatches, and each is asked wherever its answer exists.
+ * placements are not an inconsistency: `importVariants:` selects from the imported source
+ * unconditionally, `branches:` dispatches, and each is asked wherever its answer exists.
  *
  * A stamped spec is identical across every item from one include, so it resolves once per
  * group rather than once per item. Matching follows the same rule the other half uses: a
@@ -263,10 +262,10 @@ function reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics) {
  * ── Why the duplicate-id check is here and not in the registry ──────────────
  *
  * `buildRegistry` throws on two defs claiming one id, but it never sees the whole
- * question: a bare `import:` def claims no id of its own — it *is* the item it names
- * (§17.4) — so it is filtered out before the registry's check runs. Two of them naming
- * one canon item, or a bare import alongside an explicit def of the same id, therefore
- * pass load and meet for the first time here, as two resolved items with one id. What
+ * question: a bare `import:` def claims no id of its own — it *is* the item it names — so
+ * it is filtered out before the registry's check runs. Two of them naming one canon item,
+ * or a bare import alongside an explicit def of the same id, therefore pass load and meet
+ * for the first time here, as two resolved items with one id. What
  * reaches AID is two entries in one Plot Essentials slot and two story cards sharing a
  * name and a trigger list, from a compile that reported nothing.
  *
@@ -332,13 +331,12 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagno
 }
 
 /**
- * Render one item body for one component target (§7.4).
+ * Render one item body for one component target.
  *
  * The wrapper is forced off: the slot owns the wrapping of everything placed in it, and
  * `emit/components.js` applies it once the occupants are in hand. Leaving the item's own
  * `render.wrapper` in the context is what would ship an item double-braced inside a slot
- * of the same wrapper — the bug §8.4 exists to eliminate, and the reason `render.wrapper`
- * governs story-card output alone.
+ * of the same wrapper, which is why `render.wrapper` governs story-card output alone.
  *
  * Returns null and reports when the target's template ladder runs out with nothing to
  * render, which is the one case the ladder's verbatim rung cannot cover: no template and
@@ -349,15 +347,14 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
   const context = itemContext(item, { render: { ...(item.render || {}), wrapper: 'none' } });
   const label = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
 
-  // The component-target ladder (§13.4): a *chosen* target `template:` (a named text or
-  // field-list template, or a Pattern-2 name in a slot file) → `templateFor.<component>`
-  // keyed on `aid.type` → `templateFor.base` keyed on `aid.type` → `aid.type` as a template
-  // name → verbatim. A per-item `render.<component>.template` reaches here as
-  // `target.template`, so a real choice keeps winning over the branch's slot — but the
-  // `model/item.js:384` fill of `target.template` from `aid.type` is not a choice, and
-  // honouring it at rung 1 would shadow `templateFor.<component>` / `templateFor.base` for
-  // the whole corpus, the same bug fix A removed from the body ladder in Phase 13
-  // (`isTemplateChoice`).
+  // The component-target ladder: a *chosen* target `template:` (a named text or field-list
+  // template, or a Pattern-2 name in a slot file) → `templateFor.<component>` keyed on
+  // `aid.type` → `templateFor.base` keyed on `aid.type` → `aid.type` as a template name →
+  // verbatim. A per-item `render.<component>.template` reaches here as `target.template`,
+  // so a real choice keeps winning over the branch's slot — but the fill of
+  // `target.template` from `aid.type` in `model/item.js` is not a choice, and honoring it
+  // at rung 1 would shadow `templateFor.<component>` / `templateFor.base` for the whole
+  // corpus, which is what `isTemplateChoice` guards against.
   const type = item.aid && item.aid.type;
   const compMap = templateFor[target.component] || {};
   const baseMap = templateFor.base || {};
@@ -394,7 +391,7 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
     }
   }
 
-  // Verbatim pass-through — the last rung of §7.4's ladder.
+  // Verbatim pass-through — the last rung of the ladder.
   const raw = item.body && (item.body.text !== undefined ? item.body.text : item.body.content);
   if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
     return resolveVariables(String(raw).trim(), variables);
@@ -413,10 +410,9 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
  * Phase B: apply cross-item refs, pronouns, render, and write output.
  *
  * Returns `{ written, occupants }` — the story-card files, and the component slots those
- * same items routed into. One traversal produces both, which is the §7.2 inversion in its
- * smallest form: v3 ran this loop for story cards and a second resolver in `pe.js` for
- * component content, then reconciled them through a suppression side channel. There is
- * nothing to reconcile when one pass over one resolved item decides both.
+ * same items routed into. One traversal produces both: an item declares where it goes, so
+ * one pass over one resolved item decides its card output and its component placement
+ * together, with nothing to reconcile afterward.
  */
 
 function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, variables = {}, options = {}) {
@@ -430,18 +426,18 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     placeholders = {},
     usage = null,
     usagePath = '',
-    // §9.2's merged role table for this branch, and CL0545's usage callback — grouped with
+    // The merged role table for this branch, and CL0545's usage callback — grouped with
     // the rest of the trailing options rather than appended as a 17th positional parameter.
     roles = null,
     onRoleUsed = null,
-    // §13 — the field-declaration table (compile-wide) and the branch's resolved
-    // `templateFor` role maps. Both default to empty, and every ladder below falls back to
-    // exactly its pre-Phase-12 behavior when they are.
+    // The field-declaration table (compile-wide) and the branch's resolved `templateFor`
+    // role maps. Both default to empty, and every ladder below falls back to a plain
+    // template lookup when they are.
     fieldTable = { fields: {}, groups: {}, templates: {} },
     templateFor = {},
-    // §13.6 — the unread-field audit, built once per compile so its `(item id, field
-    // path)` dedupe spans every leaf. Null on the report-mode paths that reuse this
-    // function without a field table.
+    // The unread-field audit, built once per compile so its `(item id, field path)` dedupe
+    // spans every leaf. Null on the report-mode paths that reuse this function without a
+    // field table.
     fieldAudit = null,
     // CL0626–CL0628 — the `aid.type` normalizer, built once per compile for the same
     // reason: it dedupes per authored value across every branch, and its collision check
@@ -460,7 +456,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
   // one file, once well and once vaguely.
   const placeholderNoise = new Map();
 
-  // §8.5 measures what AID stores, which is the *substituted* string, so the length check
+  // The length check measures what AID stores, which is the *substituted* string, so it
   // needs the questions rather than the keys. Expanded once per branch and handed down.
   const questions = questionsForMeasurement(placeholders, variables);
 
@@ -468,13 +464,12 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
 
   // Expand render functions in body field values now that cross-item refs are resolved.
   // Dependency-ordered: a scan-build-sort-evaluate sequence over the same graph a chain
-  // like A.field = join($B.body.x) implies, replacing the fixpoint loop this used to be
-  // (v4 spec §13, Phase 9 Step 2 — see Decision 3 of the Phase 9 plan for why evaluating
-  // in topological order, rather than iterating to convergence, is the correction and not
-  // just a performance change).
+  // like A.field = join($B.body.x) implies. Evaluating in topological order rather than
+  // iterating a fixpoint loop to convergence is a correctness choice, not a performance
+  // one — convergence order is not deterministic across such a graph.
   resolveCrossItemRenderFunctions(resolvedItems, resolvedById, diagnostics);
 
-  // §8.2: the envelope is the emitter's, not the template's. Templates render the body;
+  // The envelope is the emitter's, not the template's. Templates render the body;
   // `emit/vl.js` writes the heading and the fence around it, and reports what it cannot
   // carry — a comma inside a trigger — onto the caller's bus. Nothing is printed or thrown
   // here: wrong output is still output, so the branch tree is finished either way and the
@@ -482,11 +477,11 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
   const grouped = new Map();
 
   // component key → slot name (lowercased) → occupants, unsorted. `emit/components.js`
-  // owns the sort, so `order:` then item id is stated in exactly one place (§7.4).
+  // owns the sort, so `order:` then item id is stated in exactly one place.
   const occupants = new Map();
 
-  // Card-name collision detector (Phase 10 Step 3, CL0622). Keyed on the displayed card
-  // name rather than the item id, because that is what VL's `_merge_story_cards` keys on.
+  // Card-name collision detector (CL0622). Keyed on the displayed card name rather than
+  // the item id, because that is what VL's `_merge_story_cards` keys on.
   const seenNames = new Map(); // name → { type, file }
   const reportedCollisions = new Set(); // name
 
@@ -495,12 +490,12 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
       item, registry, branchProtagonist, resolvedById, roles, busWarner(diagnostics), onRoleUsed,
     );
 
-    // §7.2: the item says where it goes. Read once, here, and used for both outputs.
+    // The item says where it goes. Read once, here, and used for both outputs.
     const placement = resolvePlacements(item);
     const itemId = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
 
     // Counts outputs, not targets: a target whose slot is gated off on this branch is
-    // legitimate (§7.4's third and fifth rows) and simply does not produce one.
+    // legitimate and simply does not produce one.
     let outputs = 0;
 
     for (const target of placement.targets) {
@@ -537,11 +532,11 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
       outputs++;
     }
 
-    // The no-output invariant (§7.4) — the replacement for v3's suppression checks. An item
-    // that resolved into this branch must leave a mark on it. Scoped by consequence rather
-    // than by mechanism: gating a slot off at the component level stays a legitimate way to
-    // drop a whole slot's contents from one branch, and only becomes an error when it would
-    // make an item vanish from every output it declared.
+    // The no-output invariant: an item that resolved into this branch must leave a mark on
+    // it. Scoped by consequence rather than by mechanism — gating a slot off at the
+    // component level stays a legitimate way to drop a whole slot's contents from one
+    // branch, and only becomes an error when it would make an item vanish from every
+    // output it declared.
     if (!placement.storyCard && outputs === 0) {
       diagnostics.error(
         DIAG_CODES.ITEM_NO_OUTPUT,
@@ -552,8 +547,8 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
       );
     }
 
-    // `storyCard: false` is now the only thing that suppresses a card (§7.4). An item that
-    // renders only into a component never produces one, so there is nothing to suppress.
+    // `storyCard: false` is the only thing that suppresses a card. An item that renders
+    // only into a component never produces one, so there is nothing to suppress.
     if (!placement.storyCard) continue;
 
     // Before the template ladder, deliberately. `aid.type` selects the template when no
@@ -591,9 +586,9 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
       continue;
     }
 
-    // §13.6: does the resolved template read every key this item's body carries? Runs on
-    // the field-list body only — a `.template` text body names nothing to check against.
-    // Findings are deduped compile-wide and emitted once, after every leaf.
+    // The unread-field audit: does the resolved template read every key this item's body
+    // carries? Runs on the field-list body only — a `.template` text body names nothing to
+    // check against. Findings are deduped compile-wide and emitted once, after every leaf.
     if (fieldAudit && bodyRender.kind === 'fieldList') {
       fieldAudit.auditBody(item, bodyRender.list, bodyRender.name, { templateFor });
     }
@@ -611,7 +606,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
           diagnostics, file: bodyRender.entry._source, name: bodyRender.name,
         });
       // The body arrives already wrapped — `render` applies render.wrapper — which is
-      // what §8.5 needs when Phase 5 measures the final string.
+      // what the length check needs when it measures the final string.
       rendered = renderCard({
         item,
         bodyText,
@@ -641,12 +636,12 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
       ? cardTypeAudit.resolve((item.aid && item.aid.type) || 'Uncategorized', { file: item._source })
       : (item.aid && item.aid.type) || 'Uncategorized';
 
-    // Two cards on one leaf that share a display name are an error (Phase 11 Step 5).
-    // Velvet Lattice's `_merge_story_cards` keys on name alone, so only one of them ever
-    // reaches AID — the later declaration wins, and once cards are inherited rather than
-    // copied to every leaf that winner is position-dependent. Two cards meant to coexist
-    // must have distinct names; one card declared twice is a duplicate id (CL0325), not
-    // this. Cross-type or same-type makes no difference to VL, so neither does it here.
+    // Two cards on one leaf that share a display name are an error. Velvet Lattice's
+    // `_merge_story_cards` keys on name alone, so only one of them ever reaches AID — the
+    // later declaration wins, and once cards are inherited rather than copied to every
+    // leaf that winner is position-dependent. Two cards meant to coexist must have
+    // distinct names; one card declared twice is a duplicate id (CL0325), not this.
+    // Cross-type or same-type makes no difference to VL, so neither does it here.
     // Reported once per name per leaf.
     const cardName = cardTitle(item);
     const existing = seenNames.get(cardName);
@@ -678,8 +673,8 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     if (!grouped.has(type)) grouped.set(type, []);
     // Carry a sort key (the item's real id, lowercased) so output order is
     // deterministic regardless of authoring order in the source YAML. `id`/`name` ride
-    // along so the caller's Phase 11 Step 5 inheritance pass can match this card to the
-    // same card on other leaves — `name` is what Velvet Lattice's card merge keys on.
+    // along so the caller's inheritance pass can match this card to the same card on
+    // other leaves — `name` is what Velvet Lattice's card merge keys on.
     grouped.get(type).push({
       sortKey: String(itemId).toLowerCase(),
       rendered,
@@ -690,11 +685,11 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     if (renderedById && item.id) renderedById.set(item.id.toLowerCase(), { type, rendered });
   }
 
-  // Phase 11 Step 5: the per-(node, type) file write is deferred to `compileRun`'s
-  // post-loop inheritance pass, which has every leaf's cards in hand and can write a
-  // card once at the deepest node whose whole subtree renders it identically, letting
-  // Velvet Lattice inherit it down. `grouped` is returned raw — types unsorted, cards
-  // unsorted within a type — because that pass re-groups by node before sorting.
+  // The per-(node, type) file write is deferred to `compileRun`'s post-loop inheritance
+  // pass, which has every leaf's cards in hand and can write a card once at the deepest
+  // node whose whole subtree renders it identically, letting Velvet Lattice inherit it
+  // down. `grouped` is returned raw — types unsorted, cards unsorted within a type —
+  // because that pass re-groups by node before sorting.
   return { grouped, occupants, placeholderNoise };
 }
 
@@ -704,7 +699,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
  *
  * Errors stop the compile before anything is written. A schema violation means some part
  * of what the author wrote is not being read, so continuing would emit a tree that looks
- * complete and is quietly missing something — the exact failure mode §4.3 exists to end.
+ * complete and is quietly missing something.
  *
  * Takes a cursor and returns the new one so a caller can check more than once — config
  * loading and item/canon loading each add to the same bus, and a config-level error must
@@ -738,10 +733,10 @@ function reportLoadDiagnostics(diagnostics, since = 0) {
  * that failed is precisely the one whose diagnostics are worth reading, so merging only
  * on the success path would collect nothing in the interesting case.
  *
- * The buses stay separate internally because their abort semantics differ (§4.3): a load
- * error stops the compile before anything is written, a compile error lets the tree land
- * and fails the run afterward. The sink flattens them because a caller reading
- * diagnostics wants the whole stream in one place.
+ * The buses stay separate internally because their abort semantics differ: a load error
+ * stops the compile before anything is written, a compile error lets the tree land and
+ * fails the run afterward. The sink flattens them because a caller reading diagnostics
+ * wants the whole stream in one place.
  */
 function compile(configPath, options = {}) {
   const buses = {};
@@ -761,8 +756,7 @@ function compileRun(configPath, options, buses) {
 
   // One bus for everything the loading phase reports, so item schema violations are
   // collected with their source positions and reported together rather than as a stream
-  // of console warnings interleaved with progress output. The compile phases still warn
-  // directly; they move onto the bus as their modules are decomposed.
+  // of console warnings interleaved with progress output.
   const loadDiagnostics = new Diagnostics();
   buses.load = loadDiagnostics;
 
@@ -784,9 +778,9 @@ function compileRun(configPath, options, buses) {
   // ── 2. Config, drift, templates ────────────────────────────────────────────
   const config = loadCompileConfig(configPath, { diagnostics: loadDiagnostics, live: options.live });
 
-  // Phase 7's drift notice: a complete no-op unless the project has opted into a snapshot
-  // (§Decision 4 — drift is informational, never a warning, never a non-zero exit; the one
-  // exception is CL0115, corruption of the frozen copy itself, which is an ERROR).
+  // The snapshot drift notice: a complete no-op unless the project has opted into a
+  // snapshot. Drift is informational — never a warning, never a non-zero exit; the one
+  // exception is CL0115, corruption of the frozen copy itself, which is an ERROR.
   if (config) checkDrift(config, loadDiagnostics);
 
   // Checked immediately, before any filesystem work — an unknown key, a missing required
@@ -796,10 +790,10 @@ function compileRun(configPath, options, buses) {
   // read canon/item files from disk before the throw was reached.
   let loadCursor = reportLoadDiagnostics(loadDiagnostics);
 
-  // The §12.5 ceiling, set here because this is the first moment both halves of it exist:
-  // `lint.level` has just been read off the config, and `--lint-level` came in with the
-  // options. The CLI flag wins, on the general rule that a flag is what someone typed for
-  // this run and the config is what the project says every run.
+  // The lint-severity ceiling, set here because this is the first moment both halves of it
+  // exist: `lint.level` has just been read off the config, and `--lint-level` came in with
+  // the options. The CLI flag wins, on the general rule that a flag is what someone typed
+  // for this run and the config is what the project says every run.
   //
   // The load bus is deliberately left alone. Nothing it raises is an opinion — it is
   // schema violations and unreadable files — and it has already been reported by the line
@@ -812,23 +806,23 @@ function compileRun(configPath, options, buses) {
 
   const { templates, partials, fieldTable } = loadTemplates(config._resolvedTemplates, { diagnostics: loadDiagnostics });
   // Checked before anything renders: a template that still carries a fence would emit a
-  // double envelope on every card it owns (§8.3), and the report names the files. The
+  // double envelope on every card it owns, and the report names the files. The
   // notes-template check needs both halves in hand, so it runs against the same bus.
   checkConfigNotesTemplates(config, templates, loadDiagnostics, configPath, fieldTable);
   loadCursor = reportLoadDiagnostics(loadDiagnostics, loadCursor);
   console.log(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
   // ── 3. Registries & audits ────────────────────────────────────────────────────
-  // §13.6 — built once so the unread-field audit's `(item id, field path)` dedupe spans
-  // the whole compile. `finish()` runs after the leaf loop, beside reportUnusedRoles.
-  // `tierTemplates` also feeds `--schema-tables` below; gathered once here.
+  // The unread-field and card-type audits, built once so their per-compile dedupes span
+  // every leaf. Both `finish()` after the leaf loop, in `finalizeDiagnostics`.
+  // `tierTemplates` also feeds `--schema-tables`; gathered once here.
   const tierTemplates = config ? gatherTierTemplates(config, configPath) : [];
   const fieldAudit = buildFieldAudit({ fieldTable, partials, tierTemplates });
   const cardTypeAudit = buildCardTypeAudit();
 
   // Build canon registry
   const canonRegistry = buildCanonRegistry(config._resolvedLibrary, { diagnostics: loadDiagnostics });
-  // itemCount, not size: an id two canon sets both define holds no plain key (§17.3), and
+  // itemCount, not size: an id two canon sets both define holds no plain key, and
   // "loaded 40 items" would otherwise quietly drop the very items worth mentioning.
   if (canonRegistry.itemCount > 0) {
     console.log(`Loaded ${canonRegistry.itemCount} canonical item(s).`);
@@ -859,19 +853,19 @@ function compileRun(configPath, options, buses) {
 
   // ── 4. Pre-loop accumulators ──────────────────────────────────────────────────
   // Every declared key referenced by any text this compile writes, keyed by the branch path
-  // the text belongs to, and every node that declared one. §12.3's unused check needs both:
-  // the declarations say what was promised and where, the usage says what was spent.
+  // the text belongs to, and every node that declared one. The unused-placeholder check
+  // needs both: the declarations say what was promised and where, the usage says what was
+  // spent.
   const placeholderState = new PlaceholderTracker();
 
-  // `CL0545`: every role name a resolved token actually bound to, project-wide — a
-  // whole-compile check rather than `CL0535`'s subtree-scoped one (Decision recorded in
-  // the Session A record: no golden declares a role yet, so there is no branch with a
-  // differently-scoped sibling to get wrong, and the simpler check is the cheaper one to
-  // build correctly today). `protagonist` is exempt: it is read structurally, by comparing
-  // an item id against `branchProtagonist`, wherever any `{$Id}` token resolves — not only
-  // where `{$protagonist}` is literally written — so "unused" is never a fact about it.
+  // `CL0545`: every role name a resolved token actually bound to, project-wide. This is a
+  // whole-compile check, deliberately coarser than `CL0535`'s subtree-scoped one — no
+  // golden declares a role yet, so there is no branch with a differently-scoped sibling
+  // for the coarse check to get wrong, and it is the cheaper one to build correctly.
+  // `protagonist` is exempt: it is read structurally, by comparing an item id against
+  // `branchProtagonist`, wherever any `{$Id}` token resolves — not only where
+  // `{$protagonist}` is literally written — so "unused" is never a fact about it.
   const roleState = new RoleTracker();
-  // The walker's root visit replaces the old hand-rolled root rung (Phase 11 Step 0).
   walkBranchTree(config, ({ node, path: path_, isRoot }) => {
     const keys = localRoleKeysOf(node).filter((k) => k.toLowerCase() !== 'protagonist');
     if (keys.length) {
@@ -914,40 +908,35 @@ function compileRun(configPath, options, buses) {
   // collected here and reported as an error at the end of the compile.
   const gaps = new GapList();
 
-  // A sectioned component document is read, validated and normalized once per file rather
-  // than once per leaf. Which sections apply is a per-branch question that
-  // `sectionsForBranch` answers from the normalized document, so nothing is lost — and a
-  // schema violation in a component reaches the author once instead of once per leaf,
-  // which for The Institute's 32 leaves is the difference between a diagnostic and a wall.
-  //
-  // §7.6's `imports:` resolve inside that one load, which is why cycle detection and the
-  // import diagnostics belong there rather than in the leaf loop: a chain resolved once per
-  // file reports a cycle once, and a chain resolved once per leaf reports it 32 times for
-  // The Institute. `from:` expands against the *root* variable table for the same reason the
-  // cache is keyed by path — a branch-varying `from:` would make one cache key stand for two
-  // documents.
-  // Cluster 5 (see compileState.js). The `CL0619`–`CL0621` metadata guards and the
-  // `imports:`-inclusive `dependencyLedger` live inside the loader now; `componentLoader.load`
+  // The sectioned-component loader (see compileState.js). A component document is read,
+  // validated and normalized once per resolved path rather than once per leaf, so a schema
+  // violation or an import cycle reaches the author once instead of once for every leaf
+  // that names the component. `imports:` chains resolve inside that one load, which is why
+  // cycle detection lives there. `from:` expands against the *root* variable table for the
+  // same reason the cache is keyed by path — a branch-varying `from:` would make one cache
+  // key stand for two documents. The `CL0619`–`CL0621` metadata guards and the
+  // `imports:`-inclusive `dependencyLedger` live inside the loader; `componentLoader.load`
   // is the stable `(spec, descriptor)` reference the leaf loop and the framing writer take.
   const rootVariables = config._variables || config.variables || null;
   const componentLoader = new ComponentLoader({
     diagnostics: compileDiagnostics, variables: rootVariables, base: config._base,
   });
 
-  // The two sets §7.7's guard compares. Both are filled by the leaf loop below, which is
-  // what makes CL0616 a comparison of two facts rather than of two passes.
+  // The two sets CL0616 compares — a leaf with an adventure description and no opening.
+  // Both are filled by the leaf loop below, which makes the check a comparison of two
+  // facts rather than of two passes.
   const descriptionLeaves = new Set();
   const openingLeaves = new Set();
 
-  // Phase 11 Step 4 — component and script inheritance. `runLeafLoop` renders and checks
-  // every component per leaf and fills these two maps; `placeInheritedFiles` drains them,
-  // writing each value once at the node VL inherits it from, or per leaf where it cannot.
+  // Component and script inheritance. `runLeafLoop` renders and checks every component per
+  // leaf and fills these two maps; `placeInheritedFiles` drains them, writing each value
+  // once at the node Velvet Lattice inherits it from, or per leaf where it cannot.
   // `LIFT_EXCLUDED_COMPONENTS` (opening, adventureDescription — see leafLoop.js) are the
   // two the leaf must hold itself and are written inside the loop instead.
   const deferredComponents = new Map(); // descriptor.key → { descriptor, metadata, perLeaf: Map(outputDir → text) }
-  const deferredScripts = new Map(); // outputDir → resolved scripts spec (a directory path), Phase 12 Step 6
+  const deferredScripts = new Map(); // outputDir → resolved scripts spec (a directory path)
 
-  // Phase 11 Step 5 — story-card inheritance. One entry per leaf, filled by the loop:
+  // Story-card inheritance. One entry per leaf, filled by the loop:
   // `{ branchPath, folderPath, outputDir, grouped: Map(type → [{sortKey, rendered, id, name}]) }`.
   // The post-loop pass writes each card at the deepest node whose whole leaf-subtree
   // renders it byte-identically, and per leaf otherwise.
@@ -968,8 +957,8 @@ function compileRun(configPath, options, buses) {
   });
 
   // ── 6. Pack checks ────────────────────────────────────────────────────────────
-  // §8.2.2 — convention packs, run over the cards each leaf just rendered while they are
-  // still keyed per leaf. Dormant unless a project declares `lint.packs`.
+  // Convention packs, run over the cards each leaf just rendered while they are still
+  // keyed per leaf. Dormant unless a project declares `lint.packs`.
   runPackChecks(config, deferredCardLeaves, configPath, compileDiagnostics);
   reportCompileDiagnostics();
 
@@ -980,16 +969,15 @@ function compileRun(configPath, options, buses) {
   });
 
   // ── 8. Tree-level writes ──────────────────────────────────────────────────────
-  // Write Opening / OpeningChoice files (post-loop) — framing, labels and placeholder
-  // questions, each at a node the leaf loop never visits. Root-level branchFraming and the
-  // root Label land in these walkers' root visits now (Phase 11 Step 0), not a hand-rolled rung.
+  // Framing, labels and placeholder questions, each at a node the leaf loop never visits.
+  // Root-level branchFraming and the root Label land in these walkers' own root visits.
   writeTreeFiles({
     config, configPath, verbose, diagnostics: compileDiagnostics,
     placeholderState, componentLoader, registry, roleState,
   });
   reportCompileDiagnostics();
 
-  // The scenario blurb (§7.7), written once to the output root alongside Branches/.
+  // The scenario blurb, written once to the output root alongside Branches/.
   writeScenarioBlurb({
     config, configPath, verbose, diagnostics: compileDiagnostics,
     rootVariables, registry, placeholderState, roleState, componentLoader, gaps, descriptionLeaves,
