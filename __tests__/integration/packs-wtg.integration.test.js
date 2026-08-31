@@ -181,6 +181,68 @@ describe('CL-wtg/0002 — the "WTG Time Config" card exists and is complete', ()
     expect(find(d, SETTINGS)).toHaveLength(0);
     expect(find(d, MALFORMED)).toHaveLength(0);
   });
+
+  test('(i) a recognized override with a bad value → one WARN naming the key', () => {
+    const d = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
+      'Codex/items.yaml': tcItem(`${VALID_TC}\nClock Format: purple`),
+    });
+    const hits = find(d, SETTINGS);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].severity).toBe('warn');
+    expect(hits[0].message).toContain('Clock Format');
+  });
+
+  test('(j) every override key present with a valid value → silent', () => {
+    const d = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
+      'Codex/items.yaml': tcItem([
+        VALID_TC,
+        'Enable WTG: true',
+        'Time Duration Multiplier: 1.0',
+        'Text Characters per Turn: 600',
+        'Number of Turns per Hour: 30',
+        'Enable Dynamic Time: true',
+        'Enable Localization: false',
+        'Clock Format: 24h',
+        'Date Format: iso',
+        'Player Command Clean Mode: in-place',
+        'Player Command Merge Mode: command-based',
+        'AI Command Nudge: false',
+        'Nudge Show Date: true',
+        'Nudge Show Era: true',
+        'Nudge Show Time: true',
+        'Nudge Show Day of Week: true',
+        'Nudge Show Phase: true',
+        'Instruction Injection Mode: cached-invisible',
+        'Show Date: true',
+        'Show Era: true',
+        'Show Time: true',
+        'Show Day of Week: true',
+        'Show Phase: true',
+        'DateTime Card Show Phase: true',
+        'Enable Generated Cards: false',
+        'Generated Card Type: _Generated',
+        'Enable Fuzzy Duplicate Matching: false',
+        'Enable Card Timestamps: true',
+        'Exclude Card Types: [zz_Settings,zz_Debug,_WTG]',
+      ].join('\n')),
+    });
+    expect(find(d, SETTINGS)).toHaveLength(0);
+    expect(find(d, MALFORMED)).toHaveLength(0);
+  });
+
+  test('(k) enum and boolean overrides are matched case-insensitively — 24H / AMERICAN / TRUE pass', () => {
+    const d = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
+      'Codex/items.yaml': tcItem(`${VALID_TC}\nClock Format: 24H\nDate Format: AMERICAN\nEnable WTG: TRUE`),
+    });
+    expect(find(d, SETTINGS)).toHaveLength(0);
+    expect(find(d, MALFORMED)).toHaveLength(0);
+  });
 });
 
 describe('CL-wtg/0003 — the "WTG Time Config" core fields are well-formed', () => {

@@ -257,7 +257,11 @@ whole-value item field.
   of `Starting Date` / `Starting Era` / `Starting Time` / `Initialized`, or carrying a key
   outside the recognized set (the four core fields plus WTG's 28 `DEFAULT_SETTINGS`
   override names). WTG deletes this card after initialization, so a key it does not read is
-  silently lost — hence the closed set. Read from the card body (`over: body`).
+  silently lost — hence the closed set. Each of the 28 override keys also carries a value
+  descriptor — an enum for the five multiple-choice settings, a positive-number `pattern:`
+  for the three rate settings, `true` / `false` for the eighteen booleans — so `Clock
+  Format: purple` is a WARN, not a bad value passed through. Read from the card body
+  (`over: body`).
 - **`CL-wtg/0003` — the `WTG Time Config` core fields are well-formed (ERROR).** For a
   present card: `Starting Date` must be `M/D/year` (1–6-digit year), `Starting Time` must
   be `H:MM AM|PM`, `Starting Era` must be one of `AD` / `CE` / `BC` / `BCE`, and

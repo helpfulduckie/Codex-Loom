@@ -5,7 +5,10 @@
 #
 #   1. the two per-card timestamp markers used together, which contradict;
 #   2. WARN — the "WTG Time Config" card must exist wherever WTG runs, must carry the
-#      four core fields, and must carry nothing else WTG will not read. The card is
+#      four core fields, must carry nothing else WTG will not read, and must give each
+#      of the 28 DEFAULT_SETTINGS overrides it does carry a value WTG will accept — an
+#      enum, a positive number, or true/false per library.js:1775, matched
+#      case-insensitively. The card is
 #      authored as plain `Key: Value` in the card ENTRY (Codex Loom `body`), read by
 #      `parseWTGTimeConfig` (library.js:1663) and DELETED by WTG after initialization —
 #      so a key it does not recognize is silently lost, which is why the key set is
@@ -48,11 +51,16 @@ rules:
   # unbinds this pack there (`wtg: ~`).
   #
   # The `schema:` is a CLOSED `type: map` over all 32 recognized keys — the four core
-  # fields (required) plus WTG's 28 DEFAULT_SETTINGS override names (`type: any`, listed
-  # only to keep them out of the unknown-key WARN). A key outside the 32 is CL0201,
-  # demoted to WARN by runSchemaCheck's error->severity mapping, and carries a
-  # Damerau-Levenshtein typo suggestion for free. Phase 15 does not validate the
-  # *values* of the 28 overrides.
+  # fields (required) plus WTG's 28 DEFAULT_SETTINGS override names, each now carrying a
+  # value descriptor: a case-insensitive `pattern:` alternation for the five
+  # multiple-choice settings, a numeric `pattern:` for the three rate settings,
+  # `^(true|false)$` for the eighteen booleans, and a bare `type: string` for the two
+  # free-form settings. Every enum is a `pattern:` rather than `values:` so it matches
+  # case-insensitively, the same way CL-wtg/0003's era check does — WTG lower-cases
+  # these before comparing. A key outside the 32 is CL0201, demoted to WARN by
+  # runSchemaCheck's error->severity mapping, and carries a Damerau-Levenshtein typo
+  # suggestion for free. A bad override value is CL0208 PATTERN_MISMATCH, likewise
+  # demoted to WARN.
   - id: 2
     severity: warn
     requireCard: { titleMatch: '^WTG Time Config$' }
@@ -66,36 +74,42 @@ rules:
         Starting Time: { type: string, required: true }
         Initialized:   { type: string, required: true }
         # WTG's 28 DEFAULT_SETTINGS override names (library.js:1775), each entry's
-        # `entry:` string. `type: any` — present only to keep a recognized override
-        # out of the CL0201 stray-key WARN.
-        Enable WTG: { type: any }
-        Time Duration Multiplier: { type: any }
-        Text Characters per Turn: { type: any }
-        Number of Turns per Hour: { type: any }
-        Enable Dynamic Time: { type: any }
-        Enable Localization: { type: any }
-        Clock Format: { type: any }
-        Date Format: { type: any }
-        Player Command Clean Mode: { type: any }
-        Player Command Merge Mode: { type: any }
-        AI Command Nudge: { type: any }
-        Nudge Show Date: { type: any }
-        Nudge Show Era: { type: any }
-        Nudge Show Time: { type: any }
-        Nudge Show Day of Week: { type: any }
-        Nudge Show Phase: { type: any }
-        Instruction Injection Mode: { type: any }
-        Show Date: { type: any }
-        Show Era: { type: any }
-        Show Time: { type: any }
-        Show Day of Week: { type: any }
-        Show Phase: { type: any }
-        DateTime Card Show Phase: { type: any }
-        Enable Generated Cards: { type: any }
-        Generated Card Type: { type: any }
-        Enable Fuzzy Duplicate Matching: { type: any }
-        Enable Card Timestamps: { type: any }
-        Exclude Card Types: { type: any }
+        # `entry:` string, each with a value descriptor. The card entry parses to an
+        # all-strings mapping, so a numeric setting is `type: string` + a numeric
+        # `pattern:` — `type: number` could never match "600" and would fire CL0202
+        # on every well-formed card, and `min:`/`max:` only act on real numbers. The
+        # eighteen booleans use the same `^(true|false)$` case-insensitive pattern
+        # CL-wtg/0003 runs on `Initialized`, and the five enums use a case-insensitive
+        # `pattern:` alternation for the same reason. Defaults resolved against the WTG
+        # source at library.js:1719 and library.js:1775.
+        Enable WTG: { type: string, pattern: '^(true|false)$' }
+        Time Duration Multiplier: { type: string, pattern: '^(?!0+(?:\.0+)?$)\d+(?:\.\d+)?$' }  # positive number; rejects 0 and negatives
+        Text Characters per Turn: { type: string, pattern: '^[1-9]\d*$' }  # positive integer
+        Number of Turns per Hour: { type: string, pattern: '^[1-9]\d*$' }  # positive integer
+        Enable Dynamic Time: { type: string, pattern: '^(true|false)$' }
+        Enable Localization: { type: string, pattern: '^(true|false)$' }
+        Clock Format: { type: string, pattern: '^(12h|24h)$' }
+        Date Format: { type: string, pattern: '^(american|european|iso)$' }
+        Player Command Clean Mode: { type: string, pattern: '^(full|prepend|in-place)$' }
+        Player Command Merge Mode: { type: string, pattern: '^(none|command-based|all)$' }
+        AI Command Nudge: { type: string, pattern: '^(true|false)$' }
+        Nudge Show Date: { type: string, pattern: '^(true|false)$' }
+        Nudge Show Era: { type: string, pattern: '^(true|false)$' }
+        Nudge Show Time: { type: string, pattern: '^(true|false)$' }
+        Nudge Show Day of Week: { type: string, pattern: '^(true|false)$' }
+        Nudge Show Phase: { type: string, pattern: '^(true|false)$' }
+        Instruction Injection Mode: { type: string, pattern: '^(invisible|visible|cached-invisible)$' }
+        Show Date: { type: string, pattern: '^(true|false)$' }
+        Show Era: { type: string, pattern: '^(true|false)$' }
+        Show Time: { type: string, pattern: '^(true|false)$' }
+        Show Day of Week: { type: string, pattern: '^(true|false)$' }
+        Show Phase: { type: string, pattern: '^(true|false)$' }
+        DateTime Card Show Phase: { type: string, pattern: '^(true|false)$' }
+        Enable Generated Cards: { type: string, pattern: '^(true|false)$' }
+        Generated Card Type: { type: string }  # arbitrary story-card type name — no closed set
+        Enable Fuzzy Duplicate Matching: { type: string, pattern: '^(true|false)$' }
+        Enable Card Timestamps: { type: string, pattern: '^(true|false)$' }
+        Exclude Card Types: { type: string }  # a bracketed [a,b,c] list string — shape not validated
     message: >-
       A "WTG Time Config" card should exist and carry all four of Starting Date,
       Starting Era, Starting Time and Initialized, and nothing WTG will not read —
