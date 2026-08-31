@@ -23,9 +23,12 @@ function loadNamedFiles(dirs, ext) {
     for (const file of findFiles(dir, ext)) {
       const name = path.basename(file, ext).toLowerCase();
       if (dirEntries.has(name)) {
-        throw new Error(
-          `Duplicate ${ext} name "${name}" found in ${dir}:\n  ${dirEntries.get(name)._source}\n  ${file}`
+        const err = new Error(
+          `${CODES.DUPLICATE_NAMED_FILE}: Duplicate ${ext} name "${name}" found in ${dir}:`
+          + `\n  ${dirEntries.get(name)._source}\n  ${file}`
         );
+        err.code = CODES.DUPLICATE_NAMED_FILE;
+        throw err;
       }
       dirEntries.set(name, { content: fs.readFileSync(file, 'utf8'), _source: file });
     }
@@ -39,6 +42,11 @@ function loadNamedFiles(dirs, ext) {
 /** Codes this module reports. CL04xx is the render/template band (§4.4). */
 const CODES = {
   TEMPLATE_CONTAINS_FENCE: 'CL0410',
+  // Two files in one templates directory resolving to the same name. Fatal rather than a
+  // bus diagnostic: `loadNamedFiles` runs before any `diagnostics` is in scope (two of the
+  // three `loadTemplates` callers pass none), and with two files claiming one name the
+  // name→file map has no defensible winner, so there is nothing to continue with.
+  DUPLICATE_NAMED_FILE: 'CL0429',
 };
 
 /**

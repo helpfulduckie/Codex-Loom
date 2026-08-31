@@ -213,6 +213,7 @@ half is checked per branch, because a dispatch has no answer without one.
 | Code | Severity | Meaning |
 |---|---|---|
 | `CL0410` | ERROR | A `.template` or `.partial` still contains a `~~~` fence. |
+| `CL0429` | ERROR | Two files in one templates directory resolve to the same name (case-insensitively). Aborts the load — the merge has no defensible winner. |
 | `CL0411` | ERROR | A `render.notesTemplate` in compile.yaml names a template that is not loaded. |
 | `CL0412` | ERROR | A `render.notesTemplate` on an item names a template that is not loaded. |
 | `CL0413` | ERROR | A render-function call in a template or body field does not parse. |
@@ -257,6 +258,15 @@ variable-driven; it reports at render time as `CL0412` and names the item.
 are not the load-time check `CL0411` is. Each drops the one thing it names — the notes
 line, the failed directive, or the whole item — and leaves the rest of the leaf intact, and each fails the run
 once the tree is written.
+
+`CL0429` is a hard load-time failure, not a bus diagnostic: when two files in one
+templates directory resolve to the same name, `loadNamedFiles` throws before any
+compile begins. It cannot degrade to a WARN — with two files claiming one name the
+merged name→file map has no defensible winner — and it runs before a diagnostics bus is
+in scope, since two of the three `loadTemplates` call sites pass none. The message names
+both colliding files. Later directories on the search path still override earlier ones on
+a name collision (that is the intended layering); the error is only for a collision
+*within* a single directory.
 
 ### CL0430–CL0437 in detail
 

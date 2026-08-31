@@ -48,7 +48,10 @@ describe('loadTemplates', () => {
     const dir = makeTmpDir();
     writeTemplateIn(dir, 'A', 'character', 'version A');
     writeTemplateIn(dir, 'B', 'character', 'version B');
-    expect(() => loadTemplates(dir)).toThrow(/Duplicate .template name "character"/);
+    expect(() => loadTemplates(dir)).toThrow(/CL0429: Duplicate .template name "character"/);
+    let caught;
+    try { loadTemplates(dir); } catch (e) { caught = e; }
+    expect(caught.code).toBe(CODES.DUPLICATE_NAMED_FILE);
   });
 
   test('a template that still writes a fence is an ERROR naming the file (§8.3)', () => {
@@ -103,7 +106,7 @@ describe('loadTemplates', () => {
     writeTemplateIn(dir1, 'X', 'character', 'version A');
     writeTemplateIn(dir1, 'Y', 'character', 'version B');
     writeTemplate(dir2, 'Location', 'loc');
-    expect(() => loadTemplates([dir1, dir2])).toThrow(/Duplicate .template name "character"/);
+    expect(() => loadTemplates([dir1, dir2])).toThrow(/CL0429: Duplicate .template name "character"/);
   });
 
   test('single string still works (no regression)', () => {
@@ -129,7 +132,7 @@ describe('loadTemplates', () => {
     fs.mkdirSync(sub);
     writePartial(dir, 'shared', 'v1');
     writePartial(sub, 'shared', 'v2');
-    expect(() => loadTemplates(dir)).toThrow(/Duplicate .partial name "shared"/);
+    expect(() => loadTemplates(dir)).toThrow(/CL0429: Duplicate .partial name "shared"/);
   });
 
   test('empty directory returns empty partials map', () => {
