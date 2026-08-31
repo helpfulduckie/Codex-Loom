@@ -321,6 +321,7 @@ describe('every diagnostic the config surface can emit', () => {
     ['a v3 key that was renamed', SCHEMA_CODES.UNKNOWN_KEY, 'overview: ./Review\n', {}],
     ['wrong type, non-empty', SCHEMA_CODES.WRONG_TYPE, 'variables:\n  - a\n  - b\n', {}],
     ['missing required key', SCHEMA_CODES.MISSING_REQUIRED, 'version: 4\nstructure:\n  input:\n    items: []\n', { raw: true }],
+    ['a v3 project (no version: key)', CODES.UNSUPPORTED_VERSION, 'structure:\n  output: ./out\n', { raw: true }],
     // No CL0204 case: `lint.packs` went live in Phase 14 (§8.2.2) and it held the last
     // `note:` on the config surface, so NOT_YET_IMPLEMENTED is now unreachable here —
     // recorded in the `unreachable` set below.
@@ -382,6 +383,46 @@ describe('every diagnostic the config surface can emit', () => {
       .filter((c) => !unreachable.has(c));
     const exercised = new Set(CASES.map(([, code]) => code));
     expect(reachable.filter((c) => !exercised.has(c))).toEqual([]);
+  });
+});
+
+/**
+ * §14.1 / §6: `version: 4` is required with no compatibility mode, so a missing or wrong
+ * `version:` is CL0209 — the "run --migrate" detection ERROR — reported before `validate`
+ * so a v3 config gets this one line instead of an unknown-key cascade.
+ */
+describe('version: 4 detection (CL0209)', () => {
+  test('no version: key is a v3 project — CL0209 naming --migrate, and load returns null', () => {
+    const { config, diagnostics } = load('structure:\n  output: ./out\n', { raw: true });
+    expect(config).toBeNull();
+    const diag = diagnostics.errors.find((d) => d.code === CODES.UNSUPPORTED_VERSION);
+    expect(diag).toBeDefined();
+    expect(diag.message).toContain('--migrate');
+  });
+
+  test('an explicit version: 3 gets the same v3 detection ERROR', () => {
+    const { diagnostics } = load('version: 3\nstructure:\n  output: ./out\n', { raw: true });
+    const diag = diagnostics.errors.find((d) => d.code === CODES.UNSUPPORTED_VERSION);
+    expect(diag).toBeDefined();
+    expect(diag.message).toContain('--migrate');
+  });
+
+  test('a version this compiler does not know gets a plain unsupported-version ERROR', () => {
+    const { diagnostics } = load('version: 99\nstructure:\n  output: ./out\n', { raw: true });
+    const diag = diagnostics.errors.find((d) => d.code === CODES.UNSUPPORTED_VERSION);
+    expect(diag).toBeDefined();
+    expect(diag.message).toMatch(/unsupported.*99/i);
+    expect(diag.message).not.toContain('--migrate');
+  });
+
+  test('the v3 ERROR is raised alone — no unknown-key cascade for keys v4 renamed', () => {
+    const { codes } = load('protagonist: Tess\noverview: ./Review\nstructure:\n  output: ./out\n', { raw: true });
+    expect(codes).toEqual([CODES.UNSUPPORTED_VERSION]);
+  });
+
+  test('version: 4 draws no CL0209', () => {
+    const { codes } = load('title: x\n');
+    expect(codes).not.toContain(CODES.UNSUPPORTED_VERSION);
   });
 });
 

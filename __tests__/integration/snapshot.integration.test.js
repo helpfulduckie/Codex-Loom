@@ -7,7 +7,7 @@ const fs = require('fs');
 
 const { compile } = require('../../src/compile');
 
-const CLI = path.resolve(__dirname, '../../src/compile.js');
+const CLI = path.resolve(__dirname, '../../src/cli.js');
 
 let tmpDir;
 

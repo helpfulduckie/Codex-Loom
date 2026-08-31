@@ -5,7 +5,7 @@ const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
 
-const CLI = path.resolve(__dirname, '../../src/compile.js');
+const CLI = path.resolve(__dirname, '../../src/cli.js');
 
 function write(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -581,5 +581,37 @@ describe('CLI --migrate flag', () => {
     const result = run(['--migrate'], path.join(tmp, 'proj'));
     expect(result.status).toBe(0);
     expect(fs.existsSync(path.join(tmp, 'proj', 'migration-report.md'))).toBe(true);
+  });
+});
+
+// ── version: 4 detection on the compile path (§14.1, CL0209) ──────────────────
+//
+// --migrate above proves a v3 config is *accepted* there; here the same config compiled
+// (not migrated) must be refused with the detection ERROR rather than an unknown-key wall.
+
+describe('CLI version: 4 detection', () => {
+  let tmp;
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cli-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true });
+  });
+
+  test('compiling a v3 project (no version:) exits nonzero and names --migrate', () => {
+    write(path.join(tmp, 'proj', 'compile.yaml'), V3_COMPILE_YAML);
+    const result = run(['-C', path.join(tmp, 'proj')], tmp);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/--migrate/);
+  });
+
+  test('an unknown version exits nonzero without the migrate hint', () => {
+    write(path.join(tmp, 'proj', 'compile.yaml'),
+      MINIMAL_COMPILE_YAML.replace('version: 4', 'version: 99'));
+    const result = run(['-C', path.join(tmp, 'proj')], tmp);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/unsupported/i);
   });
 });

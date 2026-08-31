@@ -210,7 +210,9 @@ BRANCH_NODE.keys.branches = BRANCHES;
 const CONFIG_SCHEMA = {
   type: TYPES.MAP,
   keys: {
-    version: { type: TYPES.NUMBER, required: true },
+    // Not `required` here: its absence is a v3 project, which `config/load.js` reports as
+    // CL0209 with a "run --migrate" hint rather than a bare missing-key ERROR (§14.1).
+    version: { type: TYPES.NUMBER },
     title: STRING,
 
     structure: {

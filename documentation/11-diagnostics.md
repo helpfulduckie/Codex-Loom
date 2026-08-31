@@ -129,6 +129,7 @@ resting on nothing. Sync still runs and the entry's files are still frozen; only
 | `CL0206` | ERROR | Key takes a closed set of values and got something else. |
 | `CL0207` | ERROR | A number is outside its descriptor's inclusive `min`/`max` bounds. Used by convention-pack schemas (§8.2.2); no `compile.yaml` key declares bounds. |
 | `CL0208` | ERROR | A string does not match its descriptor's `pattern:` regex, compiled case-insensitively. Used by convention-pack schemas (§8.2.2); no `compile.yaml` key declares a pattern. |
+| `CL0209` | ERROR | `version: 4` is missing or wrong. A missing key or `version: 3` names `--migrate` (§14.1); any other value is reported as unsupported. Raised before the rest of schema validation, so a v3 config gets this line alone. |
 | `CL0210` | ERROR | Key is valid, but at a different level — with the level named. |
 
 ### CL0210 in detail

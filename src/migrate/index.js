@@ -188,7 +188,13 @@ function migratePseudoRoles(configPath, options = {}) {
   const { loadCompileConfig } = require('../config/load');
   const { loadItemsFromDir, buildRegistry, mergeRegistries } = require('../loader/registry');
   const { buildCanonRegistry } = require('../loader/registry');
+  const { Diagnostics } = require('../diag');
 
+  // The two registry builders throw a raw `Error` on a duplicate id unless given a bus, and
+  // `--migrate` treats any throw from here as a fatal abort. Passing one routes the clash to
+  // CL0140 / CL0141 instead — the same codes the compile path raises — so the run finishes
+  // and the migration report carries the finding.
+  const diagnostics = new Diagnostics();
   const saved = { log: console.log, warn: console.warn, error: console.error };
   let registry;
   try {
@@ -196,10 +202,13 @@ function migratePseudoRoles(configPath, options = {}) {
     const config = loadCompileConfig(configPath);
     const canonRegistry = buildCanonRegistry(config._resolvedLibrary);
     const projectItems = loadItemsFromDir(config._resolvedItems).filter((d) => !d.include);
-    const projectRegistry = buildRegistry(projectItems, 'project');
-    registry = mergeRegistries(canonRegistry, projectRegistry);
+    const projectRegistry = buildRegistry(projectItems, 'project', { diagnostics });
+    registry = mergeRegistries(canonRegistry, projectRegistry, { diagnostics });
   } finally {
     Object.assign(console, saved);
+  }
+  for (const diag of diagnostics.errors) {
+    notes.push(`${diag.code}: ${diag.message.replace(/\n\s*/g, ' ')}`);
   }
 
   // Step 1: names actually used as {%name} in prose. Config-only variables (path pieces,

@@ -192,6 +192,25 @@ describe('migratePseudoRoles', () => {
     expect(config.roles).toBeUndefined();
   });
 
+  test('a duplicate item id is reported through the bus, not thrown (§14.2, Phase 17 Step 9)', () => {
+    const files = pseudoRoleProject();
+    files['Codex/items.yaml'] = [
+      ITEM_WITH_LI,
+      '- id: Malcolm',
+      '  name: {display: Malcolm, full: Malcolm Vale}',
+      '  pronouns: male',
+      '  aid: {type: Character, triggers: [Malcolm]}',
+      '  render: {template: Full}',
+      '  body: {Tagline: "a second Malcolm"}',
+    ].join('\n');
+    const tmpDir = buildProject(files);
+    const configPath = path.join(tmpDir, 'compile.yaml');
+
+    let result;
+    expect(() => { result = migratePseudoRoles(configPath); }).not.toThrow();
+    expect(result.notes.some((n) => n.includes('CL0141'))).toBe(true);
+  });
+
   test('a name used in prose but never declared as a variable produces no candidate', () => {
     const files = {
       ...BASE,

@@ -27,6 +27,13 @@ const { walkBranchTree } = require('../model/branches');
 
 const CODES = Object.freeze({
   CONFIG_NOT_A_MAPPING: 'CL0110',
+  /**
+   * `version: 4` is required and has no compatibility mode (§14.1), so the key's job is
+   * detection. A missing `version:` or an explicit `version: 3` means a v3 project that
+   * has not been migrated — reported with a "run codex-loom --migrate" hint rather than a
+   * cascade of unknown-key errors. Any other value is a version this compiler does not know.
+   */
+  UNSUPPORTED_VERSION: 'CL0209',
   /** `structure.input.snapshot` names a directory that isn't there when something needs it populated (§14, Phase 7). */
   SNAPSHOT_DIR_MISSING: 'CL0111',
   /** `snapshot/manifest.json` exists but doesn't parse as the expected shape. */
@@ -313,6 +320,33 @@ function loadCompileConfig(configPath, options = {}) {
   }
 
   const config = parsed;
+
+  const at = (...parts) => (sourceMap ? sourceMap.nearest(parts) : {});
+
+  // §14.1 / §6: `version: 4` is required with no compatibility mode, so the key exists to
+  // detect a v3 project rather than to negotiate. A missing key or an explicit `version: 3`
+  // routes to the migrate hint; any other value is a version this compiler cannot load.
+  // Reported before `validate` so a v3 config gets this one ERROR instead of a cascade of
+  // unknown-key errors for every key v4 renamed or removed.
+  const { version } = config;
+  if (version !== 4) {
+    if (version === undefined || version === null || version === 3) {
+      diagnostics.error(
+        CODES.UNSUPPORTED_VERSION,
+        'This looks like a v3 project. Run `codex-loom --migrate <project>` to convert it to v4.',
+        at('version'),
+      );
+    } else {
+      diagnostics.error(
+        CODES.UNSUPPORTED_VERSION,
+        `Unsupported compile.yaml version ${JSON.stringify(version)}; v4 is the only supported version.`,
+        at('version'),
+      );
+    }
+    if (ownsBus) flush(diagnostics);
+    return null;
+  }
+
   validate(config, CONFIG_SCHEMA, { diagnostics, sourceMap });
 
   const variableNames = collectVariableNames(config);
@@ -320,8 +354,6 @@ function loadCompileConfig(configPath, options = {}) {
 
   const structure = config.structure || {};
   const input = structure.input || {};
-
-  const at = (...parts) => (sourceMap ? sourceMap.nearest(parts) : {});
 
   const libraryRaw = (input.library && typeof input.library === 'object' && !Array.isArray(input.library))
     ? input.library

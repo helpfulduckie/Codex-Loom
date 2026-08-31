@@ -12,7 +12,8 @@ Phase 1 split the three files that had accreted several concerns each — `loade
 
 | File | Role |
 |---|---|
-| `src/compile.js` | CLI entry point; orchestrates the full compilation pipeline |
+| `src/cli.js` | CLI entry point: argument parsing, mode dispatch, `--migrate` |
+| `src/compile.js` | `compile()` / `compileRun()` — orchestrates the full compilation pipeline |
 | `src/config/load.js` | Loads and resolves `compile.cl.yaml`: variables, paths, canon names |
 | `src/config/schema.js` | The `compile.cl.yaml` key surface, validated by `src/schema.js` |
 | `src/loader/preparse.js` | Rescues leading `{$…}`/`{%…}` tokens YAML would swallow (§4.1) |
