@@ -124,7 +124,7 @@ resting on nothing. Sync still runs and the entry's files are still frozen; only
 | `CL0201` | ERROR | Unknown key. Carries a spelling suggestion when one is close. |
 | `CL0202` | ERROR | Key has the wrong value type. |
 | `CL0203` | ERROR | A required key is missing. |
-| `CL0204` | WARN | Key is recognized but its phase has not landed; it is ignored. |
+| `CL0204` | WARN | Key is recognized but not read — either its phase has not landed or it never will; it is ignored. |
 | `CL0205` | WARN | Key has been superseded by another spelling. |
 | `CL0206` | ERROR | Key takes a closed set of values and got something else. |
 | `CL0207` | ERROR | A number is outside its descriptor's inclusive `min`/`max` bounds. Used by convention-pack schemas (§8.2.2); no `compile.yaml` key declares bounds. |

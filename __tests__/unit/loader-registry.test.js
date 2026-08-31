@@ -255,6 +255,33 @@ describe('registries', () => {
     expect(() => mergeRegistries(buildRegistry([item('A')], 'c'), buildRegistry([item('A')], 'p')))
       .toThrow('exists in both canon and project');
   });
+
+  test('a duplicate id raises CL0141 on the bus and keeps the first definition', () => {
+    const diagnostics = new Diagnostics();
+    const registry = buildRegistry(
+      [item('A', 'one.yaml'), item('A', 'two.yaml')],
+      'proj',
+      { diagnostics },
+    );
+    expect(registry.get('a')._source).toBe('one.yaml');
+    expect(diagnostics.errors.some((d) => d.code === CODES.DUPLICATE_ITEM_ID)).toBe(true);
+  });
+
+  test('an identity-less item raises CL0140 on the bus and is skipped', () => {
+    const diagnostics = new Diagnostics();
+    const registry = buildRegistry([{ _source: 'a' }], 'proj', { diagnostics });
+    expect(registry.size).toBe(0);
+    expect(diagnostics.errors.some((d) => d.code === CODES.ITEM_WITHOUT_IDENTITY)).toBe(true);
+  });
+
+  test('mergeRegistries raises CL0141 on a canon/project collision and keeps the canon item', () => {
+    const diagnostics = new Diagnostics();
+    const canon = buildRegistry([item('A', 'canon.yaml')], 'c');
+    const project = buildRegistry([item('A', 'project.yaml')], 'p');
+    const merged = mergeRegistries(canon, project, { diagnostics });
+    expect(merged.get('a')._source).toBe('canon.yaml');
+    expect(diagnostics.errors.some((d) => d.code === CODES.DUPLICATE_ITEM_ID)).toBe(true);
+  });
 });
 
 describe('canon registry', () => {

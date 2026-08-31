@@ -133,6 +133,23 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
     const rule = rules[i];
     if (!rule || typeof rule !== 'object') return fail(`rule ${i + 1} is not a mapping`);
     const id = rule.id !== undefined ? String(rule.id) : String(i + 1);
+
+    for (const predicate of [rule.appliesTo, rule.forbid, rule.require, rule.requireCard]) {
+      const bad = findInvalidPredicateRegex(predicate);
+      if (bad) {
+        return fail(
+          `rule ${id} has an invalid ${bad.keyword} regex "${bad.spec}" — `
+          + `${bad.error.message.split('\n')[0]}`,
+        );
+      }
+    }
+
+    if (rule.severity !== undefined && rule.severity !== 'warn' && rule.severity !== 'error') {
+      return fail(
+        `rule ${id} has an unrecognized severity: "${rule.severity}" — expected `
+        + '"warn" or "error"',
+      );
+    }
     const severity = rule.severity === 'warn' ? 'warn' : 'error';
     normalized.push({
       id,
@@ -174,6 +191,50 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
 function toRegExp(spec) {
   if (spec instanceof RegExp) return spec;
   return new RegExp(String(spec));
+}
+
+/**
+ * Walk a predicate tree looking for a regex spec (`notesMatch` / `bodyMatch` / `match` /
+ * `titleMatch`) that `new RegExp` rejects. Descends into `all` (array), `any` (array),
+ * `not` (single) and the scoped `notes` form. Returns `{ keyword, spec, error }` for the
+ * first invalid one found, or `null` if the whole tree is clean.
+ */
+function findInvalidPredicateRegex(pred) {
+  if (!pred || typeof pred !== 'object') return null;
+
+  for (const keyword of ['notesMatch', 'bodyMatch', 'match', 'titleMatch']) {
+    if (pred[keyword] !== undefined) {
+      try {
+        // eslint-disable-next-line no-new
+        new RegExp(String(pred[keyword]));
+      } catch (error) {
+        return { keyword, spec: pred[keyword], error };
+      }
+    }
+  }
+
+  if (Array.isArray(pred.all)) {
+    for (const p of pred.all) {
+      const bad = findInvalidPredicateRegex(p);
+      if (bad) return bad;
+    }
+  }
+  if (Array.isArray(pred.any)) {
+    for (const p of pred.any) {
+      const bad = findInvalidPredicateRegex(p);
+      if (bad) return bad;
+    }
+  }
+  if (pred.not !== undefined) {
+    const bad = findInvalidPredicateRegex(pred.not);
+    if (bad) return bad;
+  }
+  if (pred.notes && typeof pred.notes === 'object') {
+    const bad = findInvalidPredicateRegex(pred.notes);
+    if (bad) return bad;
+  }
+
+  return null;
 }
 
 /** A value if it is a plain (non-array) object, else `{}`. */

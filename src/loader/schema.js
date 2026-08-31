@@ -87,7 +87,9 @@ const RENDER_TARGET_KEYS = {
  * rejected in step 7 alongside the undeclared-slot ERROR — one place that reports on
  * targets rather than two that disagree.
  */
-const target = (note) => ({ type: [TYPES.MAP, TYPES.BOOLEAN], keys: RENDER_TARGET_KEYS, note });
+const target = (note, noteFinal) => ({
+  type: [TYPES.MAP, TYPES.BOOLEAN], keys: RENDER_TARGET_KEYS, note, noteFinal,
+});
 
 const RENDER = {
   type: TYPES.MAP,
@@ -99,7 +101,10 @@ const RENDER = {
 
     // Per-component render targets (§7.4), one key per row of §7.3's component table.
     // The `note` stays until the phase that reads the key, and its WARN says the key will
-    // be ignored — so it has to go the moment that stops being true.
+    // be ignored — so it has to go the moment that stops being true. `noteFinal` marks the
+    // other case: a key that is recognized, permanently unread, and kept declared only so
+    // it draws a specific message instead of a bare unknown-key with a misleading
+    // relocation suggestion.
     //
     // `description` is gone as a target and `adventureDescription` replaces it (§7.7). The
     // split is which of the two descriptions has a branch: the scenario blurb is written
@@ -116,7 +121,7 @@ const RENDER = {
     // Declared but never read, and it is not a scheduling note: branch framing sits at an
     // interior node and items are resolved per leaf, so there is no cast at that node to
     // route into it. Same reason the scenario blurb is not a target.
-    branchFraming: target('branch framing sits at an interior node, where no items resolve'),
+    branchFraming: target('branch framing sits at an interior node, where no items resolve', true),
   },
 };
 

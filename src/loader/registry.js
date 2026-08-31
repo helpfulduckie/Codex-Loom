@@ -194,17 +194,25 @@ function loadItemsFromDir(dirs, options = {}) {
  * (§17.4). That is rename-on-import: `id: dragon` over `import: wyvern` is a second copy of
  * a canon item, not an override of the original.
  */
-function buildRegistry(items, context) {
+function buildRegistry(items, context, { diagnostics } = {}) {
   const registry = new Map();
   for (const item of items.filter((c) => !c.include && (!c.import || c.id))) {
     const id = (item.id || (typeof item.name === 'string' ? item.name : null) || '').toLowerCase();
     if (!id) {
-      throw new Error(`Item in ${context} is missing both id and name fields (source: ${item._source})`);
+      const message = `Item in ${context} is missing both id and name fields (source: ${item._source})`;
+      if (diagnostics) {
+        diagnostics.error(CODES.ITEM_WITHOUT_IDENTITY, message, { file: item._source });
+        continue;
+      }
+      throw new Error(message);
     }
     if (registry.has(id)) {
-      throw new Error(
-        `Duplicate item ID "${id}" in ${context}:\n  ${registry.get(id)._source}\n  ${item._source}`
-      );
+      const message = `Duplicate item ID "${id}" in ${context}:\n  ${registry.get(id)._source}\n  ${item._source}`;
+      if (diagnostics) {
+        diagnostics.error(CODES.DUPLICATE_ITEM_ID, message, { file: item._source });
+        continue; // first definition wins — the newcomer is skipped
+      }
+      throw new Error(message);
     }
     registry.set(id, { ...item, id: item.id || item.name });
   }
@@ -220,7 +228,7 @@ function buildRegistry(items, context) {
  * *is* ambiguous holds no plain key, so a project item of that name simply takes it — an
  * explicit local definition is a clear enough answer to "which magic did you mean".
  */
-function mergeRegistries(canonRegistry, projectRegistry) {
+function mergeRegistries(canonRegistry, projectRegistry, { diagnostics } = {}) {
   const merged = new ItemRegistry(canonRegistry);
   if (canonRegistry instanceof ItemRegistry) {
     merged.qualified = new Map(canonRegistry.qualified);
@@ -229,9 +237,12 @@ function mergeRegistries(canonRegistry, projectRegistry) {
   }
   for (const [id, item] of projectRegistry) {
     if (merged.has(id)) {
-      throw new Error(
-        `Item ID "${id}" exists in both canon and project:\n  Canon: ${merged.get(id)._source}\n  Project: ${item._source}`
-      );
+      const message = `Item ID "${id}" exists in both canon and project:\n  Canon: ${merged.get(id)._source}\n  Project: ${item._source}`;
+      if (diagnostics) {
+        diagnostics.error(CODES.DUPLICATE_ITEM_ID, message, { file: item._source });
+        continue; // canon item wins — the project copy is skipped
+      }
+      throw new Error(message);
     }
     merged.set(id, item);
   }
@@ -263,7 +274,7 @@ function buildCanonRegistry(resolvedCanon, options = {}) {
     registry.sources.add(String(name).toLowerCase());
 
     const items = loadItemsFromDir([canonPath], options);
-    for (const [id, item] of buildRegistry(items, `canon:${name}`)) {
+    for (const [id, item] of buildRegistry(items, `canon:${name}`, { diagnostics: options.diagnostics })) {
       const stamped = { ...item, _canonSource: name };
       registry.qualified.set(`${String(name).toLowerCase()}:${id}`, stamped);
       if (!claims.has(id)) claims.set(id, []);

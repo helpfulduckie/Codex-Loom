@@ -2424,10 +2424,10 @@ function compileRun(configPath, options, buses) {
 
   const allItemDefs = [...projectItems, ...includedItems];
 
-  const projectRegistry = buildRegistry(projectItems, 'project');
+  const projectRegistry = buildRegistry(projectItems, 'project', { diagnostics: loadDiagnostics });
   console.log(`Loaded ${projectRegistry.size} project item definition(s).`);
 
-  const registry = mergeRegistries(canonRegistry, projectRegistry);
+  const registry = mergeRegistries(canonRegistry, projectRegistry, { diagnostics: loadDiagnostics });
 
   // Every declared key referenced by any text this compile writes, keyed by the branch path
   // the text belongs to, and every node that declared one. §12.3's unused check needs both:
