@@ -807,6 +807,7 @@ function compile(configPath, options = {}) {
 }
 
 function compileRun(configPath, options, buses) {
+  // ── 1. Buses & report closures ─────────────────────────────────────────────
   const verbose = !!options.verbose;
 
   // One bus for everything the loading phase reports, so item schema violations are
@@ -831,6 +832,7 @@ function compileRun(configPath, options, buses) {
     compileCursor = compileDiagnostics.length;
   };
 
+  // ── 2. Config, drift, templates ────────────────────────────────────────────
   const config = loadCompileConfig(configPath, { diagnostics: loadDiagnostics, live: options.live });
 
   // Phase 7's drift notice: a complete no-op unless the project has opted into a snapshot
@@ -867,6 +869,7 @@ function compileRun(configPath, options, buses) {
   loadCursor = reportLoadDiagnostics(loadDiagnostics, loadCursor);
   console.log(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
+  // ── 3. Registries & audits ────────────────────────────────────────────────────
   // §13.6 — built once so the unread-field audit's `(item id, field path)` dedupe spans
   // the whole compile. `finish()` runs after the leaf loop, beside reportUnusedRoles.
   // `tierTemplates` also feeds `--schema-tables` below; gathered once here.
@@ -905,6 +908,7 @@ function compileRun(configPath, options, buses) {
 
   const registry = mergeRegistries(canonRegistry, projectRegistry, { diagnostics: loadDiagnostics });
 
+  // ── 4. Pre-loop accumulators ──────────────────────────────────────────────────
   // Every declared key referenced by any text this compile writes, keyed by the branch path
   // the text belongs to, and every node that declared one. §12.3's unused check needs both:
   // the declarations say what was promised and where, the usage says what was spent.
@@ -1069,6 +1073,7 @@ function compileRun(configPath, options, buses) {
   // renders it byte-identically, and per leaf otherwise.
   const deferredCardLeaves = [];
 
+  // ── 5. The leaf loop ──────────────────────────────────────────────────────────
   for (const branchPath of leaves) {
     const label = branchPath.length > 0 ? branchPath.join('/') : '(root)';
     if (verbose) console.log(`\n  Branch: ${label}`);
@@ -1325,11 +1330,13 @@ function compileRun(configPath, options, buses) {
     leafSummaries.push({ label, leafItems, leafVariants, hasPE, hasAIN, hasAN });
   }
 
+  // ── 6. Pack checks ────────────────────────────────────────────────────────────
   // §8.2.2 — convention packs, run over the cards each leaf just rendered while they are
   // still keyed per leaf. Dormant unless a project declares `lint.packs`.
   runPackChecks(config, deferredCardLeaves, configPath, compileDiagnostics);
   reportCompileDiagnostics();
 
+  // ── 7. Inheritance passes ─────────────────────────────────────────────────────
   // ── Phase 11 Step 4: component and script inheritance ──────────────────────
   //
   // Each deferred component (and the `Scripts/` dir) is written once at the output root
@@ -1505,6 +1512,7 @@ function compileRun(configPath, options, buses) {
     }
   }
 
+  // ── 8. Tree-level writes ──────────────────────────────────────────────────────
   // Write Opening / OpeningChoice files (post-loop)
   //
   // Root-level branchFraming lives in `writeFramingRecursive`'s root visit now (Phase 11
@@ -1621,6 +1629,7 @@ function compileRun(configPath, options, buses) {
     } else recordGap('(project)', 'Description', descSpec, 'compiled to empty content');
   }
 
+  // ── 9. Project diagnostics, summary, reports, finalize ────────────────────────
   // §7.7's one guard. Velvet Lattice sets a node's prompt to
   // `components["Opening"] or node.description`, so a leaf carrying a description and no
   // Opening.md does not produce an empty prompt — it produces the blurb as the opening
