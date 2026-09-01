@@ -1,16 +1,21 @@
 'use strict';
 
 /**
- * The diagnostic bus (v4 spec §4.4).
+ * The diagnostic bus.
  *
  * Every diagnostic carries a stable code, a severity, and — where the loader could
  * supply one — a source span. Codes exist so that three things are possible that plain
  * message strings cannot support: documentation anchors, lint suppression, and test
  * assertions that survive rewording a message.
  *
- * This module is deliberately free of `fs` and `console`. `model/` is required to be
- * pure (§3.3), and it can only stay pure if reporting a problem does not mean printing
- * one. Collect diagnostics here; let the CLI decide what reaches a terminal.
+ * This module is deliberately free of `fs` and `console`, so it can be imported from
+ * anywhere — including the pure `model/` layer, which reports problems without printing
+ * them. Collect diagnostics here; let the CLI decide what reaches a terminal.
+ *
+ * `REGISTRY` below is the one place every diagnostic code is declared. Modules that
+ * raise a code import `CODES` (name → id string, derived from `REGISTRY`) and never
+ * hold their own table. `documentation/11-diagnostics.md` carries the hand-written
+ * prose for each code; `diag.test.js` asserts the two agree on id, severity and band.
  */
 
 const SEVERITY = Object.freeze({
@@ -25,417 +30,230 @@ const SEVERITY_LABEL = Object.freeze({
   info: 'INFO',
 });
 
+const { ERROR, WARN } = SEVERITY;
+
 /**
- * Code bands. The spec fixes four codes by example (CL0210, CL0310, CL0442, CL0520);
- * these ranges are chosen to contain them so documented codes never have to move.
+ * The diagnostic registry — every code, its severity, and a one-line summary.
+ *
+ * This is the single place a code is declared. Modules that raise codes import `CODES`
+ * (below) and reference `CODES.SOME_NAME`; none carry a local table. The bands only
+ * constrain the id number:
  *
  *   CL01xx  loading — file discovery, YAML parse, entry-point resolution
  *   CL02xx  schema — unknown keys, wrong types, relocation suggestions
  *   CL03xx  items — resolution, variants, imports, branch dispatch
- *   CL04xx  render — templates, functions, lint checks
+ *   CL04xx  render — templates, render functions, the leaked-artifact sweep
  *   CL05xx  tokens — variables, roles, placeholders, scoping
- *   CL06xx  components — slots, sections, missing component sources; the `aid.type`
- *           path-safety and card-type family also lives here, by cohesion with
- *           `CARD_TYPE_CASE_COLLISION`/`_NORMALIZED`/`_LEADING_SPACE` rather than by band
- *   CL07xx  emit — output layout, platform limits
+ *   CL06xx  components — slots, sections, sources, card-type and prompt-coverage checks
+ *   CL07xx  emit — output layout, platform field caps
+ *
+ * `CL0143` (duplicate Codex overlay) and `CL0310` (unresolvable branch dispatch) are
+ * named by the design docs but not yet raised; they are reserved in
+ * `documentation/11-diagnostics.md` and deliberately absent here until something mints
+ * them.
+ *
+ * `severity` is authoritative for codes reported through `onWarn(code, message)`, which
+ * carries no severity of its own (`severityOf` recovers it). Codes raised by a direct
+ * `diagnostics.error()` / `.warn()` call pass their severity at the call site; the value
+ * here still has to match, and `diag.test.js` checks every entry against the severity
+ * column of `documentation/11-diagnostics.md`.
+ *
+ * `summary` is a terse gloss for readers of this file. The authored prose — why a code
+ * is an ERROR not a WARN, what it replaced, what bites — lives in `11-diagnostics.md`
+ * and at the raise site, not here.
+ *
+ * `layer: 'opinion'` marks a quality judgment that can be wrong — one a project may
+ * silence with `lint.level`. Everything without it is a fact about the output that
+ * `lint.level` cannot reach. Convention-pack findings (`CL-<pack>/NNNN`) are opinion-layer
+ * too, by their prefix rather than an entry here. See `isOpinion`.
  */
-const CODES = Object.freeze({
-  YAML_PARSE_FAILED: 'CL0101',
-  YAML_FILE_UNREADABLE: 'CL0102',
-  YAML_EMPTY_FILE: 'CL0103',
-  YAML_NULL_DOCUMENT: 'CL0104',
-  TOKEN_SWALLOWED_BY_YAML: 'CL0105',
+const REGISTRY = Object.freeze({
+  // ── CL01xx  loading ────────────────────────────────────────────────────────
+  YAML_PARSE_FAILED:            { id: 'CL0101', severity: ERROR, summary: 'YAML document is malformed and could not be parsed.' },
+  YAML_FILE_UNREADABLE:         { id: 'CL0102', severity: ERROR, summary: 'File could not be read.' },
+  YAML_EMPTY_FILE:              { id: 'CL0103', severity: WARN,  summary: 'File is empty; skipped.' },
+  YAML_NULL_DOCUMENT:           { id: 'CL0104', severity: WARN,  summary: 'A document within a multi-document file is null; skipped.' },
+  TOKEN_SWALLOWED_BY_YAML:      { id: 'CL0105', severity: ERROR, summary: 'A Codex Loom token was parsed as a YAML mapping key.' },
+  CONFIG_NOT_A_MAPPING:         { id: 'CL0110', severity: ERROR, summary: 'compile.yaml is not a mapping of configuration keys.' },
+  SNAPSHOT_DIR_MISSING:         { id: 'CL0111', severity: WARN,  summary: 'structure.input.snapshot names a directory --snapshot never populated.' },
+  SNAPSHOT_MANIFEST_UNPARSEABLE:{ id: 'CL0112', severity: WARN,  summary: 'snapshot/manifest.json exists but is not valid JSON or not the expected shape.' },
+  SNAPSHOT_MISSING_ENTRY:       { id: 'CL0113', severity: WARN,  summary: 'A declared library/templates entry has no section in an otherwise-valid manifest.' },
+  SNAPSHOT_FILE_UNTRACKED:      { id: 'CL0114', severity: WARN,  summary: 'A file under snapshot/<name>/ has no entry in the manifest.' },
+  SNAPSHOT_HASH_MISMATCH:       { id: 'CL0115', severity: ERROR, summary: 'A file under snapshot/<name>/ no longer matches its manifest-recorded hash.' },
+  LIBRARY_ROLE_SCAN_REFUSED:    { id: 'CL0116', severity: ERROR, summary: '--snapshot cannot compute requiresRoles for a library entry whose own items do not validate.' },
+  PACK_MALFORMED:               { id: 'CL0117', severity: ERROR, summary: 'A convention pack is missing, unparseable, or not shaped like a pack.' },
+  PACK_UNBIND_UNKNOWN:          { id: 'CL0118', severity: WARN,  summary: 'lint.packs.<name>: ~ on a branch that never inherited that pack.' },
+  PACK_NAME_MISMATCH:           { id: 'CL0119', severity: ERROR, summary: "A pack's declared name: disagrees with the lint.packs key it was loaded under." },
+  PATH_NOT_FOUND:               { id: 'CL0120', severity: WARN,  summary: 'A declared input path does not exist on disk.' },
+  INCLUDE_NOT_FOUND:            { id: 'CL0130', severity: WARN,  summary: 'An include: path does not exist.' },
+  DOUBLE_INCLUDE:               { id: 'CL0131', severity: ERROR, summary: 'The same file was included more than once.' },
+  ITEM_WITHOUT_IDENTITY:        { id: 'CL0140', severity: ERROR, summary: 'An item has neither id: nor name:.' },
+  DUPLICATE_ITEM_ID:            { id: 'CL0141', severity: ERROR, summary: 'Duplicate item id.' },
+  MULTIPLE_VAR_ALIASES:         { id: 'CL0142', severity: WARN,  summary: 'An item declares more than one v: alias; they are merged.' },
+  ID_CONTAINS_COLON:            { id: 'CL0144', severity: ERROR, summary: 'An item id contains ":", which is reserved as the canon-set separator.' },
 
-  // Items and render (§3.2, §7). These live here rather than in `compile.js` because
-  // `emit/` raises them too and cannot import from `compile.js` without a cycle.
-  ITEM_RESOLUTION_FAILED: 'CL0324',
-  DUPLICATE_RESOLVED_ID: 'CL0325',
-  /**
-   * A selector aimed at many targets that matched none of them (§7.6.2a).
-   *
-   * The guard that makes arity-N silence safe. A selector aimed at one target warns per
-   * miss, because one miss is the whole of what it asked for; a selector aimed at every
-   * item in an included file misses most of them by construction, so warning per miss is
-   * noise and Step 0 silences it. What silence costs is the typo: a misspelled name applies
-   * to nothing, alters no output and — without this — raises nothing at all. Three of seven
-   * is normal, zero of seven is a mistake, and only the second is reported.
-   */
-  SELECTOR_MATCHED_NOTHING: 'CL0326',
+  // ── CL02xx  schema ────────────────────────────────────────────────────────
+  UNKNOWN_KEY:                  { id: 'CL0201', severity: ERROR, summary: 'Unknown key. Carries a spelling suggestion when one is close.' },
+  WRONG_TYPE:                   { id: 'CL0202', severity: ERROR, summary: 'Key has the wrong value type.' },
+  MISSING_REQUIRED:             { id: 'CL0203', severity: ERROR, summary: 'A required key is missing.' },
+  NOT_YET_IMPLEMENTED:          { id: 'CL0204', severity: WARN,  summary: 'Key is recognized but not read; it is ignored.' },
+  SUPERSEDED_KEY:               { id: 'CL0205', severity: WARN,  summary: 'Key has been superseded by another spelling.' },
+  VALUE_NOT_ALLOWED:            { id: 'CL0206', severity: ERROR, summary: 'Key takes a closed set of values and got something else.' },
+  VALUE_OUT_OF_RANGE:           { id: 'CL0207', severity: ERROR, summary: "A number is outside its descriptor's inclusive min/max bounds." },
+  PATTERN_MISMATCH:             { id: 'CL0208', severity: ERROR, summary: "A string does not match its descriptor's pattern: regex." },
+  UNSUPPORTED_VERSION:          { id: 'CL0209', severity: ERROR, summary: 'version: 4 is missing or wrong; a missing key or version: 3 names --migrate.' },
+  MISPLACED_KEY:                { id: 'CL0210', severity: ERROR, summary: 'Key is valid, but at a different level — with the level named.' },
 
-  /**
-   * The parser/eval band (§13, Phase 9). `CL0410`–`CL0412` predate this band and are
-   * declared in local `CODES` tables (`loader.js`, `compile.js`) rather than here — a trap
-   * for a free-code search, since grepping this registry for an open slot in `CL041x`
-   * misses both. Grep the number across the repo, not the registry.
-   *
-   * `TEMPLATE_PARSE_FAILED` covers a malformed render-function call wherever one is found:
-   * inside a `.template` file (via `render()`, with a file and — once the parser lands — a
-   * line) or inside a card body field (via `applyFieldRenderFunctions`, file only — a body
-   * field has no useful line within a multi-thousand-line YAML file). Both are the same
-   * defect, a call that doesn't parse, found in two different kinds of source.
-   */
-  TEMPLATE_PARSE_FAILED: 'CL0413',
-  TEMPLATE_UNKNOWN_FUNCTION: 'CL0414',
-  TEMPLATE_UNCLOSED_BLOCK: 'CL0415',
-  PARTIAL_CYCLE: 'CL0416',
-  PARTIAL_NOT_FOUND: 'CL0417',
+  // ── CL03xx  items ─────────────────────────────────────────────────────────
+  VARIANT_DELTA_VAR_ALIASES:    { id: 'CL0320', severity: WARN,  summary: 'A variant delta declares more than one v: alias; they are merged.' },
+  VARIANT_NOT_FOUND:            { id: 'CL0321', severity: WARN,  summary: "A named variant does not exist in the item's variant tree." },
+  NO_TYPE_OR_TEMPLATE:          { id: 'CL0322', severity: WARN,  summary: 'An item emitting a story card has neither aid.type nor render.template.' },
+  NOTES_AND_DESCRIPTION:        { id: 'CL0323', severity: ERROR, summary: 'An item declares both notes: and description:.' },
+  ITEM_RESOLUTION_FAILED:       { id: 'CL0324', severity: ERROR, summary: 'An item could not be resolved — most often a failed import:.' },
+  DUPLICATE_RESOLVED_ID:        { id: 'CL0325', severity: ERROR, summary: 'Two item definitions resolve to the same id on one branch.' },
+  SELECTOR_MATCHED_NOTHING:     { id: 'CL0326', severity: WARN,  summary: 'A selector aimed at many items matched none of them.' },
+  CROSS_ITEM_REF_MISSING:       { id: 'CL0330', severity: WARN,  summary: 'A cross-item reference names an item that does not exist.' },
+  AMBIGUOUS_REF:                { id: 'CL0340', severity: ERROR, summary: 'A reference is defined in more than one canon set and is not qualified.' },
+  UNKNOWN_CANON_SOURCE:         { id: 'CL0341', severity: ERROR, summary: 'A reference names a canon set not declared in structure.input.library.' },
+  REF_NOT_FOUND:                { id: 'CL0342', severity: ERROR, summary: 'A reference names an id that no canon set defines.' },
 
-  /**
-   * A genuine cycle in cross-item render-function dependencies (Phase 9 Step 2), replacing
-   * the uncoded `console.warn` the fixpoint loop printed after `maxPasses` — this one names
-   * the participating items and fields because the dependency graph now exists to ask.
-   */
-  CROSS_ITEM_CYCLE: 'CL0418',
+  // ── CL04xx  render ────────────────────────────────────────────────────────
+  TEMPLATE_CONTAINS_FENCE:      { id: 'CL0410', severity: ERROR, summary: 'A .template or .partial still contains a ~~~ fence.' },
+  NOTES_TEMPLATE_NOT_FOUND:     { id: 'CL0411', severity: ERROR, summary: 'A render.notesTemplate in compile.yaml names a template that is not loaded.' },
+  ITEM_NOTES_TEMPLATE_NOT_FOUND:{ id: 'CL0412', severity: ERROR, summary: 'A render.notesTemplate on an item names a template that is not loaded.' },
+  TEMPLATE_PARSE_FAILED:        { id: 'CL0413', severity: ERROR, summary: 'A render-function call in a template or body field does not parse.' },
+  TEMPLATE_UNKNOWN_FUNCTION:    { id: 'CL0414', severity: ERROR, summary: 'A template uses an unknown render-function name.' },
+  TEMPLATE_UNCLOSED_BLOCK:      { id: 'CL0415', severity: ERROR, summary: 'An {if}, {wrapper} or {preserve} block is not closed.' },
+  PARTIAL_CYCLE:                { id: 'CL0416', severity: ERROR, summary: 'A partial includes itself, directly or indirectly.' },
+  PARTIAL_NOT_FOUND:            { id: 'CL0417', severity: ERROR, summary: 'An {include NAME} names a partial that is not loaded.' },
+  CROSS_ITEM_CYCLE:             { id: 'CL0418', severity: ERROR, summary: 'Cross-item render-function references form a cycle.' },
+  TEMPLATE_NOT_FOUND:           { id: 'CL0420', severity: ERROR, summary: "No loaded template matches an item's aid.type or render.template." },
+  RENDER_FAILED:                { id: 'CL0421', severity: ERROR, summary: 'A template threw while rendering an item.' },
+  FIELD_TABLE_MALFORMED:        { id: 'CL0422', severity: ERROR, summary: 'A fields.cl.yaml is not a mapping, or a fields:/groups:/templates: entry has the wrong shape.' },
+  FIELD_TABLE_UNKNOWN_KEY:      { id: 'CL0423', severity: ERROR, summary: 'A fields: entry carries an unknown key or an unknown render: function name.' },
+  FIELD_TABLE_BAD_REF:          { id: 'CL0424', severity: WARN,  summary: 'A group member or template entry names something that is not a declared field or group.' },
+  FIELD_TABLE_STRAY_FILE:       { id: 'CL0425', severity: WARN,  summary: 'A file in a templates directory looks like a misspelled fields.cl.yaml and is being ignored.' },
+  FIELD_UNREAD_UNKNOWN:         { id: 'CL0426', severity: WARN,  summary: 'A body: key is read by no field and named by no declaration — a typo; its content is dropped.' },
+  FIELD_UNREAD_MISROUTED:       { id: 'CL0427', severity: WARN,  summary: "A body: key is a declared field the resolved template's list does not include." },
+  FIELD_DECLARED_UNUSED:        { id: 'CL0428', severity: WARN,  summary: 'A field is declared in the field table but no template names it.' },
+  DUPLICATE_NAMED_FILE:         { id: 'CL0429', severity: ERROR, summary: 'Two files in one templates directory resolve to the same name. Aborts the load.' },
+  LEAKED_FIELD_TOKEN:           { id: 'CL0430', severity: ERROR, summary: 'A {$…} field, pronoun or character token survived into rendered output.' },
+  LEAKED_VARIABLE:              { id: 'CL0431', severity: ERROR, summary: 'A {%key} compile.yaml variable survived into rendered output.' },
+  LEAKED_RENDER_FUNCTION:       { id: 'CL0432', severity: ERROR, summary: 'A render function leaked into rendered output.' },
+  LEAKED_TEMPLATE_TAG:          { id: 'CL0433', severity: ERROR, summary: 'A template control tag leaked into rendered output.' },
+  LEAKED_VERB_MARKER:           { id: 'CL0434', severity: ERROR, summary: 'A verb-conjugation marker was left unresolved.' },
+  LEAKED_JS_ARTIFACT:           { id: 'CL0435', severity: ERROR, summary: 'A JS interpolation artifact reached rendered output.' },
+  SUSPECT_VERB_MARKER:          { id: 'CL0436', severity: WARN,  layer: 'opinion', summary: 'A bracketed lowercase word is not a recognized verb-conjugation marker — likely a typo.' },
+  SUSPECT_JS_WORD:              { id: 'CL0437', severity: WARN,  layer: 'opinion', summary: 'A bare undefined/NaN appears in rendered output.' },
 
-  TEMPLATE_NOT_FOUND: 'CL0420',
-  RENDER_FAILED: 'CL0421',
+  // ── CL05xx  tokens ────────────────────────────────────────────────────────
+  VARIABLE_UNDECLARED:          { id: 'CL0510', severity: ERROR, summary: 'A referenced variable is not declared anywhere.' },
+  VARIABLE_CYCLE:               { id: 'CL0511', severity: ERROR, summary: 'Variables form a reference cycle; every key in the loop is named.' },
+  VARIABLE_UNBIND_UNKNOWN:      { id: 'CL0512', severity: WARN,  summary: 'A variable is unbound with ~ but was never inherited at that node.' },
+  VARIABLE_PRE_BRANCH:          { id: 'CL0520', severity: ERROR, summary: 'A branch-scoped variable was used where only root variables resolve.' },
+  LIBRARY_NAME_COLLIDES:        { id: 'CL0521', severity: ERROR, summary: 'A library name collides with a declared variable.' },
+  LIBRARY_DEPENDENCY_UNCOVERED: { id: 'CL0522', severity: WARN,  summary: 'A component reads from outside the project and no structure.input.library entry covers it.' },
+  PLACEHOLDER_UNBIND_UNKNOWN:   { id: 'CL0530', severity: WARN,  summary: 'A placeholder is unbound with ~ but was never inherited at that node.' },
+  PLACEHOLDER_CYCLE:            { id: 'CL0531', severity: ERROR, summary: 'Placeholder questions form a reference cycle; every key in the loop is named.' },
+  PLACEHOLDER_UNDECLARED:       { id: 'CL0532', severity: ERROR, summary: 'A %key% reaching compiled output is not declared on that branch.' },
+  PLACEHOLDER_INVALID_CONTEXT:  { id: 'CL0533', severity: ERROR, summary: 'A placeholder reached a destination AID does not fill: the Description, or a card type.' },
+  PLACEHOLDER_IN_TITLE:         { id: 'CL0534', severity: WARN,  summary: 'A placeholder reached a title, where AID does not do what writing one implies.' },
+  PLACEHOLDER_UNUSED:           { id: 'CL0535', severity: WARN,  layer: 'opinion', summary: 'A placeholder is declared and referenced nowhere beneath its declaring node.' },
+  PLACEHOLDER_DUPLICATE_QUESTION:{ id: 'CL0536', severity: WARN, layer: 'opinion', summary: 'Two or more placeholders declare the same question text.' },
+  ROLE_UNDECLARED:              { id: 'CL0540', severity: ERROR, summary: 'A {$X} token resolves to neither a declared role nor a known item id.' },
+  ROLE_COLLIDES_WITH_ITEM:      { id: 'CL0541', severity: ERROR, summary: 'A role name and an item id are the same string, which is ambiguous.' },
+  ROLE_TARGET_EXCLUDED:         { id: 'CL0542', severity: ERROR, summary: 'A role is bound to an item id that does not resolve on this branch.' },
+  ROLE_INDIRECTION:             { id: 'CL0543', severity: ERROR, summary: 'A role is bound to another role name rather than directly to an item id.' },
+  ROLE_UNBIND_UNKNOWN:          { id: 'CL0544', severity: WARN,  summary: 'A role is unbound with ~ but was never inherited at that node.' },
+  ROLE_UNUSED:                  { id: 'CL0545', severity: WARN,  summary: 'A role is declared and never referenced by a resolved token anywhere in the compile.' },
 
-  // Leaked compile-time artifacts, found by sweeping rendered output (§12.5). Every one of
-  // them means the compiler failed and the failure is visible in the file it just wrote,
-  // which is a fact about the output rather than an opinion about it — so they are ERRORs
-  // on the bus, and `lint.level` cannot reach them.
-  //
-  // They share one decade rather than filing `{%key}` under CL05xx with the other variable
-  // diagnostics, because what is reported here is not the token family but the leak: one
-  // detector set, run at one moment, over one finished string. Splitting them by what
-  // leaked would scatter a single check across three bands.
-  LEAKED_FIELD_TOKEN: 'CL0430',
-  LEAKED_VARIABLE: 'CL0431',
-  LEAKED_RENDER_FUNCTION: 'CL0432',
-  LEAKED_TEMPLATE_TAG: 'CL0433',
-  LEAKED_VERB_MARKER: 'CL0434',
-  LEAKED_JS_ARTIFACT: 'CL0435',
+  // ── CL06xx  components ────────────────────────────────────────────────────
+  SECTION_TEXT_AND_SLOT:        { id: 'CL0601', severity: ERROR, summary: 'A section declares both text: and slot: true.' },
+  SECTION_RENDERS_NOTHING:      { id: 'CL0602', severity: WARN,  summary: 'A section has no text, no heading and is not a slot, so it renders nothing.' },
+  SECTION_WRAP_UNKNOWN:         { id: 'CL0603', severity: WARN,  summary: "A section's render.wrap is neither each nor all; each is used." },
+  SECTION_VARIANT_NOT_FOUND:    { id: 'CL0604', severity: WARN,  summary: "A section's branch dispatch names a variant the section does not define." },
+  COMPONENT_DISPATCH_MATCHED_NOTHING:{ id: 'CL0605', severity: WARN, summary: 'A component-level branch dispatch names a variant no section defines.' },
+  IMPORT_NOT_FOUND:             { id: 'CL0606', severity: ERROR, summary: 'A component imports: entry names a from: that does not resolve to a file.' },
+  IMPORT_CYCLE:                 { id: 'CL0607', severity: ERROR, summary: 'A component import chain loops back on a file already being resolved.' },
+  IMPORT_DELETE_UNKNOWN:        { id: 'CL0608', severity: WARN,  summary: 'A section is deleted with ~ but no import provided it.' },
+  ITEM_NO_OUTPUT:               { id: 'CL0610', severity: ERROR, summary: 'An item resolves onto a branch and produces no output there.' },
+  TARGET_UNDECLARED_SLOT:       { id: 'CL0611', severity: ERROR, summary: 'A render target names a slot the component does not declare.' },
+  TARGET_NOT_A_SLOT:            { id: 'CL0612', severity: ERROR, summary: 'A render target names a section that exists but is not a slot.' },
+  TARGET_NAMES_NO_SLOT:         { id: 'CL0613', severity: ERROR, summary: 'A render target names no slot at all.' },
+  SLOT_EMPTY:                   { id: 'CL0614', severity: WARN,  summary: 'A declared slot has no items on a branch.' },
+  COMPONENT_RENDERS_NOTHING:    { id: 'CL0615', severity: ERROR, summary: 'A component renders to nothing on a branch.' },
+  LEAF_DESCRIPTION_NO_OPENING:  { id: 'CL0616', severity: ERROR, summary: 'A leaf carries an adventure description and declares no Opening.md.' },
+  SECTION_SOURCE_NOT_FOUND:     { id: 'CL0617', severity: ERROR, summary: "A section's file: or from.script: does not resolve to a file." },
+  SECTION_EXTRACT_UNKNOWN:      { id: 'CL0618', severity: ERROR, summary: "A section's extract: names no known transform." },
+  SECTION_TEXT_AND_SOURCE:      { id: 'CL0619', severity: ERROR, summary: 'A section declares more than one of text:, file: and from:.' },
+  COMPONENT_METADATA_UNSUPPORTED:{ id: 'CL0620', severity: WARN, summary: 'metadata: on a component whose output has no place for frontmatter.' },
+  DESCRIPTION_KEYS_COLLIDE:     { id: 'CL0621', severity: WARN,  summary: 'Both description keys aimed at one file — an unbranched project.' },
+  CARD_NAME_COLLISION:          { id: 'CL0622', severity: ERROR, summary: 'Two story cards share a display name on the same leaf; Velvet Lattice merges by name.' },
+  STORY_CARD_ENTRY_NO_TITLE:    { id: 'CL0623', severity: ERROR, summary: 'A render.storyCards entry declares no title:.' },
+  STORY_CARD_ENTRY_UNKNOWN_SECTION:{ id: 'CL0624', severity: WARN, summary: "A render.storyCards entry's sections: names a section the component does not declare." },
+  STORY_CARD_ENTRY_RENDERS_NOTHING:{ id: 'CL0625', severity: WARN, summary: 'A render.storyCards entry renders no text on a branch; no card is written.' },
+  CARD_TYPE_CASE_COLLISION:     { id: 'CL0626', severity: ERROR, summary: 'Two aid.type values differ only by case, so one overwrites the other on a case-insensitive filesystem.' },
+  CARD_TYPE_NORMALIZED:         { id: 'CL0627', severity: WARN,  summary: 'An aid.type names an AID built-in category in non-lowercase form; it is folded to lowercase.' },
+  CARD_TYPE_LEADING_SPACE:      { id: 'CL0628', severity: WARN,  summary: 'An aid.type has leading whitespace; it is trimmed.' },
+  ADVENTURE_DESCRIPTION_ADVANCED:{ id: 'CL0629', severity: ERROR, summary: 'adventureDescription declares advanced: or description: in metadata: — both belong to the scenario blurb only.' },
+  LEAF_NO_OPENING:              { id: 'CL0630', severity: WARN,  summary: 'A branch leaf resolves neither an opening: nor an adventureDescription:, inherited or its own.' },
+  LEAF_NO_AIN:                  { id: 'CL0631', severity: WARN,  summary: "A branch leaf resolves no aiInstructions:; Velvet Lattice writes an empty string, suppressing AID's default." },
+  CARD_TYPE_INVALID:            { id: 'CL0632', severity: ERROR, summary: 'aid.type fails path-legality: empty, an illegal path character, . / .., or a trailing space/period.' },
+  BRANCH_FRAMING_IGNORED:       { id: 'CL0633', severity: WARN,  summary: 'branchFraming on a node with nothing below it to frame — the root with no branches, or a leaf.' },
+  COMPONENT_NO_OUTPUT:          { id: 'CL0634', severity: ERROR, summary: 'A requested component produced no output anywhere in the compile.' },
 
-  // The two heuristics that run in the same sweep and are *not* facts: both judge whether
-  // ordinary prose was meant, and both can be wrong about it. `[does]` may be an author's
-  // deliberate bracket, and "undefined" is a word. They stay WARN and are tagged opinion-
-  // layer below, which is what `lint.level` reaches.
-  SUSPECT_VERB_MARKER: 'CL0436',
-  SUSPECT_JS_WORD: 'CL0437',
-
-  /**
-   * Variables (§5.1, §6.1). An undeclared `{%key}` or a reference cycle. `config/load.js`
-   * owns the config-time expander and the rest of the CL051x family (`CL0512` unbind,
-   * `CL0520` pre-branch, `CL0521` library collision); these two are here because
-   * `util.js:resolveVariables` — the expander every item, component and placeholder value
-   * runs through — reports them, and `util.js` cannot import `config/load.js` without a
-   * cycle. `config/load.js` re-imports both so the two expanders raise the same codes.
-   */
-  VARIABLE_UNDECLARED: 'CL0510',
-  VARIABLE_CYCLE: 'CL0511',
-
-  // Tokens (§6.4, §12). `~` unbinds an inherited binding; unbinding something that was
-  // never inherited is meaningless as written and reliably means the author meant to
-  // include, so it warns rather than passing silently.
-  PLACEHOLDER_UNBIND_UNKNOWN: 'CL0530',
-  PLACEHOLDER_CYCLE: 'CL0531',
-  PLACEHOLDER_UNDECLARED: 'CL0532',
-  PLACEHOLDER_INVALID_CONTEXT: 'CL0533',
-  PLACEHOLDER_IN_TITLE: 'CL0534',
-  PLACEHOLDER_UNUSED: 'CL0535',
-  PLACEHOLDER_DUPLICATE_QUESTION: 'CL0536',
-
-  /**
-   * Roles (§9.2, §9.3). A role is a per-branch name → item id binding, resolved at the
-   * start of the pronoun pass (`model/pronouns.js`) before any other token lookup runs.
-   * `ROLE_UNBIND_UNKNOWN` mirrors `PLACEHOLDER_UNBIND_UNKNOWN`'s shape exactly — the same
-   * `~`-on-nothing-inherited mistake, one decade over. The other four are §9.3's resolution
-   * rules, verbatim: one level of indirection always, a role/item-id namespace collision is
-   * an ERROR, an undeclared role in a token is an ERROR, and a role bound to an item this
-   * branch excludes is an ERROR.
-   */
-  ROLE_UNBIND_UNKNOWN: 'CL0544',
-  ROLE_UNDECLARED: 'CL0540',
-  ROLE_COLLIDES_WITH_ITEM: 'CL0541',
-  ROLE_TARGET_EXCLUDED: 'CL0542',
-  ROLE_INDIRECTION: 'CL0543',
-  ROLE_UNUSED: 'CL0545',
-
-  // Components (§7.2). Raised by `model/component.js`, which reports through `onWarn`
-  // and therefore takes its severity from the table below.
-  SECTION_TEXT_AND_SLOT: 'CL0601',
-  SECTION_RENDERS_NOTHING: 'CL0602',
-  SECTION_WRAP_UNKNOWN: 'CL0603',
-  SECTION_VARIANT_NOT_FOUND: 'CL0604',
-
-  /**
-   * A component-level `branches:` dispatch that matched no section at all (§7.6.2a).
-   *
-   * `CL0326`'s shape one layer up, and it exists for the same reason. A dispatch on the
-   * component names every section it holds, so missing most of them is normal and warning
-   * per section would be noise — but a misspelled name then applies to nothing, changes no
-   * output, and raises nothing. Three of seven sections is normal; zero of seven is a typo.
-   */
-  COMPONENT_DISPATCH_MATCHED_NOTHING: 'CL0605',
-
-  // Component imports (§7.6).
-  IMPORT_NOT_FOUND: 'CL0606',
-  IMPORT_CYCLE: 'CL0607',
-  IMPORT_DELETE_UNKNOWN: 'CL0608',
-
-  // Placement (§7.4). Raised in `compile.js`, which is the only place that holds an item's
-  // targets and the branch's slot set at the same time, so these carry their severity at
-  // the call site and stay out of the table below.
-  ITEM_NO_OUTPUT: 'CL0610',
-  TARGET_UNDECLARED_SLOT: 'CL0611',
-  TARGET_NOT_A_SLOT: 'CL0612',
-  TARGET_NAMES_NO_SLOT: 'CL0613',
-  SLOT_EMPTY: 'CL0614',
-  COMPONENT_RENDERS_NOTHING: 'CL0615',
-
-  /**
-   * A leaf carrying a description and no `Opening.md` (§7.7).
-   *
-   * Velvet Lattice sets a node's prompt to `components["Opening"] or node.description`, so
-   * a leaf with one and not the other does not produce an empty prompt — it produces the
-   * store blurb as the opening scene. In v3 this could not happen, because descriptions
-   * were written only at the output root; `adventureDescription:` is what makes the pairing
-   * reachable, and the ERROR is the price of reaching it.
-   */
-  LEAF_DESCRIPTION_NO_OPENING: 'CL0616',
-
-  // Section sources (§7.7). Resolved once per component file, where `imports:` are — a
-  // `file:` read per leaf would report a missing path 32 times for The Institute.
-  SECTION_SOURCE_NOT_FOUND: 'CL0617',
-  SECTION_EXTRACT_UNKNOWN: 'CL0618',
-  SECTION_TEXT_AND_SOURCE: 'CL0619',
-
-  /** `metadata:` on a component whose output has nowhere to put frontmatter (§7.7). */
-  COMPONENT_METADATA_UNSUPPORTED: 'CL0620',
-
-  /** Both description keys aimed at one `Description.md` — an unbranched root (§7.7). */
-  DESCRIPTION_KEYS_COLLIDE: 'CL0621',
-
-  /**
-   * Two story cards share a name across different types on the same leaf (§8, Phase 10
-   * Decision 3). Velvet Lattice's `_merge_story_cards` keys on `name` alone, so the two
-   * collide and the winner is position-dependent. Today every leaf holds full copies, so
-   * the resolution is stable; under inheritance it will not be. WARN rather than ERROR
-   * because the hazard is latent rather than live.
-   */
-  CARD_NAME_COLLISION: 'CL0622',
-
-  /**
-   * §7.8's `render.storyCards` entries. Raised in `compile.js`, which is the only place
-   * that holds the component's sections and the leaf's occupants at once — so, like the
-   * placement codes above, they carry severity at the call site and are absent from
-   * `SEVERITY_BY_CODE`.
-   *
-   * `NO_TITLE` is an ERROR because the title is the card's AID name and the frontier keys
-   * on it — an untitled entry has nowhere to land. `UNKNOWN_SECTION` and `RENDERS_NOTHING`
-   * are WARNs: the component field still ships, so a broken alternate is a lost card rather
-   * than a broken compile.
-   */
-  STORY_CARD_ENTRY_NO_TITLE: 'CL0623',
-  STORY_CARD_ENTRY_UNKNOWN_SECTION: 'CL0624',
-  STORY_CARD_ENTRY_RENDERS_NOTHING: 'CL0625',
-
-  /**
-   * `advanced:` or `description:` in `adventureDescription`'s `metadata:` (§7.7).
-   *
-   * The two description keys share `Description.md`, so they share the descriptor's
-   * `frontmatter` flag — but only the scenario blurb should carry these two keys. The
-   * markdown description is a *Scenario* field: a scenario has a landing page that renders
-   * it, an adventure does not. An adventure carries only a plain description, which AID
-   * seeds from the leaf's Opening and Velvet Lattice can overwrite — safe, because the
-   * player can change it from the post-start menu. There is no equivalent escape hatch for
-   * a markdown one.
-   *
-   * ERROR rather than WARN because the risk is asymmetric and irreversible. Velvet Lattice
-   * 0.2 reads node metadata only at the root, so today the keys are inert and an author
-   * gets no feedback that they wrote something meaningless. If AID adds markdown
-   * descriptions for adventures — plausible, given how fast that platform is moving — the
-   * same frontmatter becomes live, sets a field on the player's own adventure, and leaves
-   * them no way to change it. Revisit the severity if that support arrives.
-   */
-  ADVENTURE_DESCRIPTION_ADVANCED: 'CL0629',
-
-  /**
-   * A branch leaf that resolves no `opening:` and no `adventureDescription:` — neither its
-   * own nor one inherited down the chain (§7.3). Velvet Lattice sets a node's prompt to
-   * `components["Opening"] or node.description`, so a leaf with neither opens the adventure
-   * with an empty prompt. WARN, not ERROR: an empty first turn is a degraded start, not a
-   * broken compile. A leaf that has an `adventureDescription:` but no opening is the more
-   * specific `CL0616` (ERROR) and is not also flagged here.
-   */
-  LEAF_NO_OPENING: 'CL0630',
-
-  /**
-   * A branch leaf that resolves no `aiInstructions:` — neither its own nor one inherited
-   * (§6.3). Worse than a missing opening: Velvet Lattice writes `aiInstructions: ""` on
-   * AID's side for such a leaf, and an empty string *suppresses* AID's model-default
-   * instructions rather than falling back to them, so the leaf plays with no AI Instructions
-   * at all. WARN because a project can intend that, but it is rarely what an author who
-   * forgot the component wanted.
-   */
-  LEAF_NO_AIN: 'CL0631',
-
-  /**
-   * `aid.type` as a path segment, and what a case-insensitive filesystem does with two of
-   * them (§8).
-   *
-   * `aid.type` becomes `Story Cards/{type}/{type}.md`. On Windows and macOS `Character/`
-   * and `character/` are one directory and one file, so two type groups that differ only
-   * in case are written to the same path and the second write destroys the first. The
-   * compiler counts both groups, so the run reports the full card count and ships fewer
-   * cards — the failure is silent in the one place an author would look to catch it.
-   *
-   * ERROR, on `CL0622`'s reasoning: Velvet Lattice merging two cards by name is the same
-   * shape of loss, and an author who wrote a case-variant pair is always wrong. It is
-   * checked after normalization, so a pair that folds to one built-in (`Character` and
-   * `character`) is a merge the compiler performed on purpose and not reported here —
-   * only a pair that still differs after folding still collides.
-   */
-  CARD_TYPE_CASE_COLLISION: 'CL0626',
-
-  /**
-   * An `aid.type` naming one of AID's five built-in card types in any casing other than
-   * lowercase, folded to lowercase on the way out (§8).
-   *
-   * AI Dungeon stores the type string verbatim and groups by exact match, and its built-in
-   * categories are lowercase — confirmed against the platform, not inferred. So `Character`
-   * reaches AID as a *custom* category sitting beside the built-in `character` rather than
-   * inside it. Velvet Lattice folded these itself until 0.2 dropped the normalization, and
-   * nothing downstream replaced it.
-   *
-   * WARN, and reported once per distinct authored value rather than once per card: the fold
-   * is a correction the author will want, but it changes what ships, and 27 identical lines
-   * for one authoring decision would bury it.
-   */
-  CARD_TYPE_NORMALIZED: 'CL0627',
-
-  /**
-   * An `aid.type` with leading whitespace, trimmed on the way out (§8).
-   *
-   * `validateCardType` already rejects a *trailing* space or period, because Windows strips
-   * those from a path segment and the type would silently become a different one. A leading
-   * space survives instead: it makes a real ` Character/` directory and reaches AID as a
-   * distinct category whose name differs from the obvious one by an invisible character.
-   * Trimmed rather than rejected, because there is exactly one thing the author meant.
-   */
-  CARD_TYPE_LEADING_SPACE: 'CL0628',
-
-  /**
-   * `aid.type` fails `validateCardType`'s legality check (empty/whitespace, an illegal path
-   * character, "." or "..", or a trailing space/period) — see `compile.js`. Raised on the
-   * bus rather than thrown, so one bad type does not abort a run that would otherwise report
-   * every other one; the leaf loop continues past it.
-   */
-  CARD_TYPE_INVALID: 'CL0632',
-
-  /** `branchFraming` on a node with nothing below it to frame — the root or a leaf (§7.3). */
-  BRANCH_FRAMING_IGNORED: 'CL0633',
-
-  /** A requested component produced no output anywhere in the compile (§7.2/§7.7). */
-  COMPONENT_NO_OUTPUT: 'CL0634',
-
-  // Emit (§8). Both are facts about what Velvet Lattice can carry to AID, not opinions
-  // about content — which is why they live in the compiler rather than in lint (§12.5).
-  TRIGGER_CONTAINS_COMMA: 'CL0701',
-  TRIGGER_EMPTY: 'CL0702',
-
-  // Platform field caps (§8.5). Facts about what AID stores, measured after placeholder
-  // substitution because Velvet Lattice expands `%key%` to its longer question text on the
-  // way there. Each cap needs two codes rather than one: severity is a property of the
-  // code (see `SEVERITY_BY_CODE` below), so a band and its cap cannot share one.
-  OPENING_OVER_LIMIT: 'CL0710',
-  OPENING_NEAR_LIMIT: 'CL0711',
-  CARD_BODY_OVER_LIMIT: 'CL0712',
-  CARD_BODY_NEAR_LIMIT: 'CL0713',
-  NOTES_OVER_LIMIT: 'CL0714',
-  NOTES_NEAR_LIMIT: 'CL0715',
+  // ── CL07xx  emit ─────────────────────────────────────────────────────────
+  TRIGGER_CONTAINS_COMMA:       { id: 'CL0701', severity: ERROR, summary: 'A trigger value contains a comma, which Velvet Lattice would split into two triggers.' },
+  TRIGGER_EMPTY:                { id: 'CL0702', severity: WARN,  summary: 'A trigger value is empty and will reach AID as an empty key.' },
+  OPENING_OVER_LIMIT:           { id: 'CL0710', severity: ERROR, summary: "An Opening.md exceeds AID's 4,000-character limit." },
+  OPENING_NEAR_LIMIT:           { id: 'CL0711', severity: WARN,  summary: 'An Opening.md is within 10% of the 4,000-character limit.' },
+  CARD_BODY_OVER_LIMIT:         { id: 'CL0712', severity: ERROR, summary: "A story card body exceeds AID's 2,000-character limit." },
+  CARD_BODY_NEAR_LIMIT:         { id: 'CL0713', severity: WARN,  summary: 'A story card body is within 10% of the 2,000-character limit.' },
+  NOTES_OVER_LIMIT:             { id: 'CL0714', severity: ERROR, summary: "An item's notes: exceeds AID's 10,000-character description limit." },
+  NOTES_NEAR_LIMIT:             { id: 'CL0715', severity: WARN,  summary: "An item's notes: is within 10% of the 10,000-character limit." },
 });
+
+/** name → id string, derived from `REGISTRY`. This is what raise sites import and use. */
+const CODES = Object.freeze(
+  Object.fromEntries(Object.entries(REGISTRY).map(([name, entry]) => [name, entry.id]))
+);
+
+/** id → severity, derived from `REGISTRY`, for `severityOf`. */
+const SEVERITY_BY_ID = Object.freeze(
+  Object.fromEntries(Object.values(REGISTRY).map((entry) => [entry.id, entry.severity]))
+);
 
 /**
- * Severity by code, for diagnostics that arrive through a channel that cannot carry one.
- *
- * `model/` reports through `onWarn(code, message)` (§3.3) — two arguments, no severity —
- * so severity has to be recoverable from the code alone. This table is the code-side copy
- * of the severity column in `documentation/11-diagnostics.md`, and a test asserts the two
- * agree. Codes raised by modules that call `diagnostics.error()`/`.warn()` directly carry
- * their severity at the call site and do not belong here.
+ * Recover a code's severity from its id alone — for diagnostics raised through
+ * `onWarn(code, message)`, which carries none. Every code is in `REGISTRY`, so an
+ * unknown one is a typo at the raise site and throws rather than defaulting.
  */
-const SEVERITY_BY_CODE = Object.freeze({
-  CL0320: SEVERITY.WARN,
-  CL0530: SEVERITY.WARN,
-  CL0531: SEVERITY.ERROR,
-  CL0532: SEVERITY.ERROR,
-  CL0533: SEVERITY.ERROR,
-  CL0534: SEVERITY.WARN,
-  CL0535: SEVERITY.WARN,
-  CL0536: SEVERITY.WARN,
-  CL0321: SEVERITY.WARN,
-  CL0322: SEVERITY.WARN,
-  CL0323: SEVERITY.ERROR,
-  CL0330: SEVERITY.WARN,
-  CL0601: SEVERITY.ERROR,
-  CL0602: SEVERITY.WARN,
-  CL0603: SEVERITY.WARN,
-  CL0604: SEVERITY.WARN,
-  CL0605: SEVERITY.WARN,
-  CL0608: SEVERITY.WARN,
-  CL0622: SEVERITY.ERROR,
-  CL0629: SEVERITY.ERROR,
-  CL0626: SEVERITY.ERROR,
-  CL0627: SEVERITY.WARN,
-  CL0628: SEVERITY.WARN,
-  CL0430: SEVERITY.ERROR,
-  CL0431: SEVERITY.ERROR,
-  CL0432: SEVERITY.ERROR,
-  CL0433: SEVERITY.ERROR,
-  CL0434: SEVERITY.ERROR,
-  CL0435: SEVERITY.ERROR,
-  CL0436: SEVERITY.WARN,
-  CL0437: SEVERITY.WARN,
-  CL0512: SEVERITY.WARN,
-  CL0540: SEVERITY.ERROR,
-  CL0541: SEVERITY.ERROR,
-  CL0542: SEVERITY.ERROR,
-  CL0543: SEVERITY.ERROR,
-  CL0544: SEVERITY.WARN,
-  CL0545: SEVERITY.WARN,
-  CL0632: SEVERITY.ERROR,
-  CL0633: SEVERITY.WARN,
-  CL0634: SEVERITY.ERROR,
-});
-
-/** WARN is the default: an unregistered code is still reported, never silently dropped. */
 function severityOf(code) {
-  return SEVERITY_BY_CODE[code] || SEVERITY.WARN;
+  const severity = SEVERITY_BY_ID[code];
+  if (severity === undefined) {
+    throw new Error(`severityOf: unknown diagnostic code "${code}" — every code must be declared in REGISTRY.`);
+  }
+  return severity;
 }
 
-// ── the compiler / lint split (§12.5) ────────────────────────────────────────
+// ── the compiler / lint split ───────────────────────────────────────────────
+
+/** ids of the `layer: 'opinion'` entries, derived from `REGISTRY`. */
+const OPINION_IDS = Object.freeze(new Set(
+  Object.values(REGISTRY).filter((e) => e.layer === 'opinion').map((e) => e.id)
+));
 
 /**
- * The opinion layer, by code.
+ * True for a diagnostic `lint.level` is allowed to silence: the four `layer: 'opinion'`
+ * codes, plus every convention-pack finding (`CL-<pack>/NNNN`, opinion-layer by the prefix
+ * — pack codes are not in `REGISTRY`). Every other code is a fact about the output that
+ * `lint.level` cannot reach, which is what makes `level: off` safe to write.
  *
- * §12.5 draws one line: compiler diagnostics are facts about the output, lint findings are
- * opinions about its quality. The line is about *what a check claims*, not about where the
- * code that runs it lives — `CL0535` and `CL0536` are opinions computed inside the compile
- * because they need the branch-merged placeholder table, and `CL0436`/`CL0437` are opinions
- * found by the same sweep that finds six facts. Both cases are tagged here rather than
- * relocated, because where a check runs and which layer it belongs to are separate
- * questions.
- *
- * Membership is the whole of what `lint.level` can reach. Everything absent from this set
- * is a fact, and an author cannot silence a fact — which is what makes `level: off` a safe
- * thing to write (§12.5).
- */
-const OPINION_CODES = Object.freeze(new Set([
-  'CL0436', // bracketed word that isn't a real verb-conjugation marker
-  'CL0437', // bare "undefined"/"NaN", which is also two English words
-  'CL0535', // a placeholder declared and never referenced beneath its declaring node
-  'CL0536', // two placeholder keys declaring the same question text
-]));
-
-/**
- * A `CL-<pack>/NNNN` code is always opinion-layer: §12.5 puts every opinion-layer ERROR
- * in a convention pack, and `lint.level` (plus the per-pack and per-branch ceilings) has
- * to be able to reach them. `severityOf` still defaults an unregistered code to WARN, so
- * a pack code that somehow skipped its explicit severity is reported, never dropped.
+ * Called on the raw code before anything validates it, so it must tolerate any string.
  */
 function isOpinion(code) {
-  return OPINION_CODES.has(code) || (typeof code === 'string' && code.startsWith('CL-'));
+  if (typeof code !== 'string') return false;
+  return OPINION_IDS.has(code) || code.startsWith('CL-');
 }
 
 /** The three values `lint.level` and `--lint-level` accept, in the order they say less. */
@@ -628,6 +446,6 @@ class Diagnostics {
 }
 
 module.exports = {
-  Diagnostic, Diagnostics, SEVERITY, SEVERITY_LABEL, CODES, SEVERITY_BY_CODE, severityOf, busWarner,
-  OPINION_CODES, isOpinion, LINT_LEVELS, applyLintLevel,
+  Diagnostic, Diagnostics, SEVERITY, SEVERITY_LABEL, REGISTRY, CODES, severityOf, busWarner,
+  isOpinion, LINT_LEVELS, applyLintLevel,
 };

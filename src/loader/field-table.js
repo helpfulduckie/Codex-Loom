@@ -29,20 +29,7 @@ const { findFiles } = require('../util');
 const { loadYaml } = require('./yaml');
 const { FUNCTION_NAMES, entryName } = require('../render/parse');
 const { levenshtein } = require('../schema');
-
-/**
- * Codes this module reports. `CL04xx` is the render/template band (§4.4); `CL0410`–`CL0421`
- * are taken and `CL0419` is a pre-existing gap, so the field table starts at a contiguous
- * `CL0422`. These live here rather than in `src/diag.js` for the same reason `CL0410` lives
- * in `loader.js` — the band predates the central registry and a free-code search greps the
- * number across the repo, not one file.
- */
-const CODES = Object.freeze({
-  FIELD_TABLE_MALFORMED: 'CL0422',
-  FIELD_TABLE_UNKNOWN_KEY: 'CL0423',
-  FIELD_TABLE_BAD_REF: 'CL0424',
-  FIELD_TABLE_STRAY_FILE: 'CL0425',
-});
+const { CODES } = require('../diag');
 
 /** The exact basenames a field table is read from — the `.cl.yaml` config pair (§4.6). */
 const FIELD_TABLE_BASENAMES = Object.freeze(['fields.cl.yaml', 'fields.cl.yml']);

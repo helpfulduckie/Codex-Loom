@@ -341,48 +341,54 @@ describe('every diagnostic the config surface can emit', () => {
     expect(load(yaml, options).codes).toContain(code);
   });
 
-  test('the table covers every code the config surface declares', () => {
-    // Two omissions, both unreachable from this surface rather than untested.
-    // CL0205 (SUPERSEDED_KEY): no key in CONFIG_SCHEMA declares an `alias` — the v3
-    // spellings were removed outright at the config break rather than kept as warned
-    // aliases (§14.1). CL0206 (VALUE_NOT_ALLOWED): no key in CONFIG_SCHEMA declares a
-    // `values:` set. The item schema does, for `kind:` (§4.8), and `schema.test.js`
-    // covers it there.
-    // Five more: CL0111-CL0115 (SNAPSHOT_*) are declared in config/load.js's CODES block
-    // because they're in the same "structure.input.* path problem" family as PATH_NOT_FOUND,
-    // but they're raised by src/snapshot.js's syncLibrary/checkDrift, not by loadCompileConfig
-    // itself — covered by __tests__/unit/snapshot.test.js and the --snapshot integration test
-    // instead.
-    // One more: CL0522 (LIBRARY_DEPENDENCY_UNCOVERED) needs a resolved component
-    // dependency, which exists only after components load — `compile.js`'s leaf loop, not
-    // `loadCompileConfig`'s single pass over `structure:`. Covered by
-    // __tests__/integration/component-imports.integration.test.js instead.
-    const unreachable = new Set([
+  test('the table covers every code the config surface can emit', () => {
+    // "The config surface" is what `loadCompileConfig` and its expanders actually raise:
+    // every `CODES.NAME` referenced in `src/config/load.js`, plus the schema codes a
+    // CONFIG_SCHEMA violation can produce. Codes in `diag.js`'s registry that this module
+    // never names are out of scope and not listed here.
+    const loadSource = fs.readFileSync(
+      path.join(__dirname, '../../src/config/load.js'), 'utf8'
+    );
+    const configCodes = new Set(
+      [...loadSource.matchAll(/\bCODES\.([A-Z_]+)\b/g)]
+        .map((m) => CODES[m[1]])
+        .filter(Boolean)
+    );
+
+    // Schema codes a CONFIG_SCHEMA violation cannot reach, so they have no case here:
+    //  - SUPERSEDED_KEY / VALUE_NOT_ALLOWED: no CONFIG_SCHEMA key declares `alias` or `values:`.
+    //  - NOT_YET_IMPLEMENTED: no CONFIG_SCHEMA key carries `note:` any more.
+    //  - VALUE_OUT_OF_RANGE / PATTERN_MISMATCH: no CONFIG_SCHEMA key declares `min`/`max`
+    //    or `pattern:` — only the convention-pack schema surface does (covered in
+    //    schema.test.js and lint-packs.test.js).
+    const schemaUnreachable = new Set([
       SCHEMA_CODES.SUPERSEDED_KEY, SCHEMA_CODES.VALUE_NOT_ALLOWED,
-      // CL0204 (NOT_YET_IMPLEMENTED): no key in CONFIG_SCHEMA carries a `note:` any more —
-      // `lint.packs` was the last one and Phase 14 implemented it (§8.2.2).
-      // CL0207 (VALUE_OUT_OF_RANGE): no CONFIG_SCHEMA key declares `min`/`max`; the pack
-      // schema surface does, covered by schema.test.js and lint-packs.test.js.
-      // CL0208 (PATTERN_MISMATCH): same story — no CONFIG_SCHEMA key declares `pattern:`;
-      // the convention-pack schema surface does (Phase 15, §8.2.2), covered there.
       SCHEMA_CODES.NOT_YET_IMPLEMENTED, SCHEMA_CODES.VALUE_OUT_OF_RANGE,
       SCHEMA_CODES.PATTERN_MISMATCH,
+    ]);
+    for (const c of Object.values(SCHEMA_CODES)) {
+      if (/^CL02\d\d$/.test(c) && !schemaUnreachable.has(c)) configCodes.add(c);
+    }
+
+    // Codes this module names but that fire outside `loadCompileConfig`'s single pass, so
+    // they are tested where they are raised rather than here:
+    //  - SNAPSHOT_* / LIBRARY_ROLE_SCAN_REFUSED: raised by `snapshot.js`'s
+    //    syncLibrary/checkDrift (snapshot.test.js, the --snapshot integration test).
+    //  - VARIABLE_UNBIND_UNKNOWN: raised by `model/branches.js`'s walkBranchChain
+    //    (model-branches.test.js).
+    //  - LIBRARY_DEPENDENCY_UNCOVERED: needs a resolved component dependency, so it fires
+    //    in `compile.js`'s leaf loop (component-imports.integration.test.js).
+    for (const c of [
       CODES.SNAPSHOT_DIR_MISSING, CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
       CODES.SNAPSHOT_MISSING_ENTRY, CODES.SNAPSHOT_FILE_UNTRACKED, CODES.SNAPSHOT_HASH_MISMATCH,
-      // CL0116 (LIBRARY_ROLE_SCAN_REFUSED, Phase 8 Decision 2) joins the same family for the
-      // same reason: raised by syncLibrary's requiresRoles computation, not by loadCompileConfig.
-      // Covered by __tests__/unit/snapshot.test.js and the --snapshot integration test.
-      CODES.LIBRARY_ROLE_SCAN_REFUSED,
+      CODES.LIBRARY_ROLE_SCAN_REFUSED, CODES.VARIABLE_UNBIND_UNKNOWN,
       CODES.LIBRARY_DEPENDENCY_UNCOVERED,
-      // CL0512 (VARIABLE_UNBIND_UNKNOWN) is declared here beside CL0510/CL0511 but raised by
-      // model/branches.js's walkBranchChain (Phase 8 Decision 1), not by loadCompileConfig —
-      // covered by __tests__/unit/model-branches.test.js instead.
-      CODES.VARIABLE_UNBIND_UNKNOWN,
-    ]);
-    const reachable = [...Object.values(CODES), ...Object.values(SCHEMA_CODES)]
-      .filter((c) => !unreachable.has(c));
+    ]) {
+      configCodes.delete(c);
+    }
+
     const exercised = new Set(CASES.map(([, code]) => code));
-    expect(reachable.filter((c) => !exercised.has(c))).toEqual([]);
+    expect([...configCodes].filter((c) => !exercised.has(c)).sort()).toEqual([]);
   });
 });
 

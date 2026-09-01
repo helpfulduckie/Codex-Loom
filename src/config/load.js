@@ -19,62 +19,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const { Diagnostics, CODES: DIAG_CODES } = require('../diag');
+const { Diagnostics, CODES } = require('../diag');
 const { validate } = require('../schema');
 const { loadYamlDocument } = require('../loader/yaml');
 const { CONFIG_SCHEMA } = require('./schema');
 const { walkBranchTree } = require('../model/branches');
-
-const CODES = Object.freeze({
-  CONFIG_NOT_A_MAPPING: 'CL0110',
-  /**
-   * `version: 4` is required and has no compatibility mode (§14.1), so the key's job is
-   * detection. A missing `version:` or an explicit `version: 3` means a v3 project that
-   * has not been migrated — reported with a "run codex-loom --migrate" hint rather than a
-   * cascade of unknown-key errors. Any other value is a version this compiler does not know.
-   */
-  UNSUPPORTED_VERSION: 'CL0209',
-  /** `structure.input.snapshot` names a directory that isn't there when something needs it populated (§14, Phase 7). */
-  SNAPSHOT_DIR_MISSING: 'CL0111',
-  /** `snapshot/manifest.json` exists but doesn't parse as the expected shape. */
-  SNAPSHOT_MANIFEST_UNPARSEABLE: 'CL0112',
-  /** A config-declared library/template entry has no section in an otherwise-valid manifest. */
-  SNAPSHOT_MISSING_ENTRY: 'CL0113',
-  /** A file under `snapshot/<name>/` on disk has no corresponding entry in the manifest. */
-  SNAPSHOT_FILE_UNTRACKED: 'CL0114',
-  /** A file under `snapshot/<name>/` doesn't match its own manifest-recorded hash — corruption, not drift. */
-  SNAPSHOT_HASH_MISMATCH: 'CL0115',
-  /**
-   * A library entry's own item content does not validate (a hard registry-build failure or
-   * an item schema ERROR), so `--snapshot` refuses to compute `requiresRoles` for it rather
-   * than publish an elimination result that cannot be trusted (§9.4.4, Decision 2, Phase 8).
-   */
-  LIBRARY_ROLE_SCAN_REFUSED: 'CL0116',
-  PATH_NOT_FOUND: 'CL0120',
-  // Declared in diag.js and pulled in here so the literal lives in one place: `util.js`'s
-  // `resolveVariables` raises the same two, and the config-time and content-time expanders
-  // must agree on the code.
-  VARIABLE_UNDECLARED: DIAG_CODES.VARIABLE_UNDECLARED,
-  VARIABLE_CYCLE: DIAG_CODES.VARIABLE_CYCLE,
-  /**
-   * `~` unbinding a variable that was never inherited (§6.4, Decision 1) — raised by
-   * `model/branches.js`'s `walkBranchChain`, which duplicates this literal rather than
-   * importing it, since `model/` cannot depend on `config/` (§3.3 purity).
-   */
-  VARIABLE_UNBIND_UNKNOWN: 'CL0512',
-  /** A branch-scoped variable used where only root variables resolve (§5.1). */
-  VARIABLE_PRE_BRANCH: 'CL0520',
-  /** A library name and a declared variable share one namespace as of §6.1. */
-  LIBRARY_NAME_COLLIDES: 'CL0521',
-  /**
-   * A compiled component reads from outside the project base, but no `structure.input.library`
-   * entry covers the directory it lives in (§11.2, Phase 7 Step 4 — floated out of Step 0's
-   * freeze-unit work). A shared component reached through a plain `variables:` entry rather
-   * than a library entry compiles and renders correctly and freezes not at all, silently —
-   * this is the check that catches the gap recurring.
-   */
-  LIBRARY_DEPENDENCY_UNCOVERED: 'CL0522',
-});
 
 /**
  * Expand `{%variable}` references, collecting diagnostics instead of warning.

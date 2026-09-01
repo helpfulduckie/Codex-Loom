@@ -14,23 +14,6 @@ const { deepClone, findKey } = require('../util');
 const { CODES } = require('../diag');
 
 /**
- * Mirrors `config/load.js`'s `CODES.VARIABLE_UNBIND_UNKNOWN` — the code is declared there,
- * beside `CL0510`/`CL0511`, because it names a variable-band mistake even though this is
- * the module that raises it. Duplicated as a literal rather than imported: `config/load.js`
- * depends on `fs`, and `model/` is pure by contract (§3.3, enforced by
- * `model-branches.test.js`'s "uses neither fs nor console" check).
- */
-const VARIABLE_UNBIND_UNKNOWN = 'CL0512';
-
-/**
- * `lint.packs.<name>: ~` on a branch that never inherited that pack. Declared as a
- * literal for the same reason as `VARIABLE_UNBIND_UNKNOWN` above — `src/lint/packs.js`
- * owns the code (loading band, beside `CL0117`), and `model/` may not import a module
- * that touches `fs`.
- */
-const PACK_UNBIND_UNKNOWN = 'CL0118';
-
-/**
  * Resolve the branch spec for an item/block, walking the branch path.
  *
  * Returns:
@@ -240,7 +223,7 @@ function walkBranchChain(branches, branchPath, options = {}) {
       // A present-but-null key left as a plain assign renders the literal string "null"
       // (`util.js`'s `resolveVariables`); deleting is what makes that impossible.
       result.variables = mergeUnbindable(result.variables, node.variables, {
-        code: VARIABLE_UNBIND_UNKNOWN, kind: 'variable', onWarn,
+        code: CODES.VARIABLE_UNBIND_UNKNOWN, kind: 'variable', onWarn,
       });
       if (node.roles) result.rolesDeclared = true;
       result.roles = mergeUnbindable(result.roles, node.roles, {
@@ -264,7 +247,7 @@ function walkBranchChain(branches, branchPath, options = {}) {
       // `lint.level` is the per-branch ceiling, taken last-wins down the chain.
       if (node.lint && typeof node.lint === 'object') {
         result.lint.packs = mergeUnbindable(result.lint.packs, node.lint.packs, {
-          code: PACK_UNBIND_UNKNOWN, kind: 'convention pack', onWarn,
+          code: CODES.PACK_UNBIND_UNKNOWN, kind: 'convention pack', onWarn,
         });
         if (node.lint.level !== undefined && node.lint.level !== null) {
           result.lint.level = node.lint.level;

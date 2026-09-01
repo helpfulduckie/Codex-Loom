@@ -1,18 +1,10 @@
 'use strict';
 
 const { walkItemTextFields } = require('../util');
+const { CODES } = require('../diag');
 
-// Pure by contract (§3.3): warnings go to a caller-supplied onWarn(code, message).
-const CODES = Object.freeze({
-  CROSS_ITEM_REF_MISSING: 'CL0330',
-  // Roles (§9.2, §9.3) — see diag.js for the full band comment; the values here are the
-  // source of truth `diag.test.js` checks against `SEVERITY_BY_CODE`.
-  ROLE_UNDECLARED: 'CL0540',
-  ROLE_COLLIDES_WITH_ITEM: 'CL0541',
-  ROLE_TARGET_EXCLUDED: 'CL0542',
-  ROLE_INDIRECTION: 'CL0543',
-  ROLE_UNUSED: 'CL0545',
-});
+// Pure by contract: warnings go to a caller-supplied onWarn(code, message), which carries
+// no severity — `diag.js` recovers it from the code.
 
 /**
  * Pronoun resolution for Codex Loom v4.

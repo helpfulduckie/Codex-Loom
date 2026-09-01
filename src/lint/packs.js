@@ -34,21 +34,15 @@
  * `isOpinion` recognizes the `CL-` prefix, which is what puts pack findings under
  * `lint.level`'s reach — every opinion-layer ERROR comes from a pack (§12.5).
  *
- * The pack loader's own two diagnostics are core codes in the loading band, declared
- * here rather than in `diag.js`'s registry the way `loader.js` keeps `CL041x` local:
+ * The pack loader's own two diagnostics — `PACK_MALFORMED` and `PACK_NAME_MISMATCH` —
+ * are core codes in the loading band, in `diag.js`'s registry with the rest.
  */
-const CODES = Object.freeze({
-  /** A pack file is missing, unparseable, or not shaped like a pack (§8.2.2). */
-  PACK_MALFORMED: 'CL0117',
-  /** The config key does not match the pack's declared `name:` (§8.2.2). */
-  PACK_NAME_MISMATCH: 'CL0119',
-});
 
 const fs = require('fs');
 const path = require('path');
 
 const YAML = require('yaml');
-const { applyLintLevel, Diagnostics } = require('../diag');
+const { applyLintLevel, Diagnostics, CODES } = require('../diag');
 const { resolveVariables } = require('../util');
 const { validate, TYPES, CODES: SCHEMA_CODES } = require('../schema');
 const { parseNotesBlock, parseSettingsBlock } = require('../emit/vl');

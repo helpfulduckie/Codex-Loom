@@ -6,14 +6,7 @@ const { resolveVariables, loadYaml } = require('./util');
 const { walkBranchTree } = require('./model/branches');
 const { render } = require('./template');
 const { renderFieldList } = require('./render/field-list');
-const { CODES: FIELD_TABLE_CODES } = require('./loader/field-table');
-const { CODES: LOAD_CODES } = require('./config/load');
-
-/** Codes this module reports. CL04xx is the render/template band (§4.4). */
-const CODES = {
-  NOTES_TEMPLATE_NOT_FOUND: 'CL0411',
-  ITEM_NOTES_TEMPLATE_NOT_FOUND: 'CL0412',
-};
+const { CODES } = require('./diag');
 
 /**
  * Check every `render.notesTemplate` declared in compile.yaml against the loaded set.
@@ -164,7 +157,7 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
       if (!abs) {
         if (diagnostics) {
           diagnostics.error(
-            LOAD_CODES.PATH_NOT_FOUND,
+            CODES.PATH_NOT_FOUND,
             `templateFor.${role} names "${file}", which was not found on the templates search path.`,
             { file: configPath },
           );
@@ -176,7 +169,7 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
         doc = loadYaml(abs);
       } catch (err) {
         if (diagnostics) {
-          diagnostics.error(FIELD_TABLE_CODES.FIELD_TABLE_MALFORMED,
+          diagnostics.error(CODES.FIELD_TABLE_MALFORMED,
             `Could not parse templateFor.${role} file ${path.basename(abs)}: ${err.message}`, { file: abs });
         }
         continue;

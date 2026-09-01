@@ -15,11 +15,7 @@
  * this module existed, which is what keeps the test corpus's hand-built registries working.
  */
 
-const CODES = Object.freeze({
-  AMBIGUOUS_REF: 'CL0340',
-  UNKNOWN_CANON_SOURCE: 'CL0341',
-  REF_NOT_FOUND: 'CL0342',
-});
+const { CODES } = require('../diag');
 
 /**
  * Split a reference into `{ source, id }`, both lowercased.

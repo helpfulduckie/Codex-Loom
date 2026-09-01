@@ -16,12 +16,7 @@ const { deepClone, findKey, ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES } = require('..
 const { applyFieldOp, applyFieldsDelta, applyDelta } = require('./fieldops');
 const { resolveBranchSpec } = require('./branches');
 const { resolveItemRef, describeRefFailure } = require('./refs');
-
-const CODES = Object.freeze({
-  VARIANT_NOT_FOUND: 'CL0321',
-  NO_TYPE_OR_TEMPLATE: 'CL0322',
-  NOTES_AND_DESCRIPTION: 'CL0323',
-});
+const { CODES } = require('../diag');
 
 /**
  * The components an item may route into (§7.3), in the order targets are reported.

@@ -39,12 +39,7 @@
  */
 
 const { entryName } = require('./parse');
-
-const CODES = Object.freeze({
-  FIELD_UNREAD_UNKNOWN: 'CL0426',
-  FIELD_UNREAD_MISROUTED: 'CL0427',
-  FIELD_DECLARED_UNUSED: 'CL0428',
-});
+const { CODES } = require('../diag');
 
 function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);

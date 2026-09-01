@@ -19,20 +19,9 @@ const { findFiles, deepClone, resolveVariables, VAR_ALIASES, YAML_SUFFIXES, RESE
 const { loadYamlDocument } = require('./yaml');
 const { validate } = require('../schema');
 const { ITEM_SCHEMA } = require('./schema');
-const { CODES: DIAG_CODES } = require('../diag');
+const { CODES } = require('../diag');
 const { splitRef, normalizeRef } = require('../model/refs');
 const { collectVariantDeltas, parseVariantsList } = require('../model/item');
-
-const CODES = Object.freeze({
-  EMPTY_FILE: 'CL0103',
-  NULL_DOCUMENT: 'CL0104',
-  INCLUDE_NOT_FOUND: 'CL0130',
-  DOUBLE_INCLUDE: 'CL0131',
-  ITEM_WITHOUT_IDENTITY: 'CL0140',
-  DUPLICATE_ITEM_ID: 'CL0141',
-  MULTIPLE_VAR_ALIASES: 'CL0142',
-  ID_CONTAINS_COLON: 'CL0144',
-});
 
 /**
  * The merged item registry (§17.2).
@@ -127,14 +116,14 @@ function loadItemsFromDir(dirs, options = {}) {
       };
 
       if (data === null || data === undefined) {
-        warn(CODES.EMPTY_FILE, `empty file skipped: ${file}`);
+        warn(CODES.YAML_EMPTY_FILE, `empty file skipped: ${file}`);
         continue;
       }
 
       const entries = Array.isArray(data) ? data : [data];
       entries.forEach((entry, index) => {
         if (entry === null || entry === undefined) {
-          warn(CODES.NULL_DOCUMENT, `null document in "${file}" — skipped`);
+          warn(CODES.YAML_NULL_DOCUMENT, `null document in "${file}" — skipped`);
           return;
         }
 
@@ -266,7 +255,7 @@ function buildCanonRegistry(resolvedCanon, options = {}) {
   for (const [name, canonPath] of resolvedCanon) {
     if (!fs.existsSync(canonPath)) {
       const message = `canon path not found for "${name}": ${canonPath}`;
-      if (options.diagnostics) options.diagnostics.warn(DIAG_CODES.YAML_FILE_UNREADABLE, message);
+      if (options.diagnostics) options.diagnostics.warn(CODES.YAML_FILE_UNREADABLE, message);
       else console.warn(`  WARN: ${message}`);
       continue;
     }
@@ -397,7 +386,7 @@ function reportUnmatchedSelectors(def, items, includePath, diagnostics) {
       + 'A selector aimed at every item in a file is silent where an item does not define '
       + 'the name (§7.6.2a), so a misspelling applies to nothing and changes nothing — this '
       + 'is the only report it produces.';
-    if (diagnostics) diagnostics.warn(DIAG_CODES.SELECTOR_MATCHED_NOTHING, message, { file: def._source });
+    if (diagnostics) diagnostics.warn(CODES.SELECTOR_MATCHED_NOTHING, message, { file: def._source });
     else console.warn(`  WARN: ${message}`);
   }
 }

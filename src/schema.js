@@ -48,21 +48,7 @@ const TYPES = Object.freeze({
   ANY: 'any',
 });
 
-const CODES = Object.freeze({
-  UNKNOWN_KEY: 'CL0201',
-  WRONG_TYPE: 'CL0202',
-  MISSING_REQUIRED: 'CL0203',
-  NOT_YET_IMPLEMENTED: 'CL0204',
-  SUPERSEDED_KEY: 'CL0205',
-  /** A key whose descriptor declares `values:` — a closed set — got something else. */
-  VALUE_NOT_ALLOWED: 'CL0206',
-  /** A number outside its descriptor's inclusive `min`/`max` bounds (§8.2.2). */
-  VALUE_OUT_OF_RANGE: 'CL0207',
-  /** A string that does not match its descriptor's `pattern:` regex (§8.2.2). */
-  PATTERN_MISMATCH: 'CL0208',
-  /** The canonical §4.3 case: a valid key written at the wrong level. */
-  MISPLACED_KEY: 'CL0210',
-});
+const { CODES } = require('./diag');
 
 // ── suggestions ──────────────────────────────────────────────────────────────
 

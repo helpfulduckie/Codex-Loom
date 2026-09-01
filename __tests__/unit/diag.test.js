@@ -2,7 +2,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { Diagnostic, Diagnostics, SEVERITY, CODES, SEVERITY_BY_CODE, severityOf, busWarner } = require('../../src/diag');
+const { Diagnostic, Diagnostics, SEVERITY, REGISTRY, CODES, severityOf, busWarner } = require('../../src/diag');
 
 describe('Diagnostic.location', () => {
   const base = { code: 'CL0101', severity: SEVERITY.ERROR, message: 'boom' };
@@ -147,8 +147,8 @@ describe('severityOf', () => {
     expect(severityOf('CL0321')).toBe(SEVERITY.WARN);
   });
 
-  test('defaults an unregistered code to WARN, never drops it', () => {
-    expect(severityOf('CL9999')).toBe(SEVERITY.WARN);
+  test('throws on an unknown code — every raised code is in REGISTRY, so a miss is a typo', () => {
+    expect(() => severityOf('CL9999')).toThrow(/unknown diagnostic code/);
   });
 });
 
@@ -177,40 +177,91 @@ describe('busWarner', () => {
   });
 });
 
-describe('SEVERITY_BY_CODE roster', () => {
-  // A new model/ code that skips this table would silently default to WARN via
-  // severityOf's fallback — which is the exact failure this change exists to end.
-  test('every model/ code reachable through onWarn is registered', () => {
-    const itemCodes = Object.values(require('../../src/model/item').CODES);
-    const fieldopsCodes = Object.values(require('../../src/model/fieldops').CODES);
-    const pronounsCodes = Object.values(require('../../src/model/pronouns').CODES);
-    for (const code of [...itemCodes, ...fieldopsCodes, ...pronounsCodes]) {
-      expect(SEVERITY_BY_CODE).toHaveProperty(code);
+describe('REGISTRY agrees with documentation/11-diagnostics.md', () => {
+  // The registry in diag.js and the prose registry in 11-diagnostics.md are two views of
+  // one thing. This binds them: same code set, same severities, same bands. The prose
+  // "Meaning" column stays hand-written and richer than REGISTRY's `summary` — only id,
+  // severity and band presence are machine-checked.
+  const doc = fs.readFileSync(
+    path.join(__dirname, '../../documentation/11-diagnostics.md'), 'utf8'
+  );
+  const documented = {};
+  const rowRe = /^\|\s*`(CL\d{4})`\s*\|\s*(ERROR|WARN|INFO)\s*\|/gm;
+  for (let m; (m = rowRe.exec(doc)) !== null; ) documented[m[1]] = m[2].toLowerCase();
+
+  const registryById = {};
+  for (const entry of Object.values(REGISTRY)) registryById[entry.id] = entry;
+
+  test('every registry code is documented, with a matching severity', () => {
+    for (const [id, entry] of Object.entries(registryById)) {
+      expect(documented[id]).toBe(entry.severity);
+    }
+  });
+
+  test('every documented code exists in the registry (CL0143 and CL0310 are reserved in prose only)', () => {
+    const reserved = new Set(['CL0143', 'CL0310']);
+    for (const id of Object.keys(documented)) {
+      if (reserved.has(id)) continue;
+      expect(registryById).toHaveProperty(id);
+    }
+  });
+
+  test('every registry code sits in the band its id number names', () => {
+    // The doc groups rows under `### CL0Nxx — <concern>` headings; a code's id must fall
+    // in the band it is written under.
+    const bandRe = /^### (CL0(\d)xx) —/gm;
+    const headings = [...doc.matchAll(bandRe)].map((m) => ({ band: m[1], digit: m[2], at: m.index }));
+    const bandForId = (id) => {
+      const pos = doc.indexOf(`| \`${id}\``);
+      let band = null;
+      for (const h of headings) if (h.at < pos) band = h.digit;
+      return band;
+    };
+    for (const id of Object.keys(registryById)) {
+      expect(id[3]).toBe(bandForId(id));
     }
   });
 });
 
-describe('SEVERITY_BY_CODE agrees with documentation/11-diagnostics.md', () => {
-  test('every registered code matches the severity documented in the registry table', () => {
-    const docPath = path.join(__dirname, '../../documentation/11-diagnostics.md');
-    const doc = fs.readFileSync(docPath, 'utf8');
-    const documented = {};
-    const rowRe = /^\|\s*`(CL\d+)`\s*\|\s*(ERROR|WARN|INFO)\s*\|/gm;
-    let m;
-    while ((m = rowRe.exec(doc)) !== null) {
-      documented[m[1]] = m[2].toLowerCase();
+describe('every CL code raised in src/ is in the registry', () => {
+  // A grep for `'CLNNNN'` string literals anywhere in src/ outside diag.js: after
+  // centralization there should be none. A raised code that is not in REGISTRY would
+  // throw from severityOf (onWarn path) or simply be undocumented — this catches the
+  // second case at the source.
+  const srcDir = path.join(__dirname, '../../src');
+  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) return walk(p);
+    return e.name.endsWith('.js') ? [p] : [];
+  });
+
+  test('no src/ module outside diag.js declares a raw CL literal', () => {
+    const offenders = [];
+    for (const file of walk(srcDir)) {
+      if (file.endsWith(`${path.sep}diag.js`)) continue;
+      const src = fs.readFileSync(file, 'utf8');
+      const lits = [...src.matchAll(/'(CL0\d{3})'/g)].map((m) => m[1]);
+      if (lits.length) offenders.push(`${path.relative(srcDir, file)}: ${[...new Set(lits)].join(', ')}`);
     }
-    for (const [code, severity] of Object.entries(SEVERITY_BY_CODE)) {
-      expect(documented[code]).toBe(severity);
-    }
+    expect(offenders).toEqual([]);
+  });
+
+  test('every CL id in the registry is unique', () => {
+    const ids = Object.values(REGISTRY).map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });
 
 describe('the compiler / lint split (§12.5)', () => {
-  const { isOpinion, OPINION_CODES, applyLintLevel, LINT_LEVELS } = require('../../src/diag');
+  const { isOpinion, applyLintLevel, LINT_LEVELS } = require('../../src/diag');
 
-  test('the opinion layer is exactly the four tagged codes', () => {
-    expect([...OPINION_CODES].sort()).toEqual(['CL0436', 'CL0437', 'CL0535', 'CL0536']);
+  test('the opinion layer is exactly the four codes tagged layer: opinion', () => {
+    const opinionIds = Object.values(REGISTRY)
+      .filter((e) => e.layer === 'opinion')
+      .map((e) => e.id)
+      .sort();
+    expect(opinionIds).toEqual(['CL0436', 'CL0437', 'CL0535', 'CL0536']);
+    for (const id of opinionIds) expect(isOpinion(id)).toBe(true);
   });
 
   test('a fact is not an opinion, wherever the check that raises it runs', () => {
@@ -283,68 +334,34 @@ describe('module purity', () => {
   });
 });
 
-describe('CODES', () => {
-  /**
-   * The bands diag.js declares in its header, restated as data. Listing every code here
-   * means adding one to the wrong band fails, and adding one to no band fails too — the
-   * bands exist so documented codes never have to move, which only holds if they are
-   * checked rather than intended.
-   */
-  const BANDS = {
-    CL01: ['YAML_PARSE_FAILED', 'YAML_FILE_UNREADABLE', 'YAML_EMPTY_FILE',
-      'YAML_NULL_DOCUMENT', 'TOKEN_SWALLOWED_BY_YAML'],
-    CL03: ['ITEM_RESOLUTION_FAILED', 'DUPLICATE_RESOLVED_ID', 'SELECTOR_MATCHED_NOTHING'],
-    CL04: ['TEMPLATE_PARSE_FAILED', 'TEMPLATE_UNKNOWN_FUNCTION', 'TEMPLATE_UNCLOSED_BLOCK',
-      'PARTIAL_CYCLE', 'PARTIAL_NOT_FOUND', 'CROSS_ITEM_CYCLE',
-      'TEMPLATE_NOT_FOUND', 'RENDER_FAILED',
-      'LEAKED_FIELD_TOKEN', 'LEAKED_VARIABLE', 'LEAKED_RENDER_FUNCTION',
-      'LEAKED_TEMPLATE_TAG', 'LEAKED_VERB_MARKER', 'LEAKED_JS_ARTIFACT',
-      'SUSPECT_VERB_MARKER', 'SUSPECT_JS_WORD'],
-    CL05: ['VARIABLE_UNDECLARED', 'VARIABLE_CYCLE',
-      'PLACEHOLDER_UNBIND_UNKNOWN', 'PLACEHOLDER_CYCLE', 'PLACEHOLDER_UNDECLARED',
-      'PLACEHOLDER_INVALID_CONTEXT', 'PLACEHOLDER_IN_TITLE', 'PLACEHOLDER_UNUSED',
-      'PLACEHOLDER_DUPLICATE_QUESTION',
-      'ROLE_UNBIND_UNKNOWN', 'ROLE_UNDECLARED', 'ROLE_COLLIDES_WITH_ITEM',
-      'ROLE_TARGET_EXCLUDED', 'ROLE_INDIRECTION', 'ROLE_UNUSED'],
-    CL06: ['SECTION_TEXT_AND_SLOT', 'SECTION_RENDERS_NOTHING', 'SECTION_WRAP_UNKNOWN',
-      'SECTION_VARIANT_NOT_FOUND', 'COMPONENT_DISPATCH_MATCHED_NOTHING',
-      'IMPORT_NOT_FOUND', 'IMPORT_CYCLE', 'IMPORT_DELETE_UNKNOWN',
-      'ITEM_NO_OUTPUT', 'TARGET_UNDECLARED_SLOT', 'TARGET_NOT_A_SLOT', 'TARGET_NAMES_NO_SLOT',
-      'SLOT_EMPTY', 'COMPONENT_RENDERS_NOTHING',
-      'LEAF_DESCRIPTION_NO_OPENING', 'SECTION_SOURCE_NOT_FOUND', 'SECTION_EXTRACT_UNKNOWN',
-      'SECTION_TEXT_AND_SOURCE', 'COMPONENT_METADATA_UNSUPPORTED', 'DESCRIPTION_KEYS_COLLIDE',
-      'CARD_NAME_COLLISION',
-      'STORY_CARD_ENTRY_NO_TITLE', 'STORY_CARD_ENTRY_UNKNOWN_SECTION',
-      'STORY_CARD_ENTRY_RENDERS_NOTHING',
-      'CARD_TYPE_CASE_COLLISION', 'CARD_TYPE_NORMALIZED', 'CARD_TYPE_LEADING_SPACE',
-      'ADVENTURE_DESCRIPTION_ADVANCED', 'LEAF_NO_OPENING', 'LEAF_NO_AIN',
-      'CARD_TYPE_INVALID', 'BRANCH_FRAMING_IGNORED', 'COMPONENT_NO_OUTPUT'],
-    CL07: ['TRIGGER_CONTAINS_COMMA', 'TRIGGER_EMPTY',
-      'OPENING_OVER_LIMIT', 'OPENING_NEAR_LIMIT',
-      'CARD_BODY_OVER_LIMIT', 'CARD_BODY_NEAR_LIMIT',
-      'NOTES_OVER_LIMIT', 'NOTES_NEAR_LIMIT'],
-  };
+describe('CODES / REGISTRY shape', () => {
+  test('CODES is name → id, derived from REGISTRY', () => {
+    for (const [name, entry] of Object.entries(REGISTRY)) {
+      expect(CODES[name]).toBe(entry.id);
+    }
+    expect(Object.keys(CODES).sort()).toEqual(Object.keys(REGISTRY).sort());
+  });
 
-  test('every code sits in the band its area declares', () => {
-    for (const [band, names] of Object.entries(BANDS)) {
-      for (const name of names) expect(CODES[name]).toMatch(new RegExp(`^${band}\\d\\d$`));
+  test('every id is a well-formed CL0Nxx code in a real band', () => {
+    for (const entry of Object.values(REGISTRY)) {
+      expect(entry.id).toMatch(/^CL0[1-7]\d\d$/);
     }
   });
 
-  test('every declared code is assigned to a band', () => {
-    expect(Object.keys(CODES).sort()).toEqual(Object.values(BANDS).flat().sort());
-  });
-
-  test('codes are unique', () => {
-    const values = Object.values(CODES);
-    expect(new Set(values).size).toBe(values.length);
+  test('every entry carries a severity and a non-empty summary; layer is opinion or absent', () => {
+    for (const entry of Object.values(REGISTRY)) {
+      expect(Object.values(SEVERITY)).toContain(entry.severity);
+      expect(typeof entry.summary).toBe('string');
+      expect(entry.summary.length).toBeGreaterThan(0);
+      if ('layer' in entry) expect(entry.layer).toBe('opinion');
+    }
   });
 });
 
 describe('CL0324/CL0325/CL0420/CL0421 (item and render failures)', () => {
-  // These deliberately have no SEVERITY_BY_CODE entry: they are raised through
-  // `diagnostics.error()` at call sites that already hold a bus,
-  // not through model/'s severity-blind `onWarn(code, message)` callback.
+  // Raised through `diagnostics.error()` at call sites that already hold a bus, so they
+  // carry their severity there rather than through model/'s severity-blind
+  // `onWarn(code, message)` callback. They are still in REGISTRY like every other code.
   test('ITEM_RESOLUTION_FAILED is CL0324', () => {
     expect(CODES.ITEM_RESOLUTION_FAILED).toBe('CL0324');
   });

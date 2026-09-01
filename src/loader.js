@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { findFiles } = require('./util');
 const { loadFieldTable } = require('./loader/field-table');
+const { CODES } = require('./diag');
 
 /**
  * Load all files of a given extension from one or more directories recursively.
@@ -19,6 +20,9 @@ function loadNamedFiles(dirs, ext) {
     for (const file of findFiles(dir, ext)) {
       const name = path.basename(file, ext).toLowerCase();
       if (dirEntries.has(name)) {
+        // Fatal, not a bus diagnostic: this runs before any `diagnostics` is in scope
+        // (two of the three `loadTemplates` callers pass none), and two files claiming one
+        // name leave the name→file map with no defensible winner.
         const err = new Error(
           `${CODES.DUPLICATE_NAMED_FILE}: Duplicate ${ext} name "${name}" found in ${dir}:`
           + `\n  ${dirEntries.get(name)._source}\n  ${file}`
@@ -34,16 +38,6 @@ function loadNamedFiles(dirs, ext) {
   }
   return result;
 }
-
-/** Codes this module reports. CL04xx is the render/template band (§4.4). */
-const CODES = {
-  TEMPLATE_CONTAINS_FENCE: 'CL0410',
-  // Two files in one templates directory resolving to the same name. Fatal rather than a
-  // bus diagnostic: `loadNamedFiles` runs before any `diagnostics` is in scope (two of the
-  // three `loadTemplates` callers pass none), and with two files claiming one name the
-  // name→file map has no defensible winner, so there is nothing to continue with.
-  DUPLICATE_NAMED_FILE: 'CL0429',
-};
 
 /**
  * Reject any template or partial that still writes a VL fence (§8.3).

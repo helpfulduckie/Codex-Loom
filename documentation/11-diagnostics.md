@@ -85,7 +85,7 @@ was removed in §6.1, so a `{'@pe': null}` mapping names nothing this check coul
 | `CL0140` | ERROR | An item has neither `id:` nor `name:`. |
 | `CL0141` | ERROR | Duplicate item id. |
 | `CL0142` | WARN | An item declares more than one `v:` alias; they are merged. |
-| `CL0143` | WARN | Duplicate Codex overlay for one import target; the first is kept. |
+| `CL0144` | ERROR | An item id contains `:`, which is reserved as the canon-set separator in a reference. |
 
 ### CL0111–CL0115 in detail
 
@@ -736,10 +736,12 @@ collects that set before resolving any path. A name declared at root *and* overr
 branch is not affected: it resolves at root and is overridden later, which is the normal
 pattern.
 
-Codes for the remaining bands are registered as the phases that mint them land. `CL0310`
-(unresolvable branch dispatch) is named by the spec, not yet implemented, and reserved at
-that number. `CL04xx` holds the template checks and the leaked-artifact sweep; the render
-rewrite (§13) is what fills the rest of the band.
+Codes for the remaining bands are registered as the phases that mint them land. Two codes
+are named by the design docs, not yet implemented, and reserved at their numbers: `CL0143`
+(duplicate Codex overlay for one import target) and `CL0310` (unresolvable branch
+dispatch). Neither is in `diag.js`'s registry until something raises it. `CL04xx` holds
+the template checks and the leaked-artifact sweep; the render rewrite (§13) is what fills
+the rest of the band.
 
 ### `CL-<pack>/NNNN` — convention-pack findings
 

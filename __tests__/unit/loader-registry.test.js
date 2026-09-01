@@ -91,14 +91,14 @@ describe('item loading', () => {
     write('empty.cl.yaml', '');
     const { items, codes } = loadWithDiagnostics();
     expect(items).toEqual([]);
-    expect(codes).toContain(CODES.EMPTY_FILE);
+    expect(codes).toContain(CODES.YAML_EMPTY_FILE);
   });
 
   test('a null document within a sequence is skipped', () => {
     write('a.cl.yaml', '- id: A\n- ~\n');
     const { items, codes } = loadWithDiagnostics();
     expect(items).toHaveLength(1);
-    expect(codes).toContain(CODES.NULL_DOCUMENT);
+    expect(codes).toContain(CODES.YAML_NULL_DOCUMENT);
   });
 
   test('variable-block aliases collapse to v', () => {

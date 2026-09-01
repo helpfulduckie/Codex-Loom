@@ -15,10 +15,7 @@ const {
   deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
   ITEM_TOP_LEVEL_FIELDS, normalizeNotesKey,
 } = require('../util');
-
-const CODES = Object.freeze({
-  VARIANT_DELTA_VAR_ALIASES: 'CL0320',
-});
+const { CODES } = require('../diag');
 
 /**
  * Apply a single field operation to a current value.
