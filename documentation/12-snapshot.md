@@ -41,8 +41,8 @@ structure:
 ```
 
 `structure.input.snapshot` names where the frozen copy lives, relative to `compile.yaml`.
-Setting it is the only thing that turns the mechanism on; an unset `snapshot:` key means
-every `{%name}` resolves to the live library, exactly as before Phase 7.
+Setting it is the only thing that turns the mechanism on; with the key unset,
+every `{%name}` resolves to the live library.
 
 ```bash
 codex-loom --snapshot compile.cl.yaml
@@ -98,7 +98,7 @@ if anything changed, prints one line:
 Library "characters" has 3 changed file(s) since last snapshot (2026-06-02). Run --snapshot to review.
 ```
 
-This never fails a build and never raises a diagnostic (§ Decision 4 of the Phase 7 plan). A
+This never fails a build and never raises a diagnostic, by design. A
 current snapshot and a stale one compile identically — that is the entire point of a
 freeze — and the drift line is the only thing that tells the two apart, so treat it as
 something to read, not something to silence.

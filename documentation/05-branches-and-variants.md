@@ -153,7 +153,7 @@ For a leaf path `A/X`:
 
 ## Excluding Items from Branches
 
-Branch exclusion in v3 is handled entirely through the `branches:` dispatch map by setting a branch name to null (`~`). There are no `only:` or `except:` keys — the wildcard-plus-null pattern replaces them.
+Branch exclusion is handled entirely through the `branches:` dispatch map by setting a branch name to null (`~`). There are no `only:` or `except:` keys — the wildcard-plus-null pattern covers the same cases.
 
 **Exclude from one branch, include in all others:**
 ```yaml

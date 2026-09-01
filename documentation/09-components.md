@@ -80,47 +80,9 @@ It takes the same three shapes an opening does — a sentence, a file, or a `sec
 
 Declared on a leaf, `branchFraming:` is ignored with a warning: a leaf has no children to frame.
 
-**A `branchFraming:` declared at the project root — outside every `branches:` node — is a third, separate call site with a real limitation.** It writes once to `{output}/Components/Opening.md` before any branch node exists, and resolves through the same literal/`{%variable}`-only path a plain-prose `opening:` uses: it never checks whether its spec names a `sections:` document, so a `{$role}` token there is never attempted regardless of shape. A `branchFraming:` declared inside a branch node — the case above — goes through the ordinary sectioned-component path and resolves roles the same way `opening:` and every other component does (Phase 10 Step 4; see [Roles](13-roles.md#using-a-role-in-prose)).
+**A `branchFraming:` declared at the project root — outside every `branches:` node — is a third, separate call site with a real limitation.** It writes once to `{output}/Components/Opening.md` before any branch node exists, and resolves through the same literal/`{%variable}`-only path a plain-prose `opening:` uses: it never checks whether its spec names a `sections:` document, so a `{$role}` token there is never attempted regardless of shape. A `branchFraming:` declared inside a branch node — the case above — goes through the ordinary sectioned-component path and resolves roles the same way `opening:` and every other component does (see [Roles](13-roles.md#using-a-role-in-prose)).
 
-### Migrating a v3 block-list opening
-
-v3 pointed `opening:` at a YAML **sequence of paragraph blocks**, each with its own `branches:` and `variants:`. That format is gone — it was the fourth of four syntaxes for one idea, and its variant rules disagreed with every other dispatch in the language. `migrateProjectFully()` in `src/migrate/index.js` converts it; a block-list opening reaching the compiler is an error naming what it should become.
-
-```yaml
-# before — v3
-- text: "A world of magic and intrigue awaits."
-- text: "You have mastered the arcane arts."
-  variants:
-    researcher-mage:
-      text: "You have mastered the arcane arts, informed by archival research."
-  branches:
-    researcher:
-      branches: {mage: researcher-mage, _: ~}
-    _: ~
-- text: ./paragraphs/knight-oath.md
-
-# after — v4
-sections:
-  block1:
-    text: "A world of magic and intrigue awaits."
-  block2:
-    text: "You have mastered the arcane arts."
-    variants:
-      researcher-mage:
-        text: "You have mastered the arcane arts, informed by archival research."
-    branches:
-      researcher:
-        branches: {mage: researcher-mage, _: ~}
-      _: ~
-  block3:
-    file: ./paragraphs/knight-oath.md
-```
-
-Three things change, and only one of them can alter output:
-
-- **Blocks get names.** A name is what lets an importing project override, reposition or delete a section (§7.2), which an anonymous block could never allow. The migrator takes names from the comment above each block where the author left one and generates `blockN` otherwise — rename them before sharing the file.
-- **`text:` stops being overloaded.** v3 decided whether a block's `text:` was prose or a path by testing the string against the filesystem on every compile, so prose that looked like a path was silently read as one. `text:` and `file:` are separate keys, and the migrator answers the question once.
-- **A dispatch naming two variants now applies both.** v3 applied the first and silently discarded the rest. This is the one difference that can move output, and the migrator emits a note for any block carrying more than one variant.
+Converting a v3 block-list opening — the paragraph-sequence format `opening:` used to accept — is covered in [Migrating from v3](16-migrating-from-v3.md).
 
 ### Output paths
 
@@ -142,7 +104,7 @@ Both keys write the same filename at different levels, because Velvet Lattice re
 
 **The file is a record of named `sections:`, and it describes shape only — it never names an item.** A section either carries `text:` or is marked `slot: true`, and a slot is a place items route *into*. Membership lives on the item: an item declares `render.plotEssential` naming the slot it belongs in, and the component never learns who filled it. This is the inversion described in [01-overview.md](01-overview.md) — the component says where content can go, the item says where it goes.
 
-Naming every section is what makes the file overridable. An importing project can reposition, edit or delete a named section; v3's blocks were anonymous and could only ever be replaced wholesale.
+Naming every section is what makes the file overridable: an importing project can reposition, edit or delete a named section, where an anonymous block could only be replaced wholesale.
 
 ### Sections and slots
 
@@ -275,7 +237,7 @@ sections:
 
 **Sections that do not define the name are silently unaffected**, because most of them will be — that is what fanning out means. A name matching *no* section is `CL0605`, which is the only report a misspelling at this position produces.
 
-**There is no component-level `variants:`.** A component declares no variants of its own, so a name here is always a selector over what its sections declare. A `variants:` block at document level is a v3 file that has not been migrated, and is reported as a misplaced key.
+**There is no component-level `variants:`.** A component declares no variants of its own, so a name here is always a selector over what its sections declare. A `variants:` block at document level is reported as a misplaced key.
 
 **`~` at this position excludes the whole component from that branch**, and writes no file. This is not the same as every section resolving away, which is `CL0615` and an ERROR — an exclusion is what the author asked for. An item whose only target was a slot in an excluded component is caught by `CL0610` instead, the same way a section-level `~` already behaves.
 
@@ -376,23 +338,11 @@ sections:
     plotEssential: {slot: cast, order: 1, template: CharacterBrief}
 ```
 
-**A per-target `template:` is what `style: hint` used to be**, and it is more flexible: the story card and the Plot Essentials entry can use any two templates, rather than one template and its `.hint` sibling.
+**A per-target `template:` lets the story card and the Plot Essentials entry use any two templates**, rather than being tied to one template and a `.hint` sibling.
 
 An item rendered into a slot produces body text and nothing else — the `## Name` heading and `~~~` fence belong to story-card output, and Plot Essentials is not a story card.
 
-### Migrating a v3 Plot Essentials file
-
-A v3 file validated against this grammar reports `blocks:` as an unknown key, which is the intended signal.
-
-| v3 | v4 |
-|---|---|
-| A freeform block with `body.text` | A named section with `text:` |
-| `- import: Aness` with `render.wrapper` | A slot section, plus `render.plotEssential: {slot: …}` on the Aness item |
-| `blocks:` grouping under a heading | One slot with that `heading:`, and `wrap: all` if the group shared a wrapper |
-| `render.style: hint` | A per-target `template:` on the item's render target |
-| `render.style: skip` | Do not declare the target |
-| `render.stripFence` | Deleted with the fence it removed; drop the key |
-| Block `position:` deciding occupant order | `order:` on each item's render target |
+Converting a v3 Plot Essentials file — the `blocks:` grammar — is covered in [Migrating from v3](16-migrating-from-v3.md).
 
 ---
 
@@ -475,15 +425,7 @@ sections:
           tone: Close, unsparing observation.    # edits one line; "pov" is untouched
 ```
 
-**Document-level `branches:` and `variants:` no longer exist.** v3's AI Instructions carried both, and they were a second branch walker and a second delta vocabulary for what a section already does. Writing either now reports a misplaced-key ERROR pointing at the section surface, because the migration is exactly "move it down one level":
-
-| v3, at the document level | v4, on the section |
-|---|---|
-| `branches: {subject: intimate}` with `variants: {intimate: {apply: [close]}}` | `branches: {subject: close}` on each section that defines a `close` variant |
-| `variants: {detached: {sections: {rules: ~}}}` | `branches: {detached: ~}` on the `rules` section |
-| `branches: {x: {ain: …, cards: …}}` | `render.storyCards` (see below) |
-
-The two dispatches disagreed, which is the other half of why only one survives: `~` on an item or a section excludes it, while `~` on an AI Instructions document meant "apply no variants".
+**There is no document-level `branches:` or `variants:`.** Branch dispatch and variant selection are per section, as shown above; writing either at the document level reports a misplaced-key ERROR pointing at the section surface. Converting an AI Instructions document that carried them is covered in [Migrating from v3](16-migrating-from-v3.md).
 
 ### Swappable alternates — `render.storyCards`
 
@@ -495,7 +437,7 @@ render:
     variant: concise                 # what ships in the AI Instructions field (optional)
   storyCards:
     - title: AI Instructions — Full
-      variant: verbose               # a section-variant selector (§7.6), applied everywhere it is defined
+      variant: verbose               # a section-variant selector, applied everywhere it is defined
     - title: AI Instructions — Scenario Rules Only
       sections: [institute, pacing]   # a subset — omits the imported house style
       type: zz_AIN                     # overrides the project default (see below)
@@ -528,7 +470,7 @@ sections:
         text: Stay inside the subject's head; report sensation before thought.
 ```
 
-Author's Note produces no story card of its own, but like every component it can offer alternates through `render.storyCards` (see [AI Instructions](#swappable-alternates--renderstorycards) above). The v3 `card:` block is gone — a file still carrying one gets an unknown-key ERROR pointing at `render.storyCards`.
+Author's Note produces no story card of its own, but like every component it can offer alternates through `render.storyCards` (see [AI Instructions](#swappable-alternates--renderstorycards) above). There is no `card:` block — a file carrying one gets an unknown-key ERROR pointing at `render.storyCards`.
 
 ---
 
@@ -666,7 +608,7 @@ becomes:
 
 **The trailing group is dropped when it reads as an install note.** If the final group has no list items and an earlier group does, it is removed — which is how "Paste this ONLY into…" stays out of a store listing without hardcoding the text. The rule needs both halves, so a banner that is entirely prose keeps all of it, and a banner whose last group is itself a list keeps that too.
 
-There is no way to turn this off. v3 had a `stripTrailingInstructions:` flag; §7.7 deleted it and the extractor picked the stripping behavior, which is what every project that used the flag had set.
+There is no way to turn this off — the extractor always strips a trailing install-note group. There is no flag for it.
 
 ### `metadata:` becomes frontmatter
 
@@ -704,29 +646,7 @@ components:
   description: ./components/description.md
 ```
 
-### Migrating a v3 `description.yaml`
-
-v3's two-field format becomes two sections. `migrateProjectFully()` in `src/migrate/index.js` does this conversion; by hand it is:
-
-```yaml
-# before — v3
-body:   './components/blurb.md'
-script: '{%scripts}/library.js'
-stripTrailingInstructions: true
-
-# after — v4
-sections:
-  body:
-    file: './components/blurb.md'
-  modBanner:
-    from:
-      script: '{%scripts}/library.js'
-      extract: scriptBanner
-```
-
-`stripTrailingInstructions: true` needs no replacement — it is now the only behavior. If a project had it `false`, the trailing comment group it was keeping will stop appearing; move that line into a `text:` section of its own.
-
-The `.js` shorthand — `description: ./scripts/library.js`, pointing the key straight at a script — is gone. Write it as a component with a `from:` section instead.
+Converting a v3 `description.yaml` — its `body:` / `script:` two-field format, and the `description: ./scripts/library.js` shorthand — is covered in [Migrating from v3](16-migrating-from-v3.md).
 
 ### Output paths
 

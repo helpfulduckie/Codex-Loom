@@ -8,7 +8,7 @@ code may not be reused for a different problem once it has shipped. That stabili
 lets three things work:
 
 - **Documentation anchors** — a code in a terminal is searchable here.
-- **Suppression** — `# codex-loom-disable-next-line CL0442` (planned; see §4.4).
+- **Suppression** — `# codex-loom-disable-next-line CL0442` (planned; not yet implemented).
 - **Test assertions** that survive rewording the message they assert on.
 
 ## Format
@@ -25,7 +25,8 @@ diagnostic about a whole project still renders correctly.
 
 **Template-level positions are imprecise until the render rewrite.** A malformed
 `{join(...)}` can be attributed to its template file but not to a span within it. This is
-a known, bounded shortfall of the phase ordering rather than a defect (spec §13).
+a known, bounded limitation of the current render pipeline rather than a defect: precise
+spans need the deferred render rewrite.
 
 ## Bands
 
@@ -55,7 +56,7 @@ a known, bounded shortfall of the phase ordering rather than a defect (spec §13
 
 `triggers: [{$name.display}]` is **valid YAML** — a flow sequence containing a single-key
 flow mapping — so it parses silently to `[{"$name.display": null}]` and produces a
-wrong-typed value that surfaces far from where it was written. The preparser (§4.1)
+wrong-typed value that surfaces far from where it was written. The preparser
 quotes tokens in the positions it can identify; this check catches the whole class
 regardless of position, and costs one walk of the parsed tree.
 
@@ -63,7 +64,7 @@ Only `$` reaches this check from a plain parse. An unquoted `{%role}` is a hard 
 error (`CL0101`) on YAML's `%` directive indicator, not a silent swallow — but `%` stays
 in the guard's set because `{%…}` is a live token family, so a mapping of that shape
 arriving by any route is still worth flagging. `@` is not covered: the `{@}` token family
-was removed in §6.1, so a `{'@pe': null}` mapping names nothing this check could report.
+was removed in v4, so a `{'@pe': null}` mapping names nothing this check could report.
 
 ### CL01xx continued
 
@@ -76,7 +77,7 @@ was removed in §6.1, so a `{'@pe': null}` mapping names nothing this check coul
 | `CL0114` | WARN | A file under `snapshot/<name>/` on disk has no entry in the manifest. |
 | `CL0115` | ERROR | A file under `snapshot/<name>/` no longer matches its own manifest-recorded hash. |
 | `CL0116` | ERROR | `--snapshot` cannot compute `requiresRoles` for a library entry because the entry's own items do not validate. |
-| `CL0117` | ERROR | A convention pack (§8.2.2) is missing, unparseable, or not shaped like a pack — the pack is named. |
+| `CL0117` | ERROR | A convention pack is missing, unparseable, or not shaped like a pack — the pack is named. |
 | `CL0118` | WARN | `lint.packs.<name>: ~` on a branch that never inherited that pack — nothing was unbound. |
 | `CL0119` | ERROR | A convention pack's declared `name:` disagrees with the `lint.packs` key it was loaded under — both are named. |
 | `CL0120` | WARN | A declared input path does not exist on disk. |
@@ -89,13 +90,12 @@ was removed in §6.1, so a `{'@pe': null}` mapping names nothing this check coul
 
 ### CL0111–CL0115 in detail
 
-Five conditions from `--snapshot`'s freeze (§11.2), raised by `checkDrift` on every compile
+Five conditions from `--snapshot`'s freeze, raised by `checkDrift` on every compile
 that has `structure.input.snapshot` set — never by a project that leaves the key unset,
 which is every project until it opts in. All five read `snapshot/manifest.json`; none of
 them read the live library, because the *drift* line — a library file that changed since
-the last sync — is deliberately informational only and never reaches this bus (§Decision 4
-of the Phase 7 plan: a freeze whose drift blocks a build is a dependency lock with worse
-ergonomics, not a freeze).
+the last sync — is deliberately informational only and never reaches this bus: a freeze
+whose drift blocks a build is a dependency lock with worse ergonomics, not a freeze.
 
 `CL0115` is the one ERROR in the band, because it is not drift — it is the *frozen copy
 itself* disagreeing with what was recorded about it, which only a hand edit after
@@ -109,7 +109,7 @@ section against.
 
 `CL0116` is raised by `syncLibrary` itself, on `--snapshot`, not by `checkDrift` at compile
 time — the other five read an existing manifest, and this one is raised while writing a
-new one. `requiresRoles` (§9.4.4) is computed by elimination: a `{$X}` token that resolves
+new one. `requiresRoles` is computed by elimination: a `{$X}` token that resolves
 to no item id anywhere in the snapshotted library is published as a required role. That is
 only trustworthy for an entry whose own item content validates cleanly — a set with a
 schema violation or a broken registry build gets `CL0116` instead of a role list, since an
@@ -124,12 +124,12 @@ resting on nothing. Sync still runs and the entry's files are still frozen; only
 | `CL0201` | ERROR | Unknown key. Carries a spelling suggestion when one is close. |
 | `CL0202` | ERROR | Key has the wrong value type. |
 | `CL0203` | ERROR | A required key is missing. |
-| `CL0204` | WARN | Key is recognized but not read — either its phase has not landed or it never will; it is ignored. |
+| `CL0204` | WARN | Key is recognized but not read — either it is not yet consumed or it never will be; it is ignored. |
 | `CL0205` | WARN | Key has been superseded by another spelling. |
 | `CL0206` | ERROR | Key takes a closed set of values and got something else. |
-| `CL0207` | ERROR | A number is outside its descriptor's inclusive `min`/`max` bounds. Used by convention-pack schemas (§8.2.2); no `compile.yaml` key declares bounds. |
-| `CL0208` | ERROR | A string does not match its descriptor's `pattern:` regex, compiled case-insensitively. Used by convention-pack schemas (§8.2.2); no `compile.yaml` key declares a pattern. |
-| `CL0209` | ERROR | `version: 4` is missing or wrong. A missing key or `version: 3` names `--migrate` (§14.1); any other value is reported as unsupported. Raised before the rest of schema validation, so a v3 config gets this line alone. |
+| `CL0207` | ERROR | A number is outside its descriptor's inclusive `min`/`max` bounds. Used by convention-pack schemas; no `compile.yaml` key declares bounds. |
+| `CL0208` | ERROR | A string does not match its descriptor's `pattern:` regex, compiled case-insensitively. Used by convention-pack schemas; no `compile.yaml` key declares a pattern. |
+| `CL0209` | ERROR | `version: 4` is missing or wrong. A missing key or `version: 3` names `--migrate`; any other value is reported as unsupported. Raised before the rest of schema validation, so a v3 config gets this line alone. |
 | `CL0210` | ERROR | Key is valid, but at a different level — with the level named. |
 
 ### CL0210 in detail
@@ -169,7 +169,7 @@ Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein 
 | `CL0342` | ERROR | A reference names an id that no canon set defines. |
 | `CL0330` | WARN | A cross-item reference names an item that does not exist. |
 
-`model/` uses neither `fs` nor `console` (§3.3), so these are reported through a
+The resolution layer (`src/model/`) uses neither `fs` nor `console`, so these are reported through a
 caller-supplied `onWarn(code, message)` rather than printed where they arise. Reserved:
 `CL0310`, unresolvable branch dispatch.
 
@@ -178,7 +178,7 @@ field. Two values under two names means the author believes they are two fields,
 silent winner hides that belief instead of correcting it. The declared `notes:` wins so
 output stays deterministic while it is fixed.
 
-`CL0324` is the reason a failed `import:` no longer compiles quietly. The item is dropped
+`CL0324` is the reason a failed `import:` does not compile quietly. The item is dropped
 and everything around it still renders, so the tree that lands looks complete: correct
 card count, tidy summary table, every branch present. What is missing is whatever that
 import was carrying — which, when the import also drove a branch's variant dispatch, can
@@ -275,16 +275,15 @@ a name collision (that is the intended layering); the error is only for a collis
 compiler writes: each story card, each assembled component, each `Opening.md`, and the
 Description. Every one of them means **the compiler failed and the failure is visible in
 the file it just wrote** — a fact about the output, not an opinion about it — which is why
-they are ERRORs and why `lint.level` cannot reach them (spec §12.5).
+they are ERRORs and why `lint.level` cannot reach them.
 
 They share the `CL043x` decade rather than filing `{%key}` under `CL05xx` with the other
 variable diagnostics. What is reported here is not the token family but the leak: one
 detector set, run at one moment, over one finished string. Splitting them by what leaked
 would scatter a single check across three bands and make the sweep unsearchable.
 
-**Before Phase 5 these printed a bare `WARN:` line with no code and gated nothing**, while
-`--lint` listed the same patterns as ERRORs. One check gave two answers depending on which
-half of the tool ran it. A project shipping a leaked `{$she}` now fails the compile.
+**A leaked `{$she}` fails the compile.** The same patterns are ERRORs on the compile path
+and under `--lint`; one check, one answer, wherever it runs.
 
 `CL0436` and `CL0437` run in the same sweep and are *not* facts. Both judge whether
 ordinary prose was meant: `[does]` may be a deliberate bracket, and "undefined" is an
@@ -298,7 +297,7 @@ filename that is a near-miss of `fields.cl.yaml` (a `templateFor` slot file that
 resembles one is left alone). A structurally broken entry is skipped and the rest of the
 table still loads, because a downstream project may override the whole file.
 
-`CL0426`–`CL0428` are the unread-field audit (spec §13.6). A field-list template names the
+`CL0426`–`CL0428` are the unread-field audit. A field-list template names the
 `body:` keys it renders, so a key no field reads is content the compiler silently drops —
 the diagnostic the external schema reference was hand-maintained to stand in for. One
 symptom splits three ways: a key **no declaration names** is a typo (`CL0426`), a key
@@ -340,7 +339,7 @@ value, and the property belongs to the template, not to each field.
 | `CL0620` | WARN | `metadata:` on a component whose output has no place for frontmatter. |
 | `CL0621` | WARN | Both description keys aimed at one file — an unbranched project. |
 | `CL0622` | ERROR | Two story cards share a display name on the same leaf — Velvet Lattice merges by name, so only one reaches AID. |
-| `CL0623` | ERROR | A `render.storyCards` entry (§7.8) declares no `title:` — the title is the card's AID name and the frontier keys on it. |
+| `CL0623` | ERROR | A `render.storyCards` entry declares no `title:` — the title is the card's AID name and the frontier keys on it. |
 | `CL0624` | WARN | A `render.storyCards` entry's `sections:` names a section the component does not declare; it is dropped from that entry. |
 | `CL0625` | WARN | A `render.storyCards` entry renders no text on a branch — its `variant:` / `sections:` selectors left nothing. No card is written. |
 | `CL0626` | ERROR | Two `aid.type` values differ only by case, so they are one file on a case-insensitive filesystem and one group's cards are overwritten. |
@@ -389,8 +388,7 @@ stays a warning because the result is what the author asked for either way: no s
 that name. A document with no `imports:` at all never raises it, because there `~` is the
 plain "omit this" it has always been.
 
-`CL0610` is the no-output invariant (§7.4), and it replaces v3's suppression checks rather
-than reimplementing them. It fires on *consequence*, not on mechanism: an item that
+`CL0610` is the no-output invariant. It fires on *consequence*, not on mechanism: an item that
 resolved onto a branch has to leave a mark on it, and how it failed to — no target
 declared, or a target into a slot the component gated off on that branch — does not
 change the answer. That scoping is what lets slot-level gating stay a legitimate way to
@@ -417,9 +415,8 @@ correct.
 `Opening.md` does not open on an empty prompt — it opens on the blurb, as though the store
 listing were the first scene. It is an ERROR rather than a warning because the output is
 wrong in a way that reads as deliberate: the file is present, well-formed, and shows a
-paragraph the author wrote. In v3 the pairing could not be constructed at all, since a
-description was only ever written at the output root where there is no opening to be
-confused with, so this check arrived with `adventureDescription:` and is inseparable from it.
+paragraph the author wrote. The check is inseparable from `adventureDescription:` — only a
+per-leaf description can sit where an opening would, and a root-only blurb never could.
 
 `CL0630` and `CL0631` are the other side of `CL0616` — a leaf that resolves *nothing* for
 a prompt-bearing component, not one that resolves the wrong thing. `CL0630` fires when a
@@ -454,7 +451,7 @@ description keys write the same `Description.md`. The scenario blurb survives, b
 the half with a native AID field behind it. It is reported rather than silently resolved
 because which of the two the author meant is not recoverable from the file that is left.
 
-`CL0623`–`CL0625` guard §7.8's `render.storyCards` entries. A `render.storyCards` entry is
+`CL0623`–`CL0625` guard `render.storyCards` entries. Such an entry is
 not an item — it has a `title`, an optional `variant:` and an optional `sections:` subset,
 and it renders the component again as a trigger-less `kind: reference` card. `CL0623` is an
 ERROR because the title is the card's AID name and its position in the frontier index, so
@@ -550,10 +547,11 @@ last stage that can still see the difference.
 
 ### The platform caps in detail
 
-`CL0710`–`CL0715` are §8.5's field limits. AID truncates rather than refusing, so exceeding
-one does not fail the upload — the content arrives shortened and the loss surfaces during
-play. A `kind: reference` item is **not** exempt: soft heuristics skip reference items and
-hard limits do not, because the platform does not care why an item exists (§4.8).
+`CL0710`–`CL0715` are the platform's field-length limits. AID truncates rather than
+refusing, so exceeding one does not fail the upload — the content arrives shortened and the
+loss surfaces during play. A `kind: reference` item is **not** exempt: soft heuristics skip
+reference items and hard limits do not, because the platform does not care why an item
+exists.
 
 **Each cap measures less than the file it lives in.**
 
@@ -609,23 +607,23 @@ exactly at the cap warns rather than erroring — the cap is inclusive.
 | `CL0545` | WARN | A role is declared and never referenced by a resolved token anywhere in the compile. |
 
 `CL0530` takes its own decade because `051x` is variables and `052x` is scoping; placeholders
-are a third thing in the band and will want neighbors as §12's remaining checks land.
+are a third thing in the band and will want neighbors as further placeholder checks land.
 
-It exists for the §6.4 footgun rather than for careless authors. A bare `heroName:` with
+It exists for a specific footgun rather than for careless authors. A bare `heroName:` with
 nothing after it parses as null, and null is `~` — so the most natural-looking way to
 declare a placeholder is also the way to silently delete one. Unbinding something never
 inherited removes nothing and cannot have been meant, which makes it a reliable signal that
 the question text is missing; the message says so rather than reporting the deletion
 neutrally.
 
-`CL0531` is the cost of resolving nesting at compile time (§12.2). A question may contain
+`CL0531` is the cost of resolving nesting at compile time. A question may contain
 `%key%` referring to another declared placeholder, which Codex Loom expands before writing
 the file so that Velvet Lattice's single substitution pass cannot get the order wrong. A
 cycle has no expansion, so it is named in full — the author has to break the loop somewhere
 and which key the traversal entered on says nothing about where.
 
 `CL0532` is the one placeholder check that is a *fact* rather than an opinion, and so is a
-compiler diagnostic rather than lint (§12.5). Velvet Lattice substitutes only the keys its
+compiler diagnostic rather than lint. Velvet Lattice substitutes only the keys its
 merged table holds; anything else survives its single pass untouched and is uploaded to AID
 as the literal text `%key%`, where the model reads it as noise mid-sentence. Nothing
 downstream catches it — VL's own warning scan is about *context*, and fires on keys that are
@@ -637,7 +635,7 @@ text reaches a write point its source may be a template, a component document or
 as a hint, because an undeclared key is usually a typo of a real one and `%heroname%`
 against a declared `heroName` is invisible until the two are printed together.
 
-`CL0533` and `CL0534` are §12.3's context check, rescoped against AID's real behavior
+`CL0533` and `CL0534` are the placeholder-context check, rescoped against AID's real behavior
 rather than Velvet Lattice's warnings. VL warns on Label, Description/Prompt, AI
 Instructions and Summary; two of those are stale, since AID's own documentation added AI
 Instructions and Story Summary in March 2026. Placeholders work in every component, and
@@ -656,8 +654,8 @@ Three destinations survive:
 Both check the `${...}` spelling as well as `%key%`, and both ignore whether the key is
 declared: where a placeholder cannot go, declaring it changes nothing.
 
-The check runs per *placement* rather than per file. §7.10 lets an item route into any
-component, so one item body can be legal in one destination and not another on a
+The check runs per *placement* rather than per file, because an item can route into any
+component: one item body can be legal in one destination and not another on a
 per-branch basis, and only the write point knows where the text landed. The `type` check
 in particular runs *before* template resolution: `aid.type` selects the template when no
 explicit one is named, so a placeholder there also fails to find a template, and CL0420
@@ -677,17 +675,17 @@ guidance puts the practical ceiling at about ten placeholders before players sta
 abandoning a scenario, so a prompt whose answer goes nowhere is spending a real budget.
 
 **The scope is the check.** It is measured over the declaring node's subtree, not over the
-project (§6.4). A root-level placeholder used on one branch of three is normal and correct,
+whole project. A root-level placeholder used on one branch of three is normal and correct,
 so an unscoped version would fire constantly on well-formed projects; a branch-level one
 used only on a sibling really is dead, because the declaration does not reach the sibling.
 The hint says which of the two rules applied.
 
 A reference inside another placeholder's question counts as use. Nesting is expanded into
-the emitted file (§12.2), so the inner question does reach the player — through the outer
+the emitted file, so the inner question does reach the player — through the outer
 prompt rather than on its own. Usage is therefore read off the raw question text, before
 expansion substitutes the reference away.
 
-It is a WARN and an opinion rather than a fact (§12.5): an author mid-draft may reasonably
+It is a WARN and an opinion rather than a fact: an author mid-draft may reasonably
 declare a question before writing the text that will use it.
 
 `CL0536` reads declarations and never use sites, and the distinction matters because the
@@ -706,17 +704,17 @@ of keys visible together is the set that can collide — and reported once per d
 group, because a duplicate declared at the root is otherwise re-found at every node beneath
 it and is still one mistake to fix.
 
-It is scoped to placeholders today. §6.4 gives `~` the same meaning for variables, roles
-and lint packs — each carries its own unbind-unknown WARN (`CL0512`, `CL0544`, `CL0118`)
+It is scoped to placeholders today. `~` carries the same "unbind" meaning for variables,
+roles and lint packs — each with its own unbind-unknown WARN (`CL0512`, `CL0544`, `CL0118`)
 rather than being folded into this one. `scripts:` alone still sets the key to null on a
 `~` instead of removing it, so there is nothing for this check to say about it.
 
-`CL0521` exists because library names are auto-exposed as variables (§6.1), so the two share
+`CL0521` exists because library names are auto-exposed as variables, so the two share
 one namespace. A collision is an ERROR rather than a silent precedence rule: there is no
 answer to "which one wins" that an author could predict.
 
 `CL0522` exists because `--snapshot` freezes declared library entries, not resolved
-dependencies (Phase 7 §11.2 Watch). A shared component reached through a plain `variables:`
+dependencies. A shared component reached through a plain `variables:`
 entry rather than a library entry compiles and renders correctly and freezes not at all —
 nothing else notices, because the file never appears anywhere `--snapshot` looks. It fires
 once a compile has actually read the file (component `imports:` chains included, not only a
@@ -736,29 +734,29 @@ collects that set before resolving any path. A name declared at root *and* overr
 branch is not affected: it resolves at root and is overridden later, which is the normal
 pattern.
 
-Codes for the remaining bands are registered as the phases that mint them land. Two codes
-are named by the design docs, not yet implemented, and reserved at their numbers: `CL0143`
+Codes for the remaining bands are registered as the work that mints them lands. Two codes
+are named in the design, not yet implemented, and reserved at their numbers: `CL0143`
 (duplicate Codex overlay for one import target) and `CL0310` (unresolvable branch
 dispatch). Neither is in `diag.js`'s registry until something raises it. `CL04xx` holds
-the template checks and the leaked-artifact sweep; the render rewrite (§13) is what fills
-the rest of the band.
+the template checks and the leaked-artifact sweep; the deferred render rewrite is what
+fills the rest of the band.
 
 ### `CL-<pack>/NNNN` — convention-pack findings
 
-A convention pack (§8.2.2) codes its findings **outside the numeric bands**:
+A convention pack codes its findings **outside the numeric bands**:
 `CL-<pack>/<rule-id>`, zero-padded to four digits — `CL-wtg/0001`. The prefix is the
 pack's declared `name:`, not whatever key the project used, so a pack hosted in a canon
 set yields the same codes in every project that loads it and a suppression stays portable.
 
-Every `CL-` code is opinion-layer by construction (`diag.js:isOpinion`): §12.5 puts every
-opinion-layer ERROR in a pack, and `lint.level` — plus the per-pack and per-branch
+Every `CL-` code is opinion-layer by construction (`diag.js:isOpinion`): every
+opinion-layer ERROR lives in a pack, and `lint.level` — plus the per-pack and per-branch
 `level:` ceilings — has to be able to reach them. A pack finding names the pack, the
 card, and the branch it fired on, because a pack can validate one branch's `notes:`
-config and not another's (§8.2.2).
+config and not another's.
 
 The two bundled packs are `wtg` (`CL-wtg/0001`–`CL-wtg/0003`, the World Time Generator mod
-— see Convention Packs) and `duckieConv` (`CL-duckieConv/0001`–`CL-duckieConv/0004`, the
-card-authoring conventions of `SCHEMA.md` §7 — a per-role length budget, list caps, a
+— see Convention Packs) and `duckieConv` (`CL-duckieConv/0001`–`CL-duckieConv/0004`, a set
+of card-authoring conventions — a per-role length budget, list caps, a
 faction-field redundancy nudge, and a `meta.duckieConv.role` value check). Both are all
 WARN. `duckieConv`'s `count` and `mutexHint` rules run only in the inline compile pass, not
 in offline `--lint`; its `budget` and role rules run in both.

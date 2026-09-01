@@ -95,8 +95,8 @@ items:
 ### `structure.input.library`
 
 A **named mapping** of directories containing shared item and component definitions —
-"canon," in author-facing terms, though the key covers more than characters and lore
-(§11.0). Each name is used in `{%name}` references and when reporting errors. All `.yaml`
+"canon," in author-facing terms, though the key covers more than characters and lore.
+Each name is used in `{%name}` references and when reporting errors. All `.yaml`
 files are loaded recursively.
 
 ```yaml
@@ -129,7 +129,7 @@ structure:
       libNovalune: '{%libraryRoot}\StoryCards\Novalune'
 ```
 
-**Every library name is also exposed as a variable**, so a library entry can reference a sibling — `esudia: '{%libraryRoot}/Esudia'` then `esudiaChars: '{%esudia}/Character'` — and so can any other path in the config. This is what replaced v3's separate `{@name}` family; a library name colliding with a declared variable is an ERROR (`CL0521`), since the two now share one namespace.
+**Every library name is also exposed as a variable**, so a library entry can reference a sibling — `esudia: '{%libraryRoot}/Esudia'` then `esudiaChars: '{%esudia}/Character'` — and so can any other path in the config. A library name colliding with a declared variable is an ERROR (`CL0521`), since the two share one namespace.
 
 **A library directory may carry a reserved `canon.cl.yaml`**, excluded from item loading rather than parsed — see [Roles](13-roles.md#canonclyaml--reserved-not-yet-read).
 
@@ -253,7 +253,7 @@ components:
 
 **`branchFraming:`** — Written to branch-point nodes' `Components/Opening.md`. Does **not** inherit; ignored on leaf nodes with a warning. Takes the same three shapes `opening:` does, but items cannot route into it — framing sits at an interior node, where no items are resolved.
 
-**Declared at the project root — sibling to `branches:` rather than inside any branch node — `branchFraming:` is a third, more limited call site**, written once to `{output}/Components/Opening.md` before the branch tree exists. It resolves `{%variable}` tokens but never checks whether its spec names a `sections:` document, so a role reference (`{$LI}`, `{$protagonist}` — see [Roles](13-roles.md)) is never even attempted there, whether the spec is a literal sentence or a file path. A `branchFraming:` declared *inside* a branch node goes through the ordinary component path instead, and resolves roles like any other `sections:` document (Phase 10 Step 4).
+**Declared at the project root — sibling to `branches:` rather than inside any branch node — `branchFraming:` is a third, more limited call site**, written once to `{output}/Components/Opening.md` before the branch tree exists. It resolves `{%variable}` tokens but never checks whether its spec names a `sections:` document, so a role reference (`{$LI}`, `{$protagonist}` — see [Roles](13-roles.md)) is never even attempted there, whether the spec is a literal sentence or a file path. A `branchFraming:` declared *inside* a branch node goes through the ordinary component path instead, and resolves roles like any other `sections:` document.
 
 **`description:`** — The scenario blurb AID shows on the listing page. Written once to `{output}/Description.md` after all branches compile. Accepts a `.md`/`.txt` file copied verbatim, or a component document with `sections:`. Not per-branch; branch-level declarations are ignored.
 

@@ -41,10 +41,10 @@ setting it null — a role read as "not there" behaves identically to one never 
 rather than resolving to the literal word `null`.
 
 **`protagonist` is the built-in role**, an ordinary entry in `roles:` rather than its own
-config key (Phase 8 retired the separate `protagonist:` root/branch key — see
-[compile.yaml Reference](02-compile-yaml.md)). `{$Aness}` still resolves to `"you"` when
-`Aness` is bound as `protagonist` on the active branch, exactly as before; nothing about
-protagonist substitution itself changed, only where the binding is declared.
+config key — there is no separate `protagonist:` root or branch key (see
+[compile.yaml Reference](02-compile-yaml.md)). `{$Aness}` resolves to `"you"` when
+`Aness` is bound as `protagonist` on the active branch; the binding is declared in `roles:`
+and protagonist substitution itself works like any other role's.
 
 ---
 
@@ -67,14 +67,14 @@ sections:
 
 **Every leaf-level component resolves roles** — story cards, Plot Essentials, AI
 Instructions, Author's Note, and a leaf's own `opening:` all pass through the leaf loop,
-which has always threaded `roles` and a resolved `branchProtagonist` in. Two other sites
-render the same `sections:` grammar and, as of Phase 10 Step 4, resolve roles the same way:
+which threads `roles` and a resolved `branchProtagonist` in. Two other sites
+render the same `sections:` grammar and resolve roles the same way:
 
 - **`branchFraming` at an interior branch node** — inherits the roles table down the
   branch tree exactly as `variables:` does, merging key-wise with `~` deleting (the same
   rule `walkBranchChain` uses for the leaf loop), so a role bound above an interior node
   is visible to its framing even when that node declares no `roles:` of its own.
-- **The root `Description`** (§7.7's project-level blurb) — reads the project's own
+- **The root `Description`** (the project-level scenario blurb) — reads the project's own
   `roles:`, gated the same way the leaf loop gates it: a project that never declares
   `roles:` passes `null` rather than an empty table, so `CL0540` treats it as role-unaware
   territory rather than a project with zero bindings. `branchProtagonist` is always `null`
@@ -93,7 +93,7 @@ not a bug the roles work above addresses.
 
 **Roles resolve in component prose, not only in item bodies.** An Author's Note or AI
 Instructions rule referencing `{$LI}` resolves the same way a character card's body does —
-components are items too, under the §3.4 unification, so the same token pass reaches both.
+components run through the same token pass as items, so it reaches both.
 
 ---
 
@@ -117,7 +117,7 @@ or the other.
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `CL0512` | WARN | A **variable** is unbound with `~` but was never inherited at that node — the retrofit `~` unbinding got when roles gained it (§6.4). |
+| `CL0512` | WARN | A **variable** is unbound with `~` but was never inherited at that node — nothing was there to unbind. |
 | `CL0540` | ERROR | A `{$X}` token resolves to neither a declared role nor a known item id. The compiler cannot tell an undeclared role from a misspelled item id, so the message names both readings and lists the roles declared in scope. |
 | `CL0541` | ERROR | A role name and an item id are the same string — ambiguous, since the shared grammar can't tell which was meant. Rename one. |
 | `CL0542` | ERROR | A role is bound to an item id that does not resolve on this branch — the id doesn't exist, or exists but is excluded here. |
@@ -155,7 +155,7 @@ it from item loading** — it is never parsed as an item, never raises unknown-k
 whatever it contains, and is copied byte-for-byte by `--snapshot` like any other file in the
 directory. Nothing currently *reads* it: the descriptive contract this filename is reserved
 for — documenting which roles, placeholders, and other library sets a canon directory
-expects — is deferred past Phase 8. Enforcement does not wait on it: a role requirement is
+expects — is not built yet. Enforcement does not wait on it: a role requirement is
 real and checked the moment a card references it, whether or not `canon.cl.yaml` exists to
 explain it in prose.
 

@@ -39,7 +39,7 @@ These abort compilation entirely.
 
 These skip the affected item but allow compilation to continue.
 
-**Component and placement problems are coded diagnostics, not free-text messages.** The `[PE]`, `[AIN]` and `[AN]` messages that used to appear here belonged to the separate resolvers Plot Essentials, AI Instructions and Author's Note each ran, and those are gone — every component now takes one path. A slot named by no component, a section that is not a slot, an empty slot, and an item that produces no output on a branch are `CL0610`–`CL0615` in [11-diagnostics.md](11-diagnostics.md). A component whose file is missing or empty is reported at the end of the compile as a requested component that produced no output. The description codes `CL0616`–`CL0621` are in the same table.
+**Component and placement problems are coded diagnostics, not free-text messages.** Every component type — Plot Essentials, AI Instructions, Author's Note and the rest — takes one resolution path, so one set of codes covers them all. A slot named by no component, a section that is not a slot, an empty slot, and an item that produces no output on a branch are `CL0610`–`CL0615` in [11-diagnostics.md](11-diagnostics.md). A component whose file is missing or empty is reported at the end of the compile as a requested component that produced no output. The description codes `CL0616`–`CL0621` are in the same table.
 
 | Message | Cause | Fix |
 |---|---|---|
@@ -72,14 +72,13 @@ Warnings indicate likely authoring mistakes but do not stop compilation.
 **A token that survives into compiled output means the compiler failed, and the failure is
 sitting in the file it wrote.** An unresolved `{$she}`, an unexpanded `{%era}`, a leaked
 `{join}` or `{if}`, an unresolved `[s]`, an `[object Object]` — each is a fact about the
-output rather than an opinion about it, so each is an ERROR with a code, and a project
-carrying one no longer exits zero. They are `CL0430`–`CL0435` in
+output rather than an opinion about it, so each is an ERROR with a code, and a compile
+carrying one does not exit zero. They are `CL0430`–`CL0435` in
 [Diagnostic codes](11-diagnostics.md).
 
-**Before this they printed a bare `WARN:` line and gated nothing**, while `--lint` listed
-the same patterns as errors — one check with two answers, depending on which half of the
-tool you ran. If a project of yours starts failing here, it was shipping a leaked token
-before and the compile was not telling you.
+**The same patterns are errors on the compile path and under `--lint`** — one check, one
+answer, wherever it runs. A project that fails here is one that was shipping a leaked token
+with nothing telling the author.
 
 Two checks in the same sweep stay warnings, because both are guesses about prose rather
 than facts about output: a bracketed word that is not one of the five real conjugation
@@ -121,7 +120,7 @@ at a project directory or a config path and it reads the key; point it at a bare
 and there is no config to read, so only the flag applies. The flag wins over the key either
 way — it is what you typed for this run, the key is what the project says every run.
 
-**`lint.level` on a *branch* is a per-branch ceiling (§8.2.2).** It clamps the opinion
+**`lint.level` on a *branch* is a per-branch ceiling.** It clamps the opinion
 layer for that branch's subtree only, and a finding it clamps names the branch that raised
 it. `lint.packs` on a branch merges down the chain key-wise — a branch can add a pack,
 override one, or unbind it with `<name>: ~` — so which packs validate a branch's `notes:`

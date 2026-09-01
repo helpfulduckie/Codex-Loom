@@ -1,6 +1,6 @@
 # Codex Loom — Developer Guide
 
-This document describes the internal architecture of Codex Loom for maintainers, as it stands on the `v4-phase1` branch. It is meant to augment the inline JSDoc in source files, not duplicate it — focus here is on data flow, non-obvious design decisions, and algorithm structure.
+This document describes the internal architecture of Codex Loom for maintainers. It is meant to augment the inline JSDoc in source files, not duplicate it — focus here is on data flow, non-obvious design decisions, and algorithm structure.
 
 Section references of the form §N point at the v4 design spec, which lives in the vault rather than in this repo.
 
@@ -8,18 +8,21 @@ Section references of the form §N point at the v4 design spec, which lives in t
 
 ## Module Map
 
-Phase 1 split the three files that had accreted several concerns each — `loader.js`, `resolver.js`, and `compile.js`'s config handling — along seams that already existed (§3.2).
+The loader, the resolver and `compile.js`'s config handling are split along the seams that already existed inside them (§3.2): one file per concern rather than three files carrying several each. `compile.js` orchestrates; the per-leaf work, the tree-level writes and the report dispatch are each their own module.
 
 | File | Role |
 |---|---|
-| `src/cli.js` | CLI entry point: argument parsing, mode dispatch, `--migrate` |
-| `src/compile.js` | `compile()` / `compileRun()` — orchestrates the full compilation pipeline |
+| `src/cli.js` | CLI entry point: argument parsing, mode dispatch, `--migrate`, `syncLibrary` |
+| `src/compile.js` | `compile()` / `compileRun()` — orchestrates the pipeline; the per-leaf, tree-write and report stages live in the modules below |
+| `src/compileState.js` | The mutable state of one `compileRun`, grouped into the clusters the decomposed stages pass around |
 | `src/config/load.js` | Loads and resolves `compile.cl.yaml`: variables, paths, canon names |
 | `src/config/schema.js` | The `compile.cl.yaml` key surface, validated by `src/schema.js` |
 | `src/loader/preparse.js` | Rescues leading `{$…}`/`{%…}` tokens YAML would swallow (§4.1) |
 | `src/loader/yaml.js` | YAML parsing with a source map, so diagnostics carry positions |
 | `src/loader/registry.js` | Item loading, `ItemRegistry`, canon merge, overlays, includes |
 | `src/loader/schema.js` | The item key surface (§4.3) |
+| `src/loader/component.js`, `src/loader/component-schema.js` | Component-document loading and its key surface (§7.2) |
+| `src/loader/field-table.js` | Loads `fields.cl.yaml` — the field and template declarations (§12) |
 | `src/loader.js` | Template and partial loading; re-exports the registry functions |
 | `src/schema.js` | The shared validation engine both key surfaces run through |
 | `src/diag.js` | The diagnostic bus: codes, severities, source spans (§4.4) |
@@ -28,21 +31,34 @@ Phase 1 split the three files that had accreted several concerns each — `loade
 | `src/model/fieldops.js` | Value-level field operations (`applyFieldOp` and friends) |
 | `src/model/refs.js` | Item reference resolution, plain and canon-qualified (§17.2) |
 | `src/model/pronouns.js` | Pronoun and verb conjugation passes; cross-item reference resolution |
-| `src/resolver.js` | Compatibility facade re-exporting `model/`; goes away when call sites move |
-| `src/template.js` | Template rendering engine; field interpolation; all render functions |
-| `src/tokens.js` | `{%variable}` expansion — the single expander (§5.1) |
+| `src/model/component.js` | Component documents: sections, slots, section variants, branch gating (§7.2) |
+| `src/util.js` | `{%variable}` expansion (`resolveVariables` — the single expander, §5.1); file enumeration, YAML loading, deep clone, case-insensitive object utilities |
+| `src/template.js` | Template rendering engine; field interpolation |
+| `src/render/parse.js`, `src/render/eval.js` | Tokenize/parse of render-function calls, and evaluation of the parsed program |
+| `src/render/field-list.js`, `src/render/field-audit.js` | Declared-field-list rendering, and the unread-field audit (`CL0426`–`CL0428`) |
+| `src/crossItem.js` | Cross-item render-function resolution: dependency graph, one topological pass, cycle-by-name (§13) |
 | `src/emit/vl.js` | The Velvet Lattice format — the only place that knows the envelope (§8) |
 | `src/emit/components.js` | The component descriptor table; sectioned rendering and passthrough (§7.2, §7.3) |
-| `src/model/component.js` | Component documents: sections, slots, section variants, branch gating (§7.2) |
+| `src/emit/placeholders.js` | Placeholder checks: undeclared, out-of-context, unused, duplicate question text |
+| `src/cardType.js` | `aid.type` validation and normalization for emit (§4.4) |
+| `src/limits.js` | AID's platform field caps and the post-render length measurement (§8.5) |
+| `src/slots.js` | The sections one `render.storyCards`/`render.component` entry renders; slot index; empty-slot warnings (§7.8) |
+| `src/leafLoop.js` | The per-leaf compile loop: branch-chain merge, sectioned components, slot index, card + slot render in one pass |
+| `src/inherit.js` | Component and script inheritance down the branch tree; story-card frontier placement (§11) |
+| `src/outputPaths.js` | Where a branch node's folder lands on disk; the pre-build sweep that wipes output folders and archives stale nodes |
+| `src/treeWrite.js` | Recursive writers for interior-node framing, labels and placeholders; `copyScripts`; component-spec resolution |
+| `src/treeFiles.js` | The tree-level files written after the leaf loop: root framing, labels, placeholders, descriptions |
+| `src/compiledTree.js` | The one compiled-output-tree traversal `seedmap`/`bodysize`/`overview` are built from — child lists, ancestor walk, per-node merge (§15) |
+| `src/reportDispatch.js` | End-of-compile report dispatch and the load-diagnostic replay; the `CL0545` unused-role check |
 | `src/extract.js` | Named transforms for a section's `from:` source — `scriptBanner` (§7.7) |
 | `src/overview.js` | Leaf-review and whole-tree overview file generation |
 | `src/diff.js` | Cross-branch `--with-diff` (Shared/delta) and `--with-annotate` report generation |
 | `src/inventory.js` | `--with-inventory`: slot × branch × occupants report (§7.9) |
 | `src/provenance.js` | Provenance report: library set and source file per resolved item (§17.2) |
-| `src/seedmap.js`, `src/bodysize.js`, `src/lint.js` | Post-compile report modes, read from the written tree |
-| `src/migrate/v3.js` | One-time v3 → v4 conversion (§14.2) |
+| `src/schematables.js` | The generated schema reference: field/label tables and type membership, derived from `fields.cl.yaml` (§13.8) |
+| `src/seedmap.js`, `src/bodysize.js`, `src/lint.js`, `src/lint/packs.js` | Post-compile report modes and convention-pack execution, read from the written tree |
+| `src/migrate/v3.js`, `src/migrate/index.js` | One-time v3 → v4 conversion and its file-walk driver (§14.2) |
 | `src/migrate/description.js`, `src/migrate/opening.js` | The two v3 file formats §7.1 counted, converted to `sections:` |
-| `src/util.js` | File enumeration, YAML loading, deep clone, case-insensitive object utilities |
 
 `model/` is pure by contract (§3.3): no `fs`, no `console`. Warnings go to a caller-supplied `onWarn`, and failed lookups come back described rather than thrown, so the caller decides what reaches a terminal. A test enforces both the purity and the roster.
 
@@ -288,11 +304,11 @@ Phase A (`resolveBranchItems`) resolves all items for a branch and applies field
 
 **Token expansion — one family, one expander**
 
-All `{%variable}` expansion routes through `expandTokens()` in `src/tokens.js`, which delegates to `util.resolveVariables` — recursive, cycle-detecting, and reporting undeclared names. There is no second implementation.
+All `{%variable}` expansion routes through `resolveVariables()` in `src/util.js` — recursive, cycle-detecting, and reporting undeclared names through a caller-supplied sink. There is no second implementation.
 
-v3 had a second family, `{@name}`, resolving against components then canon with a path/content mode distinction. It is removed in §6.1: the per-type component grouping never affected resolution, its one behavioral difference was already applied downstream, and the declaration subtree duplicated `variables:`. Canon names are exposed as variables instead, which is why one expander now suffices.
+The `{@name}` reference family was removed in §6.1 — it resolved against components then canon with a path/content mode distinction, but the per-type component grouping never affected resolution, its one behavioral difference was already applied downstream, and the declaration subtree duplicated `variables:`. Canon names are exposed as variables instead, which is why one expander now suffices. `codex-loom --migrate` rewrites the old sigil.
 
-Call sites are thin wrappers: `config.expandPathTokens` (config paths), `compile.resolveComponentSpec`, the `include:`-path block in `loader/registry.resolveIncludes`, and `loader/component.js` for both `imports:` `from:` and a section's `file:`/`from:` sources. When adding a context that needs tokens, call `expandTokens` rather than re-deriving the regex.
+Call sites are thin wrappers: `config.expandPathTokens` (config paths), `compile.resolveComponentSpec`, the `include:`-path block in `loader/registry.resolveIncludes`, and `loader/component.js` for both `imports:` `from:` and a section's `file:`/`from:` sources. When adding a context that needs tokens, call `resolveVariables` rather than re-deriving the regex.
 
 Coverage notes:
 - `{%}` is expanded in item bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and config paths. In `include:`/`import:` paths it uses **root** `config.variables` only, because `resolveIncludes` runs once before branch enumeration — branch-merged variables do not exist yet.
@@ -331,4 +347,4 @@ Per leaf, per item, field-level diff of `resolveItem(itemDef, registry, branchPa
 **`--with-inventory` → `Overview/Inventory.md`** (`runInventoryMode` in `inventory.js`).
 Per leaf, `captureLeafInventory` walks the slot index and the occupant map into `{slot, gated, occupants}` records. Rendering compresses twice: branches are grouped by occupancy so a uniformly-filled slot is one row, and a row's branch set is written as a path pattern when one selects exactly that set. `branchPattern` verifies each candidate against the leaves it matches and returns null on an over-match, because a pattern claiming a placement that never happened would be indistinguishable from a correct one. Occupant order comes from `sortOccupants`, exported from `emit/components.js` so §7.4's `order:`-then-id rule stays stated in one place.
 
-**Scope / current limitations.** Every sectioned component — Plot Essentials, Summary, AI Instructions and Author's Note — diffs per section, keyed `section:<name>` by `renderSectionedComponent`. A `.md` passthrough has no sections and reports as one segment keyed by the component. Opening and the two descriptions render through the same path as of Phase 6 and their segments are available, but `diff.js` does not read them yet — capturing them is a report change rather than a compiler one. The annotate `base`/`leaf` values are the pre-render resolved field structures, so `+{}` appends show as two-element arrays.
+**Scope / current limitations.** Every sectioned component — Plot Essentials, Summary, AI Instructions and Author's Note — diffs per section, keyed `section:<name>` by `renderSectionedComponent`. A `.md` passthrough has no sections and reports as one segment keyed by the component. Opening and the two descriptions render through the same path and their segments are available, but `diff.js` does not read them yet — capturing them is a report change rather than a compiler one. The annotate `base`/`leaf` values are the pre-render resolved field structures, so `+{}` appends show as two-element arrays.

@@ -18,9 +18,9 @@ compiler makes the Codex Loom maintainer a bottleneck for every mod anyone uses.
 inert data instead: a scenario author ships one alongside the canon it depends on, and
 consuming it is not a trust decision.
 
-**The rules that packs replace used to be hardcoded and brittle.** v3 lint carried an
-`[e]` / `/]` marker check that regex-scraped rendered markdown; it moved into the `wtg`
-pack in v4, scanning the same two surfaces but as a declared rule with a namespaced code.
+**A pack rule is declared data with a namespaced code, not logic compiled into the tool.**
+The `[e]` / `/]` marker check — a regex over rendered markdown on two surfaces — lives in
+the `wtg` pack, so a project that does not use that mod never runs it.
 
 ---
 
@@ -276,9 +276,9 @@ Enable it with `lint: { packs: { wtg: {} } }`.
 ## The bundled `duckieConv` pack
 
 `packs/duckieConv.cl.yaml` is the second bundled pack and the first that encodes authoring
-**judgment** rather than a mod's config contract. It transcribes the lintable half of the
-card-authoring conventions in `Scenarios/_CodexLoom/Design/SCHEMA.md` §7 and is expected to
-drift as that document does. All four rules are WARN — a convention is a nudge.
+**judgment** rather than a mod's config contract. It encodes the lintable half of a set of
+card-authoring conventions maintained separately in the `_CodexLoom` design notes, and is
+expected to drift as those conventions do. All four rules are WARN — a convention is a nudge.
 
 - **`CL-duckieConv/0001` — per-role character budget.** Compiled body length against a
   per-role cap: `anchor` 800, `standard` 400, `minor` 200. The role is
@@ -288,9 +288,9 @@ drift as that document does. All four rules are WARN — a convention is a nudge
   body field. A `count:` rule — inline only, and only fields authored as YAML lists/maps are
   seen.
 - **`CL-duckieConv/0003` — faction field redundancy.** WARNs when more than three of
-  `overview` / `purpose` / `structure` / `methods` are present on one card (§7: "audit for
-  redundancy and merge down"). A `mutexHint:` rule — inline only. Unscoped, which is safe:
-  no non-faction template exposes all four.
+  `overview` / `purpose` / `structure` / `methods` are present on one card — the convention
+  is to audit for redundancy and merge down. A `mutexHint:` rule — inline only. Unscoped,
+  which is safe: no non-faction template exposes all four.
 - **`CL-duckieConv/0004` — the role annotation is a known value.** `meta.duckieConv.role`,
   if set, must be `anchor` / `standard` / `minor`. An `over: meta` closed-`map` schema.
 

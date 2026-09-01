@@ -30,7 +30,7 @@ What the compiler decides, and from what:
 | `encapsulate: false` | Always. Not author-controlled |
 | `notes: ...` | `notes:` on the item, rendered through a notes template when one resolves. Omitted when the text is empty |
 
-Two keys that v3 templates read are gone with the envelope: `aid.encapsulate`, because the value is now unconditional, and `aid.known`, which existed only so a template could write `{if $aid.known}notes: '[e]'{/if}`. The flag lives on the item as `notes: {known: true}` now, and a notes template renders it — see [Item YAML](03-item-yaml.md). Declaring either is an unknown-key ERROR.
+Two keys are not available to a template, and declaring either is an unknown-key ERROR: `aid.encapsulate`, because the compiler writes `encapsulate: false` unconditionally, and `aid.known`, because the flag lives on the item as `notes: {known: true}` and a notes template renders it — see [Item YAML](03-item-yaml.md).
 
 ---
 
@@ -44,7 +44,7 @@ Two keys that v3 templates read are gone with the envelope: `aid.encapsulate`, b
 
 `TypeName.notes.template` is a sibling of a body template, found by name rather than declared: an item rendered by `Character.template` gets `Character.notes.template` for its notes with nothing to configure. See [Item YAML → Rendering notes through a template](03-item-yaml.md) for the full resolution order.
 
-**`.hint` is no longer resolved by name.** It was the template `style: hint` reached for, and with `style:` gone a `.hint` file is an ordinary template like any other — name it in a render target's `template:` and it is used. Existing `Character.hint.template` files keep working; they are just selected explicitly now. See [09-components.md](09-components.md) for the target syntax.
+**A `.hint` file is an ordinary template, resolved only when named.** Put it in a render target's `template:` and it is used; there is no `style:` key that reaches for it by name. See [09-components.md](09-components.md) for the target syntax.
 
 Templates and partials are loaded recursively from directories listed in `structure.input.templates`. When multiple directories are configured, later directories override earlier ones on name collision. Duplicates within the same directory are an error.
 
@@ -318,11 +318,7 @@ Codex Loom has two compile-time token families. `{%}` is the *path/value* family
 | `{%key}` | Compile variable | `compile.yaml` `variables:` (root + per-branch), and every `structure.input.library` name | a string value (recursive, cycle-detected; ERROR if undeclared) | item `id`/`name`/`body`/`aid`/`render` (string values), templates, opening prose, component specs, config paths, `include:` paths, branch `title`/`protagonist` |
 | `{$v.key}` / `{$Id.body.field}` | Field reference | an item's `v:` block / another item's fields | an item field value | templates, and item `body`/`aid`/`render`/`name` fields (the `{$…}` interpolation + cross-item + pronoun passes) |
 
-**There used to be a third: `{@key}`, a named reference declared under `structure.input.components` and `structure.input.canon`.** It is removed in v4, and deleting it cost nothing. Its lookup searched every per-type map in sequence and returned the first name match, so `{@pe}` resolved identically no matter which type declared it — no project could depend on the grouping, because the grouping never worked. Its one behavioral difference was already applied to every component spec downstream, and the declaration subtree duplicated `variables:`: both name a string for reuse.
-
-**Canon names are now auto-exposed as variables**, so `{%characters}/Aness.yaml` does what `{@characters}/Aness.yaml` used to. That leaves one naming system and removes the question *is this a `{%}` thing or a `{@}` thing?* — which had no principled answer, because the two overlapped almost entirely. A canon name colliding with a declared variable is an ERROR (`CL0521`), since the two now share a namespace.
-
-`codex-loom --migrate` rewrites `{@}` references automatically: a canon name changes sigil, and a component alias is replaced by the value it was declared as.
+**Canon and library names are auto-exposed as `{%}` variables**, so `{%characters}/Aness.yaml` resolves against a path declared under `structure.input`. That is the only naming system for these references. A canon or library name colliding with a declared variable is an ERROR (`CL0521`), since the two share a namespace. (A third family, `{@key}`, was removed in v4 — [Migrating from v3](16-migrating-from-v3.md) covers the rewrite.)
 
 **Scope caveat:** `{%}` in `include:`/`import:` paths uses **root** `variables:` only — includes resolve once, before branches are enumerated, so per-branch variable overrides are not in scope there. Everywhere else `{%}` uses the full root → branch merge.
 
@@ -332,7 +328,7 @@ Codex Loom has two compile-time token families. `{%}` is the *path/value* family
 
 **Unexpanded-variable warning:** as a final safety net, every rendered story card and component output is scanned for any leftover `{%…}` token; each distinct one emits a `WARN: unexpanded variable {%x} in …`. This is `{%}`-only. An *undeclared* variable therefore produces two complementary messages: `"{%x}" not declared` at expansion and the residual warning at output.
 
-**`{$…}` family status:** it is a separate system from `{%}`. It has been standardized for *coverage* (resolves in `body`/`aid`/`render`/`name`), *surface* (dotted field refs accepted in item data), and *failure visibility* (residual unresolved-token warning). What remains **deferred** is collapsing its resolvers (`processFieldInterpolation` and the `render/parse.js` + `render/eval.js` walk, plus `applyTokenPass`/`applyCrossItemRefs` in `model/pronouns.js`) into one dispatcher — high risk because of pronoun scope, verb conjugation and protagonist "you". Phase 9 removed one of the original reasons: cross-item resolution is now a dependency-ordered single pass rather than an iterate-to-fixpoint loop. The naming overlap is also a known confusion point: `variable`/`variables` are aliases for *both* the `{%}` declaration intent (`compile.yaml` `variables:`) and the item-level `v:` block (`{$variables.key}`). See `dev-guide.md`.
+**`{$…}` family status:** it is a separate system from `{%}`. It has been standardized for *coverage* (resolves in `body`/`aid`/`render`/`name`), *surface* (dotted field refs accepted in item data), and *failure visibility* (residual unresolved-token warning). What remains **deferred** is collapsing its resolvers (`processFieldInterpolation` and the `render/parse.js` + `render/eval.js` walk, plus `applyTokenPass`/`applyCrossItemRefs` in `model/pronouns.js`) into one dispatcher — high risk because of pronoun scope, verb conjugation and protagonist "you". One of the original reasons no longer applies: cross-item resolution is a dependency-ordered single pass rather than an iterate-to-fixpoint loop. The naming overlap is also a known confusion point: `variable`/`variables` are aliases for *both* the `{%}` declaration intent (`compile.yaml` `variables:`) and the item-level `v:` block (`{$variables.key}`). See `dev-guide.md`.
 
 ---
 
@@ -396,10 +392,4 @@ With `Appearance.partial`:
 Physical Traits: {join("; ", $body.Physical Traits.gender, $body.Physical Traits.age, $body.Physical Traits.hair, $body.Physical Traits.eyes, $body.Physical Traits.build, $body.Physical Traits.other)}
 ```
 
-### Migrating a v3 template
-
-A v3 template opened with the envelope, and everything below the last `~~~` was the body. Delete everything up to and including that line — that is the whole conversion, and `src/migrate/v3.js:stripTemplateHeader` does it mechanically. Keep any `{wrapper}` tag that lived in the header: it wraps the body, not the envelope.
-
-Then check the surviving body for `{$aid.encapsulate}`, `{$aid.known}`, and any `{$aid.title}` the migrator dropped as a duplicate of `name.full`. Those tokens now render empty rather than failing loudly.
-
-A project's **local `.partial` override** — a copy of a shared partial that adds behavior on top of it — is not auto-converted to a `fields.cl.yaml` entry. `--migrate` has no step for it: an arbitrary partial delta cannot be expressed as `label` / `labelWhen` / added-field declarations in general, so `.template` and `.partial` stay the escape hatch. Re-author the override by hand as a project field table.
+Converting v3 templates to this form is covered in [Migrating from v3](16-migrating-from-v3.md).

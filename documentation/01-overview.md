@@ -96,7 +96,7 @@ codex-loom -C -l -o path/to/project/
 
 **The library snapshot** (`--snapshot`, `--live`) — Shared items declared under `library:` are frozen into a committed `snapshot/` tree with a hashed manifest, so a compile reproduces byte-for-byte even when the shared source moves underneath it. Library-name `{%name}` tokens resolve against the snapshot by default; `--live` redirects them to the working library instead. See [The Library Snapshot](12-snapshot.md).
 
-**Migration** (`--migrate`, `--rename-cl`) — Converts a v3 project to the v4 schema in place and writes `migration-report.md` alongside the config, listing every file touched and a review queue of the conversions that need a human eye. It does not compile; run `codex-loom` again once the project has migrated. `--rename-cl` additionally renames `compile.yaml` to `compile.cl.yaml`.
+**Migration** (`--migrate`, `--rename-cl`) — Converts a v3 project to the v4 schema in place and writes `migration-report.md` alongside the config, listing every file touched and a review queue of the conversions that need a human eye. It does not compile; run `codex-loom` again once the project has migrated. `--rename-cl` additionally renames `compile.yaml` to `compile.cl.yaml`. See [Migrating from v3](16-migrating-from-v3.md) for what changes and the hand edits the review queue asks for.
 
 **Seed map** (`-s`/`--seed-map`) — Reads compiled output and reports which items' body text contains other items' triggers. When Item A's body mentions a word from Item B's trigger list, the Storyteller AI pulling Item A into context may also pull Item B — a "seed." The seed map makes these relationships visible so you can spot unintended context cascade or find items that nothing seeds.
 
@@ -159,7 +159,7 @@ specials — `${character.name}`, `${character.gender}` and the five pronoun for
 identifier-shaped by construction and exempt; they have no `%key%` equivalent, so every
 project that wants them writes them raw.
 
-Core lint carries only that one structural check on purpose. Rules about what a card's *content* should say — the `[e]` background-knowledge marker, the `/]` discovery marker, and their mutual exclusion — belong to a particular mod's convention and fire wrongly for every project that does not use it, so they move to convention packs rather than living here. `encapsulate` is no longer checked at all: the compiler writes it, not the author.
+Core lint carries only that one structural check on purpose. Rules about what a card's *content* should say — the `[e]` background-knowledge marker, the `/]` discovery marker, and their mutual exclusion — belong to a particular mod's convention and fire wrongly for every project that does not use it, so they belong to convention packs rather than core lint. `encapsulate` is not checked: the compiler writes it, not the author.
 
 This is pure pattern-matching — deterministic and exhaustive, with no false-negative risk from an LLM guessing at the token list. It catches the mechanical half of a QA pass; bleed, missing-information, and cross-branch consistency checks still require holding the whole branch structure in mind and are out of scope here.
 
@@ -302,3 +302,4 @@ Each is covered in its own reference document.
 - [Roles](13-roles.md)
 - [Convention Packs](14-convention-packs.md)
 - [Context Tiering](15-context-tiering.md)
+- [Migrating from v3](16-migrating-from-v3.md)
