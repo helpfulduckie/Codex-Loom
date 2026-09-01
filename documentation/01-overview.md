@@ -159,7 +159,7 @@ specials — `${character.name}`, `${character.gender}` and the five pronoun for
 identifier-shaped by construction and exempt; they have no `%key%` equivalent, so every
 project that wants them writes them raw.
 
-Core lint carries only that one structural check on purpose. Rules about what a card's *content* should say — the `[e]` background-knowledge marker, the `/]` discovery marker, and their mutual exclusion — belong to a particular mod's convention and fire wrongly for every project that does not use it, so they belong to convention packs rather than core lint. `encapsulate` is not checked: the compiler writes it, not the author.
+Core lint carries only that one structural check on purpose. Rules about what a card's *content* should say — the `[e]` background-knowledge marker, the `/]` discovery marker, and their mutual exclusion — belong to a particular mod's convention and fire wrongly for every project that does not use it, so they belong to convention packs rather than core lint.
 
 This is pure pattern-matching — deterministic and exhaustive, with no false-negative risk from an LLM guessing at the token list. It catches the mechanical half of a QA pass; bleed, missing-information, and cross-branch consistency checks still require holding the whole branch structure in mind and are out of scope here.
 

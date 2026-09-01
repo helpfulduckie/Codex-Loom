@@ -148,20 +148,6 @@ aid:
 | `type` | Output folder name. Also used as the default template name if `render.template` is absent. |
 | `triggers` | Trigger keyword list. Leading and trailing spaces are written as `_` — `_Era_` is the trigger `" Era "` — because a plain padded string cannot survive the round trip into AID. An interior `_` is literal. |
 
-### `encapsulate` and `known`
-
-Neither key exists on an item — both are unknown-key ERRORs. `encapsulate` is not author-controlled: the compiler writes `encapsulate: false` on every card, because every site in the Velvet Lattice loader defaults it to true.
-
-`known` lives on `notes:`, where it stays a flag rather than a baked-in string:
-
-```yaml
-notes: {known: true}
-```
-
-**A flag, not the literal `[e]` text, because the difference matters twice.** A convention pack cannot read `[e]` back out of free text, so a flattened marker is unreadable to the thing meant to read it. And a branch that does not load the mod the marker belongs to needs a way to switch the marker off — swapping the notes template does that, and a template can only decide per card if the card carries a flag rather than an answer. A notes template has to be configured for the flag to render; without one it is carried and never written.
-
-A scalar `notes: '[e]'` is still valid; it simply renders verbatim and cannot be varied per branch. Converting a v3 project: see [Migrating from v3](16-migrating-from-v3.md).
-
 `aid.type` and `render.template` default to each other — if one is set the other is filled in automatically. If neither is set, the item cannot be rendered and a warning is emitted.
 
 String values in `aid:` (e.g. `title`, `triggers`) support `{%variable}` expansion, the same as `body:`. **`aid.type` is validated after expansion** — since it becomes a folder and filename, an illegal path segment (`< > : " / \ | ? *`, control chars, `.`/`..`, or a trailing space/period) aborts the compile.
@@ -218,7 +204,7 @@ For anything richer than a literal, a template renders the text. Which template 
 | 2 | the branch-addressable notes default: `templateFor.notes` keyed on `aid.type`, then the `render.notesTemplate` scalar in `compile.yaml` — both merged down the branch chain | see [compile.yaml](02-compile-yaml.md) |
 | 3 | none — the default rendering above | |
 
-Rung 2 is where a project sets one notes template for a whole type or a whole scenario, and a branch swaps it for the mod case — a branch that drops WTG points `notesTemplate` at a blank template and every card in it stops emitting the marker. There is deliberately no rung that resolves a `<body template>.notes` file by filename alone: a renderer with nothing declared should stay inert.
+Rung 2 is where a project sets one notes template for a whole type or a whole scenario, and a branch swaps it for the mod case — a branch that drops WTG points `notesTemplate` at a blank template and every card in it stops emitting the marker.
 
 ```yaml
 # compile.yaml

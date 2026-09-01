@@ -74,11 +74,7 @@ sitting in the file it wrote.** An unresolved `{$she}`, an unexpanded `{%era}`, 
 `{join}` or `{if}`, an unresolved `[s]`, an `[object Object]` — each is a fact about the
 output rather than an opinion about it, so each is an ERROR with a code, and a compile
 carrying one does not exit zero. They are `CL0430`–`CL0435` in
-[Diagnostic codes](11-diagnostics.md).
-
-**The same patterns are errors on the compile path and under `--lint`** — one check, one
-answer, wherever it runs. A project that fails here is one that was shipping a leaked token
-with nothing telling the author.
+[Diagnostic codes](11-diagnostics.md), and `--lint` flags the same patterns.
 
 Two checks in the same sweep stay warnings, because both are guesses about prose rather
 than facts about output: a bracketed word that is not one of the five real conjugation

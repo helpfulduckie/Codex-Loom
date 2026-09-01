@@ -82,8 +82,6 @@ Declared on a leaf, `branchFraming:` is ignored with a warning: a leaf has no ch
 
 **A `branchFraming:` declared at the project root — outside every `branches:` node — is a third, separate call site with a real limitation.** It writes once to `{output}/Components/Opening.md` before any branch node exists, and resolves through the same literal/`{%variable}`-only path a plain-prose `opening:` uses: it never checks whether its spec names a `sections:` document, so a `{$role}` token there is never attempted regardless of shape. A `branchFraming:` declared inside a branch node — the case above — goes through the ordinary sectioned-component path and resolves roles the same way `opening:` and every other component does (see [Roles](13-roles.md#using-a-role-in-prose)).
 
-Converting a v3 block-list opening — the paragraph-sequence format `opening:` used to accept — is covered in [Migrating from v3](16-migrating-from-v3.md).
-
 ### Output paths
 
 | Declaration | Output path |
@@ -104,7 +102,7 @@ Both keys write the same filename at different levels, because Velvet Lattice re
 
 **The file is a record of named `sections:`, and it describes shape only — it never names an item.** A section either carries `text:` or is marked `slot: true`, and a slot is a place items route *into*. Membership lives on the item: an item declares `render.plotEssential` naming the slot it belongs in, and the component never learns who filled it. This is the inversion described in [01-overview.md](01-overview.md) — the component says where content can go, the item says where it goes.
 
-Naming every section is what makes the file overridable: an importing project can reposition, edit or delete a named section, where an anonymous block could only be replaced wholesale.
+Naming every section is what makes the file overridable: an importing project can reposition, edit or delete a named section.
 
 ### Sections and slots
 
@@ -338,11 +336,9 @@ sections:
     plotEssential: {slot: cast, order: 1, template: CharacterBrief}
 ```
 
-**A per-target `template:` lets the story card and the Plot Essentials entry use any two templates**, rather than being tied to one template and a `.hint` sibling.
+**A per-target `template:` lets the story card and the Plot Essentials entry use different templates.**
 
 An item rendered into a slot produces body text and nothing else — the `## Name` heading and `~~~` fence belong to story-card output, and Plot Essentials is not a story card.
-
-Converting a v3 Plot Essentials file — the `blocks:` grammar — is covered in [Migrating from v3](16-migrating-from-v3.md).
 
 ---
 
@@ -425,7 +421,7 @@ sections:
           tone: Close, unsparing observation.    # edits one line; "pov" is untouched
 ```
 
-**There is no document-level `branches:` or `variants:`.** Branch dispatch and variant selection are per section, as shown above; writing either at the document level reports a misplaced-key ERROR pointing at the section surface. Converting an AI Instructions document that carried them is covered in [Migrating from v3](16-migrating-from-v3.md).
+**There is no document-level `branches:` or `variants:`.** Branch dispatch and variant selection are per section, as shown above; writing either at the document level reports a misplaced-key ERROR pointing at the section surface.
 
 ### Swappable alternates — `render.storyCards`
 
@@ -470,7 +466,7 @@ sections:
         text: Stay inside the subject's head; report sensation before thought.
 ```
 
-Author's Note produces no story card of its own, but like every component it can offer alternates through `render.storyCards` (see [AI Instructions](#swappable-alternates--renderstorycards) above). There is no `card:` block — a file carrying one gets an unknown-key ERROR pointing at `render.storyCards`.
+Author's Note produces no story card of its own, but like every component it can offer alternates through `render.storyCards` (see [AI Instructions](#swappable-alternates--renderstorycards) above).
 
 ---
 
@@ -645,8 +641,6 @@ A `.md` or `.txt` path is copied verbatim, exactly as it is for every other comp
 components:
   description: ./components/description.md
 ```
-
-Converting a v3 `description.yaml` — its `body:` / `script:` two-field format, and the `description: ./scripts/library.js` shorthand — is covered in [Migrating from v3](16-migrating-from-v3.md).
 
 ### Output paths
 

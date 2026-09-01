@@ -18,9 +18,9 @@ compiler makes the Codex Loom maintainer a bottleneck for every mod anyone uses.
 inert data instead: a scenario author ships one alongside the canon it depends on, and
 consuming it is not a trust decision.
 
-**A pack rule is declared data with a namespaced code, not logic compiled into the tool.**
-The `[e]` / `/]` marker check — a regex over rendered markdown on two surfaces — lives in
-the `wtg` pack, so a project that does not use that mod never runs it.
+The bundled `wtg` pack is a worked example: its `[e]` / `/]` marker check is a regex over
+rendered markdown, run only for projects that load it. See [The bundled `wtg`
+pack](#the-bundled-wtg-pack) below.
 
 ---
 

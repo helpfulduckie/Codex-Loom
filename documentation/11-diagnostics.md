@@ -63,8 +63,7 @@ regardless of position, and costs one walk of the parsed tree.
 Only `$` reaches this check from a plain parse. An unquoted `{%role}` is a hard parse
 error (`CL0101`) on YAML's `%` directive indicator, not a silent swallow — but `%` stays
 in the guard's set because `{%…}` is a live token family, so a mapping of that shape
-arriving by any route is still worth flagging. `@` is not covered: the `{@}` token family
-was removed in v4, so a `{'@pe': null}` mapping names nothing this check could report.
+arriving by any route is still worth flagging.
 
 ### CL01xx continued
 
@@ -282,8 +281,8 @@ variable diagnostics. What is reported here is not the token family but the leak
 detector set, run at one moment, over one finished string. Splitting them by what leaked
 would scatter a single check across three bands and make the sweep unsearchable.
 
-**A leaked `{$she}` fails the compile.** The same patterns are ERRORs on the compile path
-and under `--lint`; one check, one answer, wherever it runs.
+A leaked `{$she}` fails the compile, and `--lint` flags the same patterns on an
+already-compiled tree.
 
 `CL0436` and `CL0437` run in the same sweep and are *not* facts. Both judge whether
 ordinary prose was meant: `[does]` may be a deliberate bracket, and "undefined" is an
@@ -606,10 +605,7 @@ exactly at the cap warns rather than erroring — the cap is inclusive.
 | `CL0544` | WARN | A role is unbound with `~` but was never inherited at that node. |
 | `CL0545` | WARN | A role is declared and never referenced by a resolved token anywhere in the compile. |
 
-`CL0530` takes its own decade because `051x` is variables and `052x` is scoping; placeholders
-are a third thing in the band and will want neighbors as further placeholder checks land.
-
-It exists for a specific footgun rather than for careless authors. A bare `heroName:` with
+`CL0530` exists for a specific footgun rather than for careless authors. A bare `heroName:` with
 nothing after it parses as null, and null is `~` — so the most natural-looking way to
 declare a placeholder is also the way to silently delete one. Unbinding something never
 inherited removes nothing and cannot have been meant, which makes it a reliable signal that
@@ -635,14 +631,9 @@ text reaches a write point its source may be a template, a component document or
 as a hint, because an undeclared key is usually a typo of a real one and `%heroname%`
 against a declared `heroName` is invisible until the two are printed together.
 
-`CL0533` and `CL0534` are the placeholder-context check, rescoped against AID's real behavior
-rather than Velvet Lattice's warnings. VL warns on Label, Description/Prompt, AI
-Instructions and Summary; two of those are stale, since AID's own documentation added AI
-Instructions and Story Summary in March 2026. Placeholders work in every component, and
-in a story card's entry, name, triggers and notes. Adopting VL's list would make Codex
-Loom stricter than the tool it compiles for, on rules that no longer exist.
-
-Three destinations survive:
+`CL0533` and `CL0534` check where a placeholder landed against where AID actually fills
+one. Placeholders work in every component, and in a story card's entry, name, triggers and
+notes; the destinations below are the ones where they do not.
 
 | Destination | Behavior | Code |
 |---|---|---|

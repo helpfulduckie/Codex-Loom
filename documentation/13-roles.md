@@ -40,11 +40,9 @@ unbind any of them; siblings are independent. `~` deletes the inherited key rath
 setting it null — a role read as "not there" behaves identically to one never declared,
 rather than resolving to the literal word `null`.
 
-**`protagonist` is the built-in role**, an ordinary entry in `roles:` rather than its own
-config key — there is no separate `protagonist:` root or branch key (see
-[compile.yaml Reference](02-compile-yaml.md)). `{$Aness}` resolves to `"you"` when
-`Aness` is bound as `protagonist` on the active branch; the binding is declared in `roles:`
-and protagonist substitution itself works like any other role's.
+**`protagonist` is the built-in role** — an ordinary entry in `roles:`. `{$Aness}` resolves
+to `"you"` when `Aness` is bound as `protagonist` on the active branch; it otherwise
+behaves like any other role.
 
 ---
 
