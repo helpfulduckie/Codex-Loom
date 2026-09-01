@@ -145,4 +145,4 @@ Variant dispatch uses the **item definition's** variant tree. For imports, `impo
 
 **"Cross-item ref not found"**
 
-Cross-item refs (`{$Id.body.FieldName}`) are resolved after all items for a branch are compiled. If the referenced item has `only:` or `except:` filters that exclude it from the current branch, it won't be available for cross-item resolution.
+Cross-item refs (`{$Id.body.FieldName}`) are resolved after all items for a branch are compiled. The lookup checks the branch's compiled items first, then falls back to the referenced item's **canonical base** in the registry; if the id resolves nowhere or the field is missing, `CL0330` is raised and the token is left as-is. An item excluded from this branch — a `~` for the branch in its `branches:` dispatch map — is still reachable through that canonical fallback unless it has no canon entry at all. (There are no `only:`/`except:` keys; `~` in `branches:` is the only exclusion mechanism.)

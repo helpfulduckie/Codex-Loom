@@ -49,11 +49,13 @@ A spec that names a file on disk is read; one that names nothing is the text its
 ```yaml
 branches:
   subject:
-    protagonist: Aness
+    roles:
+      protagonist: Aness
     components:
       opening: "You are a research subject assigned to the Zenus project."
   researcher:
-    protagonist: Veyrn
+    roles:
+      protagonist: Veyrn
     components:
       opening: ./openings/researcher.md
 ```
@@ -473,14 +475,19 @@ Author's Note produces no story card of its own, but like every component it can
 
 ## Scripts
 
-`components.scripts` points to a directory that is **copied** into each branch leaf's `Scripts/` folder.
+`scripts:` points at the Velvet Lattice scripting hooks **copied** into each branch leaf's `Scripts/` folder. It is a **top-level `compile.yaml` key**, not a `components:` sub-key — putting it under `components:` is a `CL0210` error — but it merges down the branch chain the same way a component does, so a branch can swap or unbind (`~`) its script set.
 
 ```yaml
-components:
-  scripts: ./scripts
+scripts: ./scripts               # a directory, copied whole
+
+scripts:                         # or the four VL hook files, named individually
+  input:   ./scripts/input.js
+  context: ./scripts/context.js
+  output:  ./scripts/output.js
+  library: ./scripts/library.js
 ```
 
-No processing is applied — files are copied as-is.
+No processing is applied to the files — they are copied as-is. Path values still take `{%variable}` expansion. See [compile.yaml → scripts](02-compile-yaml.md#scripts).
 
 ---
 

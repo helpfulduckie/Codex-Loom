@@ -11,14 +11,20 @@ The `branches:` key is a nested mapping. Any branch node without a `branches:` s
 ```yaml
 branches:
   subject:                      # leaf
-    protagonist: Aness
+    roles:
+      protagonist: Aness
   researcher:                   # leaf
-    protagonist: Veyrn
+    roles:
+      protagonist: Veyrn
   tier2:                        # non-leaf node
     branches:
       alpha: {}                 # leaf
       beta: {}                  # leaf
 ```
+
+`protagonist` is the built-in role, bound inside a branch's `roles:` block like any other
+role (see [Roles](13-roles.md)). There is no standalone `protagonist:` branch key — one
+is a `CL0201` unknown-key error.
 
 This produces four leaf outputs: `subject`, `researcher`, `tier2/alpha`, `tier2/beta`.
 
@@ -32,9 +38,11 @@ By default the output folder for each branch uses the YAML key as the directory 
 branches:
   subject:
     title: The Subject's Path     # folder: Branches/The Subject's Path/
-    protagonist: Aness
+    roles:
+      protagonist: Aness
   researcher:
-    protagonist: Veyrn             # folder: Branches/researcher/  (no title)
+    roles:
+      protagonist: Veyrn          # folder: Branches/researcher/  (no title)
 ```
 
 The `title:` value is used **only** for the filesystem path. The YAML key (`subject`, `researcher`) remains the identifier used for item `branches:` dispatch, wildcard matching, and all other internal logic.

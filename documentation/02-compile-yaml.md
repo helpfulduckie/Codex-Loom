@@ -154,29 +154,6 @@ templates:
   - ./templates
 ```
 
-### `variables`
-
-Named directory (or file) mappings for each component type. These are referenced in `components:` specs via `{%name}` tokens. The supported component types are:
-
-| Key | Written to |
-|---|---|
-| `aiInstructions` | `Components/AI Instructions.md` |
-| `plotEssential` | `Components/Plot Essentials.md` |
-| `authorsNote` | `Components/Author's Note.md` |
-| `opening` | `Components/Opening.md` at each leaf (inherits down the tree) |
-| `branchFraming` | `Components/Opening.md` at branch-point nodes only (never inherited) |
-| `scripts` | `Scripts/` (directory copy) |
-| `description` | `Description.md` (output root, written once — not per-branch) |
-| `adventureDescription` | `Description.md` at each leaf (inherits down the tree) |
-
-```yaml
-components:
-  plotEssential:
-    default: ./plot-essentials.yaml
-  aiInstructions:
-    default: ./ai-instructions.yaml
-```
-
 ### `structure.output`
 
 Directory where compiled output is written. Relative to `compile.yaml`. Defaults to `./output` if omitted.
@@ -236,18 +213,32 @@ Used in a template as: `The year is {%year}.`
 
 ### `components`
 
-Specifies what content to write for root-level component files. Each value is an inline string, a relative file path, a `{%variable}`, or a `{%key}` reference to a named directory/file in `variables` (or a library entry — `{%key}` resolves against components first, then library).
+Specifies what content to write for root-level component files. Each value is an inline string, a relative file path, or a `{%variable}` / `{%libraryName}` token that expands to one (component specs go through the same single `{%…}` expander as every other path — there is no separate component namespace).
 
 ```yaml
 components:
-  opening: "Who are you?"                     # inline text
+  opening: "Who are you?"                      # inline text
   plotEssential: ./plot-essentials.yaml        # file path
-  aiInstructions: "{%default}"                # component key reference
+  aiInstructions: "{%shared}/ai-instructions.yaml"   # a library-name token
   authorsNote: ./authors-note.yaml
-  scripts: ./scripts
-  description: ./description.cl.yaml           # the scenario blurb, root only
+  description: ./description.cl.yaml            # the scenario blurb, root only
   adventureDescription: ./adventure.cl.yaml    # per-leaf, inherits down the tree
 ```
+
+Each key writes one file. Every component except `branchFraming:` inherits down the branch tree, so a value declared at an interior node reaches the leaves beneath it:
+
+| Key | Output file | Inherits | Items route in |
+|---|---|---|---|
+| `plotEssential` | `Components/Plot Essentials.md` | yes | yes |
+| `summary` | `Components/Summary.md` (VL reads this into `storySummary`) | yes | yes |
+| `aiInstructions` | `Components/AI Instructions.md` | yes | yes |
+| `authorsNote` | `Components/Author Notes.md` (Velvet Lattice's spelling) | yes | yes |
+| `opening` | `Components/Opening.md`, at each leaf | yes | yes |
+| `branchFraming` | `Components/Opening.md`, at branch-point nodes only | no | no |
+| `description` | `Description.md` at the output root, written once | n/a | no |
+| `adventureDescription` | `Description.md`, at each leaf | yes | yes |
+
+`scripts:` is **not** a component — it is a top-level key (see [scripts](#scripts) below), folded in here only because it merges down the branch chain the same way.
 
 **`opening:`** — Written to each leaf's `Components/Opening.md`. An ordinary component: it inherits down the tree, may be a `sections:` document, and items may route into its slots. A `.md` file is copied verbatim and a spec naming no file is used as literal text, which is what most openings are. Capped at 4,000 characters (`CL0710`/`CL0711`).
 
@@ -260,6 +251,29 @@ components:
 **`adventureDescription:`** — The description a leaf carries, which AID applies to the adventure started from that leaf. An ordinary component: declared anywhere in the tree, inherited down it, written to each leaf's `Description.md`, and items may route into its slots. A leaf that has one and no `Opening.md` is `CL0616`, because Velvet Lattice would open the adventure on the blurb.
 
 See [Components → Description](09-components.md#description) for both keys, the `file:`/`from:` section sources, and `metadata:` frontmatter.
+
+### `scripts`
+
+Points at the Velvet Lattice scripting hooks copied into each branch leaf's `Scripts/`
+folder. It is a **top-level key** — sibling to `components:`, not a key inside it — and it
+merges down the branch chain like `components:` and `render:`, so a branch can swap or
+unbind (`~`) the script set it ships.
+
+Two forms:
+
+```yaml
+scripts: ./scripts               # a directory, copied whole
+
+scripts:                         # or the four VL hook files, named individually
+  input:   ./scripts/input.js
+  context: ./scripts/context.js
+  output:  ./scripts/output.js
+  library: ./scripts/library.js
+```
+
+Path values take `{%variable}` expansion like any other config path; the files themselves
+are copied as-is, with no processing of their contents. See
+[Components → Scripts](09-components.md#scripts).
 
 ### `render`
 
