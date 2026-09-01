@@ -88,9 +88,16 @@ function mapScalars(doc, fn) {
         const next = fn(node.value);
         if (next !== node.value) {
           node.value = next;
-          // Let the emitter re-choose quoting; a value that no longer starts with `{`
-          // does not need the defensive quotes v3 required (§14.2).
-          delete node.type;
+          // Drop the node's style only when the rewrite made it safe to: a value that no
+          // longer starts with `{` does not need the defensive quotes v3 required (§14.2),
+          // so let the emitter re-choose. A value that still starts with `{` keeps its
+          // authored quoting rather than being re-picked to double, and a `|`/`>` block
+          // keeps its style rather than folding — token substitution inside a body is no
+          // reason to reshape the line. Config values are never braced-after-rewrite or
+          // block scalars, so both guards only bite once item files share this pass.
+          const stillBraced = next.startsWith('{');
+          const isBlock = node.type === 'BLOCK_LITERAL' || node.type === 'BLOCK_FOLDED';
+          if (!stillBraced && !isBlock) delete node.type;
         }
       }
     },
@@ -420,10 +427,22 @@ function migrateItemDocument(doc) {
   return { changes, notes };
 }
 
-/** Migrate every item YAML file under `rootDir`. Returns per-file reports. */
-function migrateItemFiles(rootDir, options = {}) {
+/**
+ * Migrate every item YAML file under `rootDir`, and rewrite its `{@}` references in the
+ * same pass. Returns per-file reports.
+ *
+ * The `{@}` rewrite had its own walk (`migrateProjectFiles`) until it was folded in here.
+ * That walk did a blind `source.replace` on the raw file text, so it also rewrote a
+ * `{@foo}` sitting inside a comment — while `compile.yaml`'s rewrite goes through the
+ * Document API and cannot. One parsed-Document pass per file gives every file that same
+ * fidelity: `mapScalars` visits scalar values, and a comment is a node property it never
+ * sees. `aliases`/`canonNames` come from `migrateConfigFile`; they default empty so a
+ * caller exercising only the structural rules needs no maps.
+ */
+function migrateItemFiles(rootDir, aliases = new Map(), canonNames = new Set(), options = {}) {
   const touched = [];
   const notes = [];
+  const unresolved = [];
   const totals = { encapsulate: 0, known: 0, triggers: 0, stripFence: 0, kindCandidates: 0 };
 
   const walk = (dir) => {
@@ -431,10 +450,20 @@ function migrateItemFiles(rootDir, options = {}) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) { walk(full); continue; }
       if (!entry.isFile() || !hasSuffix(entry.name, YAML_SUFFIXES)) continue;
+      if (path.resolve(full) === path.resolve(options.configPath || '')) continue;
 
       const source = fs.readFileSync(full, 'utf8');
       const doc = YAML.parseDocument(source);
       if (doc.errors.length > 0) throw new Error(`${full}: ${doc.errors[0].message}`);
+
+      // {@} first, before any structural node moves — the order `migrateConfigDocument`
+      // uses, and orthogonal here anyway since `migrateItemDocument` never reads an
+      // `include:`/`script:` path.
+      if (source.includes('{@')) {
+        const local = [];
+        mapScalars(doc, (value) => rewriteAtTokens(value, aliases, canonNames, local));
+        for (const name of local) unresolved.push({ file: full, name });
+      }
 
       const result = migrateItemDocument(doc);
       for (const key of Object.keys(totals)) totals[key] += result.changes[key];
@@ -470,7 +499,7 @@ function migrateItemFiles(rootDir, options = {}) {
     });
   }
 
-  return { touched, notes, totals };
+  return { touched, notes, totals, unresolved };
 }
 
 /** Migrate a config file on disk. Returns the report; writes only when something changed. */
@@ -490,45 +519,9 @@ function migrateConfigFile(configPath, options = {}) {
   return { ...result, aliases, canonNames, output };
 }
 
-/**
- * Rewrite `{@}` references in every other YAML file of a project.
- *
- * Component files and item files use them too — `include: '{@characters}/You.yaml'`
- * reaches canon, `script: '{@scripts}/library.js'` reaches a component alias — so
- * migrating only `compile.yaml` would leave the project half-converted.
- */
-function migrateProjectFiles(rootDir, aliases, canonNames, options = {}) {
-  const touched = [];
-  const unresolved = [];
-
-  const walk = (dir) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) { walk(full); continue; }
-      if (!entry.isFile() || !hasSuffix(entry.name, YAML_SUFFIXES)) continue;
-      if (path.resolve(full) === path.resolve(options.configPath || '')) continue;
-
-      const source = fs.readFileSync(full, 'utf8');
-      if (!source.includes('{@')) continue;
-
-      const local = [];
-      const output = rewriteAtTokens(source, aliases, canonNames, local);
-      if (output !== source) {
-        if (!options.dryRun) fs.writeFileSync(full, output, 'utf8');
-        touched.push(full);
-      }
-      for (const name of local) unresolved.push({ file: full, name });
-    }
-  };
-
-  walk(rootDir);
-  return { touched, unresolved };
-}
-
 module.exports = {
   migrateConfigFile,
   migrateConfigDocument,
-  migrateProjectFiles,
   migrateItemDocument,
   migrateItemFiles,
   migrateTemplateFiles,

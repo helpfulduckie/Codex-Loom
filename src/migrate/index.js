@@ -168,9 +168,9 @@ function walkFiles(dir, skip, fn) {
  *
  * Runs after the config break and after item structural migration, on the compiler's own
  * loader (`wireNotesTemplate`'s neighbor): both `migrateConfigDocument` (edits a bare YAML
- * Document, no registry in reach) and `migrateProjectFiles` (string rewriting with nothing
- * to resolve against) run before the project is loadable, and "does this variable's value
- * name a known item" needs a registry to ask.
+ * Document, no registry in reach) and the `{@}` rewrite folded into `migrateItemFiles`
+ * (a parsed-Document scalar walk, nothing to resolve against) run before the project is
+ * loadable, and "does this variable's value name a known item" needs a registry to ask.
  *
  * Detection (the handoff's one open question, settled here): a variable converts only if
  * (a) it is referenced as `{%name}` somewhere in item or component prose, and (b) every
@@ -436,17 +436,17 @@ function migrateProjectFully(configPath, options = {}) {
     notes.push('unresolved {@' + name + '} in compile.yaml — no canon or component alias matches it.');
   }
 
-  const rewritten = v3.migrateProjectFiles(projectDir, config.aliases, config.canonNames, {
+  // Item structural migration and the {@} rewrite are one walk: a single parsed-Document
+  // pass per file gives every file the fidelity compile.yaml already gets, where a {@foo}
+  // in a comment is left alone rather than rewritten by a blind string replace.
+  const items = v3.migrateItemFiles(projectDir, config.aliases, config.canonNames, {
     ...options, configPath,
   });
-  touched.push(...rewritten.touched);
-  for (const entry of rewritten.unresolved) {
-    notes.push('unresolved {@' + entry.name + '} in ' + entry.file + '.');
-  }
-
-  const items = v3.migrateItemFiles(projectDir, options);
   touched.push(...items.touched);
   notes.push(...items.notes.map((n) => n.note));
+  for (const entry of items.unresolved) {
+    notes.push('unresolved {@' + entry.name + '} in ' + entry.file + '.');
+  }
 
   const wired = wireNotesTemplate(configPath, options);
   notes.push(...wired.notes);

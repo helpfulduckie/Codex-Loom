@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const YAML = require('yaml');
 const {
-  migrateConfigFile, migrateProjectFiles, collectComponentAliases, collectCanonNames,
+  migrateConfigFile, collectComponentAliases, collectCanonNames,
   rewriteAtTokens, migrateItemDocument, migrateItemFiles, stripTemplateHeader,
   encodeTriggerPadding,
 } = require('../../src/migrate/v3');
@@ -173,13 +173,14 @@ describe('rewriteAtTokens', () => {
   });
 });
 
-describe('migrateProjectFiles — the whole tree, not just compile.yaml', () => {
-  // The config stage produces the alias/canon maps; this stage rewrites every other YAML
-  // file beside it. `migrateProjectFully` composes the two — these cases exercise the
-  // sibling-file half directly, on the maps `migrateConfigFile` returns.
+describe('migrateItemFiles — {@} references across the whole tree, not just compile.yaml', () => {
+  // The config stage produces the alias/canon maps; migrateItemFiles rewrites every other
+  // YAML file beside it in the same pass it does the item structural rules.
+  // `migrateProjectFully` composes the two — these cases exercise the sibling-file half
+  // directly, on the maps `migrateConfigFile` returns.
   const migrateSiblings = (cfg) => {
     const config = migrateConfigFile(cfg);
-    return migrateProjectFiles(path.dirname(cfg), config.aliases, config.canonNames, { configPath: cfg });
+    return migrateItemFiles(path.dirname(cfg), config.aliases, config.canonNames, { configPath: cfg });
   };
 
   test('rewrites {@} in item and component files beside the config', () => {
@@ -215,6 +216,54 @@ describe('migrateProjectFiles — the whole tree, not just compile.yaml', () => 
     fs.writeFileSync(path.join(tmpDir, 'x.yaml'), "a: '{@mystery}'\n", 'utf8');
     const files = migrateSiblings(cfg);
     expect(files.unresolved.map((u) => u.name)).toContain('mystery');
+  });
+
+  test('a {@} inside a comment is left alone — the reason this is a Document pass, not a string replace', () => {
+    // The old `migrateProjectFiles` did a blind `source.replace` and would have rewritten
+    // the reference in the comment too. `mapScalars` only ever sees scalar values.
+    const cfg = writeConfig([
+      'structure:',
+      '  input:',
+      '    canon:',
+      '      characters: ./canon/Characters',
+      '  output: ./out',
+      '',
+    ].join('\n'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'items.yaml'),
+      "# superseded: include: '{@characters}/Old.yaml'\n- include: '{@characters}/You.yaml'\n",
+      'utf8',
+    );
+
+    migrateSiblings(cfg);
+
+    const out = fs.readFileSync(path.join(tmpDir, 'items.yaml'), 'utf8');
+    expect(out).toContain("# superseded: include: '{@characters}/Old.yaml'");
+    expect(out).toContain('{%characters}/You.yaml');
+  });
+
+  test('a {@} inside a block scalar is rewritten, the same as compile.yaml treats one', () => {
+    // A block scalar is a scalar node with a string value, so `mapScalars` visits it. This
+    // matches `migrateConfigDocument`'s own pass rather than carving out an exception.
+    const cfg = writeConfig([
+      'structure:',
+      '  input:',
+      '    canon:',
+      '      characters: ./canon/Characters',
+      '  output: ./out',
+      '',
+    ].join('\n'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'note.yaml'),
+      'body: |\n  see {@characters}/You.yaml for the player card\n',
+      'utf8',
+    );
+
+    migrateSiblings(cfg);
+
+    const out = fs.readFileSync(path.join(tmpDir, 'note.yaml'), 'utf8');
+    expect(out).toContain('see {%characters}/You.yaml for the player card');
+    expect(out).toMatch(/body: \|/); // the block style survives the substitution
   });
 });
 
