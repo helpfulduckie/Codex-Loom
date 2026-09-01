@@ -2,7 +2,7 @@
 
 This document describes the internal architecture of Codex Loom for maintainers. It is meant to augment the inline JSDoc in source files, not duplicate it — focus here is on data flow, non-obvious design decisions, and algorithm structure.
 
-Section references of the form §N point at the v4 design spec, which lives in the vault rather than in this repo.
+Section references of the form §N point at [`design-spec.md`](design-spec.md), the as-built design spec alongside this file.
 
 ---
 
@@ -22,7 +22,7 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/loader/registry.js` | Item loading, `ItemRegistry`, canon merge, overlays, includes |
 | `src/loader/schema.js` | The item key surface (§4.3) |
 | `src/loader/component.js`, `src/loader/component-schema.js` | Component-document loading and its key surface (§7.2) |
-| `src/loader/field-table.js` | Loads `fields.cl.yaml` — the field and template declarations (§12) |
+| `src/loader/field-table.js` | Loads `fields.cl.yaml` — the field and template declarations (§13.2) |
 | `src/loader.js` | Template and partial loading; re-exports the registry functions |
 | `src/schema.js` | The shared validation engine both key surfaces run through |
 | `src/diag.js` | The diagnostic bus: codes, severities, source spans (§4.4) |
@@ -44,11 +44,11 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/limits.js` | AID's platform field caps and the post-render length measurement (§8.5) |
 | `src/slots.js` | The sections one `render.storyCards`/`render.component` entry renders; slot index; empty-slot warnings (§7.8) |
 | `src/leafLoop.js` | The per-leaf compile loop: branch-chain merge, sectioned components, slot index, card + slot render in one pass |
-| `src/inherit.js` | Component and script inheritance down the branch tree; story-card frontier placement (§11) |
+| `src/inherit.js` | Component and script inheritance down the branch tree; story-card frontier placement (§7.3a) |
 | `src/outputPaths.js` | Where a branch node's folder lands on disk; the pre-build sweep that wipes output folders and archives stale nodes |
 | `src/treeWrite.js` | Recursive writers for interior-node framing, labels and placeholders; `copyScripts`; component-spec resolution |
 | `src/treeFiles.js` | The tree-level files written after the leaf loop: root framing, labels, placeholders, descriptions |
-| `src/compiledTree.js` | The one compiled-output-tree traversal `seedmap`/`bodysize`/`overview` are built from — child lists, ancestor walk, per-node merge (§15) |
+| `src/compiledTree.js` | The one compiled-output-tree traversal `seedmap`/`bodysize`/`overview` are built from — child lists, ancestor walk, per-node merge (§7.3a) |
 | `src/reportDispatch.js` | End-of-compile report dispatch and the load-diagnostic replay; the `CL0545` unused-role check |
 | `src/extract.js` | Named transforms for a section's `from:` source — `scriptBanner` (§7.7) |
 | `src/overview.js` | Leaf-review and whole-tree overview file generation |
@@ -98,7 +98,7 @@ FOR EACH LEAF:
                                     Author Notes,Opening}.md + Description.md
   copyScripts()
 Root-level branchFraming:        → Components/Opening.md, literal/{%variable} only —
-                                    never a sections: document, never a role (§9's exception)
+                                    never a sections: document, never a role (§9.7's exception)
 writeFramingRecursive()          → Components/Opening.md at interior nodes only, roles resolve
 Root Description                 → Description.md, roles resolve, branchProtagonist always null
 runLeafReviewMode()              → Overview/*.leaf.md
