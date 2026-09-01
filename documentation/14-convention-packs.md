@@ -55,8 +55,8 @@ WARN — it usually means a bare `pack-name:` (which parses as null, i.e. `~`) w
 be `pack-name: {}`.
 
 **`source:` forms.** An absent `source:` means "bundled, by name" — the loader looks for
-`packs/<name>.cl.yaml` beside `src/`. A present `source:` is a path, resolved relative to
-the `compile.yaml` directory, with `{%token}` variables expanded. A canon-hosted pack gets
+`packs/<name>.cl.yaml` in Codex Loom's own `packs/` directory. A present `source:` is a
+path, resolved relative to the `compile.yaml` directory, with `{%token}` variables expanded. A canon-hosted pack gets
 versioned and frozen alongside the canon that depends on it (see The Library Snapshot).
 
 **The config key must match the pack's declared `name:`.** Diagnostic codes are namespaced
@@ -108,7 +108,7 @@ rules:
     forbid: <predicate>       # a match contributes one finding (the rule's message)
     require: <predicate>      # a NON-match contributes one finding
     requireCard: <predicate>  # a per-leaf existence check — see below
-    schema: <descriptor>      # a src/schema.js descriptor over the card's notes: mapping
+    schema: <descriptor>      # a schema descriptor over the card's notes: mapping
     over: body                # route the schema at notes: (default), the card entry (body), or meta
     budget: <role→cap map>   # per card — compiled body length against a per-role char cap
     count: <field→bounds>    # per resolved item — list/map length or word count, per field
@@ -154,8 +154,9 @@ normalizes the position itself, so `wtg`'s marker rule scans both.
 
 ### The schema check
 
-A rule's `schema:` block is a `src/schema.js` descriptor tree evaluated over a mapping
-recovered from the card. By default that mapping is the re-parsed `notes:` block; `over:
+A rule's `schema:` block is a schema-descriptor tree — the same descriptor language the
+`compile.yaml` key surface is validated against — evaluated over a mapping recovered from
+the card. By default that mapping is the re-parsed `notes:` block; `over:
 body` on the rule routes it at the card **entry** instead, parsed as tolerant `Key: Value`
 lines (an optional `>` prefix stripped, first colon splits, first occurrence of a key
 wins) — the shape a mod reads a settings card in. The descriptor keys the engine
@@ -189,10 +190,10 @@ uses) is stripped before the parse.
 
 **`meta:` is an item key for tooling — an unvalidated annotation channel, parallel to
 `v:`.** The loader accepts any shape under it and never proposes it as a relocation target;
-it is distinct from `v:` in that no template ever reads it. `emit/vl.js` writes it into the
-card's `~~~` fence when it is a non-empty mapping, so `parseCards` carries it into both the
-inline pass and the offline `--lint` arm — and, like `kind: reference`, it reaches AID
-nowhere (`to_latitude_dict` forwards only title / type / keys / value / description).
+it is distinct from `v:` in that no template ever reads it. The compiler writes it into the
+card's `~~~` fence when it is a non-empty mapping, so a pack sees it in both the inline
+compile pass and the offline `--lint` arm — and, like `kind: reference`, it reaches AID
+nowhere: Velvet Lattice forwards only title / type / keys / value / description.
 
 **It is pack-namespaced: a pack reads `meta.<packName>.<key>`,** where `<packName>` is the
 pack's declared `name:` — the same binding that ties the `lint.packs` key and the

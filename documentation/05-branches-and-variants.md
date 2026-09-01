@@ -177,9 +177,9 @@ branches:
   '*': ~           # all other branches: excluded
 ```
 
-**Null excludes immediately** — when `resolveBranchSpec` encounters a null for the exact branch key, it returns `null` and the item is skipped entirely for that branch, with no further wildcard processing at that level.
+**Null excludes immediately** — when the dispatch walker encounters a null for the exact branch key, it returns `null` and the item is skipped entirely for that branch, with no further wildcard processing at that level.
 
-This applies identically to local item definitions, `import:` entries, `include:` directives, and component sections. One walker serves all of them — a section's `branches:` resolves through the same `resolveBranchSpec` an item's does, which is why `~` means the same thing everywhere.
+This applies identically to local item definitions, `import:` entries, `include:` directives, and component sections. One walker serves all of them — a section's `branches:` resolves through the same dispatch walker an item's does, which is why `~` means the same thing everywhere.
 
 ---
 

@@ -186,7 +186,7 @@ An item may name several targets: `storyCard: true` alongside a `plotEssential:`
 | `render.wrap` | `each` | `each` wraps every occupant; `all` wraps the joined collection. Slots only. |
 | `render.compact` | `false` | Suppress the blank line between the heading and what follows. |
 | `render.bullet` | `false` | Prefix each `text:` line with `- `. |
-| `branches` | — | Branch dispatch for the section, using the same `resolveBranchSpec` as items. `~` drops the section on that branch. |
+| `branches` | — | Branch dispatch for the section, using the same dispatch walker as items. `~` drops the section on that branch. |
 | `variants` | — | Named deltas this section's `branches:` can select. |
 
 **A section takes its text from one of `text:`, `file:` and `from:`.** Declaring two is `CL0619`. `file:` and `from:` paths resolve against the project base with `{%variable}` expansion, and are read once per component file rather than once per branch. The Description section below has the full account of both, including the `extract:` roster.
@@ -583,7 +583,7 @@ sections:
 |---|---|
 | `scriptBanner` | The leading `//` comment block of a JavaScript file, cleaned up for prose |
 
-An unrecognized name is `CL0618` and names the roster. Adding a transform is a row here and a function in `src/extract.js`.
+An unrecognized name is `CL0618` and names the roster. Adding a transform is a compiler change.
 
 #### `scriptBanner`
 

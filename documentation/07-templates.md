@@ -19,7 +19,7 @@ Aness Rozen - Journeyman Healer     ← the body: your template writes this
 Personality: inquisitive, polite
 ```
 
-The heading, the `~~~` fence and the three keys inside it come from the compiler, from one place (`src/emit/vl.js`). A template that writes any of them produces a **second** envelope inside the body, where the Velvet Lattice loader will never read its keys — so a `~~~` anywhere in a `.template` or `.partial` is a load-time ERROR (`CL0410`) naming the file, not a warning.
+The heading, the `~~~` fence and the three keys inside it come from the compiler, from one place — its Velvet Lattice emitter. A template that writes any of them produces a **second** envelope inside the body, where the Velvet Lattice loader will never read its keys — so a `~~~` anywhere in a `.template` or `.partial` is a load-time ERROR (`CL0410`) naming the file, not a warning.
 
 What the compiler decides, and from what:
 

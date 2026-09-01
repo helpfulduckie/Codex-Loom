@@ -89,7 +89,7 @@ arriving by any route is still worth flagging.
 
 ### CL0111–CL0115 in detail
 
-Five conditions from `--snapshot`'s freeze, raised by `checkDrift` on every compile
+Five conditions from `--snapshot`'s freeze, raised by the drift check on every compile
 that has `structure.input.snapshot` set — never by a project that leaves the key unset,
 which is every project until it opts in. All five read `snapshot/manifest.json`; none of
 them read the live library, because the *drift* line — a library file that changed since
@@ -106,9 +106,9 @@ manifest section (`CL0113`) is checked, and skipped, before the file-level compa
 would raise `CL0114` ever runs for that same entry — there is nothing to compare a missing
 section against.
 
-`CL0116` is raised by `syncLibrary` itself, on `--snapshot`, not by `checkDrift` at compile
-time — the other five read an existing manifest, and this one is raised while writing a
-new one. `requiresRoles` is computed by elimination: a `{$X}` token that resolves
+`CL0116` is raised by `--snapshot` itself, while it writes the manifest, not by the drift
+check at compile time — the other five read an existing manifest, and this one is raised
+while writing a new one. `requiresRoles` is computed by elimination: a `{$X}` token that resolves
 to no item id anywhere in the snapshotted library is published as a required role. That is
 only trustworthy for an entry whose own item content validates cleanly — a set with a
 schema violation or a broken registry build gets `CL0116` instead of a role list, since an
@@ -168,9 +168,9 @@ Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein 
 | `CL0342` | ERROR | A reference names an id that no canon set defines. |
 | `CL0330` | WARN | A cross-item reference names an item that does not exist. |
 
-The resolution layer (`src/model/`) uses neither `fs` nor `console`, so these are reported through a
-caller-supplied `onWarn(code, message)` rather than printed where they arise. Reserved:
-`CL0310`, unresolvable branch dispatch.
+The resolution layer touches no filesystem and prints nothing, so these are collected on
+the diagnostics bus rather than printed where they arise. Reserved: `CL0310`, unresolvable
+branch dispatch.
 
 `CL0323` is an error rather than a merge because the two keys are two spellings of one
 field. Two values under two names means the author believes they are two fields, and any
@@ -260,11 +260,10 @@ line, the failed directive, or the whole item — and leaves the rest of the lea
 once the tree is written.
 
 `CL0429` is a hard load-time failure, not a bus diagnostic: when two files in one
-templates directory resolve to the same name, `loadNamedFiles` throws before any
+templates directory resolve to the same name, template loading throws before any
 compile begins. It cannot degrade to a WARN — with two files claiming one name the
-merged name→file map has no defensible winner — and it runs before a diagnostics bus is
-in scope, since two of the three `loadTemplates` call sites pass none. The message names
-both colliding files. Later directories on the search path still override earlier ones on
+merged name→file map has no defensible winner — and it runs before the diagnostics bus
+exists. The message names both colliding files. Later directories on the search path still override earlier ones on
 a name collision (that is the intended layering); the error is only for a collision
 *within* a single directory.
 
@@ -728,7 +727,7 @@ pattern.
 Codes for the remaining bands are registered as the work that mints them lands. Two codes
 are named in the design, not yet implemented, and reserved at their numbers: `CL0143`
 (duplicate Codex overlay for one import target) and `CL0310` (unresolvable branch
-dispatch). Neither is in `diag.js`'s registry until something raises it. `CL04xx` holds
+dispatch). Neither is a live code until something raises it. `CL04xx` holds
 the template checks and the leaked-artifact sweep; the deferred render rewrite is what
 fills the rest of the band.
 
@@ -739,9 +738,9 @@ A convention pack codes its findings **outside the numeric bands**:
 pack's declared `name:`, not whatever key the project used, so a pack hosted in a canon
 set yields the same codes in every project that loads it and a suppression stays portable.
 
-Every `CL-` code is opinion-layer by construction (`diag.js:isOpinion`): every
-opinion-layer ERROR lives in a pack, and `lint.level` — plus the per-pack and per-branch
-`level:` ceilings — has to be able to reach them. A pack finding names the pack, the
+Every `CL-` code is opinion-layer by construction — recognized by its `CL-` prefix, not by
+a registry entry. Every opinion-layer ERROR lives in a pack, and `lint.level` — plus the
+per-pack and per-branch `level:` ceilings — has to be able to reach them. A pack finding names the pack, the
 card, and the branch it fired on, because a pack can validate one branch's `notes:`
 config and not another's.
 

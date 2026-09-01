@@ -52,9 +52,8 @@ sigil, and a component alias is replaced by the value it was declared as.
 
 **A v3 template opened with the envelope, and everything below the last `~~~`
 was the body.** Delete everything up to and including that line — that is the
-whole conversion, and `src/migrate/v3.js:stripTemplateHeader` does it
-mechanically. Keep any `{wrapper}` tag that lived in the header: it wraps the
-body, not the envelope.
+whole conversion, and `--migrate` does it mechanically. Keep any `{wrapper}`
+tag that lived in the header: it wraps the body, not the envelope.
 
 **Then check the surviving body for `{$aid.encapsulate}`, `{$aid.known}`, and
 any `{$aid.title}` the migrator dropped** as a duplicate of `name.full`. Those
@@ -91,7 +90,7 @@ table, or leave it as a partial.
 ## Migrating a v3 `notes: '[e]'` marker
 
 **v3 emitted the `[e]` background-knowledge marker as flat text; v4 carries it
-as a flag.** `src/migrate/v3.js` converts `notes: '[e]'` to:
+as a flag.** `--migrate` converts `notes: '[e]'` to:
 
 ```yaml
 notes: {known: true}
@@ -113,9 +112,8 @@ be varied per branch.
 **v3 pointed `opening:` at a YAML sequence of paragraph blocks**, each with its
 own `branches:` and `variants:`. That format is gone — it was the fourth of
 four syntaxes for one idea, and its variant rules disagreed with every other
-dispatch in the language. `migrateProjectFully()` in `src/migrate/index.js`
-converts it; a block-list opening reaching the compiler is an error naming what
-it should become.
+dispatch in the language. `--migrate` converts it; a block-list opening reaching
+the compiler is an error naming what it should become.
 
 ```yaml
 # before — v3
@@ -206,8 +204,8 @@ it down one level":
 
 ## Migrating a v3 `description.yaml`
 
-**v3's two-field format becomes two sections.** `migrateProjectFully()` in
-`src/migrate/index.js` does this conversion; by hand it is:
+**v3's two-field format becomes two sections.** `--migrate` does this
+conversion; by hand it is:
 
 ```yaml
 # before — v3

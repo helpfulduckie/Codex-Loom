@@ -70,8 +70,8 @@ render the same `sections:` grammar and resolve roles the same way:
 
 - **`branchFraming` at an interior branch node** — inherits the roles table down the
   branch tree exactly as `variables:` does, merging key-wise with `~` deleting (the same
-  rule `walkBranchChain` uses for the leaf loop), so a role bound above an interior node
-  is visible to its framing even when that node declares no `roles:` of its own.
+  branch-chain merge the leaf loop uses), so a role bound above an interior node is
+  visible to its framing even when that node declares no `roles:` of its own.
 - **The root `Description`** (the project-level scenario blurb) — reads the project's own
   `roles:`, gated the same way the leaf loop gates it: a project that never declares
   `roles:` passes `null` rather than an empty table, so `CL0540` treats it as role-unaware
@@ -83,11 +83,11 @@ render the same `sections:` grammar and resolve roles the same way:
 **One framing site is a real exception, not a gap in the fix above: a project-root
 `branchFraming:` never resolves a role at all.** Declared directly under the top-level
 `components:` key rather than inside any `branches:` node, it is written before the branch
-tree exists and reads through `resolveOpeningContent`, the same literal/`{%variable}`-only
-resolver an `opening:` written as plain prose uses — it never checks whether its spec names
-a `sections:` document, so a `{$role}` token there is never even attempted, whether the spec
-is a literal sentence or a file path. This is a structural limitation of that one call site,
-not a bug the roles work above addresses.
+tree exists and reads through the same literal/`{%variable}`-only resolver an `opening:`
+written as plain prose uses — it never checks whether its spec names a `sections:` document,
+so a `{$role}` token there is never even attempted, whether the spec is a literal sentence
+or a file path. This is a structural limitation of that one call site, not a bug the roles
+work above addresses.
 
 **Roles resolve in component prose, not only in item bodies.** An Author's Note or AI
 Instructions rule referencing `{$LI}` resolves the same way a character card's body does —
