@@ -20,3 +20,8 @@
 # working file matches the blob the snapshot was generated from on every platform.
 /__tests__/fixtures/** text eol=lf
 /test/** text eol=lf
+
+# Prose docs are authored and edited LF. Without this, `text=auto` + core.autocrlf=true
+# checks them out CRLF, so any edit on a Windows machine shows as a whole-file diff. Pin LF
+# so a doc change is only the lines that changed.
+/documentation/** text eol=lf

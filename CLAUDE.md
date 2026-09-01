@@ -57,8 +57,8 @@ writing, so they live in a separate private repo cloned into the gitignored `gol
 **If that directory is absent, this is all working as intended.** `golden.test.js` and
 `migrate.integration.test.js` register their suites as skipped, one `describe` in
 `emit-vl.test.js` skips, and everything else runs. The full suite with the goldens present is
-**2,003 across 77 suites** (as of Phase 13 Session C); without them the passing count is lower
-and 15 tests register as skipped. **Do not try to repair this.** There is no missing dependency
+**2,179 across 82 suites** (as of Phase 17); without them the passing count is lower and the
+four fixture-dependent `describe`s register as skipped. **Do not try to repair this.** There is no missing dependency
 to install and no path to fix; the tests are skipping because the data they compare against is
 private. Treat that as green.
 
