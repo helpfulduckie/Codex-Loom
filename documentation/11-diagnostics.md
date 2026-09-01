@@ -755,3 +755,29 @@ in offline `--lint`; its `budget` and role rules run in both.
 The pack layer's own core codes are `CL0117` (malformed pack), `CL0118` (`~` on a pack
 never inherited) and `CL0119` (`name:` disagrees with the config key) — all in the loading
 band, because loading a pack file is a loading concern.
+
+## Common mistakes
+
+Four failures that come up often enough to name, with the fix rather than the code detail.
+
+**`CL0420` "no template found for item"** — the item's `aid.type` (or `render.template`)
+matches no loaded `.template`. Both are matched case-insensitively, so `aid.type: Character`
+needs `Character.template`. The other cause is a `templateFor` slot file that does not
+define a list for that type on this branch.
+
+**`CL0324` / `CL0342` "import failed"** — the `import:` id resolves to no canon item. Check
+that the id matches the canon file's `id:` (or `name:` when `id:` is absent), that the file
+sits inside a declared `structure.input.library` directory, and — for a qualified reference
+— that the `set:` prefix names a declared library entry (`CL0341`) rather than a set that
+lacks the id (`CL0342`).
+
+**`CL0321` "variant not found" when the variant looks defined** — variant dispatch reads
+the **item definition's** own `variants:` tree. On an `import:`, `importVariants:` reads the
+**canonical item's** variant tree instead; the import's own `variants:` block holds only
+local deltas for branch dispatch. A name in the wrong one of those two is `CL0321`.
+
+**`CL0330` "cross-item ref not found"** — `{$Id.body.Field}` is resolved after every item
+for the branch compiles, checking the branch's compiled items first and then the referenced
+item's canonical base. An item `~`-excluded from this branch is still reachable through that
+canonical fallback unless it has no canon entry at all; a genuine miss leaves the token
+as-is and raises `CL0330`.

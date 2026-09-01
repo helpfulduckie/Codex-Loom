@@ -28,7 +28,7 @@ pack](#the-bundled-wtg-pack) below.
 
 ```yaml
 lint:
-  level: warn                 # global opinion-layer ceiling (see Errors & Warnings)
+  level: warn                 # global opinion-layer ceiling (see 02-compile-yaml.md § lint)
   packs:
     wtg: {}                   # a bundled pack, resolved by name against packs/
     stat-tracker:

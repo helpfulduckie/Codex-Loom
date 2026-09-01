@@ -299,7 +299,6 @@ Each is covered in its own reference document.
 - [Templates & Partials](07-templates.md)
 - [Pronoun System](08-pronouns.md)
 - [Components (PE, Summary, AIN, AN, Opening, Description)](09-components.md)
-- [Errors & Warnings](10-errors-and-warnings.md)
 - [Diagnostic Codes](11-diagnostics.md)
 - [The Library Snapshot](12-snapshot.md)
 - [Roles](13-roles.md)

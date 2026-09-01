@@ -341,15 +341,19 @@ full severity and can still fail a build.
 | *(unset)* | Everything, at the severity each finding was raised with. The default. |
 
 `--lint-level=off|error|warn` overrides the key for one run, and is separate from
-`--verbose`. See [Errors & Warnings](10-errors-and-warnings.md) for the full picture,
-including which checks sit in which layer.
+`--verbose`. See [Diagnostic Codes](11-diagnostics.md) and [design-spec §12.5](design-spec.md)
+for the compiler/lint split and which checks sit in which layer.
 
-`lint.packs` — convention packs — is recognized and not yet implemented; declaring it draws
-a `CL0204` warning. It is legal on a branch node and merges down the chain, because which
-packs should validate a branch's `notes:` depends on which mods that branch ships.
+`lint.packs` — convention packs — is a mapping keyed by pack name. `{}` names a bundled
+pack, `{ source: <path> }` a project-local or canon-hosted one, and either may carry a
+per-pack `level:` ceiling. It is legal on a branch node and merges down the chain key-wise
+(`<name>: ~` unbinds an inherited pack), because which packs should validate a branch's
+`notes:` depends on which mods that branch ships. See [Convention Packs](14-convention-packs.md).
 
-`lint.level` is project-level. Writing it on a branch draws its own `CL0204`: a per-branch
-ceiling needs a diagnostic to know which branch raised it, and that arrives with packs.
+`lint.level` on a branch is a per-branch ceiling: it clamps the opinion layer for that
+branch's subtree, and a finding it clamps names the branch that raised it. The order of the
+ceilings is per-pack `level:`, then per-branch `lint.level`, then project-level
+`lint.level`; the tightest wins.
 
 ### `branches`
 
