@@ -71,7 +71,7 @@ codex-loom -C -l -o path/to/project/
 
 **Compile options** — `-d`/`--with-diff`, `-a`/`--with-annotate`, `-i`/`--with-inventory`, `-c`/`--clean`, `-v`/`--verbose`, `--live` — modify a compile rather than selecting one. The first three emit review reports from data that only exists in memory during compilation, so any of them forces a compile. (`--diff`, `--annotate` and `--inventory` are accepted as aliases.)
 
-**Diagnostics** — `--lint-level=off|error|warn` (also `--lint-level warn`) overrides `lint.level` from `compile.yaml`. It reaches the opinion layer only — the five heuristic codes that guess at whether prose was meant — and never silences a factual error. It is deliberately separate from `--verbose`: verbosity is about compile progress, this is about which diagnostics an author wants to hear.
+**Diagnostics** — `--lint-level=off|error|warn` (also `--lint-level warn`) overrides `lint.level` from `compile.yaml`. It reaches the opinion layer only — the quality heuristics (trigger-less cards, prose guesses, unused or duplicated placeholder declarations, convention-pack findings) — and never silences a factual error like a leaked token or a platform-cap overflow. It is deliberately separate from `--verbose`: verbosity is about compile progress, this is about which diagnostics an author wants to hear.
 
 | Flags | What happens |
 |---|---|
@@ -155,9 +155,12 @@ a Codex Loom token are one transposition apart, and a mistyped `${she}` reaches 
 as a prompt asking them to type the word "she". The content is what separates them: a
 token holds an identifier, a real placeholder holds a question written for a human, so
 `${What is your name?}` and `${Date: (MM/DD/YYYY)}` draw nothing. Latitude's premade
-specials — `${character.name}`, `${character.gender}` and the five pronoun forms — are
-identifier-shaped by construction and exempt; they have no `%key%` equivalent, so every
-project that wants them writes them raw.
+specials are exempt: `${character.name}`, `${character.gender}`, and the five
+`${character.pronoun.*}` forms that follow the gender answer. The exemption is the
+`character.` prefix — these have no `%key%` equivalent and every project that wants them
+writes them raw, so flagging them would be permanent noise. A bare identifier-shaped
+`${they}` is **not** exempt: that is exactly the mistyped `{$they}` this check exists to
+catch.
 
 Core lint carries only that one structural check on purpose. Rules about what a card's *content* should say — the `[e]` background-knowledge marker, the `/]` discovery marker, and their mutual exclusion — belong to a particular mod's convention and fire wrongly for every project that does not use it, so they belong to convention packs rather than core lint.
 

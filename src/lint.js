@@ -190,10 +190,13 @@ function scanText(text) {
 // transposition and stays silent on every intentional placeholder in the corpus.
 //
 // The exception is Latitude's premade specials, which are identifier-shaped by
-// construction: `${character.name}`, `${character.gender}`, and five pronoun forms. They
-// have no `%key%` equivalent — Velvet Lattice's substitution produces a question from a
-// declared key and cannot produce a special — so every project that wants them writes them
-// raw, permanently. Warning about them would be permanent noise.
+// construction and all `character.`-prefixed: `${character.name}`, `${character.gender}`,
+// and the five `${character.pronoun.*}` forms that follow the gender answer. They have no
+// `%key%` equivalent — Velvet Lattice's substitution produces a question from a declared
+// key and cannot produce a special — so every project that wants them writes them raw,
+// permanently. Warning about them would be permanent noise. The exemption is the
+// `character.` prefix only: a bare `${they}` is still flagged, because that is exactly the
+// mistyped `{$they}` this check exists to catch.
 
 const TOKEN_SHAPED = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*$/;
 

@@ -1,6 +1,6 @@
 # Components
 
-Components are non-story-card files written to each branch leaf's `Components/` folder. They provide AID with the Opening prompt, Plot Essentials context, AI Instructions, and Author's Note. Each component is optional; if not configured, no file is written.
+Components are non-story-card files written to each branch leaf's `Components/` folder. They provide AID with the Opening prompt, Plot Essentials context, the running Summary, AI Instructions, and Author's Note. Each component is optional; if not configured, no file is written.
 
 Components are declared in `compile.yaml` under the root-level `components:` key and/or per-branch `components:` overrides.
 
@@ -341,6 +341,14 @@ sections:
 **A per-target `template:` lets the story card and the Plot Essentials entry use different templates.**
 
 An item rendered into a slot produces body text and nothing else — the `## Name` heading and `~~~` fence belong to story-card output, and Plot Essentials is not a story card.
+
+---
+
+## Summary
+
+`Components/Summary.md` is set by `components.summary`. Velvet Lattice reads it into `storySummary` — AID's running "what has happened so far" — where Plot Essentials feeds standing context. **Plot Essentials states fact that holds throughout; Summary states narrative past.** Authors shape the two alike, so Summary is mechanically identical to Plot Essentials: `sections:`, slots, wrapping, `render.position` ordering, per-section branch dispatch and variants, `imports:`, and a bare `heading:` read as level 0. Items route into its slots via `render.summary`, and it inherits down the branch tree like every component.
+
+Everything under [Plot Essentials](#plot-essentials) — section fields, slot wrapping, the `each`/`all` rule, ordering, branch gating, `imports:` — applies to Summary unchanged. Expect it to be used rarely.
 
 ---
 
