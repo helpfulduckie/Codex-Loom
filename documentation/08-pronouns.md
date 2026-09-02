@@ -31,7 +31,16 @@ All tokens in each column are synonymous — use whichever reads most naturally 
 | `{$herself}` / `{$himself}` / `{$themselves}` | reflexive | herself | himself | themselves | yourself |
 | `{$she's}` / `{$he's}` / `{$they're}` | contraction | she's | he's | they're | you're |
 
-Case of the first letter is preserved: `{$She}` → `She` or `He` depending on the pronoun set.
+Case of the first letter is preserved — `{$She}` renders `She` or `He` depending on the pronoun set:
+
+```text transform=pronoun-pass id=pron-case
+text: "{$She} studies; {$She} is admired."
+itemPronouns: male
+```
+
+``` expect=pron-case
+He studies; He is admired.
+```
 
 ---
 
@@ -48,8 +57,16 @@ body:
     that requires things most researchers won't do to their subjects
 ```
 
-If `pronouns: female`, this renders as:
-> one of the top Academy mages; has built her reputation through research...
+If `pronouns: female`, `{$her~}` resolves against the item's own set:
+
+```text transform=pronoun-pass id=pron-unscoped
+text: "has built {$her~} reputation through research"
+itemPronouns: female
+```
+
+``` expect=pron-unscoped
+has built her reputation through research
+```
 
 Swapping `pronouns: male` (via a variant) automatically updates all `{$her~}` tokens throughout the item.
 
@@ -99,6 +116,16 @@ You can also access name forms via scoped tokens:
 | `{$Aness.display}` | Display name (`Aness`) |
 | `{$Aness.full}` | Full name (`Aness Rozen`) |
 
+```text transform=pronoun-pass id=pron-name-forms
+text: "{$Aness.display} / {$Aness.full}"
+cast:
+  Aness: { name: { display: Aness, full: Aness Rozen }, pronouns: female }
+```
+
+``` expect=pron-name-forms
+Aness / Aness Rozen
+```
+
 ---
 
 ## Verb Conjugation
@@ -113,15 +140,31 @@ The markers `[s]`, `[es]`, `[is]`, `[was]`, `[has]` conjugate based on the **mos
 | `[was]` | `was` | `were` |
 | `[has]` | `has` | `have` |
 
-```yaml surface=item
-- "{$Aness} love[s] magic research — {$Aness.she} instinctively leap[s]"
+When Aness is the protagonist, `{$Aness}` becomes "you" and the plural `you`-set drives the markers:
+
+```text transform=pronoun-pass id=conj-protagonist
+text: "{$Aness} love[s] magic research — {$Aness.she} instinctively leap[s]"
+cast:
+  Aness: { name: { display: Aness, full: Aness Rozen }, pronouns: female }
+protagonist: Aness
 ```
 
-When Aness is the protagonist (you-set, plural):
-> you love magic research — you instinctively leap
+``` expect=conj-protagonist
+you love magic research — you instinctively leap
+```
 
-When Aness is an NPC with `pronouns: female` (singular):
-> Aness loves magic research — she instinctively leaps
+When Aness is an NPC with `pronouns: female`, the singular set drives them instead:
+
+```text transform=pronoun-pass id=conj-npc
+text: "{$Aness} love[s] magic research — {$Aness.she} instinctively leap[s]"
+cast:
+  Aness: { name: { display: Aness, full: Aness Rozen }, pronouns: female }
+protagonist: Veyrn
+```
+
+``` expect=conj-npc
+Aness loves magic research — she instinctively leaps
+```
 
 **Scope rules:**
 - `{$Id}` sets the scope to that character's effective pronoun set

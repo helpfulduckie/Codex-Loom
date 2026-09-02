@@ -59,6 +59,7 @@ const { scriptBanner } = require('../../src/extract');
 const { stanzaSource } = require('../../src/render/field-list');
 const { render } = require('../../src/template');
 const { applyFieldOp } = require('../../src/model/fieldops');
+const { applyTokenPass } = require('../../src/model/pronouns');
 const { isDeepStrictEqual } = require('util');
 
 const DOCS = path.join(__dirname, '../../documentation');
@@ -125,6 +126,10 @@ CONTEXTS['aness-min'].body.Personality.keywords = ['inquisitive'];
  *   field-op         src/model/fieldops.js applyFieldOp — input YAML is `{ current, op }`;
  *                    the result is deep-compared to the `expect` block parsed as YAML
  *                    (STRUCTURAL), since a field op returns arrays and mappings, not strings.
+ *   pronoun-pass     src/model/pronouns.js applyTokenPass — input YAML is
+ *                    `{ text, cast?, item?, itemPronouns?, protagonist? }`; `cast` becomes a
+ *                    registry, `protagonist` the active branch protagonist, and the token +
+ *                    conjugation pass runs over `text`.
  */
 const TRANSFORMS = {
   'script-banner': (src) => scriptBanner(src),
@@ -143,6 +148,25 @@ const TRANSFORMS = {
   'field-op': (src) => {
     const { current, op } = parseYaml(src, '<field-op>').value;
     return applyFieldOp(current, op);
+  },
+  'pronoun-pass': (src) => {
+    const spec = parseYaml(src, '<pronoun-pass>').value;
+    const registry = new Map();
+    for (const [id, def] of Object.entries(spec.cast || {})) {
+      registry.set(id.toLowerCase(), { id, ...def });
+    }
+    const subject = spec.item
+      ? registry.get(spec.item.toLowerCase())
+      : { id: '_self', pronouns: spec.itemPronouns };
+    return applyTokenPass(spec.text, {
+      item: subject,
+      registry,
+      branchProtagonist: spec.protagonist ? String(spec.protagonist).toLowerCase() : null,
+      resolvedById: registry,
+      roles: null,
+      onWarn: () => {},
+      onRoleUsed: () => {},
+    });
   },
 };
 
