@@ -45,6 +45,19 @@ function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
 }
 
+/**
+ * Case-insensitive own-property lookup, matching the renderer's field matching (a
+ * declaration `background` reads a body key `Background`). Exact-case hit wins first, so
+ * behavior is unchanged where cases already match.
+ */
+function lookupCI(map, name) {
+  if (!map || !name) return undefined;
+  if (Object.prototype.hasOwnProperty.call(map, name)) return map[name];
+  const lower = String(name).toLowerCase();
+  const key = Object.keys(map).find((k) => k.toLowerCase() === lower);
+  return key === undefined ? undefined : map[key];
+}
+
 /** `from:` as an array, or `[name]` when absent. */
 function fromPaths(decl, name) {
   if (decl && decl.from !== undefined && decl.from !== null) {
@@ -73,29 +86,29 @@ function readablePathsFor(list, fieldTable, partials) {
   const scanRaw = (str) => {
     let m;
     IF_GUARD_RE.lastIndex = 0;
-    while ((m = IF_GUARD_RE.exec(str)) !== null) ack.add(m[1]);
+    while ((m = IF_GUARD_RE.exec(str)) !== null) ack.add(m[1].toLowerCase());
     const stripped = String(str).replace(IF_TAG_RE, ' ');
     BODY_REF_RE.lastIndex = 0;
-    while ((m = BODY_REF_RE.exec(stripped)) !== null) content.add(m[1]);
+    while ((m = BODY_REF_RE.exec(stripped)) !== null) content.add(m[1].toLowerCase());
   };
 
   const addField = (name, decl) => {
-    for (const p of fromPaths(decl, name)) content.add(p);
+    for (const p of fromPaths(decl, name)) content.add(p.toLowerCase());
     if (decl && isPlainObject(decl.labelWhen)) {
       const whenKey = Object.keys(decl.labelWhen)[0];
-      if (whenKey) ack.add(whenKey);
+      if (whenKey) ack.add(String(whenKey).toLowerCase());
     }
   };
 
   const seenPartials = new Set();
   const walkEntry = (entry, allowGroup) => {
     if (typeof entry === 'string') {
-      const group = fieldTable.groups && fieldTable.groups[entry];
+      const group = lookupCI(fieldTable.groups, entry);
       if (allowGroup && Array.isArray(group)) {
         for (const member of group) walkEntry(member, false);
         return;
       }
-      addField(entry, (fieldTable.fields && fieldTable.fields[entry]) || {});
+      addField(entry, lookupCI(fieldTable.fields, entry) || {});
       return;
     }
     if (!isPlainObject(entry)) return;
@@ -114,7 +127,7 @@ function readablePathsFor(list, fieldTable, partials) {
     if (entry.allowExtra !== undefined) { allowExtra = allowExtra || entry.allowExtra === true; return; }
     const name = entry.field || entry.name;
     if (name) {
-      const base = (fieldTable.fields && fieldTable.fields[name]) || {};
+      const base = lookupCI(fieldTable.fields, name) || {};
       const { field: _f, name: _n, ...override } = entry;
       addField(name, { ...base, ...override });
     }
@@ -127,15 +140,18 @@ function readablePathsFor(list, fieldTable, partials) {
 /** Flatten `body` to dotted leaf paths, stopping descent at a content path. */
 function bodyLeafPaths(body, content) {
   const out = [];
+  // Comparisons are case-folded (the renderer matches body fields case-insensitively); a
+  // caller may pass a content set in either case, so fold a working copy rather than assume.
+  const contentLc = new Set([...content].map((c) => String(c).toLowerCase()));
   const hasContentBelow = (prefix) => {
-    const p = `${prefix}.`;
-    for (const c of content) if (c.startsWith(p)) return true;
+    const p = `${prefix.toLowerCase()}.`;
+    for (const c of contentLc) if (c.startsWith(p)) return true;
     return false;
   };
   const walk = (obj, prefix) => {
     for (const key of Object.keys(obj)) {
       const p = prefix ? `${prefix}.${key}` : key;
-      if (content.has(p)) continue; // rendered — and so is everything under it
+      if (contentLc.has(p.toLowerCase())) continue; // rendered — and so is everything under it
       const val = obj[key];
       if (isPlainObject(val) && hasContentBelow(p)) walk(val, p);
       else out.push(p);
@@ -168,8 +184,9 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
     for (const member of members) {
       const ref = entryName(member);
       if (!ref) continue;
-      if (!groupsByField.has(ref)) groupsByField.set(ref, []);
-      groupsByField.get(ref).push(gname);
+      const refKey = ref.toLowerCase();
+      if (!groupsByField.has(refKey)) groupsByField.set(refKey, []);
+      groupsByField.get(refKey).push(gname);
     }
   }
 
@@ -180,7 +197,10 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
     return hit;
   };
 
-  const isDeclared = (name) => Object.prototype.hasOwnProperty.call(fields, name) && fields[name] !== null;
+  const isDeclared = (name) => {
+    const v = lookupCI(fields, name);
+    return v !== undefined && v !== null;
+  };
 
   // (item id \x00 field path) → { code, message, file }
   const findings = new Map();
@@ -206,14 +226,15 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
     const file = item && item._source;
 
     for (const leaf of bodyLeafPaths(body, content)) {
-      if (ack.has(leaf)) continue;
+      if (ack.has(leaf.toLowerCase())) continue;
       const key = `${itemId}\x00${leaf}`;
       if (findings.has(key)) continue;
 
       const firstSeg = leaf.split('.')[0];
       const declKey = isDeclared(leaf) ? leaf : (isDeclared(firstSeg) ? firstSeg : null);
-      const contentTouches = declKey && (content.has(declKey)
-        || [...content].some((c) => c.startsWith(`${declKey}.`)));
+      const declKeyLc = declKey ? declKey.toLowerCase() : null;
+      const contentTouches = declKeyLc && (content.has(declKeyLc)
+        || [...content].some((c) => c.startsWith(`${declKeyLc}.`)));
 
       // CL0427 only when the declared field is genuinely routed elsewhere — nothing about
       // it is read here. A sub-key of a field this template *does* read (a typo such as
@@ -223,7 +244,7 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
         // the field. Skip CL0427; `finish()`'s tier-aware CL0428 sweep still flags a
         // field named by no list at all.
         if (fromTemplateFor) continue;
-        const inGroups = groupsByField.get(declKey) || [];
+        const inGroups = groupsByField.get(declKeyLc) || [];
         const where = inGroups.length
           ? `group ${inGroups.map((g) => `\`${g}\``).join(', ')}, which template "${templateName}" does not include`
           : `not listed by template "${templateName}"`;
@@ -255,11 +276,12 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
     const named = new Set();
     const addName = (ref, allowGroup) => {
       if (!ref) return;
-      if (allowGroup && Array.isArray(groups[ref])) {
-        for (const m of groups[ref]) addName(entryName(m), false);
+      const group = lookupCI(groups, ref);
+      if (allowGroup && Array.isArray(group)) {
+        for (const m of group) addName(entryName(m), false);
         return;
       }
-      named.add(ref);
+      named.add(String(ref).toLowerCase());
     };
     for (const list of Object.values(templates)) {
       if (!Array.isArray(list)) continue;
@@ -274,7 +296,7 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
     }
     const src = (table._sources && table._sources[0]) || null;
     for (const name of Object.keys(fields)) {
-      if (fields[name] === null || named.has(name)) continue;
+      if (fields[name] === null || named.has(name.toLowerCase())) continue;
       diagnostics.warn(
         CODES.FIELD_DECLARED_UNUSED,
         `field "${name}" is declared in the field table but no template names it, directly or through a group.`,

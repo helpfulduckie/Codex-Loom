@@ -25,10 +25,7 @@ WARN CL0114
 WARN CL0630 compile.cl.yaml
   branch "(root)" resolves no opening: and no adventureDescription:, so Velvet Lattice would start this leaf with an empty prompt. Give the branch an opening:, or one an ancestor passes down.
 WARN CL0631 compile.cl.yaml
-  branch "(root)" resolves no aiInstructions:. Velvet Lattice writes an empty-string AI Instructions on AID's side for it, and an empty string suppresses AID's model-default instructions rather than falling back to them — the leaf plays with none at all. Give the branch an aiInstructions:, or one an ancestor passes down.
-WARN CL0627 Codex/items.cl.yaml
-  aid.type "Character" names a built-in AI Dungeon category; writing it as "character".
-  hint: AID's built-in categories are lowercase and it matches the type string exactly, so "Character" would arrive as a custom category beside "character" rather than inside it. Declare it lowercase to silence this."
+  branch "(root)" resolves no aiInstructions:. Velvet Lattice writes an empty-string AI Instructions on AID's side for it, and an empty string suppresses AID's model-default instructions rather than falling back to them — the leaf plays with none at all. Give the branch an aiInstructions:, or one an ancestor passes down."
 `;
 
 exports[`pathological fixture a hand-edited snapshot file aborts the load 1`] = `
@@ -251,9 +248,6 @@ WARN CL0545 compile.cl.yaml
   role "Missing" is declared at the project root but no resolved token anywhere references it.
 WARN CL0545 compile.cl.yaml
   role "Loop" is declared at the project root but no resolved token anywhere references it.
-WARN CL0627 Codex/items.cl.yaml
-  aid.type "Character" names a built-in AI Dungeon category; writing it as "character".
-  hint: AID's built-in categories are lowercase and it matches the type string exactly, so "Character" would arrive as a custom category beside "character" rather than inside it. Declare it lowercase to silence this.
 WARN CL0535 compile.cl.yaml
   placeholder "altName" is declared at the project root but no text beneath it references "%altName%" — the player is asked the question and the answer goes nowhere.
   hint: Declared at the project root, so this counts every branch.
@@ -275,12 +269,6 @@ WARN CL0631 compile.cl.yaml
 WARN CL0628 Codex/items.cl.yaml
   aid.type " Gadget" has leading whitespace; writing it as "Gadget".
   hint: A leading space survives in a directory name, so the type would reach AI Dungeon as a category whose name differs from the obvious one by an invisible character.
-WARN CL0627 Codex/items.cl.yaml
-  aid.type "Character" names a built-in AI Dungeon category; writing it as "character".
-  hint: AID's built-in categories are lowercase and it matches the type string exactly, so "Character" would arrive as a custom category beside "character" rather than inside it. Declare it lowercase to silence this.
-WARN CL0627 Codex/items.cl.yaml
-  aid.type "Location" names a built-in AI Dungeon category; writing it as "location".
-  hint: AID's built-in categories are lowercase and it matches the type string exactly, so "Location" would arrive as a custom category beside "location" rather than inside it. Declare it lowercase to silence this.
 ERROR CL0626 Codex/items.cl.yaml
   aid.type values "Widget" and "widget" differ only by case, and are written to the same file on a case-insensitive filesystem.
   hint: Story Cards/{type}/{type}.md is one path for all of them on Windows and macOS, so the group written last overwrites the others and their cards never reach AI Dungeon. Pick one spelling."

@@ -1,0 +1,42 @@
+# The shared field table. Exercises every declaration key documented in
+# documentation/10-field-declarations.md § Declaration keys.
+
+fields:
+  Tagline:     { label: Tagline }
+  vibe:        { label: Vibe, join: "; ", wrap: "[]" }
+  appearance:  { label: Appearance,
+                 from: [Physical Traits.gender, Physical Traits.age,
+                        Physical Traits.hair, Physical Traits.other],
+                 join: "; ",
+                 labelWhen: { originalAppearance: Current Appearance } }
+  originalAppearance: { label: Original Appearance, join: "; " }
+  personality: { label: Personality, from: Personality.keywords, join: ", " }
+  personalityExpanded: { from: Personality.expanded }
+  Magic:       { label: Magic, from: [Magic.affinity, Magic.effect], join: "; " }
+  pantheon:    { label: Pantheon, render: keys, block: true }
+  # NOTE: the declaration key must match the body key's case. The renderer matches body
+  # fields case-insensitively, but CL0426's audit does not — declaring `background` against
+  # a `Background:` body key renders correctly and still warns.
+  Background:  { label: Background, render: list }
+  relationships: { label: Relationships, render: list }
+  secret:      { label: Hidden Info, wrap: "[]", wrapLabel: true }
+  landmarks:   { render: list }                 # bare — no label
+  purpose:     { label: Purpose }
+  structure:   { label: Structure, render: list }
+  methods:     { label: Methods, render: list }
+  overview:    { render: prose }
+  status:      { label: Status, always: true }
+
+groups:
+  core: [Tagline, vibe, appearance, originalAppearance, personality, personalityExpanded]
+
+templates:
+  Character: [core, Magic, Background, relationships, secret]
+
+  # An inline override: `vibe` renders under a different label and without the join.
+  Location: [Tagline, { field: vibe, label: Culture Vibe, render: bare }, landmarks, pantheon]
+
+  Faction: [Tagline, overview, purpose, structure, methods, status]
+
+  # A brief list for the Plot Essentials cast slot.
+  CharacterBrief: [Tagline, appearance, personality]

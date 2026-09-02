@@ -739,23 +739,20 @@ describe('buildCardTypeAudit', () => {
     expect(buildCardTypeAudit().resolve('Character', { file: 'items.yaml' })).toBe('character');
   });
 
-  test('warns once per authored value, not once per card', () => {
-    const diagnostics = report(['Character', 'Character', 'Character', 'Character']);
-    expect(diagnostics.warnings.filter((d) => d.code === 'CL0627')).toHaveLength(1);
+  test('the built-in fold is silent — it is correct and unconditional, so nothing is reported', () => {
+    // CL0627 used to announce the fold. Dropped 2026-09-01: capitalizing `Character` is the
+    // natural spelling (it matches a field table's `templates:` keys), the rewrite is always
+    // right, and no author was ever going to act on the line. The fold itself is asserted
+    // above; this guards against the warning coming back.
+    const diagnostics = report(['Character', 'Race', 'Location', 'Faction', 'Class']);
+    expect(diagnostics.warnings).toHaveLength(0);
+    expect(diagnostics.errors).toHaveLength(0);
   });
 
-  test('CL0627 names both the authored value and what is written', () => {
-    const warn = report(['Race']).warnings.find((d) => d.code === 'CL0627');
-    expect(warn).toBeTruthy();
-    expect(warn.message).toContain('"Race"');
-    expect(warn.message).toContain('"race"');
-  });
-
-  test('CL0628 reports leading whitespace and suppresses the fold warning', () => {
+  test('CL0628 still reports leading whitespace on a built-in', () => {
     const diagnostics = report([' Character']);
     expect(diagnostics.warnings.find((d) => d.code === 'CL0628')).toBeTruthy();
-    // One line per authored value: CL0628's message already names the folded result.
-    expect(diagnostics.warnings.filter((d) => d.code === 'CL0627')).toHaveLength(0);
+    expect(diagnostics.warnings).toHaveLength(1);
   });
 
   test('CL0626 errors on two custom types differing only by case', () => {
@@ -975,7 +972,7 @@ describe('CL0622 card-name collision', () => {
     const collision = diagnostics.errors.find((d) => d.code === 'CL0622');
     expect(collision).toBeTruthy();
     expect(collision.message).toContain('Shared Name');
-    // Lowercase because `Character` and `Location` are AID built-ins and CL0627 folds them
+    // Lowercase because `Character` and `Location` are AID built-ins and the emit path folds them
     // before anything downstream reads `aid.type` — including this message. The fixture
     // still authors them capitalized, which is what keeps the fold covered from this end.
     expect(collision.message).toContain('character');

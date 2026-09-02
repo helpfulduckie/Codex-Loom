@@ -89,13 +89,35 @@ sections:
           tone: Close, unsparing observation.   # edits one line; "pov" untouched
 ```
 
-**There is no document-level `branches:` or `variants:`.** v3's AI Instructions and Author's Note carried both; writing either now is a misplaced-key ERROR pointing at the section surface, because the migration is exactly "move it down one level".
+**There is no document-level `branches:` or `variants:`.** Dispatch and variant selection are per section; writing either at the document level is a misplaced-key ERROR pointing at the section surface.
 
-| v3, at the document level | v4, on the section |
-|---|---|
-| `branches: {subject: intimate}` + `variants: {intimate: {apply: [close]}}` | `branches: {subject: close}` on each section defining a `close` variant |
-| `variants: {detached: {sections: {rules: ~}}}` | `branches: {detached: ~}` on the `rules` section |
-| `branches: {x: {ain: …, cards: …}}` | Not yet — becomes `render.storyCards` in a later phase |
+### Swappable alternates — `render.storyCards`
+
+**A component can ship one version in its own field and offer alternates as story cards the player pastes in themselves** — a fuller ruleset, a terser one, or the scenario-specific parts only. Every component supports this; AI Instructions is where it earns its keep.
+
+```yaml
+render:
+  component:
+    variant: concise                  # what ships in the AI Instructions field (optional)
+  storyCards:
+    - title: AI Instructions — Full
+      variant: verbose                # a section-variant selector, applied everywhere defined
+    - title: AI Instructions — Scenario Rules Only
+      sections: [institute, pacing]   # a subset — omits the imported house style
+      type: zz_AIN                    # overrides the project default
+```
+
+**Each entry renders the component again — with the leaf's slot occupants in place — as a trigger-less story card.** `kind: reference` is set for you, the rendered text goes in `notes:` (AID's 10,000-character description field), and the body is a one-line "copy the description field…" prompt.
+
+**A trigger-less card never enters context, so the alternates cost nothing during play**, and the empty-triggers lint knows not to flag them.
+
+The card's AID `type` resolves on three rungs, most specific first:
+
+1. the entry's own `type:`
+2. `storyCardType.<component>` in `compile.yaml` — project-wide, e.g. `storyCardType: {aiInstructions: zz_AIN}` to sort alternates to the end of the player's list
+3. the component's display label (`AI Instructions`, `Plot Essentials`, …)
+
+**Placement uses the ordinary frontier mechanism.** An alternate rendering identically across a subtree is written once at that subtree's root; one that varies per branch has each version placed on its own frontier. Two entries whose titles collide under one type are `CL0622`, the same as any two story cards sharing a name.
 
 ### Prose passthrough
 
@@ -161,7 +183,7 @@ branches:
       beta: {}
 ```
 
-**It does not inherit**, because it belongs to the node whose children it frames. Declared on a leaf it is ignored with a WARN. (v3 spelled this `openingChoice:`.)
+**It does not inherit**, because it belongs to the node whose children it frames. Declared on a leaf it is ignored with a WARN.
 
 ---
 
@@ -181,18 +203,6 @@ scripts: ./scripts
 
 ---
 
-## Migrating a v3 Plot Essentials file
+## A Slot Renders Body Text Only
 
-A v3 file reports `blocks:` as an unknown key, which is the intended signal.
-
-| v3 | v4 |
-|---|---|
-| A freeform block with `body.text` | A named section with `text:` |
-| `- import: Aness` with `render.wrapper` | A slot section, plus `render.plotEssential: {slot: …}` on the Aness item |
-| `blocks:` grouping under a heading | One slot with that `heading:`, and `wrap: all` if the group shared a wrapper |
-| `style: hint` | A per-target `template:` on the item's render target |
-| `style: skip` | Do not declare the target |
-| `render.stripFence` | Deleted with the fence it removed; drop the key |
-| Block `position:` deciding occupant order | `order:` on each item's render target |
-
-A slot rendering produces body text and nothing else — the `## Name` heading and `~~~` fence belong to story-card output, which is why `stripFence` existed and why it no longer needs to.
+A slot rendering produces body text and nothing else. The `## Name` heading and the `~~~` fence belong to story-card output, so a component occupant never carries them — and a `~~~` written into a template that reaches a slot is `CL0410`.

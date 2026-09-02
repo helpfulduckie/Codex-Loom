@@ -25,3 +25,8 @@
 # checks them out CRLF, so any edit on a Windows machine shows as a whole-file diff. Pin LF
 # so a doc change is only the lines that changed.
 /documentation/** text eol=lf
+/skill/** text eol=lf
+
+# The showcase example carries the documentation's snippets verbatim, so it is edited
+# alongside them and gets the same treatment.
+/examples/** text eol=lf

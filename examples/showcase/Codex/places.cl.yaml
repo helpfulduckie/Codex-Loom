@@ -1,0 +1,52 @@
+# Imports and includes (documentation/04-imports-and-includes.md).
+
+# Whole-file include, filtered by branch dispatch.
+- include: "{%main}/places.cl.yaml"
+  branches:
+    '*': []                    # include with no variant on every branch
+    lowContext: ~              # ...except this one, which imports Academy explicitly below
+
+# An explicit import wins over the include above, silently.
+- import: Academy
+  importVariants: [noble]      # apply the library's "noble" variant chain first
+  body:
+    Tagline: +{under a standing snow}
+  branches:
+    lowContext: []
+
+# Component-only: no story card, one Plot Essentials Hints entry. An item with
+# `storyCard: false` and no reachable target on a branch would be CL0610.
+- id: OpeningHint
+  name: Opening Hint
+  aid:
+    type: character
+  render:
+    template: CharacterBrief
+    storyCard: false
+    plotEssential: {slot: hints, order: 1}
+  body:
+    Tagline: Ask about the stacks
+  branches:
+    # The hints slot is gated off this branch, so without the exclusion the item would
+    # produce no output here at all — CL0610.
+    lowContext: ~
+
+# A project-local item exercising the Faction template and the duckieConv mutexHint rule.
+- id: Guild
+  name: The Alchemists' Guild
+  aid:
+    title: The Alchemists' Guild
+    type: faction
+    triggers: [Guild, Alchemists]
+  kind: reference
+  render:
+    template: Faction
+  body:
+    Tagline: Chartered monopoly on refined reagents
+    overview:
+      - the guild predates the academy
+      - it has outlasted three charters
+    purpose: Control the reagent trade
+    structure:
+      - A masters' council of nine
+    status: active

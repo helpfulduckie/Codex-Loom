@@ -287,7 +287,11 @@ function resolveBodyRender(item, templates, fieldTable, templateForMaps) {
     const hit = lookupNamedTemplate(explicit, templates, fieldTable);
     if (hit) return hit;
   }
-  if (type && baseMap[type]) return { kind: 'fieldList', list: baseMap[type], name: type };
+  // Case-insensitively, like every other name lookup here. `aid.type` is matched against a
+  // slot file's `templates:` keys, while `cardType.js` folds a built-in type to lowercase —
+  // so a raw index here made a project that wrote `character` silently miss its tier.
+  const byType = type ? lookupSlotList(type, baseMap) : null;
+  if (byType) return { kind: 'fieldList', list: byType, name: type };
   if (type) {
     const hit = lookupNamedTemplate(type, templates, fieldTable);
     if (hit) return hit;
@@ -312,8 +316,9 @@ function resolveNotesRender(item, templates, fieldTable, projectNotesTemplate, t
   }
   const type = item.aid && item.aid.type;
   const notesMap = (templateForMaps && templateForMaps.notes) || {};
-  if (type && notesMap[type]) {
-    return { kind: 'fieldList', list: notesMap[type], name: `templateFor.notes[${type}]`, refRoot: 'notes' };
+  const notesByType = type ? lookupSlotList(type, notesMap) : null;
+  if (notesByType) {
+    return { kind: 'fieldList', list: notesByType, name: `templateFor.notes[${type}]`, refRoot: 'notes' };
   }
   if (projectNotesTemplate) {
     const hit = lookupNamedTemplate(projectNotesTemplate, templates, fieldTable);

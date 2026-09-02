@@ -17,10 +17,12 @@ letting them drift, is the whole problem.
   tree, with per-branch variants layering overrides onto a shared base.
 - **Pronoun resolution.** `{$Aness.she}` and `[s]`-style verb agreement resolve per item, so
   a character whose gender differs by branch reads correctly in every one.
-- **Templates.** Item bodies render through templates, so the shape of a Character card is
-  stated once rather than repeated in every file.
-- **Canon imports.** A shared canon directory can be imported across projects, with
-  per-project overrides.
+- **Declared fields.** A field's label and formatting are stated once, and a template is an
+  ordered list of field names — so the shape of a Character card lives in one place rather
+  than repeated across template files.
+- **Library imports.** A shared library directory can be imported across projects, with
+  per-project overrides, and frozen into a committed snapshot so a compile reproduces
+  byte-for-byte after the shared source moves.
 - **Reports.** Seed maps, card-size measurements against the platform's field caps, and a
   syntax lint pass — all reading the compiled tree back, so they measure what AID will
   actually store.

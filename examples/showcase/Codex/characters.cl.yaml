@@ -1,0 +1,151 @@
+# Project items. A file is a YAML sequence and may mix definitions, imports and includes.
+
+# The protagonist: no story card, one Plot Essentials "you" block.
+- id: Aria
+  name:
+    display: Aria
+    full: Aria Voss
+  pronouns: female
+  aid:
+    title: Aria Voss
+    type: character
+    triggers: [Aria, Voss]
+  notes: The player character.
+  render:
+    template: Character
+    storyCard: false
+    plotEssential: {slot: you, order: 1}
+  body:
+    Tagline: '%heroName%, Sworn Protector'
+    Physical Traits:
+      gender: female
+      age: late 20s
+      hair: short silver hair
+    Personality:
+      keywords: [determined, loyal, reserved]
+      expanded: '{$Aria} love[s] a clean solution — {$Aria.she} act[s] before {$Aria.she} explain[s].'
+  variants:
+    mage:
+      body:
+        Tagline: '%heroName%, Academy Mage'
+        Physical Traits:
+          other: silver staff
+  branches:
+    mage: mage
+
+# Ships both a story card (full list) and a Cast entry (brief list).
+- id: Mentor
+  name: Elder Roshan
+  pronouns: male
+  aid:
+    title: Elder Roshan
+    type: character
+    triggers: [Roshan, Elder]
+  notes: '[e]'
+  meta:
+    duckieConv:
+      role: standard
+  render:
+    template: Character
+    plotEssential: {slot: cast, order: 2, template: CharacterBrief}
+  body:
+    Tagline: Master Archivist of the Academy
+    vibe: [patient, cryptic, exacting]
+    Physical Traits:
+      gender: male
+      age: 60s
+      hair: white beard, bald
+    Personality:
+      keywords: [wise, patient, cryptic]
+    Magic:
+      affinity: memory
+      effect: recall of things not witnessed
+    Background:
+      - Catalogued the Academy's lower stacks for forty years.
+      - Never sat the mastery examination.
+    secret: He knows which records were burned, and by whom.
+
+# The love interest, bound to the LI role. Its prose never names it.
+- id: Kaiden
+  name: {display: Kaiden, full: Kaiden Ross}
+  pronouns: male
+  aid:
+    title: Kaiden Ross
+    type: character
+    triggers: [Kaiden, Ross]
+  meta:
+    duckieConv:
+      role: anchor
+  body:
+    Tagline: Hedge Knight without a house
+    vibe: [wry, watchful, steady]
+    Physical Traits:
+      gender: male
+      age: early 30s
+      hair: dark, close-cropped
+    Personality:
+      keywords: [wry, watchful]
+    relationships:
+      - Rides the northern circuit alone when the roads are bad.
+
+# Bound to LI on the mage branch. Demonstrates a gender-swap variant with field operations.
+- id: Felicia
+  name: {display: Felicia, full: Felicia Grayls}
+  pronouns: female
+  aid:
+    title: Felicia Grayls
+    type: character
+    triggers: [Felicia, Grayls]
+  render:
+    template: Character
+  body:
+    Tagline: Court Alchemist; guild liaison
+    vibe: [precise, guarded, curious]
+    Physical Traits:
+      gender: female
+      age: mid 20s
+      hair: silver hair, in a controlled bun
+    Personality:
+      keywords: [precise, guarded]
+  variants:
+    Felix:
+      name: {display: Felix, full: Felix Grayls}
+      pronouns: male
+      aid:
+        title: Felix Grayls
+        triggers: [Felix, Grayls]
+      body:
+        Physical Traits:
+          gender: male
+          hair: -{, in a controlled bun}      # remove substring
+        Tagline: +{sworn to the Academy}      # append
+  branches:
+    knight: Felix
+
+# Stays at full detail even on the lowContext tier — Pattern 2.
+- id: Voss
+  name: {display: Voss, full: Ilan Voss}
+  pronouns: nonbinary
+  aid:
+    title: Ilan Voss
+    type: character
+    triggers: [Voss, Ilan]
+  render:
+    template: CharacterFull
+  body:
+    Tagline: The rival who never conceded
+    vibe: [driven, unsentimental, patient]
+    Physical Traits:
+      gender: nonbinary
+      age: 30s
+      hair: braided black hair
+    Personality:
+      keywords: [driven, unsentimental]
+    Magic:
+      affinity: fire
+      effect: controlled burns
+    Background:
+      - Placed second in every examination Aria placed first in.
+    secret: Voss forged the letter that opened the lower stacks.
+  branches:
+    mage: ~                      # excluded from the mage branch entirely

@@ -86,16 +86,14 @@ function normalizeCardType(raw) {
 function buildCardTypeAudit() {
   // authored value → { to, file }. Keyed on the authored string so one warning covers
   // every card that spells the type that way.
-  const foldedValues = new Map();
   const trimmedValues = new Map();
   // final type → the first source file that produced it, for the collision message.
   const originOf = new Map();
 
   function resolve(raw, loc = {}) {
-    const { type, folded, trimmed } = normalizeCardType(raw);
+    const { type, trimmed } = normalizeCardType(raw);
     if (typeof type !== 'string' || type === '') return type;
     const file = loc.file || null;
-    if (folded && !foldedValues.has(raw)) foldedValues.set(raw, { to: type, file });
     if (trimmed && !trimmedValues.has(raw)) trimmedValues.set(raw, { to: type, file });
     if (!originOf.has(type)) originOf.set(type, file);
     return type;
@@ -117,21 +115,10 @@ function buildCardTypeAudit() {
       );
     }
 
-    for (const [authored, { to, file }] of foldedValues) {
-      // One line per authored value, not two: a leading-space type that is also a built-in
-      // has already been reported by CL0628, whose message names the same final value.
-      if (trimmedValues.has(authored)) continue;
-      diagnostics.warn(
-        DIAG_CODES.CARD_TYPE_NORMALIZED,
-        `aid.type "${authored}" names a built-in AI Dungeon category; writing it as "${to}".`,
-        { file },
-        {
-          hint: 'AID\'s built-in categories are lowercase and it matches the type string '
-            + `exactly, so "${authored}" would arrive as a custom category beside `
-            + `"${to}" rather than inside it. Declare it lowercase to silence this.`,
-        },
-      );
-    }
+    // The built-in fold itself is not reported. It is a correct, unconditional rewrite an
+    // author cannot act on — capitalizing `Character` is the natural spelling, since it
+    // matches a field table's `templates:` keys — so a per-compile line about it was noise
+    // on a handled situation. The fold still happens; see `normalizeCardType`.
 
     // Collision is checked on the *normalized* values: a pair that folded to one built-in
     // has already been merged on purpose, and only a pair that still differs still collides.

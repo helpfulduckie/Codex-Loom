@@ -72,9 +72,15 @@ Item files are YAML sequences. A single file can mix local item definitions, `im
 | `render` | optional | Template, wrapper, and placement targets |
 | `body` | yes | All item content — nested mappings, strings, block scalars, arrays |
 | `notes` | optional | The AID description field. `description:` is an accepted alias; declaring both is an ERROR |
+| `v` | optional | Item variables, read in templates as `{$v.key}` |
+| `meta` | optional | An annotation channel for tooling. **No template ever reads it** |
 | `variants` | optional | Named deltas; nestable to any depth |
 | `branches` | optional | Maps branch names to variant names for dispatch |
-| `kind` | optional | Declared but not yet read (Phase 5) |
+| `kind` | optional | `story` (default) or `reference` |
+
+**`kind: reference`** marks an item that exists to be read by a script or by a human in the story-card editor rather than by the AI. It exempts the item from the prose heuristics and from nothing else. It reaches AID nowhere — Velvet Lattice forwards only title, type, keys, value and description.
+
+**`meta:` is for convention packs, not for content.** Never validated by the loader, never proposed as a relocation target for a typo'd key. A pack reads `meta.<packName>.<key>`, so `meta.duckieConv.role` and a `stat-tracker` pack's keys never collide. The compiler writes it into the card's `~~~` fence so the offline `--lint` arm can read it back, and it is branch-addressable like any other whole-value field. See `references/convention-packs.md`.
 
 ---
 
@@ -96,16 +102,18 @@ Item files are YAML sequences. A single file can mix local item definitions, `im
 
 | Field | Description |
 |---|---|
-| `template` | `.template` filename without extension (case-insensitive). Defaults to `aid.type`. |
+| `template` | Template name (case-insensitive). Defaults to `aid.type`. Names a `templates:` entry in a field table, or a `.template` file |
 | `wrapper` | `none` (default) / `square` → `[ ]` / `curly` → `{ }`. **Story-card output only.** |
 | `notesTemplate` | Template override for the `notes:` field. |
 | `storyCard` | Boolean, default `true`. `false` means this item produces no story card. |
-| `plotEssential`, `summary`, `aiInstructions`, `authorsNote` | A render target — see below |
-| `description`, `opening`, `branchFraming` | Declared, but not yet read (Phase 6) |
+| `plotEssential`, `summary`, `aiInstructions`, `authorsNote`, `adventureDescription`, `opening` | A render target — see below |
+| `branchFraming` | Recognized, permanently unread — branch framing sits at an interior node, where no items resolve |
+
+**`description:` as a target is now `adventureDescription:`.** The split is which of the two descriptions has a branch: the scenario blurb is written once at the root with no cast to place into it, while an adventure description is an ordinary per-leaf component that routes like the rest. The old spelling draws a rename message rather than a bare unknown-key.
 
 ### Render targets
 
-Each component key takes a mapping:
+Each component key takes a mapping — or `true` / `false` as a shorthand:
 
 | Key | Description |
 |---|---|
@@ -123,7 +131,11 @@ render:
     template: CharacterBrief     # the PE entry is briefer than the story card
 ```
 
-**Template resolution, per target:** the target's own `template:` → `render.template` → `aid.type` → verbatim pass-through. This is what replaced `style: full | hint | skip` — `hint` was only sugar for "use the `.hint` template", which a per-target `template:` says directly, and `skip` is expressed by not declaring the target.
+**Template resolution, per target:** the target's own `template:` → `templateFor.<component>` keyed on `aid.type` → `templateFor.base` keyed on `aid.type` → `aid.type` matched against a loaded text template → verbatim pass-through.
+
+**A `template:` counts as a real choice only when it differs from `aid.type`.** The model fills both `render.template` and a target's `template:` with `aid.type` for every item naming neither, so honoring that fill would shadow every branch's `templateFor` map. See `references/field-declarations.md` → the three ladders.
+
+This is what replaced `style: full | hint | skip` — `hint` was only sugar for "use the `.hint` template", which a per-target `template:` says directly, and `skip` is expressed by not declaring the target.
 
 **There is no `wrapper:` on a target.** The slot owns the wrapping of everything placed in it, precisely so an item with `wrapper: curly` in a curly slot cannot ship double-braced. Writing one is an unknown-key ERROR pointing at `render.wrapper`.
 
@@ -148,7 +160,15 @@ body:
 
 ## `notes:` Block
 
-The AID description field, rendered through `TypeName.notes.template` when one exists. **Story-card output only** — component output has no fence to carry it, so `notes:` is not emitted into a slot.
+The AID description field. **Story-card output only** — component output has no fence to carry it, so `notes:` is not emitted into a slot.
+
+**A notes template resolves on three rungs, most specific first:**
+
+1. the item's own `render.notesTemplate`
+2. `templateFor.notes` keyed on `aid.type`, then the `render.notesTemplate` scalar in `compile.yaml` — both merged down the branch chain
+3. the built-in default
+
+Unlike the body ladder, this one needs no "is it a real choice" guard, because nothing fills `render.notesTemplate` automatically. A notes template reads `$notes` rather than `$body`.
 
 `description:` is an accepted alias, collapsed to `notes` internally. Declaring both on one item is an ERROR (`CL0323`), not a merge.
 
@@ -228,8 +248,10 @@ branches:
 - id: Kaiden
   ...
 
-- include: "{%main}/NPCs/Guards.yaml"
+- include: "{%main}/NPCs/Guards.cl.yaml"
 
 - import: Felicia
   ...
 ```
+
+Item files use the `.cl.yaml` extension by convention — `characters.cl.yaml`, `items.cl.yaml`. A library directory's `canon.cl.yaml` is reserved and excluded from item loading; it is never parsed as an item.

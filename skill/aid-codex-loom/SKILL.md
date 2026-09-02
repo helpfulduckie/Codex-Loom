@@ -2,38 +2,38 @@
 name: aid-codex-loom
 description: >
   This skill should be used when the user is working with Codex Loom — a YAML-to-Markdown compiler
-  for AI Dungeon scenarios. Use this skill when the user asks to "write a Codex Loom compile.yaml",
-  "add an item to my Codex Loom project", "add a card", "set up branches", "create a variant",
-  "write character YAML", "configure Plot Essentials", "set up AI Instructions", "write a
-  template", "import a canon item", "configure components", "declare a slot", "set a render
-  target", or "use field operations". Also use when the user mentions Codex Loom by name, asks
-  about the item YAML schema, branch dispatch, pronoun tokens, slots and placement, or
-  compile-time output structure. Also use when reviewing Velvet Lattice compiled output for format
-  correctness, cross-branch consistency, or bleed — and when validating a migration from a legacy
-  VL project to a new Codex Loom compiled version. This skill covers YAML authoring and compiled
-  output review — for AID engine behavior, Story Card triggers, and narrative design use
-  aid-scenario; for scripting use aid-scripting.
+  for AI Dungeon scenarios. Use this skill when the user asks to "write a Codex Loom
+  compile.cl.yaml", "add an item to my Codex Loom project", "add a card", "set up branches",
+  "create a variant", "write character YAML", "declare a field", "write a field table", "configure
+  Plot Essentials", "set up AI Instructions", "import a library item", "configure components",
+  "declare a slot", "set a render target", "bind a role", "add a context tier", "freeze the
+  library", "write a lint pack", or "use field operations". Also use when the user mentions Codex
+  Loom by name, asks about the item YAML schema, `fields.cl.yaml`, `templateFor`, branch dispatch,
+  pronoun or role tokens, slots and placement, library snapshots, convention packs, or compile-time
+  output structure. Also use when reviewing Velvet Lattice compiled output for format correctness,
+  cross-branch consistency, or bleed. This skill covers YAML authoring and compiled output review —
+  for AID engine behavior, Story Card triggers, and narrative design use aid-scenario; for
+  scripting use aid-scripting.
 ---
 
 # Codex Loom — Authoring Skill
 
-> **Status: describes v4, which is a clean break from the released v3.3.2.**
+> **Describes v4, a clean break from the released v3.3.2.** There is no compatibility mode
+> — `version: 4` is required and a v3 project fails loudly rather than compiling with
+> warnings. `--migrate` converts one in place; that workflow is documented in the repo's
+> `documentation/16-migrating-from-v3.md` and deliberately not carried here.
 >
-> There is no compatibility mode. A v3 project does not compile: `version: 4` is required,
-> `cards:` is now `items:`, canon is referenced with `{%name}` rather than `{@name}`, and
-> Plot Essentials' block list is now a named-sections document. Each of those fails loudly
-> rather than silently, and the migration tables at the end of the reference files say what
-> each v3 form becomes.
->
-> Phases 4–8 are additive and will land as edits rather than a rewrite.
->
-> This unpacked tree is the only editable copy; `.skill` is a zip built from it.
+> This unpacked tree is the only editable copy.
 
-Codex Loom is a command-line compiler that turns YAML item definitions into Velvet Lattice files for AI Dungeon scenarios. You write items (characters, locations, settings) in structured YAML; the compiler resolves pronoun tokens, applies branch-specific variant chains, and produces one complete output folder per playable branch.
+Codex Loom is a command-line compiler that turns YAML item definitions into Velvet Lattice files for AI Dungeon scenarios. You write items (characters, locations, settings) in structured YAML; the compiler resolves pronoun and role tokens, applies branch-specific variant chains, and produces one complete output folder per playable branch.
 
-**The central idea is that an item declares where it renders.** An item can become a story card, or content inside a component like Plot Essentials, or both. The component declares named slots and never learns who filled them; the item names the slot it belongs in. Everything else follows from that.
+**Two ideas carry most of the design:**
 
-This skill covers authoring the file types you write: `compile.yaml`, item YAML files, `.template`/`.partial` files, and component YAML files.
+**An item declares where it renders.** It can become a story card, or content inside a component like Plot Essentials, or both. The component declares named slots and never learns who filled them; the item names the slot it belongs in.
+
+**A field is declared once.** `fields.cl.yaml` says what a field's label, render function and formatting are; a template is an ordered list of field names. Text templates (`.template` / `.partial`) remain as the escape hatch for what a field list cannot express.
+
+This skill covers the file types you author: `compile.cl.yaml`, item YAML files, `fields.cl.yaml` field tables, component YAML files, and lint packs.
 
 ---
 
@@ -41,54 +41,77 @@ This skill covers authoring the file types you write: `compile.yaml`, item YAML 
 
 ```
 my-project/
-  compile.yaml               ← required; entry point
-  Codex/                     ← project item definitions and imports
-  canon/                     ← shared canonical item definitions (referenced via {%name})
-  templates/                 ← .template and .partial files
-  SCHEMA.md                  ← project schema + authoring conventions (read before writing items)
+  compile.cl.yaml            ← required; entry point (compile.yaml also accepted)
+  Codex/                     ← project item definitions and imports (*.cl.yaml)
+  templates/
+    fields.cl.yaml           ← field declarations, groups, and template lists
+    terse.cl.yaml            ← a context tier's slot file, if the project has one
+    Notes.template           ← text templates, for what a field list can't express
   components/
-    plot-essentials.yaml     ← Components/Plot Essentials.md content
-    ai-instructions.yaml     ← Components/AI Instructions.md content
-    authors-note.yaml        ← Components/Author Notes.md content
+    plot-essentials.cl.yaml  ← Components/Plot Essentials.md content
+    ai-instructions.cl.yaml  ← Components/AI Instructions.md content
+    authors-note.cl.yaml     ← Components/Author Notes.md content
+  snapshot/                  ← frozen library copy; committed, never hand-edited
+  SCHEMA.md                  ← project conventions (read before writing items)
   output/                    ← compiler output (do not edit manually)
 ```
 
-When working in a Codex Loom project, check for a `SCHEMA.md` in the project root and read
-it before writing or revising items. It defines the author's template conventions, field-usage
-rules, budget targets, and compression guidelines — project-specific constraints that the
-generic Codex Loom schema doesn't cover.
+Shared item definitions live **outside** the project, in directories named under
+`structure.input.library`. Each library name becomes a `{%name}` token.
+
+**Check for a `SCHEMA.md` in the project root and read it before writing or revising
+items.** It defines the author's field-usage rules, budget targets, and compression
+guidelines — project-specific constraints the generic schema doesn't cover. Where it
+disagrees with `--schema-tables` output, the generated tables are right.
 
 ---
 
 ## CLI
 
 ```bash
-codex-loom path/to/compile.yaml         # compile a project
-codex-loom path/to/project/             # compile from a directory (auto-finds compile.yaml)
-codex-loom --overview path/to/output    # regenerate overview files
-codex-loom --leafReview path/to/output  # regenerate leaf review files
-codex-loom --lint path/to/output        # lint the compiled tree
+codex-loom path/to/project/             # compile (auto-finds compile.cl.yaml)
+codex-loom path/to/compile.cl.yaml      # compile a named file
 ```
 
-Compile options modify a compile rather than selecting one:
+**Modes select what runs.** With no mode flag, the project compiles. Report modes read the
+existing output tree.
+
+| Mode | Effect |
+|---|---|
+| `-C` / `--compile` | Compile (the default) |
+| `-l` / `--leafReview` | One review file per branch leaf |
+| `-o` / `--overview` | A single whole-tree overview |
+| `-s` / `--seed-map` | Seed map |
+| `-b` / `--card-sizes` | Item body size report — the platform-cap diagnostic |
+| `-L` / `--lint` | Syntax lint over the compiled tree |
+| `--snapshot` | Freeze the library into `snapshot/`, with a `sync-diff.txt` review artifact |
+| `--migrate` | Convert a v3 project in place; does not compile |
+
+**Compile options modify a compile rather than selecting one.**
 
 | Flag | Effect |
 |---|---|
-| `-i` / `--with-inventory` | `Overview/Inventory.md` — which items landed in which slot, per branch |
-| `-d` / `--with-diff` | `Overview/Shared.md` + per-leaf `.delta.md` — what varies across branches |
+| `-i` / `--with-inventory` | Which items landed in which slot, per branch |
+| `-d` / `--with-diff` | `Shared.md` + per-leaf `.delta.md` — what varies across branches |
 | `-a` / `--with-annotate` | Per-leaf field-level diff against the project base, attributed to variants |
+| `--schema-tables` | Generate `schema-tables.md` from `fields.cl.yaml` |
+| `--live` | Read the live library instead of the snapshot, for this run |
 | `-c` / `--clean` | Clear output folders first |
 | `-v` / `--verbose` | Per-file logging |
 
-`--with-inventory` is the one to reach for when an item is not where you expected — it is the only view that puts placement back together, because the output file records what a slot rendered to and never who filled it.
+`--lint-level=off|error|warn` overrides `lint.level` and reaches the opinion layer only.
 
-A leaf-review overview is also generated automatically after every compile.
+**`--with-inventory` is the one to reach for when an item is not where you expected** — it
+is the only view that puts placement back together, because the output file records what a
+slot rendered to and never who filled it.
+
+A leaf-review overview is generated automatically after every compile.
 
 ---
 
 ## Quick Start: Minimal New Project
 
-**compile.yaml**
+**compile.cl.yaml**
 ```yaml
 version: 4
 
@@ -104,7 +127,7 @@ placeholders:                      # asked of the player at the start of an adve
   heroName: What should we call you?
 
 components:
-  plotEssential: ./components/plot-essentials.yaml
+  plotEssential: ./components/plot-essentials.cl.yaml
 
 branches:
   knight:
@@ -119,7 +142,7 @@ branches:
       opening: "%heroName% woke to the smell of chalk dust."
 ```
 
-**Codex/characters.yaml**
+**Codex/characters.cl.yaml**
 ```yaml
 - id: Aria
   name:
@@ -152,7 +175,7 @@ branches:
     mage: mage
 ```
 
-**components/plot-essentials.yaml**
+**components/plot-essentials.cl.yaml**
 ```yaml
 sections:
   genre:
@@ -166,14 +189,25 @@ sections:
     render: {position: 5, wrapper: curly}
 ```
 
-**templates/Character.template**
-```
-{$aid.title} - {$body.Tagline}
-Physical Traits: {join("; ", $body.Physical Traits.gender, $body.Physical Traits.age, $body.Physical Traits.hair, $body.Physical Traits.other)}
-Personality: {join(", ", $body.Personality.keywords)}
+**templates/fields.cl.yaml**
+```yaml
+fields:
+  Tagline:     { from: Tagline }
+  appearance:  { label: Physical Traits,
+                 from: [Physical Traits.gender, Physical Traits.age,
+                        Physical Traits.hair, Physical Traits.other],
+                 join: "; " }
+  personality: { label: Personality, from: Personality.keywords, join: ", " }
+
+templates:
+  Character: [Tagline, appearance, personality]
 ```
 
-A template renders the **body alone** — the story-card envelope (`##` heading, `~~~` fence, `triggers:`) is emitted by Codex Loom. A `~~~` fence left in a `.template` file is `CL0410`.
+Each declaration becomes one conditional stanza, so **a field absent from an item's `body:`
+emits nothing** — no empty label, no stray separator. The `templates:` key matches the
+item's `aid.type` (or `render.template`).
+
+A template renders the **body alone** — the story-card envelope (`##` heading, `~~~` fence, `triggers:`) is emitted by Codex Loom. A `~~~` fence in a `.template` file is `CL0410`.
 
 Then run: `codex-loom ./my-project`
 
@@ -195,7 +229,17 @@ Then run: `codex-loom ./my-project`
 
 **Branch dispatch** maps branch names to variant names, in a `branches:` block on an item, an import, or a component *section*. Scalar = one variant; array = several in order; `~` = exclude; `'*'` = wildcard baseline. One walker serves all three, so `~` means the same thing everywhere.
 
-**Canon vs project items** — canon items live in shared directories named under `structure.input.canon`; project items live under `structure.input.items`. Each canon name is automatically a `{%name}` variable. Pull canon in with `import:` (one item, full control) or `include:` (a whole file, optionally filtered).
+**Fields and templates** — a field is declared once in `fields.cl.yaml` with its label, render function and formatting; a template is an ordered list of field and group names, and list order is output order. A field's declaration never varies by branch. `.template` / `.partial` files remain for what a list cannot express.
+
+**`templateFor`** is a branch-merged map from rendering role (`base`, `notes`, one per component) to a selection file. It is how one branch renders different templates from another — and a **context tier** is exactly that: a branch carrying `templateFor: {base: terse.cl.yaml}`, guarded so a terse list can only shorten, never invent.
+
+**Library vs project items** — shared items live in directories named under `structure.input.library`; project items live under `structure.input.items`. Each library name is automatically a `{%name}` variable. Pull them in with `import:` (one item, full control) or `include:` (a whole file, optionally filtered).
+
+**A snapshot freezes the library.** Set `structure.input.snapshot` and run `--snapshot`, and every `{%name}` resolves through a committed frozen copy instead of the live source. Drift prints one informational line and never fails a build; `--live` escapes for one run.
+
+**Roles** bind a name to an item id per branch (`roles: {LI: Kaiden}`), so `{$LI}` in prose means "whoever this branch cast in that part". A role token and an item-id token share the `{$…}` grammar. `protagonist` is an ordinary entry in `roles:`.
+
+**Convention packs** are declarative lint data — never code — that check a mod's configuration or an authoring convention. Opt in per project with `lint.packs`; findings are coded `CL-<pack>/NNNN` and suppress independently.
 
 **Player placeholders** (`%heroName%`) are questions the player answers once at the start of an adventure; the answer is substituted everywhere the key appears. Declared under `placeholders:` in `compile.yaml`, at root or per branch, merging per key down the tree. They work in every component and in a card's entry, name, triggers and notes — but never in the Description or a card's `type`, which are ERRORs. AID's native `${What is your name?}` spelling is also valid to write raw, and Latitude's premade `${character.name}` and its pronoun siblings *must* be, since they have no `%key%` form.
 
@@ -253,16 +297,16 @@ Then name it on each item that belongs there:
 
 This item ships **both** a story card (full template) and a Cast entry (brief template). Add `storyCard: false` for a Plot-Essentials-only item — the protagonist "you" block is the usual case.
 
-### Import a canon item with local overrides
+### Import a library item with local overrides
 
 ```yaml
-- import: Felicia           # canon item ID
-  importVariants: [noble]   # apply the canon "noble" variant chain first
+- import: Felicia           # library item ID
+  importVariants: [noble]   # apply the library's "noble" variant chain first
   body:
     Tagline: +{; guild liaison}   # append to the existing tagline
   variants:
     felix:
-      importVariants: [Felix]     # apply the canon Felix variant on this branch
+      importVariants: [Felix]     # apply the library's Felix variant on this branch
   branches:
     felix: felix
 ```
@@ -343,13 +387,65 @@ sections:
 
 This is legitimate and stays quiet. It only becomes an ERROR when it would make an item vanish from *every* output it declared — an item with `storyCard: false` whose only target was that slot.
 
+### Add a new field to the schema
+
+Declare it once, then name it in the templates that should read it:
+
+```yaml
+# templates/fields.cl.yaml
+fields:
+  allegiance: { label: Allegiance, join: "; " }
+
+templates:
+  Character: [core, allegiance, secret]
+```
+
+**A `body:` key no declaration names is `CL0426`** — content silently dropped from the card, usually a typo. **A declared field no template names is `CL0428`** — a dead declaration. Both are WARN, and between them they keep the field table from rotting.
+
+### Bind a character to a role
+
+```yaml
+# compile.cl.yaml
+roles:
+  LI: Kaiden
+
+branches:
+  subject:
+    roles:
+      LI: Felicia        # this branch casts someone else
+```
+
+Then write prose that does not name either: `{$LI} does not raise it, and {$LI.his} restraint reads as deliberate.` Pronouns follow the bound item automatically.
+
+### Add a low-context tier
+
+```yaml
+templateFor:
+  base: templates.cl.yaml
+
+branches:
+  full: {}
+  lowContext:
+    templateFor: { base: ./templates/terse.cl.yaml }
+```
+
+`terse.cl.yaml` carries only a `templates:` block naming shorter lists per `aid.type`; types it does not mention inherit the full list. **Keep the slot file under the project's own `templates/`, never in a shared library** — a shared one would re-baseline every project that loads that library.
+
+### Turn on a lint pack
+
+```yaml
+lint:
+  packs:
+    wtg: {}            # note the {} — a bare `wtg:` parses as null and unbinds
+```
+
 ---
 
 ## Variants as Situational Versions
 
 The variant system isn't only for branch dispatch (race swaps, gender swaps, per-path
 changes). It's also the mechanism for maintaining multiple *versions* of the same item for
-different usage contexts — even when writing the canon version of an item.
+different usage contexts — even when writing the shared library version of an item.
 
 ### The Pattern
 
@@ -413,14 +509,19 @@ Read these reference files when you need schema detail:
 
 | File | Read when you need... |
 |---|---|
-| `references/compile-yaml.md` | Full `compile.yaml` schema — `version:`, `structure:`, `protagonist:`, `variables:`, `placeholders:`, `components:`, `branches:`; player placeholders in full |
-| `references/item-yaml.md` | Item schema — `id`, `name`, `pronouns`, `aid:`, `render:` and its targets, `body:`, `notes:`, `variants:`, `branches:` |
-| `references/components.md` | The sectioned grammar — sections, slots, wrapping, ordering, per-section variants; Opening, branch framing, description, scripts |
+| `references/compile-yaml.md` | Full `compile.cl.yaml` schema — `structure:`, `protagonist:`, `variables:`, `roles:`, `placeholders:`, `templateFor:`, `storyCardType:`, `lint:`, `components:`, `branches:`; player placeholders in full |
+| `references/item-yaml.md` | Item schema — `id`, `name`, `pronouns`, `aid:`, `render:` and its targets, `body:`, `notes:`, `meta:`, `kind:`, `variants:`, `branches:` |
+| `references/field-declarations.md` | **The primary rendering surface** — `fields:` / `groups:` / `templates:`, declaration keys, inline overrides, library-over-project merging, `templateFor` and the three ladders, `CL0426`–`CL0428` |
+| `references/components.md` | The sectioned grammar — sections, slots, wrapping, ordering, per-section variants, `render.storyCards` alternates; Opening, branch framing, description, scripts |
 | `references/field-operations.md` | Field ops — `+{}` append, `-{}` remove substring, `/{}/{}` swap, null remove, chained ops |
-| `references/branches-variants.md` | Branch tree structure, dispatch syntax (scalar/array/null/mapping/wildcard), nested paths |
+| `references/branches-variants.md` | Branch tree structure, dispatch syntax (scalar/array/null/mapping/wildcard), nested paths, the four branch-merged tables |
 | `references/imports-includes.md` | `import:` vs `include:`, `importVariants:`, resolution order, primary variant path syntax |
-| `references/templates.md` | Template syntax — `{$field}`, `{join}`, `{list}`, `{if}`, `{wrapper}`, partials, `{%var}`, and where `%placeholders%` may land |
-| `references/pronouns.md` | Unscoped `{$she}`, ID refs `{$Aria}`, scoped `{$Aria.she}`, verb markers `[s]` `[is]`, cross-item refs |
+| `references/roles.md` | `roles:` binding and merging, `{$LI}` in prose, where roles do and don't resolve, `CL0540`–`CL0545` |
+| `references/library-snapshot.md` | `structure.input.library`, `--snapshot` / `--live`, the drift notice, `requiresRoles`, `CL0111`–`CL0116` |
+| `references/context-tiering.md` | Declaring a tier, what a terse list may do, the label-membership guard, keeping one card full |
+| `references/convention-packs.md` | Enabling packs, the `level:` dial, writing rules, predicates, `schema:` / `budget:` / `count:` / `mutexHint:`, the bundled `wtg` and `duckieConv` packs |
+| `references/templates.md` | **The escape hatch** — `.template` / `.partial` syntax, `{join}`, `{list}`, `{if}`, `{wrapper}`, partials, and where `%placeholders%` may land |
+| `references/pronouns.md` | Unscoped `{$she}`, ID refs `{$Aria}`, scoped `{$Aria.she}`, role refs `{$LI}`, verb markers `[s]` `[is]`, cross-item refs |
 
 ---
 
@@ -499,21 +600,12 @@ When reviewing a compiled VL output for correctness and consistency:
 **Intentional vs. unintentional differences:**
 When two branches differ, ask: is this a declared variant, a branch-specific component, or something that shouldn't differ? Flag anything that looks like an unintentional delta — same item, different content, no variant in the source that explains it.
 
-### Migration Validation
+### Reading the Compiled Tree
 
-When comparing a legacy hand-authored VL project to a new Codex Loom compiled version:
+**Every file is written at the node that owns it, never copied to every leaf.** Velvet Lattice inherits components, placeholders, story cards and scripts down the branch tree by itself, so a leaf resolves to its ancestors' files without holding copies. **An absent file at a leaf is not a missing file** — check the owning node before treating it as one.
 
-**Goal:** confirm the new version matches the old where it should, and where it differs, the difference is an intentional upgrade — not a loss or corruption.
+`Label.md` and `Description.md` are the two exceptions, written at every node that needs them, because VL reads both from the node's own directory with no parent in scope.
 
-**Process:**
-1. **Item-by-item match** — for each card in the legacy project, find its counterpart in the compiled output. Flag: missing items (dropped in migration), new items (additions), and content changes. Remember that an item may deliberately have moved *out* of Story Cards and into a component — check the inventory before calling it missing.
-2. **Content delta triage** — for each changed item, classify the delta:
-   - *Equivalent* — wording changed but meaning preserved (acceptable)
-   - *Upgrade* — content improved, expanded, or corrected (intentional)
-   - *Regression* — content lost, truncated, or corrupted (flag)
-   - *Unexplained* — difference with no obvious source in the YAML (flag)
-3. **Trigger set comparison** — note triggers added or removed; flag any that could cause items to over-fire or under-fire compared to the legacy version
-4. **Component comparison** — Opening, Plot Essentials, Summary, AI Instructions, Author's Note: match expected content, flag any lines present in legacy but absent from compiled output
-5. **Branch coverage** — confirm the compiled branch set matches the intended branch structure; flag extra or missing branches
+**Story cards are placed by frontier, keyed on `(type, name)`.** For each card and each distinct rendered text, the emitter finds the minimal set of nodes whose subtrees partition exactly the leaves producing that text, and writes one copy per frontier node. A `variants:` item keeps one id while its name and type differ per branch, so placement is never keyed on the item id.
 
-When flagging issues, be specific: quote the legacy content and the compiled content side by side, name the item and branch, and classify the delta type so the author can triage quickly.
+**A duplicate card name on one leaf is `CL0622`, an ERROR, cross-type or not.** VL merges cards by name alone, so only one ever reaches AID and an author who wrote two is always wrong.

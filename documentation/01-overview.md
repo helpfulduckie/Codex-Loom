@@ -192,9 +192,10 @@ my-project/
     main/
       Aness.cl.yaml
       Felicia.cl.yaml
-  templates/                     ← .template and .partial files
-    Character.template
-    Location.template
+  templates/                     ← field tables, and .template/.partial escape hatches
+    fields.cl.yaml
+    terse.cl.yaml                ← a context tier's slot file, if the project has one
+    Notes.template
     ItemHeader.partial
   components/                    ← optional; one file per component
     plot-essentials.cl.yaml
@@ -253,15 +254,16 @@ A project with no `branches:` key produces a single root-level output with no `B
 
 ---
 
-## The Five File Types You Author
+## The File Types You Author
 
 | File | Purpose |
 |---|---|
 | `compile.cl.yaml` | Project configuration — paths, branches, roles, placeholders, component references |
 | Item YAML files | Item definitions and imports, under the directories `structure.input.items` and `library:` name |
-| `.template` files | How each item type is rendered to markdown |
-| `.partial` files | Reusable template fragments |
+| `fields.cl.yaml` | Field declarations, groups and template lists — how each item type is rendered |
+| `.template` / `.partial` files | The escape hatch, for what a field list cannot express |
 | Component YAML files | Plot Essentials, Summary, AI Instructions, Author's Note, Opening and Description content |
+| Lint pack files | Optional; declarative convention checks, enabled per project under `lint.packs` |
 
 Each is covered in its own reference document.
 
@@ -283,7 +285,7 @@ Each is covered in its own reference document.
 
 **Variants** are named deltas that layer changes on top of an item. A character item might have a `networked` variant that adds implant details, or a `Felix` variant that changes gender. Branch dispatch maps branch names to variant names, so the right version of each item appears in each branch's output.
 
-**Templates** are plain-text files that control how an item's fields are rendered to markdown. Field references, conditional blocks, and render functions let you shape the output precisely.
+**Field declarations** control how an item's fields are rendered to markdown. A field is declared once — its label, render function and formatting — and a template is an ordered list of field and group names, with list order equal to output order. `templateFor` selects which lists apply per branch, which is also how a context tier works. Text templates remain available for the few shapes a field list cannot express.
 
 **Pronoun tokens** let you write field content once and have `{$she}` / `{$her~}` resolve to the correct pronouns for each item or variant. Character ID tokens (`{$Aness}`) resolve to "you" when that character is the active branch protagonist, and to the character's display name otherwise.
 
@@ -299,6 +301,7 @@ Each is covered in its own reference document.
 - [Templates & Partials](07-templates.md)
 - [Pronoun System](08-pronouns.md)
 - [Components (PE, Summary, AIN, AN, Opening, Description)](09-components.md)
+- [Field Declarations](10-field-declarations.md)
 - [Diagnostic Codes](11-diagnostics.md)
 - [The Library Snapshot](12-snapshot.md)
 - [Roles](13-roles.md)

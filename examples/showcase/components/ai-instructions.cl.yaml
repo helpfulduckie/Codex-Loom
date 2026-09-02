@@ -1,0 +1,32 @@
+# Branch dispatch and variants are per section, never at the document level.
+# `render.storyCards` offers swappable alternates as trigger-less reference cards.
+
+sections:
+  pov:
+    text:
+      person: Second person, present tense.
+      tone: Clinical observation.
+    branches:
+      knight: close
+    variants:
+      close:
+        text:
+          tone: Close, unsparing observation. Never make {$rival} sympathetic.
+
+  pacing:
+    text: |
+      Do not resolve a scene the player opened in the same turn.
+
+  relationship:
+    text: |
+      The player's history with {$LI} is unresolved. {$LI.he} does not raise it
+      unprompted, and {$LI.his~} restraint should read as deliberate. Treat
+      %liName% as %liGender% throughout.
+
+render:
+  storyCards:
+    # A `variant:` here applies on every branch, not only where the section dispatches it —
+    # so an alternate selecting `close` would pull {$rival} onto the branch that unbinds it.
+    - title: AI Instructions — Full
+    - title: AI Instructions — Scenario Rules Only
+      sections: [pacing]

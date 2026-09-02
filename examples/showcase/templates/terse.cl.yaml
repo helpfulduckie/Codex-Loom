@@ -1,0 +1,16 @@
+# A context tier's slot file (documentation/15-context-tiering.md).
+#
+# Project-local on purpose: a shared slot file would re-baseline every project that loads
+# the library. Only `templates:` is read here — a slot file's `fields:` block is ignored.
+
+templates:
+  # Omission: the terse cast drops magic, background, relationships and the secret.
+  Character: [Tagline, appearance, personality]
+
+  Location: [Tagline]
+
+  Faction: [Tagline, purpose, status]
+
+  # Pattern 2 — a free-standing name, reachable only through templateFor. The one NPC who
+  # must stay detailed even on the tiered branch writes `render.template: CharacterFull`.
+  CharacterFull: [Tagline, vibe, appearance, personality, Magic, Background, secret]

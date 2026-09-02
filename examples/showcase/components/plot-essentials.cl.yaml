@@ -1,0 +1,25 @@
+# The sectioned grammar (documentation/09-components.md). A section carries `text:` or is
+# marked `slot: true`. A slot owns the wrapping of everything placed in it.
+
+sections:
+  genre:
+    text: |
+      Genre: Dark Fantasy | Political Intrigue
+      Setting: Feudal empire; {%setting}, %house% wing
+    render: {position: 1, wrapper: square}
+
+  you:
+    slot: true
+    render: {position: 5, wrapper: curly}
+
+  cast:
+    slot: true
+    heading: Cast
+    render: {position: 6, wrapper: curly, wrap: all}
+
+  hints:
+    slot: true
+    heading: Hints
+    render: {position: 7, wrapper: curly}
+    branches:
+      lowContext: ~            # gate the whole slot off the tier

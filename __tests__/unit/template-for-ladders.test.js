@@ -113,6 +113,44 @@ describe('resolveNotesRender — notes ladder (three rungs, §13.4 end state)', 
   test('nothing set → null (§4.5 default)', () => {
     expect(resolveNotesRender({ aid: { type: 'X' } }, new Map(), { templates: {} }, null, {})).toBeNull();
   });
+
+  test('rung 2 matches aid.type against templateFor.notes case-insensitively', () => {
+    const tf = { notes: { Character: [{ field: 'name', label: 'N' }] } };
+    const hit = resolveNotesRender(
+      { aid: { type: 'character' } }, new Map(), fieldTable, null, tf,
+    );
+    expect(hit).toMatchObject({ kind: 'fieldList', refRoot: 'notes' });
+  });
+});
+
+describe('templateFor rung 2 is case-insensitive on aid.type', () => {
+  // `cardType.js` folds a built-in `aid.type` to lowercase, and a slot file's `templates:`
+  // keys are conventionally capitalized. A raw index at rung 2 meant a project that wrote
+  // `character` silently missed its tier: no diagnostic, cards just rendered full length.
+  const tierList = [{ field: 'name', label: 'Terse' }];
+
+  test('body ladder: lowercase aid.type finds a capitalized templateFor.base key', () => {
+    const hit = resolveBodyRender(
+      { aid: { type: 'character' } }, textTemplates, fieldTable, { base: { Character: tierList } },
+    );
+    expect(hit).toMatchObject({ kind: 'fieldList', list: tierList });
+  });
+
+  test('body ladder: capitalized aid.type finds a lowercase templateFor.base key', () => {
+    const hit = resolveBodyRender(
+      { aid: { type: 'Character' } }, textTemplates, fieldTable, { base: { character: tierList } },
+    );
+    expect(hit).toMatchObject({ kind: 'fieldList', list: tierList });
+  });
+
+  test('component-target ladder: lowercase aid.type finds a capitalized slot key', () => {
+    const out = renderPlacementBody(
+      { id: 'A', aid: { type: 'character' }, body: { name: 'Aness' } },
+      { component: 'plotEssential' }, new Map(), new Map(), {}, new Diagnostics(),
+      { fieldTable, templateFor: { plotEssential: { Character: [{ field: 'name', label: 'PE' }] } } },
+    );
+    expect(out).toBe('PE: Aness');
+  });
 });
 
 describe('renderPlacementBody — component-target ladder', () => {

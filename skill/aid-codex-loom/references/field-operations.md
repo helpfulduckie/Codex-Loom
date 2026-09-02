@@ -36,7 +36,7 @@ body:
   Background: +{Recently returned from exile.}
 ```
 
-Do not add a leading separator to the appended value — the template handles separators.
+Do not add a leading separator to the appended value — rendering handles separators, via the field declaration's `join:` key or a `{join(…)}` call in a text template.
 
 ### Remove Substring — `-{text}`
 Removes all occurrences of the substring. Result is trimmed.

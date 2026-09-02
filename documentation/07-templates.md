@@ -2,6 +2,18 @@
 
 Templates are plain-text files that control how an item's **body** is rendered to markdown. Any template syntax works inside a template: field references, render functions, conditionals, and partial includes.
 
+> **A text template is the escape hatch, not the default.** The primary authoring surface is a field declaration — see [Field Declarations](10-field-declarations.md). A field list is not a second renderer: it *generates* the `.template` source each declaration is shorthand for and hands it to the engine documented here, so everything below is true of both.
+
+## What Still Needs a Text Template
+
+A field declaration expresses the great majority of stanza shapes; on the corpus this design was drawn from it covered fifteen of the eighteen distinct shapes. The remainder:
+
+- **A notes template that reads `$notes` rather than `$body`** and is not a card body at all.
+- **A long block of mod configuration** — dozens of literal `Key: Value` lines with no relationship to item fields.
+- **A line mixing a top-level token with an inline conditional suffix**, where the conditional is part of the value rather than a guard around the stanza.
+
+**Before writing a whole `.template`, try the in-list escapes.** A field list can carry an irregular line with `{ include: partialName }`, a literal with `{ raw: "…" }`, or opt out of the unread-field audit with `{ allowExtra: true }`.
+
 ---
 
 ## Templates Render the Body, Not the Envelope
@@ -42,6 +54,8 @@ What the compiler decides, and from what:
 A template that renders an item's `notes:` field is a `.template` like any other, selected by `render.notesTemplate` on the item or `templateFor.notes` in `compile.yaml` — see [Item YAML → Rendering notes through a template](03-item-yaml.md) for the resolution order.
 
 Templates and partials are loaded recursively from directories listed in `structure.input.templates`. When multiple directories are configured, later directories override earlier ones on name collision. Duplicates within the same directory are an error.
+
+**A `.template` sits at the last rung of every resolution ladder**, after a chosen `render.template` and after `templateFor`. The same directories also hold `fields.cl.yaml` field tables, which merge key-wise per entry rather than being replaced per file. See [Field Declarations → `templateFor`](10-field-declarations.md#templatefor--selecting-lists-per-branch).
 
 ---
 

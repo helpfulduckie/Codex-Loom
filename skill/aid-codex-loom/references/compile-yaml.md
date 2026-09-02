@@ -1,8 +1,10 @@
 # compile.yaml Reference
 
-Entry point for every Codex Loom project. Controls paths, branches, protagonist, variables, and components.
+Entry point for every Codex Loom project. Controls paths, branches, protagonist, variables, roles, template selection, and components.
 
 **`version: 4` is required.** There is no compatibility mode — a v3 file fails validation rather than compiling with warnings.
+
+**The file may be named `compile.cl.yaml` or `compile.yaml`.** Both spellings are found. `.cl.yaml` is the current convention and extends to every authored YAML file in a project — `items.cl.yaml`, `plot-essentials.cl.yaml`, `fields.cl.yaml`.
 
 ---
 
@@ -16,12 +18,13 @@ structure:
   input:
     items:                        # sequence of project item directories
       - ./Codex
-    canon:                        # named mapping of canonical item directories
+    library:                      # named mapping of shared/canonical directories
       characters: '{%canon}/_General/Characters'
       lore: '{%canon}/_General/Lore'
     templates:                    # sequence; later directories override earlier on name collision
       - '{%loom}/templates'
       - ./templates
+    snapshot: ./snapshot          # optional; turns on the library freeze
   output: ../Velvet Lattice/      # required
   reports: ./Review               # optional; defaults to <output>/Overview
 
@@ -32,16 +35,35 @@ variables:                        # key-value pairs; used as {%key}
   canon: '{%loom}/Canon'
   setting: The Royal Academy
 
+roles:                            # name → item id; used as {$LI}, merged down the branch chain
+  LI: Kaiden
+  rival: Voss
+
 placeholders:                     # key-question pairs; used as %key%, answered by the player
   heroName: What should we call you?
   house: 'Which wing of {%setting} claims you?'
 
+templateFor:                      # template-selection files per rendering role
+  base: templates.cl.yaml
+  plotEssential: pe.cl.yaml
+
+storyCardType:                    # AID `type` for each component's render.storyCards entries
+  plotEssential: zz_Reference
+
+render:
+  notesTemplate: Notes            # project-wide default notes template
+
+lint:
+  level: warn                     # off | error | warn — the opinion-layer ceiling
+  packs:
+    wtg: {}
+
 components:                       # root-level component specs
-  plotEssential: ./components/plot-essentials.yaml
-  summary: ./components/summary.yaml
+  plotEssential: ./components/plot-essentials.cl.yaml
+  summary: ./components/summary.cl.yaml
   aiInstructions: '{%loom}/AI Instructions/AI Instructions.md'
-  authorsNote: ./components/authors-note.yaml
-  description: ./components/description.yaml
+  authorsNote: ./components/authors-note.cl.yaml
+  description: ./components/description.cl.yaml
   opening: "Who are you?"                    # inline text
   branchFraming: "Choose your path."
 
@@ -75,17 +97,22 @@ branches:
 ### `items`
 Sequence of directories to load project item YAML files from. All `.yaml` files loaded recursively. **Named `items`, not `cards`** — an item is the definition, and a story card is one of the things it can render into.
 
-### `canon`
-Named mapping of canonical item directories. All `.yaml` files loaded recursively, names matched case-insensitively.
+### `library`
+Named mapping of shared source directories — canon characters, house-style components — typically outside the project. All item files loaded recursively, names matched case-insensitively.
 
-**Each canon name is automatically exposed as a `{%name}` variable**, so a canon entry can be referenced in paths without declaring it twice.
+**Each library name is automatically exposed as a `{%name}` variable**, so an entry can be referenced in paths without declaring it twice.
+
+**Reach a shared file through a library entry rather than a plain `variables:` path.** A component pulled in through an ordinary variable compiles correctly but cannot be frozen by `--snapshot`, and raises `CL0522`. See `references/library-snapshot.md`.
 
 ### `templates`
-Sequence of directories for `.template` and `.partial` files. Later entries override earlier on name collision. Duplicates within the same directory are an error.
+Sequence of directories for `fields.cl.yaml` field tables and for `.template` / `.partial` files. Later entries override earlier on name collision — but the field table merges **key-wise per entry**, not per file. Duplicates within the same directory are an error.
+
+### `snapshot`
+Path to the frozen library copy. **Setting this key is the only thing that turns the freeze on**; unset, every `{%name}` resolves live. See `references/library-snapshot.md`.
 
 ### What is *not* here
 
-`structure.input.components` is gone. Component specs live only under the root-level `components:` key and its per-branch counterparts, so there is one declaration site rather than a named-directory indirection layered under a spec. The `{@key}` reference syntax went with it — use `{%variable}` instead.
+`structure.input.canon` is now `structure.input.library`. `structure.input.components` is gone — component specs live only under the root-level `components:` key and its per-branch counterparts. The `{@key}` reference syntax went with it; use `{%variable}` instead.
 
 ---
 
@@ -99,6 +126,23 @@ Global default protagonist ID, overridable per branch. Matched case-insensitivel
 
 ### `variables`
 Key-value pairs available in templates and field values as `{%key}`. Variables resolve against other variables, so `canon: '{%loom}/Canon'` works. Branch variables merge on top of parent variables.
+
+### `roles`
+Name-to-item-id bindings, referenced in prose as `{$LI}`. Merges down the branch chain key by key; `~` unbinds. `protagonist` is an ordinary entry here rather than a separate mechanism. Full semantics in `references/roles.md`.
+
+### `templateFor`
+A template-selection file per rendering role — `base`, `notes`, and one key per component. Each value names a `.cl.yaml` carrying a `templates:` namespace, or a list of them merged left to right. Branch-addressable, and the mechanism behind context tiering. See `references/field-declarations.md`.
+
+### `storyCardType`
+The AID story-card `type` that a component's `render.storyCards` entries land under, one key per component (`plotEssential`, `summary`, `aiInstructions`, `authorsNote`, `adventureDescription`, `opening`). **Root only.** Use it to steer where the alternates sort in the player's card list — a `zz_` prefix, say. Falls back to the component's display label.
+
+### `render`
+Project-wide rendering defaults. One key: `notesTemplate`, the template rendering every card's `notes:` when the item names none and no `templateFor.notes` entry matches.
+
+### `lint`
+The opinion layer's controls. `level:` is `off` / `error` / `warn` and names the one severity the opinion layer may speak at; `packs:` enables convention packs. See `references/convention-packs.md`.
+
+**`lint.level` reaches only the opinion layer.** Facts — unknown keys, undeclared roles, platform caps, a leaked `{$she}` — are not silenceable at any level, which is what makes `off` safe to write.
 
 ### `placeholders`
 Key-question pairs. The key is referenced in authored text as `%key%`; the question is what the player is asked, once, at the start of an adventure. Declarable at root and on any branch — a branch adds keys, overrides same-named ones, and inherits every key it does not mention. `~` unbinds an inherited key.
@@ -120,7 +164,7 @@ Each value is either inline text, or a path to a file. There are seven keys:
 
 `Author Notes.md` is Velvet Lattice's spelling, not a typo.
 
-**`opening:` and `branchFraming:` are two keys for one filename**, and the difference is where AID reads it. An `Opening.md` at a leaf is that branch's first move; anywhere else it is the framing shown while the player chooses a branch beneath that node. `branchFraming:` does not inherit, because it belongs to the node whose children it frames — declared on a leaf it is ignored with a WARN. (v3 called it `openingChoice:`.)
+**`opening:` and `branchFraming:` are two keys for one filename**, and the difference is where AID reads it. An `Opening.md` at a leaf is that branch's first move; anywhere else it is the framing shown while the player chooses a branch beneath that node. `branchFraming:` does not inherit, because it belongs to the node whose children it frames — declared on a leaf it is ignored with a WARN.
 
 ### `scripts`
 **Top-level, not a component.** Points at a directory copied into each leaf's `Scripts/` folder, or a mapping of the four Velvet Lattice hook names. Merges per file down the branch chain.
@@ -134,17 +178,21 @@ Nested branch tree. Leaf = no `branches:` sub-key, and produces one output folde
 | `protagonist` | Protagonist ID for this branch, overriding the parent |
 | `components` | Component specs for this branch, same keys as root |
 | `variables` | Variables for this subtree, merged on top of the parent's |
+| `roles` | Role bindings for this subtree, merged per key; `~` unbinds |
 | `placeholders` | Player placeholders for this subtree, merged per key on top of the parent's; `~` unbinds |
+| `templateFor` | Template-selection files for this subtree — this is how a context tier is declared |
 | `scripts` | Script set for this subtree |
-| `lint` | Lint configuration for this subtree |
+| `lint` | Lint configuration for this subtree, including `packs:` |
 | `render` | Rendering defaults for this subtree |
 | `branches` | Child branches, which makes this node a non-leaf |
+
+**`storyCardType:` is root-only** and has no per-branch counterpart.
 
 ---
 
 ## Path Resolution
 
-All paths resolve relative to `compile.yaml`; absolute paths are valid. Missing `items`/`canon`/`templates` paths emit warnings.
+All paths resolve relative to `compile.yaml`; absolute paths are valid. Missing `items` / `library` / `templates` paths emit warnings.
 
 ---
 
@@ -285,16 +333,10 @@ output/
 
 Nested branches produce `Branches/tier2/Branches/alpha/` paths.
 
----
+**Every file is written at the node that owns it, never copied to every leaf.** Velvet
+Lattice inherits components, placeholders, story cards and scripts down the branch tree by
+itself, so a leaf resolves to its ancestors' files without holding copies. An absent file at
+a leaf is not a missing file — check the owning node before treating it as one.
 
-## Migrating a v3 compile.yaml
-
-| v3 | v4 |
-|---|---|
-| *(no `version:` key)* | `version: 4`, required |
-| `structure.input.cards` | `structure.input.items` |
-| `structure.input.components` | Deleted — declare under root `components:` directly |
-| `{@name}` references | `{%name}` variables; canon names auto-expose |
-| `components.openingChoice` | `components.branchFraming` |
-| `components.scripts` | Top-level `scripts:` |
-| *(no summary)* | `components.summary`, if you want to seed `storySummary` |
+**`Label.md` and `Description.md` are the two exceptions**, written at every node that needs
+them, because VL reads both from the node's own directory with no parent in scope.

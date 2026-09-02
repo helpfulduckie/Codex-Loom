@@ -80,6 +80,22 @@ Use when writing about a specific named character from any item.
 
 ---
 
+## 4. Role References — `{$LI}`
+
+**A role token is written exactly like an item reference, because it is one once resolved.** `roles:` in `compile.yaml` binds a name to an item id per branch, and resolution rewrites the leading name to that id before anything else runs — so `{$LI}`, `{$LI.he}`, `{$LI.his~}`, `{$LI's}` and `{$LI.body.Backstory}` all take every form documented above.
+
+```yaml
+The player's history with {$LI} is unresolved. {$LI.he} does not raise it unprompted.
+```
+
+**Reach for a role whenever prose written once must name a character who changes per branch.** Naming the item directly breaks the moment another branch casts someone else; the pronoun beside it breaks regardless.
+
+**`protagonist` is an ordinary entry in `roles:`, not a separate mechanism.** `{$Aness}` resolves to `"you"` because `Aness` is bound as `protagonist` on the active branch.
+
+**A role name and an item id share one grammar**, so a `{$X}` that matches neither is `CL0540`, and a name that matches *both* is `CL0541`. All-caps for role names is a convention that keeps them legible, not an enforced rule. Full semantics in `references/roles.md`.
+
+---
+
 ## Verb Conjugation Markers
 
 Based on the **most recently referenced `{$Id}` or `{$Id.pronoun}` token** in the string.

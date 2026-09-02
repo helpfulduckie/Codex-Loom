@@ -23,7 +23,16 @@ Each leaf path is the slash-joined sequence of YAML keys from root to leaf. The 
 
 No `branches:` key at all → single root-level output, no `Branches/` folder.
 
-**A branch may declare `placeholders:` alongside `variables:`, and both merge per key onto the parent's.** A branch adds keys, overrides same-named ones, and inherits the rest; `~` unbinds an inherited key for that subtree, which is what makes a `%key%` written there report as undeclared. Full semantics in `references/compile-yaml.md` → Player Placeholders.
+**Four tables merge down the branch chain the same way: `variables:`, `placeholders:`, `roles:`, and `lint.packs:`.** A branch adds keys, overrides same-named ones, and inherits the rest; `~` unbinds an inherited key for that subtree. The merge is per key, not per file, so a branch declaring one entry does not shadow the parent's others.
+
+| Table | Unbinding with `~` means | Reference |
+|---|---|---|
+| `variables` | `{%key}` no longer resolves here | `references/compile-yaml.md` |
+| `placeholders` | a `%key%` written here reports as undeclared (`CL0532`) | `references/compile-yaml.md` |
+| `roles` | `{$LI}` written here reports as unresolvable (`CL0540`) | `references/roles.md` |
+| `lint.packs` | the pack does not run on this subtree | `references/convention-packs.md` |
+
+**`templateFor:` merges the same way and is how a context tier is declared** — a branch carrying `templateFor: { base: terse.cl.yaml }` renders terser cards for the types that file names and inherits the full lists for the rest. See `references/context-tiering.md`.
 
 ---
 

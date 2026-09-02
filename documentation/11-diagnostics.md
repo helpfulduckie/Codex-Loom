@@ -341,7 +341,6 @@ value, and the property belongs to the template, not to each field.
 | `CL0624` | WARN | A `render.storyCards` entry's `sections:` names a section the component does not declare; it is dropped from that entry. |
 | `CL0625` | WARN | A `render.storyCards` entry renders no text on a branch — its `variant:` / `sections:` selectors left nothing. No card is written. |
 | `CL0626` | ERROR | Two `aid.type` values differ only by case, so they are one file on a case-insensitive filesystem and one group's cards are overwritten. |
-| `CL0627` | WARN | An `aid.type` names an AID built-in category in non-lowercase form; it is folded to lowercase. |
 | `CL0628` | WARN | An `aid.type` has leading whitespace; it is trimmed. |
 | `CL0629` | ERROR | `adventureDescription` declares `advanced:` or `description:` in `metadata:` — both belong to the scenario blurb only. |
 | `CL0630` | WARN | A branch leaf resolves neither an `opening:` nor an `adventureDescription:`, inherited or its own — Velvet Lattice would start it with an empty prompt. |
@@ -497,9 +496,9 @@ the summary table an author would check to catch it is exactly what hides it. ER
 `CL0622`'s reason — an author who wrote a case-variant pair is always wrong, because the two
 spellings cannot both exist.
 
-`CL0627` folds an `aid.type` naming one of AID's five built-in categories — `character`,
-`class`, `race`, `location`, `faction` — to lowercase. AI Dungeon stores the type string
-verbatim and groups by exact match, so `Character` arrives as a *custom* category sitting
+**An `aid.type` naming one of AID's five built-in categories — `character`, `class`, `race`,
+`location`, `faction` — is folded to lowercase, silently.** AI Dungeon stores the type string
+verbatim and groups by exact match, so `Character` would arrive as a *custom* category sitting
 beside the built-in `character` rather than inside it. This was confirmed against the
 platform: a card pushed as `Race` comes back as `Race`, and a `Location` card and a
 `location` card do not group in the scenario editor. Velvet Lattice folded these itself
@@ -507,9 +506,13 @@ until 0.2 dropped the normalization, and nothing downstream replaced it. Only ba
 names fold — `Character - Dalor` and `Spell - Ice` are deliberate custom groupings and are
 left alone.
 
-`CL0627` is reported once per distinct authored value rather than once per card, because the
-fold is one authoring decision however many cards share it; per-card reporting would print
-27 identical lines for the Institute corpus and bury the finding.
+**The fold is not reported.** It carried a WARN (`CL0627`) until 2026-09-01; the code is
+retired and its number is not reused. Capitalizing `Character` is the natural spelling —
+it matches a field table's `templates:` keys, and `templateFor` looks types up
+case-insensitively — so the rewrite is unconditionally correct and there was nothing for an
+author to do about the line. `CL0626` still catches the case that *is* a mistake: two
+**custom** types differing only by case, which collide on a case-insensitive filesystem. A
+built-in pair cannot reach it, because both spellings fold to the same type first.
 
 `CL0628` trims leading whitespace. The trailing case is fatal above, since Windows strips it
 and the type would silently become a different one; a leading space instead survives into a

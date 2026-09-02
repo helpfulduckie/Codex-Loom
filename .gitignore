@@ -20,6 +20,10 @@
 # Regenerate it before uploading; the unpacked tree is the thing to edit.
 /skill/*.skill
 
+# The showcase example is source; what it compiles to is not. Run it to regenerate.
+/examples/*/output/
+/examples/*/Review/
+
 
 # Ignore .clinerules while still figuring out cline
 .clinerules

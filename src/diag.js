@@ -193,7 +193,6 @@ const REGISTRY = Object.freeze({
   STORY_CARD_ENTRY_UNKNOWN_SECTION:{ id: 'CL0624', severity: WARN, summary: "A render.storyCards entry's sections: names a section the component does not declare." },
   STORY_CARD_ENTRY_RENDERS_NOTHING:{ id: 'CL0625', severity: WARN, summary: 'A render.storyCards entry renders no text on a branch; no card is written.' },
   CARD_TYPE_CASE_COLLISION:     { id: 'CL0626', severity: ERROR, summary: 'Two aid.type values differ only by case, so one overwrites the other on a case-insensitive filesystem.' },
-  CARD_TYPE_NORMALIZED:         { id: 'CL0627', severity: WARN,  summary: 'An aid.type names an AID built-in category in non-lowercase form; it is folded to lowercase.' },
   CARD_TYPE_LEADING_SPACE:      { id: 'CL0628', severity: WARN,  summary: 'An aid.type has leading whitespace; it is trimmed.' },
   ADVENTURE_DESCRIPTION_ADVANCED:{ id: 'CL0629', severity: ERROR, summary: 'adventureDescription declares advanced: or description: in metadata: — both belong to the scenario blurb only.' },
   LEAF_NO_OPENING:              { id: 'CL0630', severity: WARN,  summary: 'A branch leaf resolves neither an opening: nor an adventureDescription:, inherited or its own.' },

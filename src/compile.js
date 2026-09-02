@@ -367,7 +367,8 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
       : lookupNamedTemplate(target.template, templates, fieldTable);
   }
   if (!hit && type) {
-    const list = compMap[type] || baseMap[type];
+    // Case-insensitive, matching rung 1 above and the body/notes ladders.
+    const list = lookupSlotList(type, compMap) || lookupSlotList(type, baseMap);
     if (list) hit = { kind: 'fieldList', list, name: `${target.component}:${type}` };
   }
   if (!hit && type) hit = lookupNamedTemplate(type, templates, fieldTable);

@@ -206,6 +206,85 @@ describe('buildFieldAudit — templateFor slot files (§13.4, Phase 14 Step 1)',
   });
 });
 
+describe('buildFieldAudit — case-insensitive matching (renderer parity)', () => {
+  // The renderer matches body fields case-insensitively, so the audit's own lookups must
+  // too — a declaration/body pair that differs only in case is not a dropped-content bug.
+  const CI_TABLE = {
+    fields: {
+      background: { label: 'Background' },
+      Magic: { from: ['Magic.affinity', 'Magic.effect'] },
+      magic2: { from: ['magic2.affinity', 'magic2.effect'] },
+    },
+    groups: {
+      Lore: ['background'],
+    },
+    templates: {
+      CaseTest: ['background', 'Magic', 'magic2', 'Lore'],
+    },
+    _sources: ['fields.cl.yaml'],
+  };
+
+  test('a lowercase declaration reading a capitalized body key raises no CL0426', () => {
+    const d = sink();
+    const a = buildFieldAudit({ fieldTable: CI_TABLE, partials: PARTIALS });
+    a.auditBody(mk('Ren', 'CaseTest', { Background: 'a windswept coast' }), CI_TABLE.templates.CaseTest, 'CaseTest');
+    a.finish(d);
+    expect(d.codes().filter((c) => c === 'CL0426')).toEqual([]);
+  });
+
+  test('a from: declaration named Magic against body key Magic raises no CL0426', () => {
+    const d = sink();
+    const a = buildFieldAudit({ fieldTable: CI_TABLE, partials: PARTIALS });
+    a.auditBody(
+      mk('Sel', 'CaseTest', { Magic: { affinity: 'fire', effect: 'burn' } }),
+      CI_TABLE.templates.CaseTest, 'CaseTest',
+    );
+    a.finish(d);
+    expect(d.codes().filter((c) => c === 'CL0426')).toEqual([]);
+  });
+
+  test('the lowercase mirror — declaration magic2 against body key magic2 — also raises no CL0426', () => {
+    const d = sink();
+    const a = buildFieldAudit({ fieldTable: CI_TABLE, partials: PARTIALS });
+    a.auditBody(
+      mk('Tam', 'CaseTest', { magic2: { affinity: 'ice', effect: 'freeze' } }),
+      CI_TABLE.templates.CaseTest, 'CaseTest',
+    );
+    a.finish(d);
+    expect(d.codes().filter((c) => c === 'CL0426')).toEqual([]);
+  });
+
+  test('a group named in a template list resolves its members when the group name case differs', () => {
+    const { content } = readablePathsFor(['lore'], CI_TABLE, PARTIALS);
+    expect(content.has('background')).toBe(true);
+  });
+
+  test('a genuinely undeclared body key still raises CL0426 — no over-suppression', () => {
+    const d = sink();
+    const a = buildFieldAudit({ fieldTable: CI_TABLE, partials: PARTIALS });
+    a.auditBody(mk('Wren', 'CaseTest', { Background: 'a coast', strength: 'uncanny' }), CI_TABLE.templates.CaseTest, 'CaseTest');
+    a.finish(d);
+    expect(d.codes()).toContain('CL0426');
+    expect(d.calls.find((c) => c.code === 'CL0426').message).toMatch(/strength/);
+  });
+
+  test('a CL0426 message about body key Background keeps the author\'s casing', () => {
+    const d = sink();
+    const noBgTable = {
+      fields: {},
+      groups: {},
+      templates: { Empty: ['name'] },
+      _sources: ['fields.cl.yaml'],
+    };
+    const a = buildFieldAudit({ fieldTable: noBgTable, partials: PARTIALS });
+    a.auditBody(mk('Iona', 'Empty', { Background: 'a coast' }), noBgTable.templates.Empty, 'Empty');
+    a.finish(d);
+    const hit = d.calls.find((c) => c.code === 'CL0426');
+    expect(hit.message).toContain('"Background"');
+    expect(hit.message).not.toContain('"background"');
+  });
+});
+
 describe('buildFieldAudit — dedupe on (item id, field path)', () => {
   test('auditing the same item on many leaves reports each field once', () => {
     const d = sink();

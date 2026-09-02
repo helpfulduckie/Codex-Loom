@@ -1,28 +1,30 @@
 # Imports & Includes Reference
 
-Two ways to pull canonical items into a project:
+Two ways to pull items from a shared **library** — a directory declared under `structure.input.library` — into a project:
 
-- **`include:`** — loads every item from a canon file, with optional filtering
+- **`include:`** — loads every item from a library file, with optional filtering
 - **`import:`** — loads a single named item and applies variants, overrides, and dispatch
 
 ---
 
 ## `include:` Directive
 
-Loads all items from a canonical YAML file. Items compiled as-is unless you attach `importVariants:` or `branches:`.
+Loads all items from a library file. Items compiled as-is unless you attach `importVariants:` or `branches:`.
 
 ```yaml
-- include: "{%main}/Characters/Felicia.yaml"
+- include: "{%main}/Characters/Felicia.cl.yaml"
 ```
 
-`{%main}` resolves to the path string of the `main` canon directory (not its contents). **Every canon name is automatically exposed as a `{%name}` variable**, so there is nothing to declare twice. Always prefer it to a relative path, for portability. (v3 spelled these references `{@name}`; that syntax is gone.)
+`{%main}` resolves to the path string of the `main` library directory (not its contents). **Every library name is automatically exposed as a `{%name}` variable**, so there is nothing to declare twice. Always prefer it to a relative path, for portability.
+
+**When the project has a populated snapshot, `{%name}` resolves through the frozen copy rather than the live library.** The decision is made once at config load, so a compile is either frozen or it is not — never partially. `--live` overrides for one run. See `references/library-snapshot.md`.
 
 ### Branch filtering on includes
 
 Attach a `branches:` dispatch spec to filter all items in the file:
 
 ```yaml
-- include: "{%main}/Characters/Guards.yaml"
+- include: "{%main}/Characters/Guards.cl.yaml"
   branches:
     '*': []         # include with no variant for all branches
     flashback: ~    # exclude all items in this file from flashback
@@ -33,7 +35,7 @@ Attach a `branches:` dispatch spec to filter all items in the file:
 Apply a variant to every item in the file. Items that don't define a variant by that name are **silently skipped** (no warning — unlike single `import:` where a missing variant warns).
 
 ```yaml
-- include: "{%main}/Characters/Grayls.yaml"
+- include: "{%main}/Characters/Grayls.cl.yaml"
   importVariants: [human]
 ```
 
@@ -42,7 +44,7 @@ Apply a variant to every item in the file. Items that don't define a variant by 
 If an item from an `include:` file is also in an explicit `import:`, the `import:` wins silently — the included version is skipped. Use this to include a whole file but override one specific item:
 
 ```yaml
-- include: "{%main}/Characters/Felicia.yaml"  # Felicia item skipped below
+- include: "{%main}/Characters/Felicia.cl.yaml"  # Felicia item skipped below
 
 - import: Felicia                              # explicit import wins
   variants:
