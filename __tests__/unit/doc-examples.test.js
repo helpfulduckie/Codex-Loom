@@ -57,6 +57,7 @@ const { Diagnostics } = require('../../src/diag');
 const { parseYaml } = require('../../src/loader/yaml');
 const { scriptBanner } = require('../../src/extract');
 const { stanzaSource } = require('../../src/render/field-list');
+const { render } = require('../../src/template');
 
 const DOCS = path.join(__dirname, '../../documentation');
 
@@ -68,24 +69,71 @@ const SURFACE_SCHEMA = {
 };
 
 /**
- * The render-and-compare roster. A `transform=<name>` input fence is run through the
- * matching function and compared to its `expect=` partner. Every entry is a pure
- * `string → string`; anything needing a project on disk belongs in its own integration test.
+ * Fixture item contexts for the `render-template` transform. A chapter's worked examples
+ * all read one running character; declaring it here once, with values chosen to match the
+ * outputs the prose states, is what makes those `→` claims checkable. `context=<name>` on
+ * the fence picks one.
+ */
+const CONTEXTS = {
+  aness: {
+    id: 'Aness',
+    name: { display: 'Aness', full: 'Aness Rozen' },
+    pronouns: 'female',
+    aid: { title: 'Aness Rozen', type: 'Character', triggers: ['Aness', 'Rozen'] },
+    render: { template: 'Character', wrapper: 'none' },
+    v: { affiliation: 'Zenus Institute' },
+    body: {
+      Tagline: 'Journeyman Healer; Magic Researcher',
+      'Physical Traits': {
+        gender: 'female',
+        age: 'mid 20s',
+        hair: 'black hair, braided, waist-length',
+        eyes: 'brown eyes',
+        build: 'tall, willowy build',
+      },
+      Personality: {
+        keywords: ['inquisitive', 'polite', 'sarcastic', 'compassionate'],
+        expanded: 'She leaps to explore theory.',
+      },
+      Magic: {
+        affinity: 'high ice-affinity; moderate growth-affinity',
+        effect: ['water whip attacks', 'minor water shields', 'small healing spells'],
+      },
+      Background: ['a journeyman healer', 'assigned to the Zenus project'],
+    },
+  },
+};
+// A copy whose keyword list holds a single element — the "single-element array" cases.
+CONTEXTS['aness-min'] = JSON.parse(JSON.stringify(CONTEXTS.aness));
+CONTEXTS['aness-min'].body.Personality.keywords = ['inquisitive'];
+
+/**
+ * The render-and-compare roster. A `transform=<name>` input fence is run as `fn(body, ann)`
+ * and compared to its `expect=` partner. Transforms stay dependency-light — a pure function
+ * or one fed a hand-built plain-object context; anything needing a project on disk belongs
+ * in its own integration test.
  *
- *   script-banner   src/extract.js scriptBanner — a JS comment block → cleaned prose
- *   stanza-source   src/render/field-list.js stanzaSource — one or more `fields:` entries →
- *                   the `.template` source they are shorthand for, joined as renderFieldList
- *                   joins them (`\n\n`). Input may be a bare `name: {…}` map or wrapped in
- *                   `fields:`.
+ *   script-banner    src/extract.js scriptBanner — a JS comment block → cleaned prose
+ *   stanza-source    src/render/field-list.js stanzaSource — one or more `fields:` entries →
+ *                    the `.template` source they are shorthand for, joined `\n\n` as
+ *                    renderFieldList joins them. Input may be a bare `name: {…}` map or
+ *                    wrapped in `fields:`.
+ *   render-template  src/template.js render — a `.template` body string rendered against
+ *                    the `context=<name>` fixture in CONTEXTS.
  */
 const TRANSFORMS = {
-  'script-banner': scriptBanner,
+  'script-banner': (src) => scriptBanner(src),
   'stanza-source': (src) => {
     const doc = parseYaml(src, '<stanza-source>').value;
     const fields = doc && typeof doc === 'object' && doc.fields ? doc.fields : doc;
     return Object.entries(fields)
       .map(([name, decl]) => stanzaSource({ name, decl }))
       .join('\n\n');
+  },
+  'render-template': (src, ann) => {
+    const ctx = CONTEXTS[ann.context];
+    if (!ctx) throw new Error(`render-template needs a known context=<name>; got "${ann.context}"`);
+    return render(src, ctx, new Map(), null, {});
   },
 };
 
@@ -230,7 +278,7 @@ describe('documentation transforms produce their documented output', () => {
     const want = expected.get(ann.id);
     expect(want).toBeDefined();
 
-    const got = fn(b.body).replace(/\s+$/, '');
+    const got = fn(b.body, ann).replace(/\s+$/, '');
     const wanted = want.body.replace(/\s+$/, '');
     if (got !== wanted) {
       throw new Error(

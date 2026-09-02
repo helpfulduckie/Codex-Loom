@@ -99,19 +99,25 @@ When a field holds an array or mapping and you use it directly with `{$body.Fiel
 
 Joins present values with a separator. Missing or empty values are omitted — no double separators.
 
-The separator can be quoted with double quotes, single quotes, or backticks — all three forms are equivalent:
+The separator can be quoted with double quotes, single quotes, or backticks — all three forms are equivalent.
 
-```
+```text transform=render-template context=aness id=fn-join
 {join("; ", $body.Physical Traits.gender, $body.Physical Traits.age, $body.Physical Traits.hair)}
-{join('; ', $body.Physical Traits.gender, $body.Physical Traits.age, $body.Physical Traits.hair)}
-{join(`; `, $body.Physical Traits.gender, $body.Physical Traits.age, $body.Physical Traits.hair)}
-→  female; mid 20s; black hair, braided, waist-length
-
-{join(", ", $aid.triggers)}
-→  Aness, Rozen
 ```
 
-When a ref resolves to an array, all its elements are spread into the join list. You can mix array refs with scalar refs in a single call.
+``` expect=fn-join
+female; mid 20s; black hair, braided, waist-length
+```
+
+A ref that resolves to an array spreads all its elements into the join list, and you can mix array refs with scalar refs in one call:
+
+```text transform=render-template context=aness id=fn-join-array
+{join(", ", $aid.triggers)}
+```
+
+``` expect=fn-join-array
+Aness, Rozen
+```
 
 ### `{list($body.items)}`
 
@@ -119,29 +125,40 @@ Renders a YAML array or mapping as a bulleted list. Also the default behavior wh
 
 **Single-element** arrays render as the bare value with no bullet and no leading newline, so `Heading: {list($field)}` stays on one line:
 
+```text transform=render-template context=aness-min id=fn-list-single
+{list($body.Personality.keywords)}
 ```
-{list($body.Personality.keywords)}   ← single element
-→  inquisitive
+
+``` expect=fn-list-single
+inquisitive
 ```
 
 **Multi-element** arrays prepend a newline before the first bullet. This means `Heading: {list($field)}` and the block form produce identical output:
 
-```
+```text transform=render-template context=aness id=fn-list-multi
 Heading: {list($body.Personality.keywords)}
-→  Heading:
-   - inquisitive
-   - polite
-   - sarcastic
-   - compassionate
+```
+
+``` expect=fn-list-multi
+Heading:
+- inquisitive
+- polite
+- sarcastic
+- compassionate
 ```
 
 For a mapping, the values are listed as bullets using the same single/multi-element rule.
 
-```
+```text transform=render-template context=aness id=fn-list-mapping
 {list($body.Physical Traits)}
-→  - female
-   - mid 20s
-   - black hair, braided, waist-length
+```
+
+``` expect=fn-list-mapping
+- female
+- mid 20s
+- black hair, braided, waist-length
+- brown eyes
+- tall, willowy build
 ```
 
 ### `{and($body.items)}`
@@ -152,49 +169,66 @@ Joins array elements with natural-language "and":
 - 2 elements: `a and b`
 - 3+ elements: `a, b, and c`
 
-```
+```text transform=render-template context=aness id=fn-and
 {and($body.Personality.keywords)}
-→  inquisitive, polite, sarcastic, and compassionate
+```
+
+``` expect=fn-and
+inquisitive, polite, sarcastic, and compassionate
 ```
 
 ### `{prose($body.items)}`
 
 Renders each array element as a sentence: capitalizes first letter, ensures it ends with a period, joins with spaces.
 
-```
+```text transform=render-template context=aness id=fn-prose
 {prose($body.Background)}
-→  A journeyman healer. Assigned to the Zenus project.
+```
+
+``` expect=fn-prose
+A journeyman healer. Assigned to the Zenus project.
 ```
 
 ### `{block($body.items)}`
 
 Renders each array element on its own line with no prefix. For a plain string, outputs the string unchanged.
 
-```
+```text transform=render-template context=aness id=fn-block
 {block($body.Magic.effect)}
-→  water whip attacks
-   minor water shields
-   small healing spells
+```
+
+``` expect=fn-block
+water whip attacks
+minor water shields
+small healing spells
 ```
 
 ### `{keys($body.mapping)}`
 
 Renders a mapping as `key: value` pairs, one per line, each prefixed with `- `.
 
-```
+```text transform=render-template context=aness id=fn-keys
 {keys($body.Physical Traits)}
-→  - gender: female
-   - age: mid 20s
-   - hair: black hair, braided, waist-length
+```
+
+``` expect=fn-keys
+- gender: female
+- age: mid 20s
+- hair: black hair, braided, waist-length
+- eyes: brown eyes
+- build: tall, willowy build
 ```
 
 ### `{inline($body.mapping)}`
 
 Space-joins all values of a mapping. Useful for collapsing a mapping into a single line.
 
-```
+```text transform=render-template context=aness id=fn-inline
 {inline($body.Physical Traits)}
-→  female mid 20s black hair, braided, waist-length brown eyes tall, willowy build
+```
+
+``` expect=fn-inline
+female mid 20s black hair, braided, waist-length brown eyes tall, willowy build
 ```
 
 ---
@@ -232,17 +266,27 @@ A render function that fails to evaluate inside a body field is `CL0413`, an **E
 
 ## Conditionals
 
-```
+```text transform=render-template context=aness id=cond-guard
 {if $body.Background}
 Background:
 {$body.Background}
 {/if}
 ```
 
+``` expect=cond-guard
+Background:
+- a journeyman healer
+- assigned to the Zenus project
+```
+
 With optional else:
 
-```
+```text transform=render-template context=aness id=cond-else
 {if $body.Secret}{$body.Secret}{else}Nothing hidden here.{/if}
+```
+
+``` expect=cond-else
+Nothing hidden here.
 ```
 
 **Falsy values:** a field is falsy if it is missing, an empty string, the string `"false"`, the string `"0"`, an empty array, or an empty mapping. Everything else is truthy.
