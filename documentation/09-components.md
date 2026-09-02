@@ -624,7 +624,7 @@ Reads the top contiguous `//` comment block and transforms it line by line:
 
 This comment block:
 
-```js
+```js transform=script-banner id=scriptbanner-install-note
 // ============================================================
 // ============= Standard Build - 26.9.6 - library ============
 // ============================================================
@@ -637,7 +637,7 @@ This comment block:
 
 becomes:
 
-```
+``` expect=scriptbanner-install-note
 === Standard Build - 26.9.6 - library ===
 - UnifiedSettings@1.1.2
 - DuckieDebug@1.0.3
