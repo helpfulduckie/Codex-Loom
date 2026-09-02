@@ -115,8 +115,9 @@ four syntaxes for one idea, and its variant rules disagreed with every other
 dispatch in the language. `--migrate` converts it; a block-list opening reaching
 the compiler is an error naming what it should become.
 
-```yaml check=none reason=v3-shape-removed
-# before — v3
+Before — the v3 block list:
+
+```yaml transform=migrate-opening id=migrate-blocklist-opening
 - text: "A world of magic and intrigue awaits."
 - text: "You have mastered the arcane arts."
   variants:
@@ -126,11 +127,12 @@ the compiler is an error naming what it should become.
     researcher:
       branches: {mage: researcher-mage, _: ~}
     _: ~
-- text: ./paragraphs/knight-oath.md
+- text: "{%paragraphs}/knight-oath.md"
 ```
 
-```yaml surface=component
-# after — v4
+After — `--migrate` produces named sections, `text:` split from `file:`, and (unnamed blocks) `blockN` names to rename before sharing:
+
+```yaml surface=component expect=migrate-blocklist-opening
 sections:
   block1:
     text: "A world of magic and intrigue awaits."
@@ -144,7 +146,7 @@ sections:
         branches: {mage: researcher-mage, _: ~}
       _: ~
   block3:
-    file: ./paragraphs/knight-oath.md
+    file: "{%paragraphs}/knight-oath.md"
 ```
 
 Three things change, and only one of them can alter output:
@@ -217,15 +219,13 @@ document variants have no v4 counterpart to move to:
 **v3's two-field format becomes two sections.** `--migrate` does this
 conversion; by hand it is:
 
-```yaml check=none reason=v3-shape-removed
-# before — v3
+```yaml transform=migrate-description id=migrate-description-twofield
 body:   './components/blurb.md'
 script: '{%scripts}/library.js'
 stripTrailingInstructions: true
 ```
 
-```yaml surface=component
-# after — v4
+```yaml surface=component expect=migrate-description-twofield
 sections:
   body:
     file: './components/blurb.md'

@@ -61,6 +61,8 @@ const { render } = require('../../src/template');
 const { applyFieldOp } = require('../../src/model/fieldops');
 const { applyTokenPass } = require('../../src/model/pronouns');
 const { resolveBranchSpec, enumerateLeaves } = require('../../src/model/branches');
+const { convertOpening } = require('../../src/migrate/opening');
+const { convertDescription } = require('../../src/migrate/description');
 const { isDeepStrictEqual } = require('util');
 
 const DOCS = path.join(__dirname, '../../documentation');
@@ -134,6 +136,11 @@ CONTEXTS['aness-min'].body.Personality.keywords = ['inquisitive'];
  *   branch-dispatch  src/model/branches.js — input YAML is `{ spec, path }`
  *                    (→ resolveBranchSpec, the variant list or null) or `{ leaves }`
  *                    (→ enumerateLeaves, the leaf paths). STRUCTURAL.
+ *   migrate-opening  src/migrate/opening.js convertOpening — a v3 opening block list →
+ *                    `{ sections }`. STRUCTURAL. The `expect` block carries `surface=component`
+ *                    too, so the v4 output is schema-checked as well as diffed.
+ *   migrate-description  src/migrate/description.js convertDescription — a v3
+ *                    `description.yaml` two-field doc → `{ sections }`. STRUCTURAL.
  */
 const TRANSFORMS = {
   'script-banner': (src) => scriptBanner(src),
@@ -158,6 +165,14 @@ const TRANSFORMS = {
     if (spec && spec.leaves !== undefined) return enumerateLeaves(spec.leaves);
     return resolveBranchSpec(spec.spec, spec.path || []);
   },
+  'migrate-opening': (src) => {
+    const blocks = parseYaml(src, '<migrate-opening>').value;
+    return { sections: convertOpening(blocks, src, '.').sections };
+  },
+  'migrate-description': (src) => {
+    const doc = parseYaml(src, '<migrate-description>').value;
+    return { sections: convertDescription(doc).sections };
+  },
   'pronoun-pass': (src) => {
     const spec = parseYaml(src, '<pronoun-pass>').value;
     const registry = new Map();
@@ -180,7 +195,7 @@ const TRANSFORMS = {
 };
 
 /** Transforms whose output is a value, not a string — compared by deep equality. */
-const STRUCTURAL = new Set(['field-op', 'branch-dispatch']);
+const STRUCTURAL = new Set(['field-op', 'branch-dispatch', 'migrate-opening', 'migrate-description']);
 
 /** Required-key complaints are meaningless against a fragment that shows one key. */
 const NOISE = new Set(['CL0203']);
