@@ -58,6 +58,8 @@ const { parseYaml } = require('../../src/loader/yaml');
 const { scriptBanner } = require('../../src/extract');
 const { stanzaSource } = require('../../src/render/field-list');
 const { render } = require('../../src/template');
+const { applyFieldOp } = require('../../src/model/fieldops');
+const { isDeepStrictEqual } = require('util');
 
 const DOCS = path.join(__dirname, '../../documentation');
 
@@ -120,6 +122,9 @@ CONTEXTS['aness-min'].body.Personality.keywords = ['inquisitive'];
  *                    wrapped in `fields:`.
  *   render-template  src/template.js render — a `.template` body string rendered against
  *                    the `context=<name>` fixture in CONTEXTS.
+ *   field-op         src/model/fieldops.js applyFieldOp — input YAML is `{ current, op }`;
+ *                    the result is deep-compared to the `expect` block parsed as YAML
+ *                    (STRUCTURAL), since a field op returns arrays and mappings, not strings.
  */
 const TRANSFORMS = {
   'script-banner': (src) => scriptBanner(src),
@@ -135,7 +140,14 @@ const TRANSFORMS = {
     if (!ctx) throw new Error(`render-template needs a known context=<name>; got "${ann.context}"`);
     return render(src, ctx, new Map(), null, {});
   },
+  'field-op': (src) => {
+    const { current, op } = parseYaml(src, '<field-op>').value;
+    return applyFieldOp(current, op);
+  },
 };
+
+/** Transforms whose output is a value, not a string — compared by deep equality. */
+const STRUCTURAL = new Set(['field-op']);
 
 /** Required-key complaints are meaningless against a fragment that shows one key. */
 const NOISE = new Set(['CL0203']);
@@ -200,9 +212,10 @@ describe('every documentation YAML block declares its surface', () => {
 
   test.each(yamlBlocks.map((b) => [`${b.file}:${b.line}`, b]))('%s', (_label, b) => {
     const ann = parseInfo(b.info);
-    // A ```yaml fence must say what it is: a schema surface, an opt-out, or the input
-    // half of a render-and-compare pair.
-    const declared = Boolean(ann.surface) || ann.check === 'none' || Boolean(ann.transform);
+    // A ```yaml fence must say what it is: a schema surface, an opt-out, or a half of a
+    // render-and-compare pair (`transform=` input or `expect=` output).
+    const declared = Boolean(ann.surface) || ann.check === 'none'
+      || Boolean(ann.transform) || Boolean(ann.expect);
     expect({ block: `${b.file}:${b.line}`, declared, info: b.info })
       .toEqual({ block: `${b.file}:${b.line}`, declared: true, info: b.info });
     if (ann.surface) expect(Object.keys(SURFACE_SCHEMA)).toContain(ann.surface);
@@ -278,7 +291,22 @@ describe('documentation transforms produce their documented output', () => {
     const want = expected.get(ann.id);
     expect(want).toBeDefined();
 
-    const got = fn(b.body, ann).replace(/\s+$/, '');
+    const raw = fn(b.body, ann);
+
+    if (STRUCTURAL.has(ann.transform)) {
+      const wanted = parseYaml(want.body, `${want.file}:${want.line}`).value;
+      if (!isDeepStrictEqual(raw, wanted)) {
+        throw new Error(
+          `${b.file}:${b.line}: transform "${ann.transform}" no longer produces the value at `
+          + `${want.file}:${want.line}.\n--- doc claims ---\n${JSON.stringify(wanted)}\n`
+          + `--- code produces ---\n${JSON.stringify(raw)}\n`
+          + '\nAdjudicate: the doc may be stale, or the change may be a regression.',
+        );
+      }
+      return;
+    }
+
+    const got = String(raw).replace(/\s+$/, '');
     const wanted = want.body.replace(/\s+$/, '');
     if (got !== wanted) {
       throw new Error(

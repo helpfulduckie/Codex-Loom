@@ -41,10 +41,19 @@ Appends a value to a field. **What that produces depends on what the field alrea
 ```yaml surface=item
 body:
   Tagline: +{retired}
-  # "count of monwynd, shadow mage" → ["count of monwynd, shadow mage", "retired"]
-
   Background: +{Recently returned from exile.}
-  # "long backstory" → ["long backstory", "Recently returned from exile."]
+```
+
+Appending to a non-empty string produces a two-element array:
+
+```yaml transform=field-op id=op-append-scalar
+current: count of monwynd, shadow mage
+op: "+{retired}"
+```
+
+```yaml expect=op-append-scalar
+- count of monwynd, shadow mage
+- retired
 ```
 
 Do not put a leading separator in the appended value — the separator is added by the template, not the operation.
@@ -57,7 +66,15 @@ Removes all occurrences of the substring from the field value. Result is trimmed
 body:
   Physical Traits:
     hair: -{in a controlled bun}
-    # "platinum blond hair in a controlled bun" → "platinum blond hair"
+```
+
+```yaml transform=field-op id=op-remove-substring
+current: platinum blond hair in a controlled bun
+op: "-{in a controlled bun}"
+```
+
+```yaml expect=op-remove-substring
+platinum blond hair
 ```
 
 ### Swap Substring — `/{old}/{new}`
@@ -67,7 +84,15 @@ Replaces all occurrences of `old` with `new`. Result is trimmed.
 ```yaml surface=item
 body:
   Background: /{her}/{his}
-  # "she built her reputation" → "she built his reputation"
+```
+
+```yaml transform=field-op id=op-swap-substring
+current: she built her reputation
+op: "/{her}/{his}"
+```
+
+```yaml expect=op-swap-substring
+she built his reputation
 ```
 
 ---
@@ -103,8 +128,20 @@ When an op chain includes `+{…}`, the append converts the intermediate value t
 ```yaml surface=item
 body:
   title:
-    - "+{Guild Certified}"      # "Master Swordsman" → ["Master Swordsman", "Guild Certified"]
-    - "/{Swordsman}/{Archer}"   # → ["Master Archer", "Guild Certified"]
+    - "+{Guild Certified}"
+    - "/{Swordsman}/{Archer}"
+```
+
+```yaml transform=field-op id=op-chain-append-swap
+current: Master Swordsman
+op:
+  - "+{Guild Certified}"
+  - "/{Swordsman}/{Archer}"
+```
+
+```yaml expect=op-chain-append-swap
+- Master Archer
+- Guild Certified
 ```
 
 ### Distinguishing op sequences from value arrays
@@ -147,8 +184,16 @@ body:
 ```yaml surface=item
 body:
   Physical Traits: -{grey}
-  # {hair: platinum blond, eyes: grey, height: tall}
-  #   → ["platinum blond", "tall"]      # keys gone, and "eyes" removed as a whole element
+```
+
+```yaml transform=field-op id=op-mapping-collapse
+current: { hair: platinum blond, eyes: grey, height: tall }
+op: "-{grey}"
+```
+
+```yaml expect=op-mapping-collapse
+- platinum blond
+- tall
 ```
 
 There is no diagnostic for this. Operations against a mapping belong on its subfields, one level in.
