@@ -394,7 +394,7 @@ A `.md` or `.txt` file is copied through with trailing blank lines trimmed and n
 
 ### Sections
 
-```yaml surface=component
+```yaml surface=component transform=render-section section=rules headingLevel=2 id=section-rules
 sections:
   narrative:
     heading: Narrative Tone
@@ -419,9 +419,9 @@ sections:
       position: 3
 ```
 
-The `rules` section renders as:
+The `rules` section — a mapping `text:` under a level-2 heading, `bullet: true` — renders as:
 
-```
+``` expect=section-rules
 ## Writing Rules
 - Second person, present tense.
 - Clinical observation punctuated by visceral sensation.
@@ -670,6 +670,21 @@ tags:
 ---
 
 A psychological thriller.
+```
+
+The frontmatter block alone, from the `metadata:` mapping:
+
+```yaml transform=render-frontmatter id=frontmatter-tags
+metadata:
+  tags: [thriller, dark]
+```
+
+``` expect=frontmatter-tags
+---
+tags:
+  - thriller
+  - dark
+---
 ```
 
 The key is declared on every component, but only the two description components emit it — nothing else writes a file with a place to put frontmatter. Declaring it elsewhere is `CL0620` and the metadata is ignored.

@@ -63,6 +63,8 @@ const { applyTokenPass } = require('../../src/model/pronouns');
 const { resolveBranchSpec, enumerateLeaves } = require('../../src/model/branches');
 const { convertOpening } = require('../../src/migrate/opening');
 const { convertDescription } = require('../../src/migrate/description');
+const { normalizeComponent } = require('../../src/model/component');
+const { renderSection, renderFrontmatter } = require('../../src/emit/components');
 const { isDeepStrictEqual } = require('util');
 
 const DOCS = path.join(__dirname, '../../documentation');
@@ -141,6 +143,11 @@ CONTEXTS['aness-min'].body.Personality.keywords = ['inquisitive'];
  *                    too, so the v4 output is schema-checked as well as diffed.
  *   migrate-description  src/migrate/description.js convertDescription — a v3
  *                    `description.yaml` two-field doc → `{ sections }`. STRUCTURAL.
+ *   render-section   src/model/component.js normalizeComponent + emit/components.js
+ *                    renderSection — a `sections:` block, `section=<name>` and optional
+ *                    `headingLevel=` on the fence, rendered with no occupants.
+ *   render-frontmatter  emit/components.js renderFrontmatter — a `metadata:` mapping → its
+ *                    `---` YAML frontmatter block.
  */
 const TRANSFORMS = {
   'script-banner': (src) => scriptBanner(src),
@@ -191,6 +198,25 @@ const TRANSFORMS = {
       onWarn: () => {},
       onRoleUsed: () => {},
     });
+  },
+  'render-section': (src, ann) => {
+    const doc = parseYaml(src, '<render-section>').value;
+    const comp = normalizeComponent(doc);
+    const section = ann.section
+      ? comp.sections.find((s) => s.name === ann.section)
+      : comp.sections[0];
+    if (!section) throw new Error(`render-section: no section "${ann.section}" in the block`);
+    return renderSection(section, [], {
+      defaultHeadingLevel: ann.headingLevel !== undefined ? Number(ann.headingLevel) : 0,
+      variables: {},
+      registry: new Map(),
+      onWarn: () => {},
+      onRoleUsed: () => {},
+    });
+  },
+  'render-frontmatter': (src) => {
+    const doc = parseYaml(src, '<render-frontmatter>').value;
+    return renderFrontmatter(doc && doc.metadata ? doc.metadata : doc);
   },
 };
 
