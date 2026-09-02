@@ -214,14 +214,63 @@ function roleUndeclaredMessage(name, roles) {
 }
 
 /**
+ * Normalize `{$Role…}` to `{$id…}` across all of a branch's resolved items, ahead of
+ * `applyCrossItemRefs` (§9.3). This is the item path's fix for one ordering problem:
+ * `applyCrossItemRefs` runs before the per-item token pass and understands only item ids,
+ * so `{$LI.body.Tagline}` would never resolve unless the leading role name were an id by
+ * the time it ran. One leading identifier is shared by `{$LI}`, `{$LI's}`, `{$LI.he}` and
+ * `{$LI.body.X}`, so the rewrite covers every form, not just the `.body.` one.
+ *
+ * Deliberately silent: `applyTokenPass` remains the one place role diagnostics
+ * (CL0540–CL0543) are raised — it is the shared token chokepoint for every render path,
+ * and re-runs this same `resolveRole` rewrite, a no-op here on ids this pass already
+ * resolved and the reporting site for the broken roles it left untouched. `onRoleUsed` is
+ * threaded through so a role referenced only by an item `{$Role.body.X}` — consumed by
+ * `applyCrossItemRefs` before `applyTokenPass` can see it — still counts against CL0545.
+ *
+ * A no-op when no role is in scope. Only `{$…}` brace tokens are visited; render-function
+ * role refs like `{join($LI.body.x)}` were never role-aware and still are not.
+ *
+ * @param {object[]} resolvedItems - all items compiled for this branch
+ * @param {object} opts
+ *   opts.registry      - full item registry Map
+ *   opts.roles         - this branch's merged role table (§9.2), or null
+ *   opts.resolvedById  - Map of post-variant resolved items by lowercase id
+ *   opts.onRoleUsed    - (roleKey) => void, for CL0545's usage tracking
+ */
+function applyRolePass(resolvedItems, { registry, roles, resolvedById, onRoleUsed }) {
+  if (!roles || Object.keys(roles).length === 0) return;
+  const TOKEN_RE = /\{\$([^{}]+)\}/g;
+  const rewrite = (str) => str.replace(TOKEN_RE, (match, braceContent) => {
+    const inner = braceContent.trim();
+    const dot0 = inner.indexOf('.');
+    const possessive = dot0 === -1 && inner.toLowerCase().endsWith("'s");
+    const leading = dot0 !== -1 ? inner.slice(0, dot0) : possessive ? inner.slice(0, -2) : inner;
+    const trailing = dot0 !== -1 ? inner.slice(dot0) : possessive ? "'s" : '';
+    // onWarn omitted on purpose — see the note above.
+    const roleId = resolveRole(leading, { roles, registry, resolvedById, onRoleUsed });
+    return roleId !== null ? `{$${roleId}${trailing}}` : match;
+  });
+  for (const item of resolvedItems) {
+    walkItemTextFields(item, rewrite);
+  }
+}
+
+/**
  * Combined pronoun and verb conjugation pass.
  *
  * Processes a string left-to-right, handling:
  *   {$PronounToken}      - unscoped pronoun; against item's own pronouns; does NOT set scope
  *   {$Id}                - character reference; sets scope to Id
  *   {$Id.pronoun}        - scoped pronoun; sets scope to Id
- *   {$Id.body.field}     - cross-item ref; leave as-is (handled in second pass)
+ *   {$Id.body.field}     - cross-item ref; re-emitted here, resolved by `applyCrossItemRefs`
  *   [s] [es] [is] [was] [has] - conjugate using current scope
+ *
+ * This is the shared token chokepoint for every render path — item bodies, sectioned
+ * components, passthrough prose, tree-file literals — so it still rewrites a leading role
+ * name to its bound item id (§9.3). The item path additionally runs `applyRolePass` first,
+ * so that `{$Role.body.X}` is an ordinary `{$id.body.X}` by the time `applyCrossItemRefs`
+ * (item-path only) reads it; here that rewrite is then a no-op on already-resolved ids.
  *
  * @param {string} str
  * @param {object} opts
@@ -262,7 +311,9 @@ function applyTokenPass(str, opts) {
     // Roles resolve first, always (§9.3): rewrite a leading role name to its bound item id
     // so every check below sees an ordinary card reference. `{$LI}`, `{$LI's}`, `{$LI.he}`
     // and `{$LI.body.X}` all share one leading identifier, so one substitution handles all
-    // four — everything past this point reads `inner`, never `braceContent`.
+    // four — everything past this point reads `inner`, never `braceContent`. On the item
+    // path `applyRolePass` has already done this, so the call is a no-op there; the other
+    // render paths (components, passthrough, tree-file literals) reach roles only here.
     {
       const dot0 = inner.indexOf('.');
       const possessive = dot0 === -1 && inner.toLowerCase().endsWith("'s");
@@ -296,10 +347,12 @@ function applyTokenPass(str, opts) {
         if (restLower === 'full') return matchCase(getFullName(refItem), inner);
         if (restLower === 'display') return matchCase(getDisplayName(refItem), inner);
 
-        // Otherwise it's a cross-item field ref like {$Id.body.field} — leave for second
-        // pass, but reconstructed from `inner` rather than the original `match`: a role
-        // rewrite above already replaced the leading identifier, and `applyCrossItemRefs`
-        // only understands item ids, never role names.
+        // Otherwise it's a cross-item field ref like {$Id.body.field}. On the item path
+        // `applyCrossItemRefs` ran earlier and resolved every such ref whose field exists,
+        // so a survivor here means a missing field; on the other render paths there is no
+        // cross-item resolution at all. Either way, re-emit the token — reconstructed from
+        // `inner`, so a role rewrite above is preserved — and let the output sweep report
+        // it as CL0430.
         return `{$${inner}}`;
       }
 
@@ -359,7 +412,10 @@ function applyTokenPass(str, opts) {
 
 /**
  * Apply cross-item reference resolution: {$id.body.field} → resolved field value.
- * This is a second pass run after all items for a branch have been resolved.
+ *
+ * Runs once over all of a branch's resolved items, after `applyRolePass` (so a leading role
+ * name is already an item id) and before the per-item `applyPronounPasses` loop (so it needs
+ * every item's body resolved simultaneously, regardless of source order).
  *
  * @param {object[]} resolvedItems - all items compiled for this branch
  * @param {Map} registry - full item registry (for fallback to canonical base)
@@ -426,6 +482,7 @@ function applyPronounPasses(item, registry, branchProtagonist, resolvedById, rol
 
 module.exports = {
   CODES,
+  applyRolePass,
   applyPronounPasses,
   applyTokenPass,
   applyCrossItemRefs,

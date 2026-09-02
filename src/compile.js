@@ -10,7 +10,7 @@ const {
   branchTreeDeclares, enumerateLeaves, walkBranchChain, walkBranchTree,
   resolveBranchSpec, localRoleKeysOf,
 } = require('./model/branches');
-const { applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
+const { applyRolePass, applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation } = require('./template');
 const { renderFieldList } = require('./render/field-list');
 const { CODES: FIELD_TABLE_CODES } = require('./loader/field-table');
@@ -460,6 +460,14 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
   // The length check measures what AID stores, which is the *substituted* string, so it
   // needs the questions rather than the keys. Expanded once per branch and handed down.
   const questions = questionsForMeasurement(placeholders, variables);
+
+  // §9.3: normalize `{$Role…}` to `{$id…}` across every item before `applyCrossItemRefs`
+  // runs, so a cross-item ref reached through a role (`{$LI.body.Tagline}`) arrives as
+  // `{$<id>.body.Tagline}` and resolves like any other. Silent — `applyPronounPasses`
+  // below is still the one site that raises role diagnostics — but it threads `onRoleUsed`
+  // so a role used only in an item `.body.` ref keeps counting against CL0545. A no-op
+  // when the branch declares no roles.
+  applyRolePass(resolvedItems, { registry, roles, resolvedById, onRoleUsed });
 
   applyCrossItemRefs(resolvedItems, registry, busWarner(diagnostics), resolvedById);
 

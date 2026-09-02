@@ -730,11 +730,11 @@ nonbinary. Roles are the missing half of something that was already in use.
 ### §9.2 Design
 
 **Anywhere an item id may appear in a `{$…}` token, a role name may appear instead** —
-`{$LI}`, `{$LI.he}`, `{$LI's}`, `{$LI.body.Tagline}`. **`{$LI.body.X}` is the one form not
-currently reached**: `applyCrossItemRefs` runs before the role rewrite and understands only
-item ids, so the token survives to the output sweep and fails as `CL0430`. The gap is in
-the pass ordering, not in this design — see the dev-guide's Pronoun Resolution Passes.
-`{$protagonist}` is not a special
+`{$LI}`, `{$LI.he}`, `{$LI's}`, `{$LI.body.Tagline}`, and all four resolve. The token pass
+rewrites a leading role name to its bound id inline; `{$LI.body.Tagline}` needs one extra
+step, because on the item path the cross-item resolver runs before the token pass — so
+`applyRolePass` normalizes `{$Role…}` to `{$id…}` across every item first. See the
+dev-guide's Pronoun Resolution Passes. `{$protagonist}` is not a special
 mechanism; it is the built-in `protagonist` role, which already drives the "you"
 substitution. The general feature is *less* code than the special case, because the
 special case already existed.
@@ -754,9 +754,13 @@ dot grammar.
 
 **A role resolves one level of indirection, always** — to an item id, never to another
 role (`CL0543`). No expressions, no computed names; logic belongs in the template layer's
-`{if}`. Resolution happens *first*, by rewriting the leading role name to its bound item
-id at the start of the pronoun pass (`resolveRole` in `src/model/pronouns.js`), so every
-downstream check sees an ordinary card reference and needs no role-awareness.
+`{if}`. Resolution happens *first*, by rewriting the leading role name to its bound item id
+before any other test in the token pass (`resolveRole` in `src/model/pronouns.js`), so
+every check below it sees an ordinary card reference. The token pass is the one site that
+raises the role diagnostics and the one that tracks role usage. On the item path a silent
+pre-pass, `applyRolePass`, runs the same rewrite over every item ahead of
+`applyCrossItemRefs`, whose `{$Id.body.X}` resolution would otherwise never see an id where
+a role name was written.
 
 | Failure | Code |
 |---|---|

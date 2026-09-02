@@ -91,6 +91,7 @@ FOR EACH LEAF:
   resolveSectionedComponents()   → the leaf's component documents
   buildSlotIndex()               → what a render target may name on this branch
   renderBranchItems()            → {written, occupants} — cards and slot contents in one pass
+    applyRolePass()              → {$Role…} leading names rewritten to bound item ids, all items
     applyCrossItemRefs()         → {$Id.body.Field} refs resolved across all items
     FOR EACH resolvedItem:
       applyPronounPasses()       → pronoun + conjugation tokens resolved
@@ -264,23 +265,21 @@ Three rules there are justified by what `velvet_lattice/loader.py` actually does
 
 ## Pronoun Resolution Passes
 
-**Two separate stages run in `renderBranchItems`, and cross-item refs go first.** `applyCrossItemRefs(resolvedItems, registry, onWarn, resolvedById)` runs **once** over all of a branch's resolved items, before the per-item loop starts. `applyPronounPasses(item, registry, branchProtagonist, resolvedById, roles, onWarn, onRoleUsed)` then runs **per item** inside that loop, and is a single `applyTokenPass` walk over `walkItemTextFields` — not two passes. Several comments in `model/pronouns.js` still call cross-item resolution "the second pass"; they predate the current ordering and are stale.
+**The token pass (`applyTokenPass`) is one function called from every render path — item bodies, sectioned components, passthrough prose, tree-file literals.** It rewrites a leading role name to its bound item id, then resolves pronouns and conjugation. Role rewriting lives here, at the shared chokepoint, so this is the one place role diagnostics are raised and role usage is tracked.
 
-**Stage 1 — `applyCrossItemRefs`** replaces `{$Id.body.FieldPath}` by looking up the resolved item for `Id` and reading its body field. It needs every item resolved simultaneously, which is why it is hoisted above the loop. Like the other `{$…}` walkers it visits `body`/`aid`/`render`/`name` via `walkItemTextFields`; the cross-item *source* path is still `.body.`-only. It understands item ids and nothing else — see the ordering gap below.
+**One ordering wrinkle, on the item path only.** `renderBranchItems` runs `applyCrossItemRefs` — which resolves `{$Id.body.FieldPath}` by reading the source item's body field — *before* the per-item `applyPronounPasses`/`applyTokenPass` loop, because it needs every item's body available at once. `applyCrossItemRefs` understands item ids and nothing else, so a `{$Role.body.X}` written through a role would never match. `applyRolePass(resolvedItems, { registry, roles, resolvedById, onRoleUsed })` closes that: it runs the same `resolveRole` rewrite over every item *before* `applyCrossItemRefs`, turning `{$Role…}` into `{$id…}` for all four token forms. It is deliberately **silent** — no `onWarn` — so the diagnostics still come from `applyTokenPass` alone; it does thread `onRoleUsed`, so a role referenced only by a `{$Role.body.X}` (consumed by `applyCrossItemRefs` before `applyTokenPass` sees it) still counts against `CL0545`. A no-op when the branch declares no roles. The component and passthrough paths have no `applyCrossItemRefs` step and so need no pre-pass.
 
-**Stage 2 — `applyTokenPass`** processes the combined regex `/{(\$[^{}]+)\}|\[(s|es|is|was|has)\]/g` left-to-right. A role name is rewritten to its bound item id first, before any other test: the leading identifier is split off (`{$LI}`, `{$LI's}`, `{$LI.he}` and `{$LI.body.X}` share one), passed through `resolveRole`, and substituted, so everything downstream reads an ordinary card reference (§9.3). Then:
+**`applyTokenPass`** processes the combined regex `/{(\$[^{}]+)\}|\[(s|es|is|was|has)\]/g` left-to-right. A leading role name is rewritten via `resolveRole` first (on the item path that rewrite is already done, so it is a no-op on the resulting ids); then, in order:
 
 - `{$she}` / `{$her~}` etc. (unscoped, no dot) → resolve against item's own `pronouns:` field. Does **not** set the conjugation scope.
 - `{$Id}` (registry ID, no dot) → "you" if protagonist, else display name. Sets scope to Id's pronoun set.
 - `{$Id.pronoun}` (registry ID + pronoun token) → resolve pronoun against Id's effective pronoun set. Sets scope to Id's pronoun set.
 - `{$Id.full}` / `{$Id.display}` → full or display name. Does not set scope.
-- `{$Id.body.Field}` (registry ID + body path) → re-emitted as `{$<id>.body.Field}`, rebuilt from the role-rewritten name rather than the original text.
+- `{$Id.body.Field}` (registry ID + body path) → re-emitted as `{$<id>.body.Field}`. On the item path `applyCrossItemRefs` already resolved every such ref whose field exists, so a survivor is a missing field; on the other paths there is no cross-item resolution and it leaks. Either way the output sweep reports it as `CL0430`.
 - `[s]` / `[es]` / `[is]` / `[was]` / `[has]` → conjugate using the current scope (or item's own pronouns if no scope set).
-- Anything else, when the branch is role-aware (`roles` non-null) → `CL0540`, naming both readings.
+- A leading name that resolves to neither a role nor a registry ID, when the branch is role-aware (`roles` non-null) → `CL0540` (`CL0541`–`CL0543` cover a role that is declared but cannot resolve).
 
-Scope tracking via `currentScope` is local to each string processed by `applyTokenPass`, reset for each call.
-
-**Known ordering gap: `{$Role.body.Field}` does not resolve.** Because stage 1 runs before the role rewrite in stage 2 and understands only item ids, a cross-item field reference reached *through a role* is left behind: stage 1 skips it (the leading name is not an id), stage 2 rewrites the role and re-emits the token expecting a later pass that no longer exists, and the survivor is caught by the output sweep as `CL0430`. The plain-id form `{$Id.body.Field}` is unaffected. This contradicts §9.2, which lists `{$LI.body.Tagline}` as supported — the spec states the intent and the code has not caught up. It fails loudly rather than silently, and no project in the corpus writes the shape.
+Scope tracking via `currentScope` is local to each string processed by `applyTokenPass`, reset for each call. `applyRolePass`, `applyCrossItemRefs` and `applyPronounPasses` all route through `walkItemTextFields`, so they reach the same fields (`body`/`aid`/`render`/`name`).
 
 ---
 
@@ -288,7 +287,7 @@ Scope tracking via `currentScope` is local to each string processed by `applyTok
 
 `applyFieldInterpolation(item)` in `template.js` runs after `resolveItem()` but before pronoun passes. It expands dotted field refs within the item's text sections.
 
-**Coverage:** all three `{$…}` item-data walkers — `applyFieldInterpolation` (here), `applyCrossItemRefs`, and `applyPronounPasses` — route through the shared `walkItemTextFields(item, transform)` in `util.js`, which visits string values in `item.body`, `item.aid`, `item.render`, and `item.name`. That helper is the single place the section list lives, so the three passes always reach the same fields. (`name` is already normalized to an object before these passes run.)
+**Coverage:** all four `{$…}` item-data walkers — `applyFieldInterpolation` (here), `applyRolePass`, `applyCrossItemRefs`, and `applyPronounPasses` — route through the shared `walkItemTextFields(item, transform)` in `util.js`, which visits string values in `item.body`, `item.aid`, `item.render`, and `item.name`. That helper is the single place the section list lives, so the passes always reach the same fields. (`name` is already normalized to an object before these passes run.)
 
 **Surface:** `processFieldInterpolation(value, context)` matches dotted refs rooted at `body`, `v` (+ aliases), `aid`, `render`, or `name`, and resolves them via `resolveField`. The **required dot** is deliberate: bare single-segment `{$X}` (pronoun tokens like `{$she}`, character refs like `{$Id}`) is left for the pronoun pass. This ordering matters — interpolating `{$body.year}` into another field must happen before pronoun resolution so the interpolated content can itself contain pronoun tokens.
 
@@ -308,7 +307,7 @@ v3 switched from bare `$Aness`, `$her~` markers (v2) to fully braced `{$Aness}`,
 
 **Phase A / Phase B split**
 
-Phase A (`resolveBranchItems`) resolves all items for a branch and applies field interpolation before Phase B starts. Phase B (`renderBranchItems`) runs `applyCrossItemRefs` first (which needs all resolved items available simultaneously), then processes pronouns and rendering per item. This two-phase design ensures cross-item `{$Id.body.Field}` references can always find the target item's resolved body, regardless of item ordering in the source files.
+Phase A (`resolveBranchItems`) resolves all items for a branch and applies field interpolation before Phase B starts. Phase B (`renderBranchItems`) runs `applyRolePass` then `applyCrossItemRefs` first (both need all resolved items available simultaneously), then processes pronouns and rendering per item. This two-phase design ensures cross-item `{$Id.body.Field}` references — and, since the role rewrite is part of it, `{$Role.body.Field}` too — can always find the target item's resolved body, regardless of item ordering in the source files.
 
 **`__DELETE__` sentinel**
 

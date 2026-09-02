@@ -2,7 +2,7 @@
 
 const {
   resolveProunounToken, applyTokenPass,
-  getDisplayName, getFullName, applyCrossItemRefs, applyPronounPasses,
+  getDisplayName, getFullName, applyRolePass, applyCrossItemRefs, applyPronounPasses,
 } = require('../../src/model/pronouns');
 
 // ── resolveProunounToken ────────────────────────────────────────────────────
@@ -496,6 +496,47 @@ describe('applyCrossItemRefs', () => {
   });
 });
 
+// ── applyRolePass ────────────────────────────────────────────────────────────
+
+describe('applyRolePass', () => {
+  const registry = new Map([['kaiden', { id: 'kaiden' }]]);
+  const opts = (extra) => ({ registry, roles: { LI: 'Kaiden' }, resolvedById: registry, ...extra });
+
+  // The rewrite substitutes the binding target verbatim (`resolveRole` returns `roles[key]`
+  // as authored); downstream lookups are case-insensitive, so casing here does not matter.
+  test('rewrites the leading role name in every {$…} form, in place', () => {
+    const items = [{
+      id: 'ree',
+      body: {
+        A: '{$LI}', B: "{$LI's}", C: '{$LI.he}', D: '{$LI.body.Tagline}',
+      },
+    }];
+    applyRolePass(items, opts());
+    expect(items[0].body).toEqual({
+      A: '{$Kaiden}', B: "{$Kaiden's}", C: '{$Kaiden.he}', D: '{$Kaiden.body.Tagline}',
+    });
+  });
+
+  test('leaves an unknown name and a bare pronoun token untouched', () => {
+    const items = [{ id: 'ree', body: { B: '{$Nobody}', C: '{$she}' } }];
+    applyRolePass(items, opts());
+    expect(items[0].body).toEqual({ B: '{$Nobody}', C: '{$she}' });
+  });
+
+  test('calls onRoleUsed for a role reached only through a {$Role.body.X} ref', () => {
+    const onRoleUsed = jest.fn();
+    const items = [{ id: 'ree', body: { Tagline: '{$LI.body.Tagline}' } }];
+    applyRolePass(items, opts({ onRoleUsed }));
+    expect(onRoleUsed).toHaveBeenCalledWith('LI');
+  });
+
+  test('no-op when no roles are in scope', () => {
+    const items = [{ id: 'ree', body: { Tagline: '{$LI.body.Tagline}' } }];
+    applyRolePass(items, { registry, roles: {}, resolvedById: registry });
+    expect(items[0].body.Tagline).toBe('{$LI.body.Tagline}');
+  });
+});
+
 // ── applyTokenPass — {$Id.display} and {$Id.full} ────────────────────────────
 
 describe('applyTokenPass — {$Id.display} and {$Id.full} tokens', () => {
@@ -606,7 +647,10 @@ describe('applyTokenPass — role resolution (§9.3)', () => {
       .toBe('he left');
   });
 
-  test('{$LI.body.field} rewrites and leaves the cross-item ref for the second pass', () => {
+  // The token pass only rewrites the leading name and re-emits the cross-item ref;
+  // `applyCrossItemRefs` resolves the `.body.` lookup. The end-to-end path — including a
+  // role name in the leading slot — is covered by roles.integration.test.js.
+  test('{$LI.body.field} rewrites the leading name and re-emits the cross-item ref', () => {
     expect(applyTokenPass('{$LI.body.Tagline}', { item: malcolm, registry, roles, branchProtagonist: null }))
       .toBe('{$Malcolm.body.Tagline}');
   });

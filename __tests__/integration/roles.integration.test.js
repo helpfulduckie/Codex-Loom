@@ -105,6 +105,59 @@ describe('a branch-level roles: block reaches the token pass', () => {
   });
 });
 
+/**
+ * §9.2's fourth token form, `{$Role.body.Field}`, end to end. `applyCrossItemRefs` runs
+ * before the token pass and reads item ids only, so this only resolves because
+ * `applyRolePass` rewrites the leading role name first. The plain-id form `{$Kaiden.body.…}`
+ * is the control — it resolved before this pass existed and must still resolve now.
+ * Asserted on the rendered card, not the call site: a leaked token here would surface as
+ * CL0430, which the test also rules out.
+ */
+describe('{$Role.body.Field} resolves through the role, like the plain-id cross-item ref', () => {
+  const files = {
+    ...BASE,
+    'Codex/items.yaml': [
+      '- id: Kaiden',
+      '  name: {display: Kaiden, full: Kaiden Ash}',
+      '  pronouns: male',
+      '  aid: {type: Character, triggers: [Kaiden]}',
+      '  render: {template: Full}',
+      '  body:',
+      '    Tagline: the quiet one',
+      '- id: Ree',
+      '  name: {display: Ree, full: Ree Sol}',
+      '  pronouns: female',
+      '  aid: {type: Character, triggers: [Ree]}',
+      '  render: {template: Full}',
+      '  body:',
+      '    Tagline: "via role: {$LI.body.Tagline}; via id: {$Kaiden.body.Tagline}"',
+    ].join('\n'),
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'roles:',
+      '  LI: Kaiden',
+      'branches:',
+      '  solo: {}',
+      '',
+    ].join('\n'),
+  };
+
+  test('both the role form and the id form resolve, with no CL0430 leak', () => {
+    const { threw, output, tmpDir } = compileProject(files);
+    expect(threw).toBeNull();
+    expect(occurrences(output, 'CL0430')).toEqual([]);
+    expect(occurrences(output, 'CL0540')).toEqual([]);
+    const content = fs.readFileSync(cardFile(tmpDir, 'solo', 'Character'), 'utf8');
+    expect(content).toContain('via role: the quiet one; via id: the quiet one');
+    expect(content).not.toContain('{$LI.body.Tagline}');
+  });
+});
+
 describe('~ unbinds a role rather than resolving to a null binding', () => {
   const files = {
     ...BASE,
