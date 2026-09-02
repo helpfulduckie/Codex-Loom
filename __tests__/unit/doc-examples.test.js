@@ -60,6 +60,7 @@ const { stanzaSource } = require('../../src/render/field-list');
 const { render } = require('../../src/template');
 const { applyFieldOp } = require('../../src/model/fieldops');
 const { applyTokenPass } = require('../../src/model/pronouns');
+const { resolveBranchSpec, enumerateLeaves } = require('../../src/model/branches');
 const { isDeepStrictEqual } = require('util');
 
 const DOCS = path.join(__dirname, '../../documentation');
@@ -130,6 +131,9 @@ CONTEXTS['aness-min'].body.Personality.keywords = ['inquisitive'];
  *                    `{ text, cast?, item?, itemPronouns?, protagonist? }`; `cast` becomes a
  *                    registry, `protagonist` the active branch protagonist, and the token +
  *                    conjugation pass runs over `text`.
+ *   branch-dispatch  src/model/branches.js — input YAML is `{ spec, path }`
+ *                    (→ resolveBranchSpec, the variant list or null) or `{ leaves }`
+ *                    (→ enumerateLeaves, the leaf paths). STRUCTURAL.
  */
 const TRANSFORMS = {
   'script-banner': (src) => scriptBanner(src),
@@ -148,6 +152,11 @@ const TRANSFORMS = {
   'field-op': (src) => {
     const { current, op } = parseYaml(src, '<field-op>').value;
     return applyFieldOp(current, op);
+  },
+  'branch-dispatch': (src) => {
+    const spec = parseYaml(src, '<branch-dispatch>').value;
+    if (spec && spec.leaves !== undefined) return enumerateLeaves(spec.leaves);
+    return resolveBranchSpec(spec.spec, spec.path || []);
   },
   'pronoun-pass': (src) => {
     const spec = parseYaml(src, '<pronoun-pass>').value;
@@ -171,7 +180,7 @@ const TRANSFORMS = {
 };
 
 /** Transforms whose output is a value, not a string — compared by deep equality. */
-const STRUCTURAL = new Set(['field-op']);
+const STRUCTURAL = new Set(['field-op', 'branch-dispatch']);
 
 /** Required-key complaints are meaningless against a fragment that shows one key. */
 const NOISE = new Set(['CL0203']);

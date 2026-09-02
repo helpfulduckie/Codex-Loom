@@ -72,7 +72,27 @@ Vibe: [{join("; ", $body.vibe)}]
 {/if}
 ```
 
-The `{if}` guard tests the first ref, so **a field absent from an item's `body:` emits nothing** — no empty label, no stray separator. `always: true` drops the guard.
+The `{if}` guard tests the first ref, so **a field absent from an item's `body:` emits nothing** — no empty label, no stray separator. `always: true` drops the guard:
+
+```yaml transform=stanza-source id=stanza-always
+tagline: { label: Tagline, always: true }
+```
+
+``` expect=stanza-always
+Tagline: {$body.tagline}
+```
+
+**A `labelWhen` entry compiles to a nested `{if}` on the label**, so the alternate label shows only when its key is present:
+
+```yaml transform=stanza-source id=stanza-labelwhen
+appearance: { label: Appearance, join: "; ", labelWhen: { originalAppearance: Current Appearance } }
+```
+
+``` expect=stanza-labelwhen
+{if $body.appearance}
+{if $body.originalAppearance}Current Appearance{else}Appearance{/if}: {join("; ", $body.appearance)}
+{/if}
+```
 
 `wrap` composes with `wrapLabel` and `block` in three shapes:
 

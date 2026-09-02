@@ -25,7 +25,24 @@ branches:
 `protagonist` is the built-in role, bound inside a branch's `roles:` block like any other
 role (see [Roles](13-roles.md)).
 
-This produces four leaf outputs: `subject`, `researcher`, `tier2/alpha`, `tier2/beta`.
+This produces four leaf outputs — `subject`, `researcher`, `tier2/alpha`, `tier2/beta`:
+
+```yaml transform=branch-dispatch id=leaves-nested
+leaves:
+  subject: {}
+  researcher: {}
+  tier2:
+    branches:
+      alpha: {}
+      beta: {}
+```
+
+```yaml expect=leaves-nested
+- [subject]
+- [researcher]
+- [tier2, alpha]
+- [tier2, beta]
+```
 
 A project with no `branches:` key produces a single root-level output.
 
@@ -134,7 +151,22 @@ branches:
       Y: variantAY
 ```
 
-The `apply:` list sets variants at this level; `branches:` descends for deeper dispatch.
+The `apply:` list sets variants at this level; `branches:` descends for deeper dispatch. For leaf `A/X` that stacks `apply:` then the sub-key:
+
+```yaml transform=branch-dispatch id=dispatch-nested
+spec:
+  A:
+    apply: [variantA]
+    branches:
+      X: variantAX
+      Y: variantAY
+path: [A, X]
+```
+
+```yaml expect=dispatch-nested
+- variantA
+- variantAX
+```
 
 ### Wildcard `*` — baseline for every branch
 
@@ -144,6 +176,25 @@ The `apply:` list sets variants at this level; `branches:` descends for deeper d
 branches:
   '*': base            # "base" applies to every branch, felix included
   felix: felix         # felix gets [base, felix]; every other branch gets [base]
+```
+
+```yaml transform=branch-dispatch id=dispatch-wild-felix
+spec: { '*': base, felix: felix }
+path: [felix]
+```
+
+```yaml expect=dispatch-wild-felix
+- base
+- felix
+```
+
+```yaml transform=branch-dispatch id=dispatch-wild-other
+spec: { '*': base, felix: felix }
+path: [knight]
+```
+
+```yaml expect=dispatch-wild-other
+- base
 ```
 
 **A null wildcard does nothing.** `'*': ~` is skipped rather than excluding anything — the walker ignores a null `*` entirely, so every branch is still included with whatever else matched.
@@ -161,12 +212,50 @@ branches:
   felix: felix         # felix gets [base, felix]; every other branch gets [base, unnamed]
 ```
 
+```yaml transform=branch-dispatch id=dispatch-fallback-felix
+spec: { '*': base, _: unnamed, felix: felix }
+path: [felix]
+```
+
+```yaml expect=dispatch-fallback-felix
+- base
+- felix
+```
+
+```yaml transform=branch-dispatch id=dispatch-fallback-other
+spec: { '*': base, _: unnamed, felix: felix }
+path: [knight]
+```
+
+```yaml expect=dispatch-fallback-other
+- base
+- unnamed
+```
+
 **`_: ~` excludes every branch you did not name**, which is what makes "include in only one branch" expressible:
 
 ```yaml surface=item
 branches:
   subject: base        # the subject branch gets "base"
   _: ~                 # every other branch: excluded
+```
+
+```yaml transform=branch-dispatch id=dispatch-only-subject
+spec: { subject: base, _: ~ }
+path: [subject]
+```
+
+```yaml expect=dispatch-only-subject
+- base
+```
+
+```yaml transform=branch-dispatch id=dispatch-only-other
+spec: { subject: base, _: ~ }
+path: [knight]
+```
+
+```yaml expect=dispatch-only-other
+null
 ```
 
 ### How dispatch walks nested branches
