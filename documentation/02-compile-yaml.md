@@ -131,7 +131,7 @@ structure:
 
 **Every library name is also exposed as a variable**, so a library entry can reference a sibling — `esudia: '{%libraryRoot}/Esudia'` then `esudiaChars: '{%esudia}/Character'` — and so can any other path in the config. A library name colliding with a declared variable is an ERROR (`CL0521`), since the two share one namespace.
 
-**A library directory may carry a reserved `canon.cl.yaml`**, excluded from item loading rather than parsed — see [Roles](13-roles.md#canonclyaml--reserved-not-yet-read).
+**A directory may carry a reserved `library.cl.yaml`**, skipped by the item loader rather than parsed — see [Roles](13-roles.md#libraryclyaml--reserved-not-yet-read).
 
 **`structure.input.snapshot` freezes library entries into a copy the project carries with it.** See [The Library Snapshot](12-snapshot.md) for `--snapshot`, the drift notice, and `requiresRoles`.
 
@@ -156,7 +156,7 @@ templates:
 
 ### `structure.output`
 
-Directory where compiled output is written. Relative to `compile.yaml`. Defaults to `./output` if omitted.
+Directory where compiled output is written. Relative to `compile.yaml`. **Required** — omitting it is `CL0203` at load, and nothing compiles.
 
 ```yaml
 output: ./output

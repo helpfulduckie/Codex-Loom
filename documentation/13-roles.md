@@ -49,11 +49,17 @@ behaves like any other role.
 ## Using a role in prose
 
 A role token is written exactly like an item reference, because it *is* one once resolved
-— `{$LI}`, `{$LI.he}`, `{$LI.his~}`, `{$LI.body.Backstory}`, `{$LI's}` all work, the same forms
+— `{$LI}`, `{$LI.he}`, `{$LI.his~}`, `{$LI's}` all work, the same forms
 [Pronoun System](08-pronouns.md) documents for `{$Id...}`. Resolution rewrites the leading
-name to its bound item id before anything else runs, so every downstream check — pronoun
-resolution, cross-item field references, the output sweep — sees an ordinary item
-reference and needs no role-awareness of its own.
+name to its bound item id at the start of the token pass, so the checks that run after it
+— pronoun resolution, the output sweep — see an ordinary item reference and need no
+role-awareness of their own.
+
+> **`{$LI.body.Field}` does not currently work.** Cross-item field references are resolved
+> in an earlier stage than the role rewrite, and that stage understands item ids only, so a
+> body reference reached through a role survives to the output sweep and fails as
+> `CL0430`. Name the item directly — `{$Kaiden.body.Backstory}` — until the pass ordering
+> is fixed. Every other role form above is unaffected.
 
 ```yaml
 sections:
@@ -145,17 +151,27 @@ entry gets instead of a role list when its own items don't validate.
 
 ---
 
-## `canon.cl.yaml` — reserved, not yet read
+## `library.cl.yaml` — reserved, not yet read
 
-A canon (library) directory may contain a file named `canon.cl.yaml`. Codex Loom **excludes
-it from item loading** — it is never parsed as an item, never raises unknown-key errors on
-whatever it contains, and is copied byte-for-byte by `--snapshot` like any other file in the
-directory. Nothing currently *reads* it: the descriptive contract this filename is reserved
-for — documenting which roles, placeholders, and other library sets a canon directory
-expects — is not built yet. Enforcement does not wait on it: a role requirement is
-real and checked the moment a card references it, whether or not `canon.cl.yaml` exists to
-explain it in prose.
+A directory may contain a file named `library.cl.yaml`. Codex Loom **excludes it from item
+loading** — it is never parsed as an item, never raises unknown-key errors on whatever it
+contains, and is copied byte-for-byte by `--snapshot` like any other file in the directory.
+Nothing currently *reads* it: the descriptive contract this filename is reserved for —
+documenting which roles, placeholders, and other library sets a directory expects — is not
+built yet. Enforcement does not wait on it: a role requirement is real and checked the
+moment a card references it, whether or not `library.cl.yaml` exists to explain it in prose.
 
 Until that manifest is built, the reservation exists so an author can write
-`canon.cl.yaml` by hand — for their own documentation, ahead of any tooling — without
+`library.cl.yaml` by hand — for their own documentation, ahead of any tooling — without
 breaking the project the moment it's added.
+
+**The reservation is not scoped to library directories**, despite the name. The item loader
+walks project item directories and library directories with the same function, so the
+basename is skipped in both. **The skip is silent** — no diagnostic — so a project item file
+that happens to be named `library.cl.yaml` disappears from the compile without comment.
+
+> **Renamed from `canon.cl.yaml` on 2026-09-01.** "Canon" was retired as the mechanism word
+> in Phase 7 (`structure.input.canon` became `structure.input.library`), and a reserved
+> filename the compiler matches by name is a mechanism rather than an instance. Nothing read
+> the file, so there is no compatibility shim: a leftover `canon.cl.yaml` now loads as an
+> ordinary item and reports as one, which is what makes the stale name visible.

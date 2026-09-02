@@ -271,9 +271,11 @@ Supported roots in item data: `{$body.X}`, `{$v.X}` (and the `var`/`vars`/`varia
 
 > **Dotted only.** Only dotted refs are field interpolation. Bare single-segment `{$X}` belongs to the pronoun/character-ref system (`{$she}`, `{$Aria}`) — so bare `{$id}` and bare `{$name}` are **template-only**; in item data use `{$name.full}`/`{$name.display}`. See [07-templates.md](07-templates.md) "Token Systems at a Glance".
 
-Cross-item body references (`{$OtherId.body.FieldName}`) are also supported and resolved in a second pass after all items for a branch are compiled (in `body`, `aid`, `render`, and `name`). See [Pronoun System](08-pronouns.md).
+Cross-item body references (`{$OtherId.body.FieldName}`) are also supported, resolved once for the whole branch after every item on it is resolved — before pronoun and role tokens, not after (in `body`, `aid`, `render`, and `name`). See [Pronoun System](08-pronouns.md).
 
-A `{$…}` token that no pass resolves and that survives into output triggers a `WARN: unresolved token {$x} in …`.
+> **Name the item, not a role.** Because this stage runs before role names are rewritten, `{$SomeRole.body.Field}` does not resolve — only the literal item id works here. See [Roles](13-roles.md#using-a-role-in-prose).
+
+A `{$…}` token that no pass resolves and that survives into output is `CL0430`, an **ERROR** — a leaked token means a pass failed and the failure is visible in the compiled card, so it fails the build rather than warning.
 
 ---
 

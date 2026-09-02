@@ -730,7 +730,11 @@ nonbinary. Roles are the missing half of something that was already in use.
 ### §9.2 Design
 
 **Anywhere an item id may appear in a `{$…}` token, a role name may appear instead** —
-`{$LI}`, `{$LI.he}`, `{$LI's}`, `{$LI.body.Tagline}`. `{$protagonist}` is not a special
+`{$LI}`, `{$LI.he}`, `{$LI's}`, `{$LI.body.Tagline}`. **`{$LI.body.X}` is the one form not
+currently reached**: `applyCrossItemRefs` runs before the role rewrite and understands only
+item ids, so the token survives to the output sweep and fails as `CL0430`. The gap is in
+the pass ordering, not in this design — see the dev-guide's Pronoun Resolution Passes.
+`{$protagonist}` is not a special
 mechanism; it is the built-in `protagonist` role, which already drives the "you"
 substitution. The general feature is *less* code than the special case, because the
 special case already existed.
@@ -778,8 +782,8 @@ the same reasoning a compile-time undeclared-role ERROR uses — and it is why a
 no unresolved tokens gets no `requiresRoles` key rather than an empty array.
 
 **Computed, not declared.** The manifest holds the enforceable fact; the
-descriptive contract — which roles and placeholders a canon set expects, in prose — is
-what `canon.cl.yaml` is reserved for. That file is excluded from item loading, copied
+descriptive contract — which roles and placeholders a library set expects, in prose — is
+what `library.cl.yaml` is reserved for. That file is excluded from item loading, copied
 byte-for-byte by `--snapshot`, and **not yet read by anything**; enforcement does not wait
 on it. A set whose own item content does not validate cleanly gets `CL0116` instead of a
 role list — an elimination result computed over content the compiler cannot load would
@@ -1186,8 +1190,13 @@ writes. It runs alone — it cannot be combined with a compile or a report mode.
 
 `migrateProjectFully` in `src/migrate/index.js` is the driver; the v3-format converters
 are `stripTemplateHeader` in `src/migrate/v3.js` (delete everything through the last
-`~~~`), `src/migrate/description.js` and `src/migrate/opening.js` (the two v3 file formats
-§7.1 counted, converted to `sections:`). Author-facing detail — what changes and the hand
+`~~~`), and one per v3 file format §7.1 counted, each converting to `sections:` —
+`src/migrate/description.js`, `src/migrate/opening.js`, and the pair
+`src/migrate/plot-essentials.js` (decides what each block becomes) and
+`plot-essentials-apply.js` (does the surgery). Plot Essentials needs the split because its
+conversion is not local: a v3 Plot Essentials file *resolves items*, so every block has to
+become a slot on the component plus a render target on the item it named, in a different
+file. Author-facing detail — what changes and the hand
 edits the review queue asks for — is `documentation/16-migrating-from-v3.md`.
 
 ### §14.3 Golden fixtures and the re-baselining protocol
@@ -1280,7 +1289,7 @@ hyphenated. Two import defs renaming to the same local id are a duplicate that
 
 ### §17.6 Templates following the canon set
 
-A `canon.cl.yaml` declaring per-set default templates — so a set that files age and gender
+A `library.cl.yaml` declaring per-set default templates — so a set that files age and gender
 under `appearance` ships the template that renders them — is **reserved, not yet built**.
 See §9.4 and `documentation/13-roles.md`.
 
@@ -1311,4 +1320,4 @@ covers it. Later work is a task queue, not a phase — there is no Phase 18.
 | 14 | Convention packs going live, built by shipping `wtg` as the first real pack | §8.2.2 |
 | 15 | Convention packs round two: the `WTG Time Config` rule, and the vocabulary to express it (`requireCard`, `over: body`, `pattern`, `keys`-on-`record`) | §8.2.2 |
 | 16 | The `duckieConv` authoring-conventions pack and the `meta:` channel it reads; the `budget` / `count` / `mutexHint` rule primitives | §8.2.2 |
-| 17 | Audit-driven refactor: `compile.js` decomposed 3,785→1,829 lines across seven modules; `resolver.js` / `tokens.js` deleted; `version: 4` validation; the `--migrate` duplicate-id bus fix. No output change | §3.2 |
+| 17 | Audit-driven refactor: `compile.js` decomposed 3,785→1,026 lines across twelve modules; `resolver.js` / `tokens.js` deleted; `version: 4` validation; the `--migrate` duplicate-id bus fix. No output change | §3.2 |

@@ -23,8 +23,7 @@ branches:
 ```
 
 `protagonist` is the built-in role, bound inside a branch's `roles:` block like any other
-role (see [Roles](13-roles.md)). There is no standalone `protagonist:` branch key — one
-is a `CL0201` unknown-key error.
+role (see [Roles](13-roles.md)).
 
 This produces four leaf outputs: `subject`, `researcher`, `tier2/alpha`, `tier2/beta`.
 
@@ -137,25 +136,49 @@ branches:
 
 The `apply:` list sets variants at this level; `branches:` descends for deeper dispatch.
 
-### Wildcard `*` — baseline for all branches
+### Wildcard `*` — baseline for every branch
 
-A `*` key applies to every branch that doesn't have an explicit match, before the explicit match is added on top.
+**A `*` key applies to *every* branch at that level, including ones with an explicit match.** It is a baseline, not a fallback: the wildcard is collected first, then any explicit match stacks on top of it.
 
 ```yaml
 branches:
-  '*': base            # apply "base" variant as baseline for all branches
-  felix: felix         # additionally apply "felix" for the felix branch
+  '*': base            # "base" applies to every branch, felix included
+  felix: felix         # felix gets [base, felix]; every other branch gets [base]
 ```
 
-Both `*` and a direct key can match at the same level — the wildcard is applied first, then the explicit match stacks on top.
+**A null wildcard does nothing.** `'*': ~` is skipped rather than excluding anything — the walker ignores a null `*` entirely, so every branch is still included with whatever else matched.
+
+That is deliberate. Read literally, `'*': ~` says *exclude this item from every branch*, which is never a thing anyone means to write — an item excluded everywhere may as well be deleted — and honoring it would silently empty an item out of a whole scenario. So the walker refuses the reading rather than acting on it. **`_` exists for what people actually mean here**, and predates v4.
+
+### Fallback `_` — only when nothing else matched
+
+**A `_` key applies only to branches with no explicit key at that level.** This is the fallback `*` is often mistaken for, and the two compose: `*` always applies, `_` adds on top only when no exact key matched.
+
+```yaml
+branches:
+  '*': base            # every branch
+  _: unnamed           # only branches with no explicit key
+  felix: felix         # felix gets [base, felix]; every other branch gets [base, unnamed]
+```
+
+**`_: ~` excludes every branch you did not name**, which is what makes "include in only one branch" expressible:
+
+```yaml
+branches:
+  subject: base        # the subject branch gets "base"
+  _: ~                 # every other branch: excluded
+```
 
 ### How dispatch walks nested branches
 
-For a leaf path `A/X`:
-1. At depth 0, check for `*` and `A` in the `branches:` spec → collect those variant names
-2. If `A`'s value is a mapping with `branches:`, descend into it for depth 1
-3. At depth 1, check for `*` and `X` → collect additional variant names
-4. All collected names are applied to the item in order
+For a leaf path `A/X`, at each depth the walker does the same four things in this order:
+
+1. **If the exact key maps to `~`, return immediately** — the item is excluded, and no wildcard or fallback is consulted.
+2. **Collect `*`**, if present and not null.
+3. **Collect the exact key**, stacking on top of the wildcard.
+4. **Collect `_` only if no exact key matched** — and if `_` is `~`, exclude here too.
+
+Then descend through any `branches:` sub-key on the values that matched, and repeat at depth 1 for `X`. All collected names are applied to the item in the order they were gathered.
 
 ---
 
@@ -174,8 +197,10 @@ branches:
 ```yaml
 branches:
   subject: base    # only the subject branch gets this item
-  '*': ~           # all other branches: excluded
+  _: ~             # all other branches: excluded
 ```
+
+Use `_`, not `'*'`, for this. A null wildcard is skipped rather than honored, so `'*': ~` leaves the item **included** in every branch — the opposite of what it reads as, and with no diagnostic.
 
 **Null excludes immediately** — when the dispatch walker encounters a null for the exact branch key, it returns `null` and the item is skipped entirely for that branch, with no further wildcard processing at that level.
 

@@ -52,13 +52,14 @@ the shared field table with `label: Background`, and the terse list names the sh
 terse list still cannot name a field with no declaration: a slot file's `fields:` block is
 ignored, so a condensed variant is declared once in the shared table.
 
-**The guard that enforces this is label membership, not byte identity.** Byte identity
-cannot check output that shortens on purpose. For every tier branch × leaf the compiler
-renders each card twice — terse list and full list — and asserts: every label the terse
-render emits also appears in the full render (the tier invents nothing); the labels it
-keeps are an in-order subsequence of the full render's (no reordering); and every kept
-label whose stanza body differs from the full render's is backed by a declared same-label
-substitution. Anything else is a tier-correctness failure.
+Stated as three rules, a terse list must: invent no label the full list does not have, keep
+the labels it does keep in their original order, and change a stanza's body only where a
+declared same-label substitution backs it.
+
+**Nothing checks this at compile time.** Codex Loom's own test suite holds a guard that
+compares a terse render against a full one, but it protects the compiler's tiering behavior,
+not your scenario — **a malformed terse list compiles clean and raises no diagnostic.**
+Check a new tier by reading the compiled output, or with `--leafReview`.
 
 ---
 

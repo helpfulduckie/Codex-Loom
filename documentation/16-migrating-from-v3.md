@@ -186,13 +186,21 @@ naming the slot it belongs in — is described in [Components](09-components.md)
 
 ## Migrating a v3 AI Instructions document
 
-**v3's AI Instructions carried document-level `branches:` and `variants:`; v4
-does not.** They were a second branch walker and a second delta vocabulary for
-what a section already does, and the two dispatches disagreed — `~` on a
-section excludes it, while `~` on a v3 AI Instructions document meant "apply no
-variants". Writing either at the document level now reports a misplaced-key
-ERROR pointing at the section surface, because the migration is exactly "move
-it down one level":
+**v3's AI Instructions carried document-level `branches:` and `variants:`, and
+neither survives with its v3 meaning.** They were a second branch walker and a
+second delta vocabulary for what a section already does, and the two dispatches
+disagreed — `~` on a section excludes it, while `~` on a v3 AI Instructions
+document meant "apply no variants".
+
+- **Document-level `variants:` is gone.** A component declares no variants of its
+  own; writing one reports a misplaced-key ERROR pointing at the section surface.
+- **Document-level `branches:` exists in v4 but means something different.** It is
+  a fan-out selector: the name is looked up in *each section's* own `variants:` and
+  applied wherever found, rather than selecting a document-level variant. See
+  [`branches:` on the whole component](09-components.md#branches-on-the-whole-component).
+
+Either way the migration is "move the logic down one level", because v3's
+document variants have no v4 counterpart to move to:
 
 | v3, at the document level | v4, on the section |
 |---|---|
@@ -237,5 +245,9 @@ section instead.
 
 **Branch exclusion works the same in v4 as it did in v3:** set a branch name to
 null (`~`) in the item's `branches:` dispatch map. There are no `only:` or
-`except:` keys — the wildcard-plus-null pattern replaces them. See
-[Branches & Variants](05-branches-and-variants.md).
+`except:` keys.
+
+To exclude every branch you did *not* name, use the fallback key — `_: ~`, not
+`'*': ~`. A null wildcard is skipped rather than honored, so `'*': ~` leaves the
+item included everywhere. See
+[Branches & Variants](05-branches-and-variants.md#fallback-_--only-when-nothing-else-matched).

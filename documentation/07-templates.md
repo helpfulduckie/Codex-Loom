@@ -74,7 +74,7 @@ Templates receive an item context with these top-level keys:
 | `notes` | `{$notes}`, or `{$notes.key}` when it holds a mapping |
 | `v` | `{$v.key}` — also accessible as `{$var.key}`, `{$vars.key}`, `{$variable.key}`, `{$variables.key}` |
 
-Body fields are matched case-insensitively. A field ref that resolves to nothing renders as empty string. Dotted field refs (`{$body.X}`, `{$v.X}`, `{$aid.X}`, `{$render.X}`, `{$name.X}`) also resolve inside item `aid`/`render`/`name` fields, not just `body` — bare single-segment `{$X}` stays in the pronoun/character-ref namespace. A `{$…}` token that survives unresolved into final output triggers `WARN: unresolved token {$x} in …` (a literal field-ref miss in a *template* still renders empty and is not flagged).
+Body fields are matched case-insensitively. A field ref that resolves to nothing renders as empty string. Dotted field refs (`{$body.X}`, `{$v.X}`, `{$aid.X}`, `{$render.X}`, `{$name.X}`) also resolve inside item `aid`/`render`/`name` fields, not just `body` — bare single-segment `{$X}` stays in the pronoun/character-ref namespace. A `{$…}` token that survives unresolved into final output is `CL0430`, an **ERROR** that fails the build (a literal field-ref miss in a *template* still renders empty and is not flagged).
 
 ---
 
@@ -89,7 +89,7 @@ Body fields are matched case-insensitively. A field ref that resolves to nothing
 {$v.affiliation}                  item variable (also: {$var.affiliation}, {$vars.affiliation}, etc.)
 ```
 
-When a field holds an array or mapping and you use it directly with `{$body.Field}`, it renders using the same logic as `{list(...)}`: a single element renders inline (`- value`), while two or more elements render as a bullet list preceded by a newline. Use `{join(...)}`, `{and(...)}`, `{keys(...)}`, or `{inline(...)}` when you need a different format.
+When a field holds an array or mapping and you use it directly with `{$body.Field}`, it renders using the same logic as `{list(...)}`: a single element renders as the bare value, with no bullet and no leading newline, while two or more elements render as a bullet list preceded by a newline. Use `{join(...)}`, `{and(...)}`, `{keys(...)}`, or `{inline(...)}` when you need a different format.
 
 ---
 
@@ -226,7 +226,7 @@ The pass runs after cross-item refs are resolved (`{$Id.body.Field}` has already
 | `{$she}`, `{$Id}`, pronoun tokens | ✗ (left for the pronoun pass) |
 | `{if ...}` conditionals | ✗ (template-only) |
 
-Render function errors in body fields emit a warning and leave the original token intact.
+A render function that fails to evaluate inside a body field is `CL0413`, an **ERROR**, and the original token is left in the field text — so it also reaches the output sweep as a leaked artifact.
 
 ---
 
@@ -247,7 +247,7 @@ With optional else:
 
 **Falsy values:** a field is falsy if it is missing, an empty string, the string `"false"`, the string `"0"`, an empty array, or an empty mapping. Everything else is truthy.
 
-Conditionals are processed innermost-first and support nesting.
+Conditionals nest to any depth. The template is parsed into a tree, so each `{if}` is matched to its own `{/if}` by the parser rather than by repeated text substitution; an `{if}` whose closer never arrives is `CL0415`, and the unmatched tag renders as literal text.
 
 ---
 
@@ -270,7 +270,9 @@ The wrapper applies to the body only. The envelope is written outside it, so a w
 | `square` | `[\ncontent\n]` |
 | `curly` | `{\ncontent\n}` |
 
-If no `{wrapper}` block is used and the item has a non-`none` wrapper, the wrapper is applied to the entire rendered output automatically (unless it already starts with the corresponding bracket).
+If no `{wrapper}` block is used and the item has a non-`none` wrapper, the wrapper is applied to the entire rendered output automatically.
+
+**There is no already-wrapped guard.** A template that writes its own `[` … `]` *and* an item carrying `wrapper: square` produce a doubly-wrapped body — `[\n[\n…\n]\n]` — with no diagnostic. Either write the brackets in the template and leave `render.wrapper` at `none`, or use a `{wrapper}` block and let the item decide.
 
 ---
 

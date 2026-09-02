@@ -783,3 +783,13 @@ for the branch compiles, checking the branch's compiled items first and then the
 item's canonical base. An item `~`-excluded from this branch is still reachable through that
 canonical fallback unless it has no canon entry at all; a genuine miss leaves the token
 as-is and raises `CL0330`.
+
+**`CL0330` covers a missing *item*, not a missing *field*.** If the item resolves but the
+dotted field path does not, nothing is raised there — the token is left as written and
+surfaces later as `CL0430` at the output sweep, with no diagnostic naming the field. A
+`CL0430` on a `{$Id.body.Field}` token that raised no `CL0330` means the item was found and
+the field path was wrong.
+
+**The reference must name an item id, not a role.** This stage runs before role names are
+rewritten, so `{$SomeRole.body.Field}` resolves nowhere and reaches `CL0430` too. Every
+other role form is unaffected — see [Roles](13-roles.md#using-a-role-in-prose).

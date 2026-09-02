@@ -254,4 +254,4 @@ branches:
   ...
 ```
 
-Item files use the `.cl.yaml` extension by convention — `characters.cl.yaml`, `items.cl.yaml`. A library directory's `canon.cl.yaml` is reserved and excluded from item loading; it is never parsed as an item.
+Item files use the `.cl.yaml` extension by convention — `characters.cl.yaml`, `items.cl.yaml`. The basename `library.cl.yaml` is reserved and excluded from item loading in any directory the loader walks, project or library; it is never parsed as an item.

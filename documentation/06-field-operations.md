@@ -29,18 +29,19 @@ body:
 
 ### Append — `+{value}`
 
-Appends to a field by converting the existing value into a two-element array. The separator between elements is a template concern — use `{join("; ", ...)}` or `{$body.Field}` (which joins arrays with `"; "` by default) to control formatting.
+Appends a value to a field. **What that produces depends on what the field already holds:**
 
-- If the field is **empty or absent**, the value is set as a plain scalar (no array created)
-- If the field is a **non-empty string or block scalar**, the result is `[existing, value]`
-- If the field is already an **array**, the value is appended as a new element: `[...existing, value]`
+- **Empty or absent** — the value is set as a plain scalar; no array is created
+- **A non-empty string or block scalar** — the result is `[existing, value]`
+- **Already an array** — the value is appended as a new element: `[...existing, value]`
+- **A mapping** — the mapping is flattened to its values, and the value is appended to that list; the keys are lost. See [Subfield Operations](#subfield-operations)
+
+**Appending can change a field's shape, and that changes how it renders.** A scalar becomes a list, and a bare `{$body.Field}` does not join a list — see [Templates & Partials](07-templates.md#variable-interpolation) for what each form emits and how to get a single line instead.
 
 ```yaml
 body:
   Tagline: +{retired}
   # "count of monwynd, shadow mage" → ["count of monwynd, shadow mage", "retired"]
-  # rendered via {$body.Tagline}  → "count of monwynd, shadow mage; retired"
-  # rendered via {join(", ", $body.Tagline)} → "count of monwynd, shadow mage, retired"
 
   Background: +{Recently returned from exile.}
   # "long backstory" → ["long backstory", "Recently returned from exile."]
@@ -138,6 +139,17 @@ body:
     hair: -{in a bun}     # remove substring in this subfield only
     other:                # remove this subfield only (empty value)
 ```
+
+**Aim a string op at the mapping itself and it collapses into a list.** `hair: -{…}` targets a subfield and is what you want; `Physical Traits: -{…}`, with the op one level up, flattens the whole mapping to its values, discards every key, and leaves an array behind:
+
+```yaml
+body:
+  Physical Traits: -{grey}
+  # {hair: platinum blond, eyes: grey, height: tall}
+  #   → ["platinum blond", "tall"]      # keys gone, and "eyes" removed as a whole element
+```
+
+There is no diagnostic for this. Operations against a mapping belong on its subfields, one level in.
 
 You can mix operations and replacements within the same mapping block:
 

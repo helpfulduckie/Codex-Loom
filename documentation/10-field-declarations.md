@@ -96,7 +96,10 @@ templates:
   Character: [core, magic, pantheon, secret]
 ```
 
-**Groups do not nest**, matching item `include:`. A group named inside a group expands one level and no further.
+**Groups do not nest**, matching item `include:`. The two positions take different things, and the checker enforces it:
+
+- **A group's members must be declared *fields*.** Naming another group there is `CL0424`, a WARN — it is not expanded, and it contributes nothing to the output.
+- **A template's entries may name fields *or* groups.** This is the only position a group name resolves in.
 
 **A `templates:` key is normally an `aid.type` name.** A free-standing name is reachable through `render.template` — see [Context Tiering](15-context-tiering.md#pattern-2--one-card-stays-full-on-a-tiered-branch).
 
@@ -168,6 +171,10 @@ branches:
 What merges down the branch chain is the type-to-template map the files *produce*, key-wise — no new merge rule, the same one-level overwrite `components:` uses. A branch inherits the full list for every type its slot file does not mention.
 
 A value may also be a list of files, merged left to right.
+
+**A slot file is named by its filename, and located by searching `structure.input.templates`.** That is the same search the compiler uses for `.template` and `.partial` files, with the same rule when two directories hold the same filename: the later directory wins. Naming a file no directory on that list holds is `CL0120`, and the role is skipped.
+
+That path is shared, so **put a project's slot files under its own templates directory**, not in a shared library one. A `terse.cl.yaml` sitting in a library directory is on the search path of every project that lists it, and each of them picks it up by name.
 
 ### The three ladders
 

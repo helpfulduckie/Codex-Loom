@@ -118,11 +118,13 @@ bus, so one compile tells you all four cards that need a binding.
 
 ---
 
-## `canon.cl.yaml` — Reserved, Not Yet Read
+## `library.cl.yaml` — Reserved, Not Yet Read
 
-A library directory may contain a file named `canon.cl.yaml`. Codex Loom **excludes it from
+A directory may contain a file named `library.cl.yaml`. Codex Loom **excludes it from
 item loading** — never parsed as an item, never raises unknown-key errors, copied
-byte-for-byte by `--snapshot`.
+byte-for-byte by `--snapshot`. The skip applies to project item directories as well as
+library ones, and it is silent. (Renamed from `canon.cl.yaml` on 2026-09-01; no shim, so a
+file under the old name now loads as an ordinary item.)
 
 **Nothing currently reads it.** The reservation exists so an author can write one by hand
 for their own documentation — which roles and placeholders a library expects — without

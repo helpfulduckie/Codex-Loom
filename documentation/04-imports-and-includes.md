@@ -206,9 +206,11 @@ To exclude an import from specific branches, use null (`~`) in the `branches:` d
 - import: Guard
   branches:
     garrison: base  # only compiled for the garrison branch
-    '*': ~          # excluded from all other branches
+    _: ~            # excluded from all other branches
   variants:
     base: {}
 ```
+
+**Use `_`, not `'*'`, to exclude the branches you did not name.** A null wildcard is skipped rather than honored, so `'*': ~` leaves the import **included** everywhere — silently, and with no diagnostic. See [Fallback `_`](05-branches-and-variants.md#fallback-_--only-when-nothing-else-matched).
 
 See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) for the full `branches:` dispatch syntax including wildcards, arrays, and nested dispatch.

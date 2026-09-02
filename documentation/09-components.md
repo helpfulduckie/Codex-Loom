@@ -60,7 +60,14 @@ branches:
       opening: ./openings/researcher.md
 ```
 
-**`opening:` inherits down the tree**, like every other component: a branch that declares none uses the nearest ancestor's. Only leaves receive an `Opening.md` from it — an interior node's declaration flows down rather than being written where it was declared.
+**A branch that declares no `opening:` uses its nearest ancestor's.** That is what a leaf *resolves*, and it is what decides the text a player sees.
+
+**Where the file is written is a separate question, with a different answer.** Velvet Lattice inherits components down the tree by itself, so the compiler does not copy one to every leaf when it does not have to:
+
+- **Identical at every leaf, redeclared by no branch, in a project with more than one leaf** — written once to `{output}/Components/Opening.md`, and VL inherits it down.
+- **Anything else** — written into each leaf's own `Components/` folder.
+
+The lift is to the output root or not at all; components have no intermediate-node placement. (Story cards do — they are placed on a computed frontier, which is a different mechanism. See [design-spec §7.3a](design-spec.md).) A single-leaf project always writes per leaf, because its one leaf already *is* the root.
 
 **A leaf with an adventure description and no opening is `CL0616`.** Velvet Lattice reads a node's prompt as its Opening or, failing that, its description, so the pairing produces the blurb as the first scene. See [Description](#description).
 
@@ -88,9 +95,12 @@ Declared on a leaf, `branchFraming:` is ignored with a warning: a leaf has no ch
 
 | Declaration | Output path |
 |---|---|
-| Root `components.opening` | `{output}/Components/Opening.md` (an unbranched project is its own leaf) |
+| Root `components.opening`, resolving the same on every leaf | `{output}/Components/Opening.md`, written once |
+| Root `components.opening`, differing by leaf | `{output}/Branches/…/leaf/Components/Opening.md`, one per leaf |
 | Leaf branch `components.opening` | `{output}/Branches/…/leaf/Components/Opening.md` |
 | Branch-point `components.branchFraming` | `{output}/Branches/…/node/Components/Opening.md` |
+
+A root declaration can differ per leaf without being redeclared — a `{%variable}` or a `{$role}` that resolves differently down each branch is enough.
 
 Both keys write the same filename at different levels, because Velvet Lattice reads a node's prompt from `Components/Opening.md` wherever that node sits. `description:` and `adventureDescription:` share `Description.md` the same way.
 
@@ -431,7 +441,9 @@ sections:
           tone: Close, unsparing observation.    # edits one line; "pov" is untouched
 ```
 
-**There is no document-level `branches:` or `variants:`.** Branch dispatch and variant selection are per section, as shown above; writing either at the document level reports a misplaced-key ERROR pointing at the section surface.
+**There is no document-level `variants:`.** A component declares no variants of its own, so writing one at the document level reports a misplaced-key ERROR pointing at the section surface.
+
+**Document-level `branches:` is supported, and it is a fan-out selector** — it names every section the document holds, applying the variant wherever a section defines it. See [`branches:` on the whole component](#branches-on-the-whole-component) above; everything there applies to AI Instructions unchanged.
 
 ### Swappable alternates — `render.storyCards`
 

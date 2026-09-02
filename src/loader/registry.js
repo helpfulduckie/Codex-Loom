@@ -102,10 +102,11 @@ function loadItemsFromDir(dirs, options = {}) {
 
   for (const dir of dirList) {
     for (const file of findFiles(dir, YAML_SUFFIXES)) {
-      // `canon.cl.yaml` is the reserved per-canon-set manifest (§9.4.2) — excluded from
-      // item loading (Decision 3, Phase 8) rather than parsed, which is deferred past
+      // `library.cl.yaml` is the reserved per-library-set manifest (§9.4.2) — excluded
+      // from item loading (Decision 3, Phase 8) rather than parsed, which is deferred past
       // Phase 8. Skipped by basename before the file is even read, same as the
-      // component-shape skip below is silent rather than warned.
+      // component-shape skip below is silent rather than warned. This walk serves project
+      // item directories as well as library ones, so the skip applies to both.
       if (RESERVED_LIBRARY_BASENAMES.includes(path.basename(file).toLowerCase())) continue;
 
       const { value: data, sourceMap } = loadYamlDocument(file);

@@ -17,6 +17,7 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/compileState.js` | The mutable state of one `compileRun`, grouped into the clusters the decomposed stages pass around |
 | `src/config/load.js` | Loads and resolves `compile.cl.yaml`: variables, paths, canon names |
 | `src/config/schema.js` | The `compile.cl.yaml` key surface, validated by `src/schema.js` |
+| `src/snapshot.js` | `--snapshot`: the library freeze (copy + hash + manifest write) and the compile-time drift notice (§11) |
 | `src/loader/preparse.js` | Rescues leading `{$…}`/`{%…}` tokens YAML would swallow (§4.1) |
 | `src/loader/yaml.js` | YAML parsing with a source map, so diagnostics carry positions |
 | `src/loader/registry.js` | Item loading, `ItemRegistry`, canon merge, overlays, includes |
@@ -33,8 +34,9 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/model/pronouns.js` | Pronoun and verb conjugation passes; cross-item reference resolution |
 | `src/model/component.js` | Component documents: sections, slots, section variants, branch gating (§7.2) |
 | `src/util.js` | `{%variable}` expansion (`resolveVariables` — the single expander, §5.1); file enumeration, YAML loading, deep clone, case-insensitive object utilities |
-| `src/template.js` | Template rendering engine; field interpolation |
-| `src/render/parse.js`, `src/render/eval.js` | Tokenize/parse of render-function calls, and evaluation of the parsed program |
+| `src/template.js` | The render entry point: `{%}` expansion, `{include}` splicing, whitespace normalization, field interpolation |
+| `src/templateResolve.js` | The template-selection ladders (§13.4): `templateFor` per rendering role, the branch-merged type→template map, the load-time `notesTemplate` check |
+| `src/render/parse.js`, `src/render/eval.js` | The template lexer and parser (the whole tag grammar, not just render functions), and the AST evaluator |
 | `src/render/field-list.js`, `src/render/field-audit.js` | Declared-field-list rendering, and the unread-field audit (`CL0426`–`CL0428`) |
 | `src/crossItem.js` | Cross-item render-function resolution: dependency graph, one topological pass, cycle-by-name (§13) |
 | `src/emit/vl.js` | The Velvet Lattice format — the only place that knows the envelope (§8) |
@@ -58,7 +60,9 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/schematables.js` | The generated schema reference: field/label tables and type membership, derived from `fields.cl.yaml` (§13.8) |
 | `src/seedmap.js`, `src/bodysize.js`, `src/lint.js`, `src/lint/packs.js` | Post-compile report modes and convention-pack execution, read from the written tree |
 | `src/migrate/v3.js`, `src/migrate/index.js` | One-time v3 → v4 conversion and its file-walk driver (§14.2) |
-| `src/migrate/description.js`, `src/migrate/opening.js` | The two v3 file formats §7.1 counted, converted to `sections:` |
+| `src/migrate/description.js`, `src/migrate/opening.js` | Two of the v3 file formats §7.1 counted, converted to `sections:` |
+| `src/migrate/plot-essentials.js` | The third: decides what each v3 Plot Essentials block becomes (slot vs. render target), and touches nothing |
+| `src/migrate/plot-essentials-apply.js` | Applies that decision — rewrites the component as `sections:`, adds render targets, moves inline blocks out into item files |
 
 `model/` is pure by contract (§3.3): no `fs`, no `console`. Warnings go to a caller-supplied `onWarn`, and failed lookups come back described rather than thrown, so the caller decides what reaches a terminal. A test enforces both the purity and the roster.
 
@@ -214,17 +218,27 @@ The `'__DELETE__'` sentinel is propagated up the call chain so callers can delet
 
 ## Template Pipeline
 
-`render(template, data, partials)` in `template.js` applies 7 steps in order:
+**Phase 9 replaced the regex-and-sentinel engine with a lexer, a parser and a tree walk.** Through Phase 8 this was a sequence of text passes over the whole document — escape to sentinels, expand partials, resolve conditionals by repeating a regex until the string stopped changing, restore sentinels. That engine is gone. `render()` now tokenizes once and evaluates an AST, which is what lets a block tag nest properly and lets every diagnostic carry a line.
 
-1. **Escape literals** — `{{` and `}}` replaced with internal sentinel strings to prevent them from being parsed as expressions
-2. **Expand partials** — `{include PartialName}` expanded depth-first, with circular-include detection via a stack
-3. **Process conditionals** — `{if ...}...{else}...{/if}` resolved innermost-first (repeated until stable)
-4. **Process wrapper blocks** — `{wrapper}...{/wrapper}` replaced with wrapped content per `data.render.wrapper`
-5. **Process inline expressions** — `{$field}`, `{join(...)}`, `{list(...)}`, render functions
-6. **Restore sentinels** — sentinel strings replaced back with literal `{` and `}`
-7. **Normalize whitespace** — `{preserve}...{/preserve}` blocks extracted; tabs stripped, blank lines removed, spaces deduplicated, document trimmed; preserved blocks restored
+`render(template, data, partials, variables, options)` in `template.js` runs five stages:
 
-Post-render: if `data.render.wrapper` is non-`none` and no `{wrapper}` block was used, the entire output is wrapped automatically (unless it already starts with the corresponding bracket).
+1. **Expand `{%variable}` tokens** — `resolveVariables` over the template source, before anything else looks at it (§5.1)
+2. **Splice in partials** — `expandIncludes` expands `{include Name}` depth-first, with circular-include detection via a stack
+3. **Tokenize** — `tokenize()` (`render/parse.js`) walks the source once into a flat token stream, each token carrying a 1-based `{line, column, length}` span
+4. **Parse** — `parse()` builds a document tree of `Text`, `FieldRef`, `FuncCall`, `If`, `Wrapper` and `Preserve` nodes
+5. **Evaluate** — `renderProgram()` (`render/eval.js`) walks that tree against `data`, then `normalizeWhitespace` strips tabs, drops blank lines, deduplicates spaces and trims
+
+**`{include}` is spliced before tokenization, and that is deliberate.** A real template opens a block in one partial and closes it in another — the golden corpus does exactly this for `{wrapper}`, via `cardHeader` / `cardFooter` — so an `Include` node scoped to its own parse tree could not represent templates the v3 engine already rendered correctly. Expanding first and tokenizing the assembled string once is also what makes `{{` / `}}` escapes inside partials fall out for free.
+
+**Escaping is a lexer concern, not a find-and-restore pass.** `{{` and `}}` become `ESC_LBRACE` / `ESC_RBRACE` tokens that parse straight to literal `{` and `}`. A lone `{` with no `}` before the next `{`, or an empty `{}`, is not a tag and stays in the text buffer. Tags never nest inside one brace pair — `[^{}]+` was the v3 regex's rule and remains the lexer's, because nothing in this language needs a literal brace inside a tag body.
+
+**Block tags nest for real, via the parser's stack.** `parseIf` / `parseWrapper` / `parsePreserve` match their own closer by walking the token stream, so the repeat-to-fixpoint loop the old engine needed is gone. A block whose closer never arrives is not swallowed: the parser backtracks to just past the opening tag, emits that tag as literal text (matching the v3 fallback, where an unmatched regex left the tag untouched), and reports `CL0415` once per opening token even when an enclosing block also fails and re-walks it.
+
+**Template diagnostics carry spans** — `CL0413` a malformed render-function call, `CL0414` an unknown function name, `CL0415` an unclosed block. `parse()` and the evaluator both take a `report(code, message, span)` callback rather than a bus reference, so neither module has to know what a `Diagnostics` instance is.
+
+**One sentinel survives, for `{preserve}` only.** `renderPreserve` evaluates the block's children and hands `normalizeWhitespace` a `\x00PRESERVE_n\x00` marker plus an out-of-band array, rather than re-emitting the literal tags for a later regex to re-discover. Re-emitting was tried and rejected: if the evaluated content itself contains the text `{/preserve}` — reachable from data, via `{preserve}{$body.text}{/preserve}` — the regex closes on that instead of the source's real closing tag. Finding the boundary in the parsed source is what makes the fix real. `normalizeWhitespace` still carries its own regex path for callers that pass no `preserved` array.
+
+**Post-render:** if `data.render.wrapper` is non-`none` and no `{wrapper}` block fired, the whole output is wrapped automatically. `ctx.flags.wrapperUsed` is set on a *shared* object rather than a plain context property, so a `{wrapper}` inside a taken `{if}` branch or inside an included partial is still seen through the shallow context copy.
 
 `resolveField(ref, data)` is the core field lookup: splits the ref on `.`, walks the data object case-insensitively at each level. Returns arrays and objects as-is (for render functions), scalars as trimmed strings, missing/empty as `null`.
 
@@ -250,20 +264,23 @@ Three rules there are justified by what `velvet_lattice/loader.py` actually does
 
 ## Pronoun Resolution Passes
 
-`applyPronounPasses(item, registry, branchProtagonist)` in `model/pronouns.js` applies two passes per item:
+**Two separate stages run in `renderBranchItems`, and cross-item refs go first.** `applyCrossItemRefs(resolvedItems, registry, onWarn, resolvedById)` runs **once** over all of a branch's resolved items, before the per-item loop starts. `applyPronounPasses(item, registry, branchProtagonist, resolvedById, roles, onWarn, onRoleUsed)` then runs **per item** inside that loop, and is a single `applyTokenPass` walk over `walkItemTextFields` — not two passes. Several comments in `model/pronouns.js` still call cross-item resolution "the second pass"; they predate the current ordering and are stale.
 
-**Pass 1 — `applyTokenPass`** processes the combined regex `/{(\$[^{}]+)\}|\[(s|es|is|was|has)\]/g` left-to-right:
+**Stage 1 — `applyCrossItemRefs`** replaces `{$Id.body.FieldPath}` by looking up the resolved item for `Id` and reading its body field. It needs every item resolved simultaneously, which is why it is hoisted above the loop. Like the other `{$…}` walkers it visits `body`/`aid`/`render`/`name` via `walkItemTextFields`; the cross-item *source* path is still `.body.`-only. It understands item ids and nothing else — see the ordering gap below.
+
+**Stage 2 — `applyTokenPass`** processes the combined regex `/{(\$[^{}]+)\}|\[(s|es|is|was|has)\]/g` left-to-right. A role name is rewritten to its bound item id first, before any other test: the leading identifier is split off (`{$LI}`, `{$LI's}`, `{$LI.he}` and `{$LI.body.X}` share one), passed through `resolveRole`, and substituted, so everything downstream reads an ordinary card reference (§9.3). Then:
 
 - `{$she}` / `{$her~}` etc. (unscoped, no dot) → resolve against item's own `pronouns:` field. Does **not** set the conjugation scope.
 - `{$Id}` (registry ID, no dot) → "you" if protagonist, else display name. Sets scope to Id's pronoun set.
 - `{$Id.pronoun}` (registry ID + pronoun token) → resolve pronoun against Id's effective pronoun set. Sets scope to Id's pronoun set.
 - `{$Id.full}` / `{$Id.display}` → full or display name. Does not set scope.
-- `{$Id.body.Field}` (registry ID + body path) → left as-is for Pass 2.
+- `{$Id.body.Field}` (registry ID + body path) → re-emitted as `{$<id>.body.Field}`, rebuilt from the role-rewritten name rather than the original text.
 - `[s]` / `[es]` / `[is]` / `[was]` / `[has]` → conjugate using the current scope (or item's own pronouns if no scope set).
-
-**Pass 2 — `applyCrossItemRefs`** is run once after **all items for a branch are resolved** (before `applyPronounPasses` is called individually per item — actually cross-item refs are resolved first in Phase B). It replaces `{$Id.body.FieldPath}` patterns by looking up the resolved item for `Id` and reading its body field. Like the other `{$…}` passes it walks `body`/`aid`/`render`/`name` (via `walkItemTextFields`); the cross-item source path itself is still `.body.`-only.
+- Anything else, when the branch is role-aware (`roles` non-null) → `CL0540`, naming both readings.
 
 Scope tracking via `currentScope` is local to each string processed by `applyTokenPass`, reset for each call.
+
+**Known ordering gap: `{$Role.body.Field}` does not resolve.** Because stage 1 runs before the role rewrite in stage 2 and understands only item ids, a cross-item field reference reached *through a role* is left behind: stage 1 skips it (the leading name is not an id), stage 2 rewrites the role and re-emits the token expecting a later pass that no longer exists, and the survivor is caught by the output sweep as `CL0430`. The plain-id form `{$Id.body.Field}` is unaffected. This contradicts §9.2, which lists `{$LI.body.Tagline}` as supported — the spec states the intent and the code has not caught up. It fails loudly rather than silently, and no project in the corpus writes the shape.
 
 ---
 
@@ -275,7 +292,7 @@ Scope tracking via `currentScope` is local to each string processed by `applyTok
 
 **Surface:** `processFieldInterpolation(value, context)` matches dotted refs rooted at `body`, `v` (+ aliases), `aid`, `render`, or `name`, and resolves them via `resolveField`. The **required dot** is deliberate: bare single-segment `{$X}` (pronoun tokens like `{$she}`, character refs like `{$Id}`) is left for the pronoun pass. This ordering matters — interpolating `{$body.year}` into another field must happen before pronoun resolution so the interpolated content can itself contain pronoun tokens.
 
-**Failure visibility:** `warnUnresolvedFieldTokens(text, label)` (`util.js`) scans final rendered items and component outputs for any surviving `{$…}` and warns once per distinct token (sibling of the `{%}` `warnUnexpandedVariables` sweep). Template field-ref *misses* resolve to empty at render time and are not flagged; only verbatim survivors are.
+**Failure visibility:** `checkUnresolvedFieldTokens(text, label, sink)` (`util.js`) scans final rendered items and component outputs for any surviving `{$…}` and reports once per distinct token. It has two siblings built on the same `reportPattern` helper and called at the same sites: `checkUnexpandedVariables` for surviving `{%…}`, and `checkMechanicalArtifacts` for leaked engine text. All three take a diagnostics sink rather than warning directly, and all three mask fenced regions first so a code block in a body is not scanned. Template field-ref *misses* resolve to empty at render time and are not flagged; only verbatim survivors are.
 
 ---
 
@@ -311,7 +328,7 @@ Call sites are thin wrappers: `config.expandPathTokens` (config paths), `compile
 
 Coverage notes:
 - `{%}` is expanded in item bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and config paths. In `include:`/`import:` paths it uses **root** `config.variables` only, because `resolveIncludes` runs once before branch enumeration — branch-merged variables do not exist yet.
-- The `{$…}` field-reference family (`{$v.field}`, `{$Id.body.field}`) is a separate system (field interpolation + pronoun passes) and is **not** part of `resolveVariables`. It covers `body`/`aid`/`render`/`name` via `walkItemTextFields`, accepts dotted field refs in item data, and warns via `warnUnresolvedFieldTokens` on any token that survives to output; collapsing its four resolvers into one dispatcher is still deferred. See `07-templates.md` "Token Systems at a Glance".
+- The `{$…}` field-reference family (`{$v.field}`, `{$Id.body.field}`) is a separate system (field interpolation + pronoun passes) and is **not** part of `resolveVariables`. It covers `body`/`aid`/`render`/`name` via `walkItemTextFields`, accepts dotted field refs in item data, and reports via `checkUnresolvedFieldTokens` on any token that survives to output; collapsing its four resolvers into one dispatcher is still deferred. See `07-templates.md` "Token Systems at a Glance".
 
 Canon path resolution no longer needs a bespoke two-pass. v3 resolved plain-path canon entries first to build a lookup table, then resolved entries referencing sibling canon names against it. Now that canon names are ordinary variables (§6.1) and variables resolve against each other by topological sort (§6.2), a canon entry naming a sibling is just a variable naming a variable, and `expandPathTokens` handles it like any other. Unresolved tokens pass through unchanged, so the standard missing-path warning fires with the unexpanded token visible in the path string.
 

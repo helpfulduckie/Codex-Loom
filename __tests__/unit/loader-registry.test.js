@@ -54,11 +54,11 @@ describe('file discovery across every accepted suffix (§4.6)', () => {
     expect(loadItemsFromDir([path.join(tmpDir, 'nope')])).toEqual([]);
   });
 
-  test('canon.cl.yaml is excluded from item loading (§9.4.2, Decision 3, Phase 8)', () => {
+  test('library.cl.yaml is excluded from item loading (§9.4.2, Decision 3, Phase 8)', () => {
     // Written by hand, ahead of any tooling — a manifest opening with a string `name:`
     // fails the component-shape skip and would otherwise register as a phantom item and
     // raise unknown-key errors on its own `roles:`/`placeholders:`/`requires:` keys.
-    write('Esudia/canon.cl.yaml', 'name: Esudia\ndescription: Esudia canon set.\nroles:\n  LI:\n    description: x\n');
+    write('Esudia/library.cl.yaml', 'name: Esudia\ndescription: Esudia library set.\nroles:\n  LI:\n    description: x\n');
     write('Esudia/Malcolm.cl.yaml', 'id: Malcolm\nname: Malcolm\n');
     const { items, diagnostics } = loadWithDiagnostics();
     expect(items.map((i) => i.id)).toEqual(['Malcolm']);
@@ -66,8 +66,16 @@ describe('file discovery across every accepted suffix (§4.6)', () => {
   });
 
   test('the exclusion is case-insensitive on the basename', () => {
-    write('Esudia/Canon.CL.YAML', 'name: Esudia\nroles:\n  LI: {}\n');
+    write('Esudia/Library.CL.YAML', 'name: Esudia\nroles:\n  LI: {}\n');
     expect(loadItemsFromDir([tmpDir])).toEqual([]);
+  });
+
+  test('the old canon.cl.yaml name is no longer reserved', () => {
+    // The rename ships no compatibility shim (see RESERVED_LIBRARY_BASENAMES): a leftover
+    // file under the old name loads as an ordinary item, which is what makes the stale
+    // name visible rather than silently honored.
+    write('Esudia/canon.cl.yaml', 'id: Stale\nname: Stale\n');
+    expect(loadItemsFromDir([tmpDir]).map((i) => i.id)).toEqual(['Stale']);
   });
 });
 

@@ -134,14 +134,21 @@ When Aness is an NPC with `pronouns: female` (singular):
 
 ## Cross-Item Field References
 
-After all items for a branch are compiled, a second pass resolves `{$Id.body.FieldName}` references:
+**Cross-item references get their own stage, and it runs before every token above.** It happens once per branch rather than once per item, because it needs the branch's whole cast resolved at the same time.
 
 ```
 {$Mentor.body.Tagline}       → resolves Tagline from the item with id "Mentor"
 {$Setting.body.Era}          → resolves Era from the Setting item
 ```
 
-These are left as-is during the first pass and resolved in a second pass once all items are available. The lookup checks the branch's compiled items first; if the referenced item was excluded from this branch (via null dispatch), it falls back to the **canonical base item** in the registry. If the item is not found anywhere or the field doesn't exist, a warning is emitted and the token is left as-is.
+The lookup checks the branch's resolved items first. If the referenced item was excluded from this branch by a null dispatch, it falls back to **the item as the registry holds it** — so a reference to an item this branch dropped still reads that item's base text rather than failing.
+
+The two failure modes differ, which matters when you are hunting one:
+
+- **The item is not found anywhere** — `CL0330`, a WARN, and the token is left as written.
+- **The item resolves but the field path does not** — silent. The token is left as written and surfaces later as `CL0430` at the output sweep, with nothing naming the missing field.
+
+> **This stage runs before roles are rewritten, so it understands item ids only.** `{$SomeRole.body.Field}` does not resolve — name the item directly. Every other role form works normally; see [Roles](13-roles.md#using-a-role-in-prose).
 
 ---
 

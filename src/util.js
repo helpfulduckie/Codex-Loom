@@ -30,12 +30,19 @@ const CONFIG_BASENAMES = Object.freeze([
 ]);
 
 /**
- * Reserved filenames within a library directory — content the loader must not treat as an
- * item even though it sits beside items (§9.4.2). `canon.cl.yaml` is the per-canon-set
- * manifest; excluded from item loading (Decision 3, Phase 8) rather than parsed, since
- * parsing it is deferred past Phase 8.
+ * Reserved filenames the loader must not treat as an item even though they sit beside
+ * items (§9.4.2). `library.cl.yaml` is the per-library-set manifest; excluded from item
+ * loading (Decision 3, Phase 8) rather than parsed, since parsing it is deferred past
+ * Phase 8.
+ *
+ * Named for the library sets it describes, but the skip is not scoped to them: this list
+ * is consulted wherever `loadItemsFromDir` walks, project item directories included, so
+ * one basename means one thing everywhere. It was `canon.cl.yaml` until 2026-09-01 —
+ * renamed because §11.0 retired "canon" as the mechanism word, and a reserved filename the
+ * compiler matches by name is a mechanism. Nothing read it, so there is no compatibility
+ * shim: a leftover `canon.cl.yaml` now loads as an ordinary item and reports as one.
  */
-const RESERVED_LIBRARY_BASENAMES = Object.freeze(['canon.cl.yaml']);
+const RESERVED_LIBRARY_BASENAMES = Object.freeze(['library.cl.yaml']);
 
 /**
  * Characters illegal in a Windows/Unix path segment, as a character-class source
