@@ -38,8 +38,8 @@
  *     ```
  *
  * The test runs the named transform on the input and asserts it equals the `expect` block
- * byte-for-byte. This is the layer that catches *behavioral* drift. Kept deliberately
- * small — one transform to start; grow it per chapter only where a binding earns its keep.
+ * byte-for-byte. This is the layer that catches *behavioral* drift. Grown per chapter only
+ * where a binding earns its keep — see TRANSFORMS for the current roster.
  *
  * Precedent for a doc-binding test: `diag.test.js`'s "REGISTRY agrees with
  * documentation/11-diagnostics.md" block.
@@ -56,6 +56,7 @@ const { FIELD_TABLE_SCHEMA } = require('../../src/loader/field-table-schema');
 const { Diagnostics } = require('../../src/diag');
 const { parseYaml } = require('../../src/loader/yaml');
 const { scriptBanner } = require('../../src/extract');
+const { stanzaSource } = require('../../src/render/field-list');
 
 const DOCS = path.join(__dirname, '../../documentation');
 
@@ -70,9 +71,22 @@ const SURFACE_SCHEMA = {
  * The render-and-compare roster. A `transform=<name>` input fence is run through the
  * matching function and compared to its `expect=` partner. Every entry is a pure
  * `string → string`; anything needing a project on disk belongs in its own integration test.
+ *
+ *   script-banner   src/extract.js scriptBanner — a JS comment block → cleaned prose
+ *   stanza-source   src/render/field-list.js stanzaSource — one or more `fields:` entries →
+ *                   the `.template` source they are shorthand for, joined as renderFieldList
+ *                   joins them (`\n\n`). Input may be a bare `name: {…}` map or wrapped in
+ *                   `fields:`.
  */
 const TRANSFORMS = {
   'script-banner': scriptBanner,
+  'stanza-source': (src) => {
+    const doc = parseYaml(src, '<stanza-source>').value;
+    const fields = doc && typeof doc === 'object' && doc.fields ? doc.fields : doc;
+    return Object.entries(fields)
+      .map(([name, decl]) => stanzaSource({ name, decl }))
+      .join('\n\n');
+  },
 };
 
 /** Required-key complaints are meaningless against a fragment that shows one key. */
@@ -138,11 +152,14 @@ describe('every documentation YAML block declares its surface', () => {
 
   test.each(yamlBlocks.map((b) => [`${b.file}:${b.line}`, b]))('%s', (_label, b) => {
     const ann = parseInfo(b.info);
-    const declared = Boolean(ann.surface) || ann.check === 'none';
+    // A ```yaml fence must say what it is: a schema surface, an opt-out, or the input
+    // half of a render-and-compare pair.
+    const declared = Boolean(ann.surface) || ann.check === 'none' || Boolean(ann.transform);
     expect({ block: `${b.file}:${b.line}`, declared, info: b.info })
       .toEqual({ block: `${b.file}:${b.line}`, declared: true, info: b.info });
     if (ann.surface) expect(Object.keys(SURFACE_SCHEMA)).toContain(ann.surface);
     if (ann.check === 'none') expect(ann.reason).toBeTruthy();
+    if (ann.transform) expect(ann.id).toBeTruthy();
   });
 });
 

@@ -60,9 +60,13 @@ Note that `block` is both a render function and a declaration key, and they are 
 
 **A field list renders through the text engine, not around it.** `src/render/field-list.js` *generates* the `.template` source each declaration is shorthand for, concatenates the stanzas, and hands the result to `render()`. A field list and the hand-written template it replaces go through one identical code path, which is what makes byte-identity between the two a real property rather than two emitters happening to agree.
 
-`vibe: { label: Vibe, join: "; ", wrap: "[]" }` generates:
+A declaration generates the `.template` stanza it stands for:
 
+```yaml transform=stanza-source id=stanza-vibe
+vibe: { label: Vibe, join: "; ", wrap: "[]" }
 ```
+
+``` expect=stanza-vibe
 {if $body.vibe}
 Vibe: [{join("; ", $body.vibe)}]
 {/if}
@@ -77,6 +81,29 @@ The `{if}` guard tests the first ref, so **a field absent from an item's `body:`
 | `{ label: X, wrap: "[]" }` | `X: [value]` |
 | `{ label: X, wrap: "[]", wrapLabel: true }` | `[X: value]` |
 | `{ label: X, wrap: "[]", block: true }` | `X:` newline `[value]` |
+
+Each of the three, as a full stanza:
+
+```yaml transform=stanza-source id=stanza-wrap-shapes
+plain:   { label: Vibe, wrap: "[]" }
+inside:  { label: Vibe, wrap: "[]", wrapLabel: true }
+stacked: { label: Vibe, wrap: "[]", block: true }
+```
+
+``` expect=stanza-wrap-shapes
+{if $body.plain}
+Vibe: [{$body.plain}]
+{/if}
+
+{if $body.inside}
+[Vibe: {$body.inside}]
+{/if}
+
+{if $body.stacked}
+Vibe:
+[{$body.stacked}]
+{/if}
+```
 
 A label-less field is always wrapped whole, since there is no label to place inside or outside.
 
