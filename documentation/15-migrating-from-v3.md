@@ -92,7 +92,7 @@ table, or leave it as a partial.
 **v3 emitted the `[e]` background-knowledge marker as flat text; v4 carries it
 as a flag.** `--migrate` converts `notes: '[e]'` to:
 
-```yaml
+```yaml surface=item
 notes: {known: true}
 ```
 
@@ -115,7 +115,7 @@ four syntaxes for one idea, and its variant rules disagreed with every other
 dispatch in the language. `--migrate` converts it; a block-list opening reaching
 the compiler is an error naming what it should become.
 
-```yaml
+```yaml check=none reason=v3-shape-removed
 # before — v3
 - text: "A world of magic and intrigue awaits."
 - text: "You have mastered the arcane arts."
@@ -127,7 +127,9 @@ the compiler is an error naming what it should become.
       branches: {mage: researcher-mage, _: ~}
     _: ~
 - text: ./paragraphs/knight-oath.md
+```
 
+```yaml surface=component
 # after — v4
 sections:
   block1:
@@ -215,12 +217,14 @@ document variants have no v4 counterpart to move to:
 **v3's two-field format becomes two sections.** `--migrate` does this
 conversion; by hand it is:
 
-```yaml
+```yaml check=none reason=v3-shape-removed
 # before — v3
 body:   './components/blurb.md'
 script: '{%scripts}/library.js'
 stripTrailingInstructions: true
+```
 
+```yaml surface=component
 # after — v4
 sections:
   body:

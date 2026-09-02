@@ -203,7 +203,7 @@ Space-joins all values of a mapping. Useful for collapsing a mapping into a sing
 
 Render functions also work inside item body field values (not just inside template files). This is useful when a computed value needs to be reused across multiple templates, stored in a body field for cross-item reference, or built from other body subfields.
 
-```yaml
+```yaml surface=item
 body:
   head: "{join('; ', $body.Physical Traits.gender, $body.Physical Traits.hair, $body.Physical Traits.eyes)}"
   build_summary: "{and($body.build_list)}"

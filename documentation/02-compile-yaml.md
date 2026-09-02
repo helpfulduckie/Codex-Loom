@@ -6,7 +6,7 @@
 
 ## Minimal Example
 
-```yaml
+```yaml surface=config
 structure:
   input:
     items: [./Codex]
@@ -18,7 +18,7 @@ structure:
 
 ## Full Structure
 
-```yaml
+```yaml surface=config
 structure:
   input:
     items:                        # sequence of project item directories
@@ -84,9 +84,11 @@ All path resolution happens under `structure:`.
 
 A sequence of directories to load project item YAML files from. All `.yaml` files are loaded recursively. Entries support the same `{%variable}` and `{%libraryName}` token expansion as `structure.input.templates` (resolved before the path is made absolute), so a shared path prefix variable can be reused here.
 
-```yaml
+```yaml surface=config level=structure.input
 items: [./Codex]
-# or
+```
+
+```yaml surface=config level=structure.input
 items:
   - ./cards
   - ./extra-items
@@ -99,7 +101,7 @@ A **named mapping** of directories containing shared item and component definiti
 Each name is used in `{%name}` references and when reporting errors. All `.yaml`
 files are loaded recursively.
 
-```yaml
+```yaml surface=config level=structure.input
 library:
   main: ../../_Canon
   lore: ./lore-items
@@ -107,7 +109,7 @@ library:
 
 Library names are matched case-insensitively in `{%key}` references. Use the name to refer to a library directory in `include:` paths:
 
-```yaml
+```yaml surface=item
 - include: "{%main}/Characters/Aness.yaml"
 ```
 
@@ -118,7 +120,7 @@ Library names are matched case-insensitively in `{%key}` references. Use the nam
 
 This makes it practical to define a root path once as a variable and reference it for multiple subdirectory entries, rather than repeating the full path:
 
-```yaml
+```yaml surface=config
 variables:
   libraryRoot: C:\Shared\AID\_Canon
 
@@ -139,7 +141,7 @@ structure:
 
 A sequence of directories to load `.template` and `.partial` files from. When multiple directories are listed, **later directories override earlier ones** on name collision. Duplicate names within the same directory are an error.
 
-```yaml
+```yaml surface=config level=structure.input
 templates:
   - ../../_SharedTemplates   # base library — loaded first
   - ./templates              # project overrides — same name here wins
@@ -147,7 +149,7 @@ templates:
 
 Template path entries support the same token expansion as library values: `{%variableName}` and `{%libraryName}`. The full library map is available when templates are resolved, so any named library entry can be referenced:
 
-```yaml
+```yaml surface=config level=structure.input
 templates:
   - '{%libraryRoot}\templates'   # {%variable} expanded to absolute path
   - '{%libGeneral}\templates'  # a library name, exposed as a variable
@@ -158,7 +160,7 @@ templates:
 
 Directory where compiled output is written. Relative to `compile.yaml`. **Required** — omitting it is `CL0203` at load, and nothing compiles.
 
-```yaml
+```yaml surface=config level=structure
 output: ./output
 ```
 
@@ -174,7 +176,7 @@ Per-branch name → item id bindings, merged down the branch chain like `variabl
 `placeholders:`. `protagonist` is the built-in role — a global default is set at root and
 a branch overrides or unbinds (`~`) it like any other role.
 
-```yaml
+```yaml surface=config
 roles:
   protagonist: Aness
 
@@ -193,7 +195,7 @@ misused role raises.
 
 Optional scenario title. Written once to `{output}/Label.md` after all branches compile, expanding `{%variable}` tokens against root `variables`. This is distinct from a branch's own `title:` field, which writes `Label.md` into that branch's own output folder (see [Branch Tree & Variant Dispatch](05-branches-and-variants.md)) — the root `title` only ever produces the single top-level file, alongside `Description.md`.
 
-```yaml
+```yaml surface=config
 title: The Royal Academy
 ```
 
@@ -201,7 +203,7 @@ title: The Royal Academy
 
 Key-value pairs available in templates and field values as `{%key}`. Variables at the branch level override root-level variables for that branch's subtree.
 
-```yaml
+```yaml surface=config
 variables:
   setting: "The Royal Academy"
   year: "1315"
@@ -215,7 +217,7 @@ Used in a template as: `The year is {%year}.`
 
 Specifies what content to write for root-level component files. Each value is an inline string, a relative file path, or a `{%variable}` / `{%libraryName}` token that expands to one (component specs go through the same single `{%…}` expander as every other path — there is no separate component namespace).
 
-```yaml
+```yaml surface=config
 components:
   opening: "Who are you?"                      # inline text
   plotEssential: ./plot-essentials.yaml        # file path
@@ -261,10 +263,12 @@ unbind (`~`) the script set it ships.
 
 Two forms:
 
-```yaml
+```yaml surface=config
 scripts: ./scripts               # a directory, copied whole
+```
 
-scripts:                         # or the four VL hook files, named individually
+```yaml surface=config
+scripts:                         # the four VL hook files, named individually
   input:   ./scripts/input.js
   context: ./scripts/context.js
   output:  ./scripts/output.js
@@ -279,7 +283,7 @@ are copied as-is, with no processing of their contents. See
 
 Rendering defaults for the whole project. One key so far:
 
-```yaml
+```yaml surface=config
 render:
   notesTemplate: ProjectNotes
 ```
@@ -288,7 +292,7 @@ render:
 
 **It merges down the branch chain, key by key, like `components:` and `scripts:`.** That is the point of putting it here rather than only at root: which mods a branch loads is what decides whether a marker in the notes field means anything on that branch, and swapping the template swaps the whole convention without touching a single item.
 
-```yaml
+```yaml surface=config
 render:
   notesTemplate: WTGNotes         # [e] suppresses the mod's discovery timestamp
 
@@ -305,7 +309,7 @@ branches:
 
 The AID story-card `type` that a component's `render.storyCards` alternates land under — one per component, project-wide.
 
-```yaml
+```yaml surface=config
 storyCardType:
   aiInstructions: zz_AIN            # sorts the alternates to the end of the player's card list
   plotEssential:  zz_PE
@@ -318,7 +322,7 @@ This is the middle rung of the ladder in [Components → Swappable alternates](0
 Controls for Codex Loom's **opinion layer** — the checks that judge quality rather than
 report facts.
 
-```yaml
+```yaml surface=config
 lint:
   level: error        # off | error | warn
 ```
@@ -361,7 +365,7 @@ The branch tree. Each key is a branch name; each value is a branch config object
 
 See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) for full details.
 
-```yaml
+```yaml surface=config
 branches:
   subject:
     title: The Subject's Path     # output folder: Branches/The Subject's Path/

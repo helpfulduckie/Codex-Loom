@@ -12,7 +12,7 @@ All string matching within operations is **case-sensitive** for the content of t
 
 Assign a new value directly. Replaces the field entirely.
 
-```yaml
+```yaml surface=item
 body:
   Tagline: count of monwynd, shadow mage
 ```
@@ -21,7 +21,7 @@ body:
 
 Set the field to `null` (empty value or explicit `~`). Removes the field entirely from the item.
 
-```yaml
+```yaml surface=item
 body:
   Magic:               # empty value — removes the Magic field
   alternate form: ~    # explicit null — equivalent
@@ -38,7 +38,7 @@ Appends a value to a field. **What that produces depends on what the field alrea
 
 **Appending can change a field's shape, and that changes how it renders.** A scalar becomes a list, and a bare `{$body.Field}` does not join a list — see [Templates & Partials](07-templates.md#variable-interpolation) for what each form emits and how to get a single line instead.
 
-```yaml
+```yaml surface=item
 body:
   Tagline: +{retired}
   # "count of monwynd, shadow mage" → ["count of monwynd, shadow mage", "retired"]
@@ -53,7 +53,7 @@ Do not put a leading separator in the appended value — the separator is added 
 
 Removes all occurrences of the substring from the field value. Result is trimmed.
 
-```yaml
+```yaml surface=item
 body:
   Physical Traits:
     hair: -{in a controlled bun}
@@ -64,7 +64,7 @@ body:
 
 Replaces all occurrences of `old` with `new`. Result is trimmed.
 
-```yaml
+```yaml surface=item
 body:
   Background: /{her}/{his}
   # "she built her reputation" → "she built his reputation"
@@ -90,7 +90,7 @@ When a field holds a YAML sequence (array), operations behave element-wise:
 
 Set a field to a YAML sequence where every element is an op string (`+{…}`, `-{…}`, `/{…}/{…}`). Operations are applied in order to the field value.
 
-```yaml
+```yaml surface=item
 body:
   description:
     - "/{She}/{He}"
@@ -100,7 +100,7 @@ body:
 
 When an op chain includes `+{…}`, the append converts the intermediate value to an array. Subsequent swap ops map element-wise over the array:
 
-```yaml
+```yaml surface=item
 body:
   title:
     - "+{Guild Certified}"      # "Master Swordsman" → ["Master Swordsman", "Guild Certified"]
@@ -113,12 +113,14 @@ A YAML sequence in a variant is treated as a **value replacement** (sets the fie
 
 An empty sequence `[]` is always treated as an ops list (no ops = no change, not an empty array replacement).
 
-```yaml
+```yaml check=none reason=body-field-fragment
 # Op sequence — every element starts with an op prefix
 description:
   - "/{She}/{He}"
   - "+{addendum}"
+```
 
+```yaml check=none reason=body-field-fragment
 # Value array — plain strings; replaces the field with this array
 keywords:
   - inquisitive
@@ -132,7 +134,7 @@ keywords:
 
 Apply an operation to a specific subfield within a nested mapping. Other subfields are not affected.
 
-```yaml
+```yaml surface=item
 body:
   Physical Traits:
     gender: male          # replace this subfield only
@@ -142,7 +144,7 @@ body:
 
 **Aim a string op at the mapping itself and it collapses into a list.** `hair: -{…}` targets a subfield and is what you want; `Physical Traits: -{…}`, with the op one level up, flattens the whole mapping to its values, discards every key, and leaves an array behind:
 
-```yaml
+```yaml surface=item
 body:
   Physical Traits: -{grey}
   # {hair: platinum blond, eyes: grey, height: tall}
@@ -153,7 +155,7 @@ There is no diagnostic for this. Operations against a mapping belong on its subf
 
 You can mix operations and replacements within the same mapping block:
 
-```yaml
+```yaml surface=item
 body:
   Physical Traits:
     gender: male
@@ -166,7 +168,7 @@ body:
 
 ## Examples
 
-```yaml
+```yaml surface=item
 variants:
   veteran:
     body:

@@ -8,7 +8,7 @@ Branches define the playable paths through your scenario. The compiler enumerate
 
 The `branches:` key is a nested mapping. Any branch node without a `branches:` sub-key is a leaf.
 
-```yaml
+```yaml surface=config
 branches:
   subject:                      # leaf
     roles:
@@ -33,7 +33,7 @@ A project with no `branches:` key produces a single root-level output.
 
 By default the output folder for each branch uses the YAML key as the directory name (`Branches/subject/`, `Branches/researcher/`, etc.). To use a different folder name, add a `title:` key to the branch config:
 
-```yaml
+```yaml surface=config
 branches:
   subject:
     title: The Subject's Path     # folder: Branches/The Subject's Path/
@@ -63,13 +63,13 @@ Each leaf is identified by a **path** — the sequence of branch **keys** from r
 
 `variants:` on an item definition holds named deltas. Each variant name maps to a partial item definition — any fields present in the variant are layered on top of the current item state.
 
-```yaml
+```yaml surface=item
 - id: Felicia
   name:
     display: Felicia
     full: Felicia Grayls
   pronouns: female
-  ...
+  # ...
   variants:
     Felix:
       name:
@@ -103,7 +103,7 @@ The `branches:` key on an item or import definition maps branch names to local v
 
 ### Scalar form — apply one variant
 
-```yaml
+```yaml surface=item
 branches:
   felix: felix         # apply the "felix" local variant for the felix branch
   subject: subject
@@ -111,21 +111,21 @@ branches:
 
 ### Array form — apply multiple variants in order
 
-```yaml
+```yaml surface=item
 branches:
   felix: [base, felix]
 ```
 
 ### Null form — exclude item from branch
 
-```yaml
+```yaml surface=item
 branches:
   flashback: ~         # null; item is excluded from the flashback branch
 ```
 
 ### Mapping form — apply variants and/or descend into sub-branches
 
-```yaml
+```yaml surface=item
 branches:
   A:
     apply: [variantA]
@@ -140,7 +140,7 @@ The `apply:` list sets variants at this level; `branches:` descends for deeper d
 
 **A `*` key applies to *every* branch at that level, including ones with an explicit match.** It is a baseline, not a fallback: the wildcard is collected first, then any explicit match stacks on top of it.
 
-```yaml
+```yaml surface=item
 branches:
   '*': base            # "base" applies to every branch, felix included
   felix: felix         # felix gets [base, felix]; every other branch gets [base]
@@ -154,7 +154,7 @@ That is deliberate. Read literally, `'*': ~` says *exclude this item from every 
 
 **A `_` key applies only to branches with no explicit key at that level.** This is the fallback `*` is often mistaken for, and the two compose: `*` always applies, `_` adds on top only when no exact key matched.
 
-```yaml
+```yaml surface=item
 branches:
   '*': base            # every branch
   _: unnamed           # only branches with no explicit key
@@ -163,7 +163,7 @@ branches:
 
 **`_: ~` excludes every branch you did not name**, which is what makes "include in only one branch" expressible:
 
-```yaml
+```yaml surface=item
 branches:
   subject: base        # the subject branch gets "base"
   _: ~                 # every other branch: excluded
@@ -187,14 +187,14 @@ Then descend through any `branches:` sub-key on the values that matched, and rep
 Branch exclusion is handled entirely through the `branches:` dispatch map by setting a branch name to null (`~`). There are no `only:` or `except:` keys — the wildcard-plus-null pattern covers the same cases.
 
 **Exclude from one branch, include in all others:**
-```yaml
+```yaml surface=item
 branches:
   '*': []          # include with no variant for all branches
   flashback: ~     # null: excluded from flashback
 ```
 
 **Include in only one branch:**
-```yaml
+```yaml surface=item
 branches:
   subject: base    # only the subject branch gets this item
   _: ~             # all other branches: excluded
@@ -211,7 +211,7 @@ This applies identically to local item definitions, `import:` entries, `include:
 ## Full Worked Example
 
 **Canon item:**
-```yaml
+```yaml surface=item
 - id: Felicia
   name: {display: Felicia, full: Felicia Grayls}
   pronouns: female
@@ -231,7 +231,7 @@ This applies identically to local item definitions, `import:` entries, `include:
 ```
 
 **Project import:**
-```yaml
+```yaml surface=item
 - import: Felicia
   variants:
     felix:

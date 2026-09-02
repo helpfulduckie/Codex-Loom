@@ -6,7 +6,7 @@ Items are the atomic units of content in a Codex Loom project — a character, a
 
 ## Complete Example
 
-```yaml
+```yaml surface=item
 - id: Aness
   name:
     display: Aness
@@ -61,7 +61,7 @@ Compiler-internal identifier. Used to look up this item in the registry, in `imp
 
 Must be unique across all canon and project items — collision is an error.
 
-```yaml
+```yaml surface=item
 id: Aness
 ```
 
@@ -71,7 +71,7 @@ Display name used in rendered output. Two forms:
 
 **Scalar string** — the compiler normalizes it automatically: `display` is set to the first word, `full` is the complete string.
 
-```yaml
+```yaml surface=item
 name: Aness Rozen
 # → display: "Aness",  full: "Aness Rozen"
 # {$name} → "Aness Rozen",  {$name.display} → "Aness"
@@ -79,7 +79,7 @@ name: Aness Rozen
 
 **Object** — explicit separate display (short) and full forms.
 
-```yaml
+```yaml surface=item
 name:
   display: Aness
   full: Aness Rozen
@@ -103,7 +103,7 @@ When this item is the active branch protagonist, pronouns resolve to the `you` s
 
 Whether this item is narrative content or reference material. `story` (the default) or `reference` — any other value is an error.
 
-```yaml
+```yaml surface=item
 - id: WTG Time Config
   kind: reference
   aid: {type: System, triggers: []}
@@ -135,7 +135,7 @@ The rule is that soft heuristics skip reference items and hard limits apply to e
 
 AID-specific metadata. All fields are optional.
 
-```yaml
+```yaml surface=item
 aid:
   title: The Stranger       # card name in AID; defaults to name.full
   type: Character           # item type — determines output folder and default template
@@ -158,7 +158,7 @@ String values in `aid:` (e.g. `title`, `triggers`) support `{%variable}` expansi
 
 Controls how this item is rendered.
 
-```yaml
+```yaml surface=item
 render:
   template: Character      # template filename (without .template extension)
   wrapper: none            # none | square | curly
@@ -179,7 +179,7 @@ String values in `render:` support `{%variable}` expansion too, so `template`/`w
 
 `notes:` becomes AID's card description — the `notes:` line inside the fence. It is a top-level item field, so it is variant- and branch-addressable and field operations apply to it, exactly like `body:` or `aid:`.
 
-```yaml
+```yaml surface=item
 - id: Aness
   notes: {known: true}      # a flag for a template to render
 - id: Kaiden
@@ -206,13 +206,13 @@ For anything richer than a literal, a template renders the text. Which template 
 
 Rung 2 is where a project sets one notes template for a whole type or a whole scenario, and a branch swaps it for the mod case — a branch that drops WTG points `notesTemplate` at a blank template and every card in it stops emitting the marker.
 
-```yaml
+```yaml surface=config
 # compile.yaml
 render:
   notesTemplate: MarkerNotes
 ```
 
-```yaml
+```yaml surface=item
 - id: Aness
   notes:
     known: true
@@ -235,7 +235,7 @@ A mapping under `notes:` merges subfield-wise across variants and canon, the sam
 
 All item content. Values can be plain strings, block scalars, YAML sequences (arrays), or nested mappings. Field names are case-insensitive throughout — the compiler and templates match them case-insensitively.
 
-```yaml
+```yaml surface=item
 body:
   Tagline: Journeyman Healer; Magic Researcher
   Physical Traits:
@@ -260,7 +260,7 @@ In templates, body fields are accessed as `{$body.Tagline}`, `{$body.Physical Tr
 
 Within field values you can reference other fields using dotted `{$…}` syntax. These resolve before pronoun tokens.
 
-```yaml
+```yaml surface=item
 body:
   graduation year: 1315
   background: |
@@ -283,7 +283,7 @@ A `{$…}` token that no pass resolves and that survives into output is `CL0430`
 
 Arbitrary author-defined key/value data attached to this item. Use this for metadata that isn't part of the rendered content — affiliation, faction, role, status flags, or any other per-item values you want to reference in templates or override in variants.
 
-```yaml
+```yaml surface=item
 v:
   affiliation: Academy
   role: Researcher
@@ -312,7 +312,7 @@ You can write any alias in your item YAML, in a variant delta, or in a template 
 
 Named deltas that layer changes on top of this item definition. Variants can modify any top-level item field (`name`, `pronouns`, `aid`, `render`, `v`) and any `body` field.
 
-```yaml
+```yaml surface=item
 variants:
   networked:
     body:
@@ -354,9 +354,9 @@ See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) and [Field Ope
 
 Maps branch names to variant names for branch-specific dispatch. Separate from `variants:` — `variants:` defines the named deltas, `branches:` dispatches to them based on which branch is being compiled.
 
-```yaml
+```yaml surface=item
 - id: Aness
-  ...
+  # ...
   variants:
     subject:
       body:
@@ -373,7 +373,7 @@ See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) for the full s
 
 To exclude a local item from a branch, use a null (`~`) value in the `branches:` dispatch map. This is the only mechanism for branch exclusion — there are no `only:` or `except:` keys on items.
 
-```yaml
+```yaml surface=item
 - id: ContextItem
   branches:
     '*': base          # apply "base" variant for all branches
@@ -381,7 +381,7 @@ To exclude a local item from a branch, use a null (`~`) value in the `branches:`
   variants:
     base:
       body:
-        ...
+        # ...
 ```
 
 See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) for the full `branches:` dispatch syntax.
@@ -392,14 +392,14 @@ See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) for the full `
 
 A single `.yaml` file can contain multiple item entries as a sequence:
 
-```yaml
+```yaml surface=item
 - id: Aness
   name: Aness Rozen
-  ...
+  # ...
 
 - id: Kaiden
   name: Kaiden Ventus
-  ...
+  # ...
 ```
 
 A file can also mix local item definitions with import and include directives. All entries in a sequence are processed in order.

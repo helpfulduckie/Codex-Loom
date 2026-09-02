@@ -14,7 +14,7 @@ Components are declared in `compile.yaml` under the root-level `components:` key
 
 An `opening:` is built from `sections:` like Plot Essentials or AI Instructions, and everything the sections grammar offers applies: per-section branch dispatch and variants, `file:` and `from:` sources, `imports:`, and items routing into slots.
 
-```yaml
+```yaml surface=component
 # components/opening.cl.yaml
 sections:
   scene:
@@ -35,10 +35,18 @@ Sections join with a blank line between them, which is what a paragraph break is
 
 **Prose is still the common case and costs nothing.** Most openings are a file or a sentence, and neither needs a document:
 
-```yaml
+```yaml surface=config
 components:
   opening: ./openings/root.md                # a file, copied verbatim
+```
+
+```yaml surface=config
+components:
   opening: "Who are you, really?"            # a sentence, used as written
+```
+
+```yaml surface=config
+components:
   opening: "{%openings}/{%role}.md"          # a path built from variables
 ```
 
@@ -46,7 +54,7 @@ A spec that names a file on disk is read; one that names nothing is the text its
 
 ### Declaring an opening per branch
 
-```yaml
+```yaml surface=config
 branches:
   subject:
     roles:
@@ -75,7 +83,7 @@ The lift is to the output root or not at all; components have no intermediate-no
 
 `branchFraming:` writes to a **non-leaf** node's `Components/Opening.md` — what AID shows while the player is choosing among the children below it. Unlike `opening:` it does **not** inherit: it belongs to the node where it is declared.
 
-```yaml
+```yaml surface=config
 branches:
   tier2:
     components:
@@ -118,7 +126,7 @@ Naming every section is what makes the file overridable: an importing project ca
 
 ### Sections and slots
 
-```yaml
+```yaml surface=component
 sections:
   genre:
     text: |
@@ -146,7 +154,7 @@ sections:
 
 And the item side, which lives in the item's own file:
 
-```yaml
+```yaml surface=item
 - id: Aness
   name: {display: Aness, full: Aness Vale}
   aid: {type: Character, triggers: [Aness, Vale]}
@@ -164,7 +172,7 @@ An item may name several targets: `storyCard: true` alongside a `plotEssential:`
 
 **`render.wrap` decides whether that wrapper encloses each occupant or the whole collection.** The default is `each`, which is the ordinary Plot Essentials idiom — every character its own bracketed block.
 
-```yaml
+```yaml check=none reason=section-map-fragment
   cast:
     slot: true
     render: {position: 6, wrapper: curly}              # wrap: each — four occupants, four blocks
@@ -207,7 +215,7 @@ An item may name several targets: `storyCard: true` alongside a `plotEssential:`
 
 ### Branch dispatch and variants are per section
 
-```yaml
+```yaml surface=component
 sections:
   genre:
     text: |
@@ -227,7 +235,7 @@ sections:
 
 **A tone shift that affects several sections is written once, at the document level.** `branches:` on the component names *every* section it holds: the variant name is looked up in each section's own `variants:` and applied wherever it is found.
 
-```yaml
+```yaml surface=component
 branches:
   flashback: lighter          # every section defining "lighter" gets it
   briefing: ~                 # this branch gets no Plot Essentials file at all
@@ -257,7 +265,7 @@ sections:
 
 Every component can pull in another with `imports:`, so one document can be written once and used by many projects. This is what `imports:` exists for: a single AI Instructions body currently sits in 67 places across the scenario corpus, reached by copy or by absolute path, and neither of those supports a variant, a branch dispatch, or a one-line override.
 
-```yaml
+```yaml surface=component
 # shared/ai-instructions.cl.yaml — the canonical document
 sections:
   narrativeTone:
@@ -275,7 +283,7 @@ sections:
       tone: Clinical observation.
 ```
 
-```yaml
+```yaml surface=component
 # the project's own ai-instructions.cl.yaml
 imports:
   - from: '{%components}/ai-instructions.cl.yaml'
@@ -304,7 +312,7 @@ sections:
 
 ### Full example
 
-```yaml
+```yaml surface=component
 sections:
   genre:
     text: |
@@ -332,7 +340,7 @@ sections:
       flashback: ~
 ```
 
-```yaml
+```yaml surface=item
 # The items that fill it, in their own files
 - id: Aness
   render:
@@ -372,9 +380,13 @@ Everything under [Plot Essentials](#plot-essentials) — section fields, slot wr
 
 The spec may point at either:
 
-```yaml
+```yaml surface=config
 components:
   aiInstructions: ./components/ai-instructions.md      # copied through verbatim
+```
+
+```yaml surface=config
+components:
   aiInstructions: ./components/ai-instructions.yaml    # sections, compiled
 ```
 
@@ -382,7 +394,7 @@ A `.md` or `.txt` file is copied through with trailing blank lines trimmed and n
 
 ### Sections
 
-```yaml
+```yaml surface=component
 sections:
   narrative:
     heading: Narrative Tone
@@ -426,7 +438,7 @@ The `rules` section renders as:
 
 ### Branch dispatch and variants are per section
 
-```yaml
+```yaml surface=component
 sections:
   rules:
     text:
@@ -449,7 +461,7 @@ sections:
 
 A scenario ships one version of a component in its field and offers alternates as story cards the player can read and paste in themselves — a fuller ruleset, a terser one, or the scenario-specific parts only. Every component can do this; AI Instructions is where it is used most.
 
-```yaml
+```yaml surface=component
 render:
   component:
     variant: concise                 # what ships in the AI Instructions field (optional)
@@ -477,7 +489,7 @@ Placement is the ordinary frontier mechanism: an alternate that renders identica
 
 `Components/Author Notes.md` — Velvet Lattice's spelling, not a typo — works exactly like AI Instructions, including the level-2 heading default, slots, and per-section variants.
 
-```yaml
+```yaml surface=component
 sections:
   tone:
     text: Maintain second-person perspective throughout.
@@ -497,10 +509,12 @@ Author's Note produces no story card of its own, but like every component it can
 
 `scripts:` points at the Velvet Lattice scripting hooks **copied** into each branch leaf's `Scripts/` folder. It is a **top-level `compile.yaml` key**, not a `components:` sub-key — putting it under `components:` is a `CL0210` error — but it merges down the branch chain the same way a component does, so a branch can swap or unbind (`~`) its script set.
 
-```yaml
+```yaml surface=config
 scripts: ./scripts               # a directory, copied whole
+```
 
-scripts:                         # or the four VL hook files, named individually
+```yaml surface=config
+scripts:                         # the four VL hook files, named individually
   input:   ./scripts/input.js
   context: ./scripts/context.js
   output:  ./scripts/output.js
@@ -515,7 +529,7 @@ No processing is applied to the files — they are copied as-is. Path values sti
 
 A description is an ordinary component built from `sections:`, and there are **two keys** for it. `description:` is the scenario blurb AID shows in listings; `adventureDescription:` is the description a leaf carries, which AID applies to the adventure started from that leaf. Both write `Description.md`, at different levels — the same arrangement `opening:` and `branchFraming:` have with `Opening.md`.
 
-```yaml
+```yaml surface=config
 components:
   description: ./components/description.cl.yaml           # the store listing, root only
   adventureDescription: ./components/adventure.cl.yaml    # per-leaf, inherits down the tree
@@ -545,7 +559,7 @@ Velvet Lattice sets a node's prompt to `components["Opening"] or node.descriptio
 
 Give the branch an `opening:`, or drop the `adventureDescription:` it inherits:
 
-```yaml
+```yaml surface=config
 branches:
   silent:
     components:
@@ -557,7 +571,7 @@ branches:
 
 Besides `text:`, a section may read a file (`file:`) or read one through a named transform (`from:`). These are ordinary section keys and work in any component, not only a description.
 
-```yaml
+```yaml surface=component
 sections:
   pitch:
     text: |
@@ -581,7 +595,7 @@ sections:
 
 **An override replaces the source rather than joining it.** A project importing a component whose section uses `file:` can replace it with its own `text:`, or append to the file's contents with a field operation, and neither is an error:
 
-```yaml
+```yaml surface=component
 imports:
   - from: '{%components}/house-blurb.cl.yaml'
 sections:
@@ -637,7 +651,7 @@ There is no way to turn this off — the extractor always strips a trailing inst
 
 A component document may declare `metadata:`, which is written as a YAML frontmatter block above the body. Velvet Lattice reads scenario tags from `Description.md`'s frontmatter, which is what this is for.
 
-```yaml
+```yaml surface=component
 # components/description.cl.yaml
 metadata:
   tags: [thriller, dark]
@@ -664,7 +678,7 @@ The key is declared on every component, but only the two description components 
 
 A `.md` or `.txt` path is copied verbatim, exactly as it is for every other component:
 
-```yaml
+```yaml surface=config
 components:
   description: ./components/description.md
 ```

@@ -26,7 +26,7 @@ pack](#the-bundled-wtg-pack) below.
 
 ## Declaring packs
 
-```yaml
+```yaml surface=config
 lint:
   level: warn                 # global opinion-layer ceiling (see 02-compile-yaml.md § lint)
   packs:
@@ -42,7 +42,7 @@ lint:
 chain.** A branch inherits every pack its ancestors declared and may override one entry or
 unbind it:
 
-```yaml
+```yaml surface=config
 branches:
   modA-path:
     lint:
@@ -99,7 +99,7 @@ is ever a crash or a silent skip.
 
 ## Writing a pack
 
-```yaml
+```yaml check=none reason=pseudo-yaml-placeholders
 name: wtg                     # must equal the lint.packs key
 rules:
   - id: 1                     # → CL-wtg/0001

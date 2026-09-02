@@ -41,7 +41,7 @@ Written as `{$she}`, `{$her~}`, etc. Resolve against the **item's own `pronouns:
 
 Use these in field values and templates where the token refers to the item subject (the character the item is about).
 
-```yaml
+```yaml surface=item
 body:
   Background: |
     one of the top Academy mages; has built {$her~} reputation through research
@@ -64,7 +64,7 @@ Written as `{$Aness}`, `{$Felicia}`, etc., using the character's `id`. Resolves 
 
 Also sets the conjugation scope to that character's effective pronoun set.
 
-```yaml
+```yaml surface=item
 body:
   Personality:
     expanded: |
@@ -85,7 +85,7 @@ Written as `{$Aness.she}`, `{$Aness.her~}`, etc. Resolve against the **reference
 
 Use these when writing about a specific named character where you want the pronouns to track that character's settings (and protagonist mode).
 
-```yaml
+```yaml surface=item
 body:
   expanded: |
     - {$Aness} love[s] magic research — {$Aness.she} instinctively leap[s]
@@ -113,8 +113,8 @@ The markers `[s]`, `[es]`, `[is]`, `[was]`, `[has]` conjugate based on the **mos
 | `[was]` | `was` | `were` |
 | `[has]` | `has` | `have` |
 
-```yaml
-- {$Aness} love[s] magic research — {$Aness.she} instinctively leap[s]
+```yaml surface=item
+- "{$Aness} love[s] magic research — {$Aness.she} instinctively leap[s]"
 ```
 
 When Aness is the protagonist (you-set, plural):
@@ -157,7 +157,7 @@ The two failure modes differ, which matters when you are hunting one:
 The protagonist is the built-in role (see [Roles](13-roles.md)) — an ordinary entry in
 `roles:`, declared per branch:
 
-```yaml
+```yaml surface=config
 roles:
   protagonist: Aness              # global default
 

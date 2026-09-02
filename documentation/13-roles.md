@@ -20,7 +20,7 @@ of this part," resolved per branch before pronouns are.
 
 ## Declaring and binding
 
-```yaml
+```yaml surface=config
 roles:
   protagonist: Aness
   LI:          Kaiden
@@ -61,7 +61,7 @@ role-awareness of their own.
 > `CL0430`. Name the item directly — `{$Kaiden.body.Backstory}` — until the pass ordering
 > is fixed. Every other role form above is unaffected.
 
-```yaml
+```yaml surface=component
 sections:
   relationship:
     text: |

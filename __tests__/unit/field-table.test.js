@@ -121,3 +121,20 @@ describe('loadFieldTable', () => {
     ]).toEqual(['CL0422', 'CL0423', 'CL0424', 'CL0425']);
   });
 });
+
+describe('FIELD_TABLE_SCHEMA stays in step with the procedural loader', () => {
+  // The declarative descriptor (`field-table-schema.js`, used by the schema engine and by
+  // the doc-example test) and the procedural fold in `field-table.js` are two views of one
+  // surface. This binds them so a key added to one is added to the other.
+  const { FIELD_KEYS } = require('../../src/loader/field-table');
+  const { FIELD_DECL, RENDER_FUNCTIONS } = require('../../src/loader/field-table-schema');
+  const { FUNCTION_NAMES } = require('../../src/render/parse');
+
+  test('a fields: entry declares exactly the keys FIELD_KEYS allows', () => {
+    expect(Object.keys(FIELD_DECL.keys).sort()).toEqual([...FIELD_KEYS].sort());
+  });
+
+  test('the render set is the seven functions plus bare, taken from render/parse', () => {
+    expect(RENDER_FUNCTIONS).toEqual([...FUNCTION_NAMES, 'bare']);
+  });
+});

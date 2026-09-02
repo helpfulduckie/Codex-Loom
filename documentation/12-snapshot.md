@@ -28,7 +28,7 @@ content, deliberately, when it is ready to.
 
 ## Freezing a project
 
-```yaml
+```yaml surface=config
 structure:
   input:
     library:
@@ -178,7 +178,7 @@ a component — including everything a chain of `imports:` pulls in, not only a 
 top-level `components:` specs — anything that came from outside the project base without a
 covering library entry is reported.
 
-```yaml
+```yaml surface=config
 # Fires CL0522: {%loom} is a plain variable, not a library entry.
 variables:
   loom: ../../_CodexLoom
@@ -187,7 +187,7 @@ components:
 # wrapper.cl.yaml: imports: [{from: '{%loom}/AI Instructions/AI Instructions.yaml'}]
 ```
 
-```yaml
+```yaml surface=config
 # Silent: the same file, reached through a library entry instead.
 structure:
   input:

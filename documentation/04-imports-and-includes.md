@@ -11,7 +11,7 @@ Project item files can pull in items from the canonical registry in two ways:
 
 Loads all items from a canonical YAML file. Items are compiled exactly as defined in canon, with no modifications unless you attach `importVariants:` or `branches:` to the include directive itself.
 
-```yaml
+```yaml surface=item
 - include: "{%main}/Characters/Felicia.yaml"
 ```
 
@@ -19,7 +19,7 @@ Loads all items from a canonical YAML file. Items are compiled exactly as define
 
 Include and import paths also support `{%variable}` expansion, but — because includes are resolved once, before branches are enumerated — only **root-level** `variables:` are available there, not per-branch overrides.
 
-```yaml
+```yaml surface=config
 structure:
   input:
     library:
@@ -32,7 +32,7 @@ You can also use a direct relative path, but the `{%name}` form is preferred for
 
 To exclude all items in an included file from specific branches, attach a `branches:` dispatch spec to the `include:` directive. All items loaded from the file inherit it.
 
-```yaml
+```yaml surface=item
 - include: "{%main}/Characters/Guards.yaml"
   branches:
     '*': []         # include with no variant for all branches
@@ -43,7 +43,7 @@ To exclude all items in an included file from specific branches, attach a `branc
 
 Both `importVariants:` and `branches:` on an include directive name a variant for **every item in the file**. Items that **do not define** a variant by that name are **silently skipped** — no warning. That is the point of an include: naming the variant on each item is the repetition it exists to remove, so most items missing the name is correct authoring, not a mistake.
 
-```yaml
+```yaml surface=item
 - include: "{%main}/Characters/Felicia.yaml"
   importVariants: [human]    # applied to every item that defines a "human" variant;
                              # items without it are silently unaffected
@@ -53,7 +53,7 @@ This differs from a single `import:` and from an item's own `branches:`. Both of
 
 What silence cannot hide is a name that matches **nothing**. A misspelled selector applies to no item, changes no output, and would otherwise say nothing at all — so a selector matching zero targets raises `CL0326`, naming the selector and how many items it was aimed at:
 
-```yaml
+```yaml surface=item
 - include: "{%main}/Characters/Guards.yaml"
   importVariants: [hmuan]    # CL0326: matched none of the 6 items included from Guards.yaml
 ```
@@ -64,7 +64,7 @@ Three of seven items matched is normal and reports nothing. Zero of seven is the
 
 If an item from an `include:` file is also listed in an explicit `import:` entry, the explicit import **wins silently** — the included version is skipped. Use this to include a whole file while overriding one specific item:
 
-```yaml
+```yaml surface=item
 # Include all items from Felicia.yaml — Felicia will be skipped below
 - include: "{%main}/Characters/Felicia.yaml"
 
@@ -83,7 +83,7 @@ If an item from an `include:` file is also listed in an explicit `import:` entry
 
 Imports a single item from the canonical registry by ID and applies variant chains, field overrides, and branch dispatch.
 
-```yaml
+```yaml surface=item
 - import: Aness
   importVariants: [networked]
   body:
@@ -114,7 +114,7 @@ Imports a single item from the canonical registry by ID and applies variant chai
 
 Applies named variant chains from the **canonical item's own variant tree** and folds them into the item in progress. Each entry is a slash-separated variant path, applied in order.
 
-```yaml
+```yaml surface=item
 - import: Zephon
   importVariants: [human/noble, sci-fi/near-future]
 ```
@@ -123,7 +123,7 @@ This applies the `human` variant, then `human/noble`, then `sci-fi`, then `sci-f
 
 `importVariants:` can also appear **inside a branch variant** on the import, where it sources from the same canonical item's variant tree:
 
-```yaml
+```yaml surface=item
 - import: Felicia
   variants:
     felix:
@@ -142,7 +142,7 @@ This applies the `human` variant, then `human/noble`, then `sci-fi`, then `sci-f
 
 A slash-separated suffix on the item ID applies variant deltas before any `importVariants:` or field overrides:
 
-```yaml
+```yaml surface=item
 - import: Zephon/human/noble
 ```
 
@@ -154,7 +154,7 @@ This is equivalent to loading `Zephon` then applying `importVariants: [human/nob
 
 Top-level fields (`name`, `pronouns`, `aid`, `render`) and `body` can be overridden directly on the import entry. These are applied after all variant chains resolve.
 
-```yaml
+```yaml surface=item
 - import: Zephon
   name:
     display: Zeph
@@ -174,7 +174,7 @@ Field operations (`+{}`, `-{}`, `/{}`) work on `body` fields the same as in vari
 
 `variants:` on an import defines **local named deltas** for branch dispatch. `branches:` maps branch names to those variant names.
 
-```yaml
+```yaml surface=item
 - import: Aness
   importVariants: [networked]
   variants:
@@ -197,7 +197,7 @@ For the full syntax of `branches:` dispatch values (including wildcards, arrays,
 
 To exclude an import from specific branches, use null (`~`) in the `branches:` dispatch map. There are no `only:` or `except:` keys on imports.
 
-```yaml
+```yaml surface=item
 - import: Zephon
   branches:
     '*': []         # include with no variant for all branches

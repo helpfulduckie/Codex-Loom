@@ -20,7 +20,7 @@ Three costs followed from that, and a declaration removes all three:
 
 ## Declaring a Field
 
-```yaml
+```yaml surface=fieldtable
 fields:
   name:          { label: Name }
   vibe:          { label: Vibe, join: "; ", wrap: "[]" }
@@ -88,7 +88,7 @@ A label-less field is always wrapped whole, since there is no label to place ins
 
 **A group is a named sub-list** — what a partial's grouping role becomes. **A template is an ordered list of field or group names**, expanded in place, with list order equal to output order.
 
-```yaml
+```yaml surface=fieldtable
 groups:
   core: [name, vibe, appearance, personality]
 
@@ -107,7 +107,7 @@ templates:
 
 **A list entry may override the declaration inline**, which is required rather than a convenience — some lists need a field rendered differently without a second declaration.
 
-```yaml
+```yaml surface=fieldtable
 templates:
   History: [name, { field: vibe, label: Culture Vibe, render: bare }]
 ```
@@ -118,7 +118,7 @@ templates:
 
 Three entry forms let an irregular line live inside an otherwise declared list:
 
-```yaml
+```yaml surface=fieldtable
 templates:
   Character:
     - core
@@ -135,11 +135,13 @@ templates:
 
 **The loader merges key-wise, later winning per entry** — not per file, and not deep.
 
-```yaml
+```yaml surface=fieldtable
 # library templates/fields.cl.yaml
 fields:
   appearance: { label: Appearance, join: "; ", labelWhen: { originalAppearance: Current Appearance } }
+```
 
+```yaml surface=fieldtable
 # project templates/fields.cl.yaml
 fields:
   appearance: { label: Face, join: "; " }
@@ -157,7 +159,7 @@ The project's entry **replaces** the library's entirely. `labelWhen` is gone for
 
 **`templateFor` is a branch-merged map from rendering role to selection file**, one slot per role: `base`, `notes`, and one per component (`plotEssential`, …). **An unset slot falls back to `base`.**
 
-```yaml
+```yaml surface=config
 templateFor:
   base:          templates.cl.yaml
   plotEssential: pe.cl.yaml
@@ -196,7 +198,7 @@ The notes ladder needs no such guard, since nothing fills `render.notesTemplate`
 
 **A context tier is a branch that swaps one or more rendering roles for a terser field list.** It is not a separate feature: a tier is `templateFor` on a branch node, reusing the branch merge and the field table unchanged. A scenario can ship a low-context variant of itself — the same items, shorter cards — without a parallel source tree.
 
-```yaml
+```yaml surface=config
 branches:
   full:       {}                        # inherits base — the ordinary output
   lowContext:
@@ -213,7 +215,7 @@ A branch may tier one role and leave the rest at full detail — `templateFor: {
 
 Substitution uses the inline-override form the field table already carries:
 
-```yaml
+```yaml surface=fieldtable
 templates:
   Character:       [name, appearance, personality, background]
   Character.terse: [name, appearance, backgroundBrief]
@@ -229,14 +231,14 @@ Stated as three rules, a terse list must invent no label the full list lacks, ke
 
 **A slot file's `templates:` keys are usually `aid.type` names, but one may be a free-standing name.** An item writing `render.template: CharacterFull` selects that list — the name differs from its `aid.type`, so it counts as a real choice and wins at rung 1 — and because the slot file is branch-scoped, the full list applies only where the tier is loaded.
 
-```yaml
+```yaml surface=fieldtable
 # terse.cl.yaml
 templates:
   Character:     [name, appearance, personality]
   CharacterFull: [name, appearance, personality, background, relationships, prose]
 ```
 
-```yaml
+```yaml surface=item
 # the one NPC who stays detailed even in the low-context tier
 - id: Grand
   aid: { type: Character }
