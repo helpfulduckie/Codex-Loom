@@ -101,7 +101,7 @@ templates:
 - **A group's members must be declared *fields*.** Naming another group there is `CL0424`, a WARN — it is not expanded, and it contributes nothing to the output.
 - **A template's entries may name fields *or* groups.** This is the only position a group name resolves in.
 
-**A `templates:` key is normally an `aid.type` name.** A free-standing name is reachable through `render.template` — see [Context Tiering](15-context-tiering.md#pattern-2--one-card-stays-full-on-a-tiered-branch).
+**A `templates:` key is normally an `aid.type` name.** A free-standing name is reachable through `render.template` — see [Keeping one card at full detail](#keeping-one-card-at-full-detail).
 
 ### Inline overrides
 
@@ -188,7 +188,62 @@ That path is shared, so **put a project's slot files under its own templates dir
 
 The notes ladder needs no such guard, since nothing fills `render.notesTemplate`.
 
-**This supersedes the branch-level `render.notesTemplate` special case.** That existed *because* a filename suffix cannot be branch-addressed; `templateFor` generalizes it to every rendering role. [Context Tiering](15-context-tiering.md) is this mechanism with a terse field list per tier and a guard proving a terse list only shortens.
+**This supersedes the branch-level `render.notesTemplate` special case.** That existed *because* a filename suffix cannot be branch-addressed; `templateFor` generalizes it to every rendering role.
+
+---
+
+## Tiering — a shorter rendering per branch
+
+**A context tier is a branch that swaps one or more rendering roles for a terser field list.** It is not a separate feature: a tier is `templateFor` on a branch node, reusing the branch merge and the field table unchanged. A scenario can ship a low-context variant of itself — the same items, shorter cards — without a parallel source tree.
+
+```yaml
+branches:
+  full:       {}                        # inherits base — the ordinary output
+  lowContext:
+    templateFor: { base: terse.cl.yaml }
+```
+
+`terse.cl.yaml` contributes a `templates:` block keyed by `aid.type`. Its entries replace the inherited ones for the types they name; every type it does not mention keeps the full list. So `lowContext` renders terse `Character` cards if `terse.cl.yaml` defines `Character`, and everything else is unchanged.
+
+A branch may tier one role and leave the rest at full detail — `templateFor: { plotEssential: terse-pe.cl.yaml }` shortens Plot Essentials and nothing else.
+
+### What a terse list may and may not do
+
+**A terse list may omit a field, or substitute a same-label sibling for it. It may not introduce a label the full list does not have.** Omission is the common case: a list naming `[name, appearance, personality]` drops every other stanza.
+
+Substitution uses the inline-override form the field table already carries:
+
+```yaml
+templates:
+  Character:       [name, appearance, personality, background]
+  Character.terse: [name, appearance, backgroundBrief]
+```
+
+— where `background` (a paragraph) and `backgroundBrief` (a sentence) are both declared in the shared table with `label: Background`, and the terse list names the short one. **A slot file's own `fields:` block is ignored**, so a condensed variant is declared once in the shared table rather than per tier.
+
+Stated as three rules, a terse list must invent no label the full list lacks, keep the labels it does keep in their original order, and change a stanza's body only where a declared same-label substitution backs it.
+
+**Nothing checks this at compile time.** Codex Loom's own test suite holds a guard comparing a terse render against a full one, but it protects the compiler's tiering behavior, not your scenario — **a malformed terse list compiles clean and raises no diagnostic.** Check a new tier by reading the compiled output, or with `--leafReview`.
+
+### Keeping one card at full detail
+
+**A slot file's `templates:` keys are usually `aid.type` names, but one may be a free-standing name.** An item writing `render.template: CharacterFull` selects that list — the name differs from its `aid.type`, so it counts as a real choice and wins at rung 1 — and because the slot file is branch-scoped, the full list applies only where the tier is loaded.
+
+```yaml
+# terse.cl.yaml
+templates:
+  Character:     [name, appearance, personality]
+  CharacterFull: [name, appearance, personality, background, relationships, prose]
+```
+
+```yaml
+# the one NPC who stays detailed even in the low-context tier
+- id: Grand
+  aid: { type: Character }
+  render: { template: CharacterFull }
+```
+
+That is how a terse cast keeps its one important NPC without a per-item flag. The free-standing name is reachable only through `templateFor` — the shared field table never sees it — and it wins from a component target too, since such a name is matched against the component and base slot maps before the shared table.
 
 ---
 

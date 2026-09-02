@@ -1104,7 +1104,7 @@ per-item flag. The notes ladder needs no guard, since nothing fills `render.note
 
 This supersedes the branch-level special case §6.3a was: `render.notesTemplate` on a
 branch existed *because* a filename suffix cannot be branch-addressed, and `templateFor`
-generalizes that to every rendering role. Context tiering (`15-context-tiering.md`) is
+generalizes that to every rendering role. Context tiering (`10-field-declarations.md`) is
 this mechanism with a terse field list per tier and a label-membership guard that proves
 a terse list only ever shortens.
 
@@ -1197,7 +1197,7 @@ are `stripTemplateHeader` in `src/migrate/v3.js` (delete everything through the 
 conversion is not local: a v3 Plot Essentials file *resolves items*, so every block has to
 become a slot on the component plus a render target on the item it named, in a different
 file. Author-facing detail — what changes and the hand
-edits the review queue asks for — is `documentation/16-migrating-from-v3.md`.
+edits the review queue asks for — is `documentation/15-migrating-from-v3.md`.
 
 ### §14.3 Golden fixtures and the re-baselining protocol
 

@@ -54,7 +54,7 @@ for the full CLI and [documentation/](documentation/) for the YAML surface.
 changes the config format, collapses the four component syntaxes into one, drops the
 template envelope and the `{@name}` reference family, splits the compiler from the lint
 pass, adds player placeholders and the platform field caps, and adds convention packs and
-context tiering. See [documentation/16-migrating-from-v3.md](documentation/16-migrating-from-v3.md)
+context tiering. See [documentation/15-migrating-from-v3.md](documentation/15-migrating-from-v3.md)
 for the conversion. If you are reading this to see how the thing is built, read `v4-phase1`.
 
 ## Tests
