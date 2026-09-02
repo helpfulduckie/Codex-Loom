@@ -97,9 +97,8 @@ FOR EACH LEAF:
   renderSectionedComponent()     → Components/{Plot Essentials,Summary,AI Instructions,
                                     Author Notes,Opening}.md + Description.md
   copyScripts()
-Root-level branchFraming:        → Components/Opening.md, literal/{%variable} only —
-                                    never a sections: document, never a role (§9.7's exception)
-writeFramingRecursive()          → Components/Opening.md at interior nodes only, roles resolve
+writeFramingRecursive()          → Components/Opening.md at every branch node incl. the root;
+                                    roles resolve in every shape (sentence, prose .md, sections:)
 Root Description                 → Description.md, roles resolve, branchProtagonist always null
 runLeafReviewMode()              → Overview/*.leaf.md
 runProvenanceMode()               → Overview/<root>.provenance.{md,csv}  (always, §17.2)

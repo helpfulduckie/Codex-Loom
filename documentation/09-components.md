@@ -42,7 +42,7 @@ components:
   opening: "{%openings}/{%role}.md"          # a path built from variables
 ```
 
-A spec that names a file on disk is read; one that names nothing is the text itself. `{%variable}` tokens expand against the branch's merged table either way, so an inline opening may differ per branch without a document.
+A spec that names a file on disk is read; one that names nothing is the text itself. Either way it goes through the same token passes a `sections:` opening does: `{%variable}` tokens expand against the branch's merged table, and `{$role}` / pronoun tokens resolve — so an inline opening may differ per branch, and may reference a role, without a document.
 
 ### Declaring an opening per branch
 
@@ -82,7 +82,7 @@ It takes the same three shapes an opening does — a sentence, a file, or a `sec
 
 Declared on a leaf, `branchFraming:` is ignored with a warning: a leaf has no children to frame.
 
-**A `branchFraming:` declared at the project root — outside every `branches:` node — is a third, separate call site with a real limitation.** It writes once to `{output}/Components/Opening.md` before any branch node exists, and resolves through the same literal/`{%variable}`-only path a plain-prose `opening:` uses: it never checks whether its spec names a `sections:` document, so a `{$role}` token there is never attempted regardless of shape. A `branchFraming:` declared inside a branch node — the case above — goes through the ordinary sectioned-component path and resolves roles the same way `opening:` and every other component does (see [Roles](13-roles.md#using-a-role-in-prose)).
+**A `branchFraming:` declared at the project root — outside every `branches:` node — writes once to `{output}/Components/Opening.md` and behaves like framing at any interior node.** It reads the project's own `roles:` and resolves `{$role}` and pronoun tokens whether it is a sentence, a prose `.md` file, or a `sections:` document (see [Roles](13-roles.md#using-a-role-in-prose)). The only asymmetry is `{$protagonist}` → "you", which needs a branch protagonist: root framing takes one from `roles: protagonist` if bound, and the root `Description` — a different key — never does.
 
 ### Output paths
 

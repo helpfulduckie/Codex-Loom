@@ -171,8 +171,13 @@ function resolveSectionedComponents(compileContext, label, { loadSectioned, reco
   for (const descriptor of SLOTTED_COMPONENTS) {
     const spec = compileContext.componentRefs[descriptor.key];
     if (!spec) continue;
-    if (typeof spec === 'string' && spec.includes('{')) {
-      recordGap(label, descriptor.label, spec, 'unresolved reference — token did not expand to a path');
+    // A surviving `{%…}` is a compile variable that named a path and did not resolve — the
+    // spec was meant to be a file. It is caught here rather than written as content. A
+    // `{$…}` token is *not* caught: it belongs to the leaf token pass (`applyTokenPass` in
+    // the leaf loop for an `inlineProse` component, the CL0430 output sweep otherwise), and
+    // guarding on the bare brace made a role reference in an inline opening a fatal CL0634.
+    if (typeof spec === 'string' && /\{%/.test(spec)) {
+      recordGap(label, descriptor.label, spec, 'unexpanded compile variable {%…} — the spec named a path that did not resolve');
       continue;
     }
 

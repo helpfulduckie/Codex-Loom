@@ -8,6 +8,7 @@ const {
   selectComponentSections, renderComponentStoryCards,
 } = require('./slots');
 const { renderSectionedComponent, writeSectionedComponent } = require('./emit/components');
+const { applyTokenPass } = require('./model/pronouns');
 const { checkUndeclaredPlaceholders } = require('./emit/placeholders');
 const { LIMITS, checkLimit } = require('./limits');
 const { questionsForMeasurement } = require('./treeWrite');
@@ -141,8 +142,20 @@ function compileLeaf(branchPath, ctx) {
     if (passthrough !== null && passthrough !== undefined) {
       // Prose has no sections to render, warn about, or report separately. It is one
       // segment keyed by the component so the cross-branch reports still name it.
-      text = passthrough;
-      segments = [{ key: descriptor.label, text: passthrough }];
+      //
+      // An `inlineProse` component — `opening:` written as a sentence or as a prose `.md`
+      // — still runs the role/pronoun token pass, so `{$LI}` in an inline opening resolves
+      // exactly as it does in a `sections:` opening. Every other passthrough component (an
+      // `aiInstructions:` `.md`, say) is copied verbatim; a stray `{$x}` there is caught by
+      // the CL0430 output sweep in `writeSectionedComponent` like any other leaked token.
+      text = descriptor.inlineProse
+        ? applyTokenPass(passthrough, {
+          item: {}, registry, branchProtagonist,
+          roles: cctx.roles, onRoleUsed: roleState.onUsed,
+          onWarn: busWarner(diagnostics, { file: String(spec) }),
+        })
+        : passthrough;
+      segments = [{ key: descriptor.label, text }];
     } else {
       warnEmptySlots(descriptor, slotIndex, filled, label, diagnostics, spec);
       // `render.component.variant` selects which section-variant ships in the component

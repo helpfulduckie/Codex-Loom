@@ -49,7 +49,7 @@ behaves like any other role.
 ## Using a role in prose
 
 A role token is written exactly like an item reference, because it *is* one once resolved
-— `{$LI}`, `{$LI.he}`, `{$LI.body.Backstory}`, `{$LI's}` all work, the same forms
+— `{$LI}`, `{$LI.he}`, `{$LI.his~}`, `{$LI.body.Backstory}`, `{$LI's}` all work, the same forms
 [Pronoun System](08-pronouns.md) documents for `{$Id...}`. Resolution rewrites the leading
 name to its bound item id before anything else runs, so every downstream check — pronoun
 resolution, cross-item field references, the output sweep — sees an ordinary item
@@ -60,34 +60,33 @@ sections:
   relationship:
     text: |
       The player's history with {$LI} is unresolved. {$LI.he} does not raise it
-      unprompted, and {$LI.his} restraint should read as deliberate.
+      unprompted, and {$LI.his~} restraint should read as deliberate.
 ```
 
-**Every leaf-level component resolves roles** — story cards, Plot Essentials, AI
-Instructions, Author's Note, and a leaf's own `opening:` all pass through the leaf loop,
-which threads `roles` and a resolved `branchProtagonist` in. Two other sites
-render the same `sections:` grammar and resolve roles the same way:
+**Every component resolves roles, in every shape.** Story cards, Plot Essentials, AI
+Instructions, Author's Note and a leaf's own `opening:` pass through the leaf loop, which
+threads `roles` and a resolved `branchProtagonist` in; the same token pass runs whether
+the component is a `sections:` document, a prose `.md` file, or an inline string, so
+`opening: "%heroName% woke, and {$rival} was gone."` resolves `{$rival}` exactly as a
+`sections:` opening would. The remaining sites resolve roles the same way:
 
-- **`branchFraming` at an interior branch node** — inherits the roles table down the
-  branch tree exactly as `variables:` does, merging key-wise with `~` deleting (the same
-  branch-chain merge the leaf loop uses), so a role bound above an interior node is
-  visible to its framing even when that node declares no `roles:` of its own.
+- **`branchFraming` at any branch node, the project root included** — inherits the roles
+  table down the branch tree exactly as `variables:` does, merging key-wise with `~`
+  deleting (the same branch-chain merge the leaf loop uses), so a role bound above a node
+  is visible to its framing even when that node declares no `roles:` of its own. A
+  project-root `branchFraming:` reads the project's own `roles:`; written as a sentence,
+  a prose file or a `sections:` document, it resolves roles in all three.
 - **The root `Description`** (the project-level scenario blurb) — reads the project's own
   `roles:`, gated the same way the leaf loop gates it: a project that never declares
   `roles:` passes `null` rather than an empty table, so `CL0540` treats it as role-unaware
-  territory rather than a project with zero bindings. `branchProtagonist` is always `null`
-  here — the blurb belongs to the project, not to any branch, so `{$protagonist}` resolves
-  through the ordinary "you" pronoun substitution only if a role literally named
-  `protagonist` is declared at the project root; there is no branch chain to take one from.
+  territory rather than a project with zero bindings.
 
-**One framing site is a real exception, not a gap in the fix above: a project-root
-`branchFraming:` never resolves a role at all.** Declared directly under the top-level
-`components:` key rather than inside any `branches:` node, it is written before the branch
-tree exists and reads through the same literal/`{%variable}`-only resolver an `opening:`
-written as plain prose uses — it never checks whether its spec names a `sections:` document,
-so a `{$role}` token there is never even attempted, whether the spec is a literal sentence
-or a file path. This is a structural limitation of that one call site, not a bug the roles
-work above addresses.
+**What differs between sites is only whether `{$protagonist}` can become "you".** Every
+`{$role}` token resolves to its bound item everywhere; turning the protagonist into "you"
+additionally needs a resolved `branchProtagonist`. A leaf takes that from its branch
+chain, and `branchFraming` (interior or root) derives it from the merged protagonist
+binding. The root `Description` pins it to `null` — the blurb belongs to no branch — so
+`{$protagonist}` there renders as the bound item's name rather than "you".
 
 **Roles resolve in component prose, not only in item bodies.** An Author's Note or AI
 Instructions rule referencing `{$LI}` resolves the same way a character card's body does —

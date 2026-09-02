@@ -793,16 +793,16 @@ Author's Note rule referencing `{$LI}` goes through the same token pass items do
 matters because a real share of the hardcoded pronouns §9.1 describes live in component
 text, not in cards. Every leaf-level component (story cards, Plot Essentials, AI
 Instructions, Author's Note, a leaf's own `opening:`) resolves roles; `branchFraming` at
-an interior node inherits the roles table down the tree and resolves them too; the root
-`Description` reads the project's own `roles:`.
+any branch node — the project root included — inherits the roles table down the tree and
+resolves them too; the root `Description` reads the project's own `roles:`.
 
-**One site is a real exception: a project-root `branchFraming:` never resolves a role at
-all.** Declared directly under the top-level `components:` key rather than inside any
-`branches:` node, it is written before the branch tree exists and reads through the
-literal / `{%variable}`-only resolver a plain-prose `opening:` uses. It never checks
-whether its spec names a `sections:` document, so a `{$role}` token there is never
-attempted, whatever shape the spec is. This is a structural limit of that one call site
-(see §7.7).
+**Shape does not gate it.** An `opening:` or `branchFraming:` written as an inline
+sentence or a prose `.md` runs the same token pass a `sections:` document does, so a
+`{$role}` in an inline opening resolves — a stray `{$token}` that matches nothing still
+leaks to CL0430, and an unresolved `{%var}` in the spec is still CL0634. The one
+asymmetry is `{$protagonist}` → "you": it needs a resolved `branchProtagonist`, which a
+leaf and `branchFraming` (interior or root) have but the root `Description` pins to
+`null`, so `{$protagonist}` in the blurb renders as the bound item's name.
 
 ---
 

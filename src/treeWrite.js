@@ -8,6 +8,7 @@ const {
 const { busWarner, severityOf, CODES: DIAG_CODES } = require('./diag');
 const { walkBranchTree, mergePlaceholders, mergeUnbindable } = require('./model/branches');
 const { FRAMING_DESCRIPTOR, isPassthrough, renderSectionedComponent } = require('./emit/components');
+const { applyTokenPass } = require('./model/pronouns');
 const {
   checkUndeclaredPlaceholders, checkPlaceholderContext, writeNodePlaceholders, localKeysOf,
   expandQuestions,
@@ -145,7 +146,16 @@ function writeFramingRecursive(rootNode, outputBase, configBase, configPath, var
       });
       return text;
     }
-    return resolveOpeningContent(spec, configBase, vars, framingSink);
+    // Framing written as a sentence or a prose `.md` still resolves role and pronoun
+    // tokens — the same pass the sectioned arm above runs — so `{$LI}` in a one-line
+    // `branchFraming:` works like it does in a `sections:` document. Interior nodes and the
+    // project root alike: the root visit reaches here with the project's own roles table
+    // and protagonist already merged in, exactly as it does for a sectioned root framing.
+    const literal = resolveOpeningContent(spec, configBase, vars, framingSink);
+    return applyTokenPass(literal, {
+      item: {}, registry, branchProtagonist, roles, onRoleUsed,
+      onWarn: busWarner(diagnostics, { file: configPath }),
+    });
   };
 
   walkBranchTree(rootNode, ({ name, node, path: nodePath, isLeaf, isRoot, state }) => {

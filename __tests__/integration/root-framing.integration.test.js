@@ -126,3 +126,83 @@ test('the undeclared-placeholder check runs at root framing, where the old rung 
   const found = diagnostics.all.filter((d) => d.code === CODES.PLACEHOLDER_UNDECLARED);
   expect(found).toEqual([]);
 });
+
+/**
+ * The literal / inline arm of root framing resolves roles too.
+ *
+ * Phase 11 gave root framing the sectioned path (the tests above). What it left behind
+ * was `renderFraming`'s fallback — a `branchFraming:` written as a bare sentence or a
+ * prose `.md` still went through `resolveOpeningContent`, which only expands `{%…}`. A
+ * `{$role}` there was never attempted, so the token leaked into `Opening.md` and tripped
+ * the CL0430 output sweep. It now runs the same token pass the sectioned arm does, with
+ * the project's own `roles:` table and (null) protagonist.
+ */
+describe('root branchFraming — inline sentence arm', () => {
+  let dir;
+  let diag;
+  const readOut = (...p) => fs.readFileSync(path.join(dir, 'out', ...p), 'utf8');
+
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-root-framing-inline-'));
+    const write = (rel, content) => {
+      const full = path.join(dir, rel);
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, content, 'utf8');
+    };
+    write('templates/Character.template', '{$name}\n');
+    write('Codex/items.yaml', [
+      '- id: Aness',
+      '  name: Aness',
+      '  pronouns: female',
+      '  aid: {type: Character, triggers: [Aness]}',
+      '  render: {template: Character, wrapper: none}',
+      '',
+      '- id: Kaiden',
+      '  name: Kaiden',
+      '  pronouns: male',
+      '  aid: {type: Character, triggers: [Kaiden]}',
+      '  render: {template: Character, wrapper: none}',
+      '',
+    ].join('\n'));
+    write('compile.yaml', [
+      'version: 4',
+      'title: Inline Root Framing Probe',
+      'structure:',
+      '  input:',
+      "    items: ['./Codex']",
+      "    templates: ['./templates']",
+      "  output: './out'",
+      'roles:',
+      '  protagonist: Aness',
+      '  LI: Kaiden',
+      'components:',
+      '  branchFraming: "Your bond, {$LI}, is already at the gate. Which road?"',
+      'branches:',
+      '  subject: {}',
+      '',
+    ].join('\n'));
+
+    diag = new Diagnostics();
+    const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
+    try {
+      compile(path.join(dir, 'compile.yaml'), { diagnostics: diag });
+    } catch (err) { /* none expected */ } finally {
+      spies.forEach((s) => s.mockRestore());
+    }
+  });
+
+  afterAll(() => {
+    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('compiles with no error-level diagnostic', () => {
+    expect(diag.all.filter((d) => d.severity === 'error')).toEqual([]);
+  });
+
+  test('the {$LI} role resolves to its item, with no leaked-token sweep hit', () => {
+    expect(readOut('Components', 'Opening.md')).toBe(
+      'Your bond, Kaiden, is already at the gate. Which road?\n',
+    );
+    expect(diag.all.filter((d) => d.code === CODES.LEAKED_FIELD_TOKEN)).toEqual([]);
+  });
+});

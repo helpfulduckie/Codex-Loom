@@ -10,6 +10,7 @@ const { checkUndeclaredPlaceholders, checkPlaceholderContext } = require('./emit
 const {
   resolveComponentSpec, writeFramingRecursive, writeLabelsRecursive, writePlaceholdersRecursive,
 } = require('./treeWrite');
+const { applyTokenPass } = require('./model/pronouns');
 
 /**
  * The recursive tree writers. `opening:` is written by the leaf loop as an ordinary
@@ -67,7 +68,22 @@ function writeScenarioBlurb({
     let descMetadata = null;
 
     if (isPassthrough(descSpec)) {
-      combined = readPassthrough(descSpec);
+      // A prose `.md`/`.txt` blurb still resolves role and pronoun tokens, matching the
+      // `sections:` arm below and the leaf loop. `branchProtagonist` stays null — the blurb
+      // belongs to the project, not any branch — and `roles` is gated the same way that arm
+      // gates it: passed only when some node declared `roles:`, so `CL0540` treats a project
+      // that never mentions roles as role-unaware rather than one with zero bindings.
+      const raw = readPassthrough(descSpec);
+      if (raw === null) {
+        combined = null;
+      } else {
+        const rootRolesDeclared = !!(config.roles && Object.keys(config.roles).length);
+        combined = applyTokenPass(raw, {
+          item: {}, registry, branchProtagonist: null,
+          roles: rootRolesDeclared ? config.roles : null, onRoleUsed: roleState.onUsed,
+          onWarn: busWarner(diagnostics, { file: String(descSpec) }),
+        }) || null;
+      }
     } else {
       const descComponent = componentLoader.load(descSpec, DESCRIPTION_DESCRIPTOR);
       if (descComponent) {
