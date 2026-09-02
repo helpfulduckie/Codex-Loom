@@ -150,6 +150,10 @@ A YAML sequence in a variant is treated as a **value replacement** (sets the fie
 
 An empty sequence `[]` is always treated as an ops list (no ops = no change, not an empty array replacement).
 
+### When a `-{}` or `/{}/{}` matches nothing — `CL0328`
+
+`-{text}` and `/{old}/{new}` return the value untouched when the target is absent, which is a silent no-op. That is usually harmless — a swap-chain like `/{She}/{He}` / `/{she}/{he}` / `/{her}/{his}` relies on it, since any one description carries some of those forms and not others. But a *standalone* `-{}` / `/{}/{}` that matches nothing, or an op chain where **every** removal/swap missed, is always a mistake: most often the text the op was written against has drifted since. Codex Loom warns (`CL0328`) in exactly those two cases, and stays quiet when some ops in a chain legitimately do nothing.
+
 ```yaml check=none reason=body-field-fragment
 # Op sequence — every element starts with an op prefix
 description:

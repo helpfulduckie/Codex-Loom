@@ -185,7 +185,8 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     }
     for (const key of ITEM_TOP_LEVEL_FIELDS) {
       if (itemDef[key] !== undefined) {
-        const newVal = applyFieldOp(item[key], itemDef[key]);
+        const label = `${itemDef.id || item.id || item.name || '(unknown)'}.${key}`;
+        const newVal = applyFieldOp(item[key], itemDef[key], onWarn ? { onWarn, label } : null);
         if (newVal === '__DELETE__') delete item[key]; else item[key] = newVal;
       }
     }
@@ -196,7 +197,7 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     if (itemDef.id) item.id = itemDef.id;
 
     // Resolve branch spec → variant names to apply
-    const branchVariantNames = resolveBranchSpec(itemDef.branches, branchPath);
+    const branchVariantNames = resolveBranchSpec(itemDef.branches, branchPath, onWarn);
     if (branchVariantNames === null) return null; // excluded
     item._hasVariant = branchVariantNames.length > 0;
 
@@ -252,7 +253,8 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     const fannedOut = Boolean(itemDef._include_branch_spec);
     const branchVariantNames = resolveBranchSpec(
       itemDef._include_branch_spec || itemDef.branches,
-      branchPath
+      branchPath,
+      onWarn
     );
     if (branchVariantNames === null) return null; // excluded
     item._hasVariant = branchVariantNames.length > 0;

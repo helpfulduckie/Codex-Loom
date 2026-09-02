@@ -234,8 +234,10 @@ branches:
 # Or: include only in one branch
 branches:
   subject: base
-  '*': ~
+  _: ~             # exclude from every branch not named above
 ```
+
+Use `_: ~` for the catch-all, not `'*': ~`. A null wildcard is skipped rather than honored — `'*': ~` leaves the item included everywhere and raises `CL0327`.
 
 ---
 

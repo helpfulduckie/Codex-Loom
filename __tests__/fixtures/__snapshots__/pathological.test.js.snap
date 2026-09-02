@@ -48,6 +48,10 @@ ERROR CL0201 compile.cl.yaml
 exports[`pathological fixture placement invariants and latent placeholder content 1`] = `
 "WARN CL0326 Codex/items.cl.yaml
   importVariants selector "wrm" matched none of the 3 items included from lore.cl.yaml. A selector aimed at every item in a file is silent where an item does not define the name (§7.6.2a), so a misspelling applies to nothing and changes nothing — this is the only report it produces.
+WARN CL0327 Codex/items.cl.yaml
+  branch spec maps '*' to ~ (a null wildcard). Read literally that excludes the item from every branch, which is never what anyone means, so the walker skips it and the item stays included everywhere — the opposite of how it reads. Use '_: ~' as the catch-all to drop the branches you did not name.
+WARN CL0328 Codex/items.cl.yaml
+  field "DriftedOp.Tagline" operation "-{in a controlled bun}" targets "in a controlled bun", which the current value does not contain — it removes and replaces nothing. A \`-{}\` or \`/{}/{}\` that matches nothing is always a mistake: usually the text it was written against has drifted. Check the value, or drop the op.
 ERROR CL0325 Codex/items.cl.yaml
   two item definitions resolve to id "anchor" on this branch.
   hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.

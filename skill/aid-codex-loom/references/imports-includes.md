@@ -158,9 +158,11 @@ No `only:` or `except:` keys. Use null dispatch:
 - import: Guard
   branches:
     garrison: base  # include only in garrison branch
-    '*': ~          # exclude from all others
+    _: ~            # exclude from all others
   variants:
     base: {}
 ```
+
+Use `_: ~`, not `'*': ~`, to exclude the branches you did not name — a null wildcard is skipped, not honored, so `'*': ~` leaves the import included everywhere and raises `CL0327`.
 
 See `branches-variants.md` for full dispatch syntax.

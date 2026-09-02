@@ -211,6 +211,6 @@ To exclude an import from specific branches, use null (`~`) in the `branches:` d
     base: {}
 ```
 
-**Use `_`, not `'*'`, to exclude the branches you did not name.** A null wildcard is skipped rather than honored, so `'*': ~` leaves the import **included** everywhere — silently, and with no diagnostic. See [Fallback `_`](05-branches-and-variants.md#fallback-_--only-when-nothing-else-matched).
+**Use `_`, not `'*'`, to exclude the branches you did not name.** A null wildcard is skipped rather than honored, so `'*': ~` leaves the import **included** everywhere — the opposite of what it reads as, and a warning (`CL0327`). See [Fallback `_`](05-branches-and-variants.md#fallback-_--only-when-nothing-else-matched).
 
 See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) for the full `branches:` dispatch syntax including wildcards, arrays, and nested dispatch.

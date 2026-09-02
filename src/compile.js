@@ -231,7 +231,9 @@ function reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics) {
   }
 
   for (const [source, items] of groups) {
-    const names = resolveBranchSpec(items[0]._include_branch_spec, branchPath);
+    const names = resolveBranchSpec(
+      items[0]._include_branch_spec, branchPath, busWarner(diagnostics, { file: source }),
+    );
     if (names === null) continue; // the whole include is excluded from this branch
     for (const name of names) {
       const matched = items.filter((def) => {

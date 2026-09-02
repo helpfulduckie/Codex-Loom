@@ -132,8 +132,10 @@ branches:
 ```yaml
 branches:
   subject: base
-  '*': ~           # exclude from all other branches
+  _: ~             # exclude from all other branches
 ```
+
+Use `_: ~`, not `'*': ~`, here. A null wildcard is skipped, not honored — `'*': ~` leaves the item included everywhere and raises `CL0327`. `_` is the catch-all for branches with no explicit key.
 
 **Null excludes immediately** — when the dispatch resolves a null for the exact branch key, the item is skipped with no further wildcard processing at that level.
 

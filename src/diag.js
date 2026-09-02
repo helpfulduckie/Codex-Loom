@@ -112,6 +112,8 @@ const REGISTRY = Object.freeze({
   ITEM_RESOLUTION_FAILED:       { id: 'CL0324', severity: ERROR, summary: 'An item could not be resolved — most often a failed import:.' },
   DUPLICATE_RESOLVED_ID:        { id: 'CL0325', severity: ERROR, summary: 'Two item definitions resolve to the same id on one branch.' },
   SELECTOR_MATCHED_NOTHING:     { id: 'CL0326', severity: WARN,  summary: 'A selector aimed at many items matched none of them.' },
+  BRANCH_WILDCARD_UNBIND:       { id: 'CL0327', severity: WARN,  summary: "A branch spec maps '*' to ~, which reads as \"exclude from every branch\" and is silently skipped; the author meant '_: ~'." },
+  FIELD_OP_NOOP:                { id: 'CL0328', severity: WARN,  summary: "A field op's target is absent so it changes nothing — every op in a chain missed, or a lone -{} / swap missed." },
   CROSS_ITEM_REF_MISSING:       { id: 'CL0330', severity: WARN,  summary: 'A cross-item reference names an item that does not exist.' },
   AMBIGUOUS_REF:                { id: 'CL0340', severity: ERROR, summary: 'A reference is defined in more than one canon set and is not qualified.' },
   UNKNOWN_CANON_SOURCE:         { id: 'CL0341', severity: ERROR, summary: 'A reference names a canon set not declared in structure.input.library.' },

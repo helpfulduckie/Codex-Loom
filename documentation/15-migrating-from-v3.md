@@ -253,5 +253,6 @@ null (`~`) in the item's `branches:` dispatch map. There are no `only:` or
 
 To exclude every branch you did *not* name, use the fallback key — `_: ~`, not
 `'*': ~`. A null wildcard is skipped rather than honored, so `'*': ~` leaves the
-item included everywhere. See
+item included everywhere — and, since v4, raises `CL0327` naming `_: ~` as the
+fix. See
 [Branches & Variants](05-branches-and-variants.md#fallback-_--only-when-nothing-else-matched).

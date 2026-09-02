@@ -116,6 +116,69 @@ describe('applyFieldOp', () => {
       expect(applyFieldOp({ a: 'foo' }, 'new value')).toBe('new value');
     });
   });
+
+  describe('CL0328 — a field op that matched nothing', () => {
+    const arm = () => {
+      const calls = [];
+      return { ctx: { onWarn: (code, message) => calls.push({ code, message }), label: 'Item.field' }, calls };
+    };
+
+    test('a standalone -{} whose target is absent warns', () => {
+      const { ctx, calls } = arm();
+      expect(applyFieldOp('platinum blond hair', '-{in a controlled bun}', ctx)).toBe('platinum blond hair');
+      expect(calls.map((c) => c.code)).toEqual(['CL0328']);
+      expect(calls[0].message).toContain('in a controlled bun');
+    });
+
+    test('a standalone swap whose "from" is absent warns', () => {
+      const { ctx, calls } = arm();
+      applyFieldOp('she built her reputation', '/{THEY}/{he}', ctx);
+      expect(calls.map((c) => c.code)).toEqual(['CL0328']);
+    });
+
+    test('a -{} that does hit stays silent', () => {
+      const { ctx, calls } = arm();
+      expect(applyFieldOp('platinum blond hair in a controlled bun', '-{in a controlled bun}', ctx))
+        .toBe('platinum blond hair');
+      expect(calls).toEqual([]);
+    });
+
+    test('append and replace never warn', () => {
+      const { ctx, calls } = arm();
+      applyFieldOp('base', '+{ addendum }', ctx);
+      applyFieldOp('base', 'a plain replacement', ctx);
+      applyFieldOp('anything', null, ctx); // ~ delete
+      expect(calls).toEqual([]);
+    });
+
+    test('a chain warns once when every op missed', () => {
+      const { ctx, calls } = arm();
+      applyFieldOp('a plain clause', ['/{She}/{He}', '/{she}/{he}', '/{her}/{his}'], ctx);
+      expect(calls.map((c) => c.code)).toEqual(['CL0328']);
+      expect(calls[0].message).toContain('every operation in this chain');
+    });
+
+    test('a chain stays silent when at least one op hits (the pronoun swap-chain case)', () => {
+      const { ctx, calls } = arm();
+      applyFieldOp('She met her friend', ['/{She}/{He}', '/{she}/{he}', '/{her}/{his}'], ctx);
+      expect(calls).toEqual([]);
+    });
+
+    test('a mapping op warns per missed subfield, not for the ones that hit', () => {
+      const { ctx, calls } = arm();
+      applyFieldOp(
+        { hair: 'in a controlled bun', mood: 'clinical' },
+        { hair: '-{absent phrase}', mood: '/{clinical}/{warm}' },
+        ctx,
+      );
+      expect(calls.map((c) => c.code)).toEqual(['CL0328']);
+      expect(calls[0].message).toContain('Item.field.hair');
+    });
+
+    test('no ctx → no warnings and identical output', () => {
+      expect(applyFieldOp('x', '-{absent}')).toBe('x');
+    });
+  });
 });
 
 describe('collectVariantDeltas', () => {
@@ -404,6 +467,43 @@ describe('_ fallback wildcard (resolveBranchSpec)', () => {
     };
     expect(resolveBranchSpec(spec, ['Other', 'Aness'])).toEqual(['aness-fallback']);
     expect(resolveBranchSpec(spec, ['Felix', 'Aness'])).toEqual(['aness-felix']);
+  });
+});
+
+// ── CL0327 — a null wildcard in a branch spec ─────────────────────────────────
+
+describe('CL0327 — null wildcard (resolveBranchSpec)', () => {
+  test("'*': ~ raises CL0327 through onWarn and is still skipped (item stays included)", () => {
+    const calls = [];
+    const spec = { subject: 'base', '*': null };
+    const names = resolveBranchSpec(spec, ['researcher'], (code, message) => calls.push({ code, message }));
+    expect(names).toEqual([]); // not excluded — the null wildcard was skipped
+    expect(calls.map((c) => c.code)).toEqual(['CL0327']);
+    expect(calls[0].message).toContain("'_: ~'");
+  });
+
+  test("'_': ~ is the legitimate form and raises nothing", () => {
+    const calls = [];
+    const spec = { subject: 'base', _: null };
+    expect(resolveBranchSpec(spec, ['researcher'], (code) => calls.push(code))).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  test('a null wildcard nested under a branch key is found too', () => {
+    const calls = [];
+    const spec = { Wyvern: { branches: { '*': null, Veryn: 'v' } } };
+    resolveBranchSpec(spec, ['Wyvern', 'Veryn'], (code) => calls.push(code));
+    expect(calls).toEqual(['CL0327']);
+  });
+
+  test('one warning per spec object however many leaves resolve against it', () => {
+    const calls = [];
+    const spec = { subject: 'base', '*': null };
+    const onWarn = (code) => calls.push(code);
+    for (const leaf of [['researcher'], ['flashback'], ['subject']]) {
+      resolveBranchSpec(spec, leaf, onWarn);
+    }
+    expect(calls).toEqual(['CL0327']);
   });
 });
 

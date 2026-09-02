@@ -163,6 +163,8 @@ Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein 
 | `CL0324` | ERROR | An item could not be resolved — most often a failed `import:`. |
 | `CL0325` | ERROR | Two item definitions resolve to the same id on one branch. |
 | `CL0326` | WARN | A selector aimed at many items matched none of them. |
+| `CL0327` | WARN | A branch spec maps `'*'` to `~`; it is skipped, and `'_': ~` is what was meant. |
+| `CL0328` | WARN | A field op changes nothing: every op in a chain missed, or a lone `-{}` / `/{}/{}` missed. |
 | `CL0340` | ERROR | A reference is defined in more than one canon set and is not qualified. |
 | `CL0341` | ERROR | A reference names a canon set not declared in `structure.input.library`. |
 | `CL0342` | ERROR | A reference names an id that no canon set defines. |
@@ -207,6 +209,27 @@ would otherwise raise nothing at all. Three of seven targets matched is normal; 
 seven is a mistake, and only the second is reported. The `importVariants:` half is checked
 once per compile, because that selector does not depend on the branch; the `branches:`
 half is checked per branch, because a dispatch has no answer without one.
+
+`CL0327` fires when a branch spec — an item's `branches:`, an import's, an include
+directive's, or a component's — maps `'*'` to `~`. The walker skips a null wildcard on
+purpose: read literally `'*': ~` excludes the item from *every* branch, which no one means
+to write, and honoring it would silently empty an item out of a whole scenario. But the
+skip is not the same as the item being fine — every author who writes `'*': ~` meant
+`'_': ~`, the catch-all that excludes the branches they did *not* name. So the skip stays
+and the silence goes. The finding is keyed on the spec object, not the leaf, so a project
+with fifty leaves resolving against one bad spec gets one warning.
+
+`CL0328` catches a field op that matched nothing. `-{x}` and `/{a}/{b}` are
+`split(…).join(…)` underneath, which returns the value untouched when the target is
+absent — a silent no-op, and exactly what upstream drift produces: a shared library item's
+text changes from "in a controlled bun" to "in a tight bun", a consuming project's
+`hair: -{in a controlled bun}` quietly stops applying, and the card compiles clean
+carrying text that was meant to be gone. Warning on *every* missed op is unusable —
+`06-field-operations.md`'s pronoun swap-chain (`/{She}/{He}`, `/{she}/{he}`,
+`/{her}/{his}`) is built on misses, since any one description carries some of those forms
+and not others. So the report is scoped like `CL0326`: it fires only when **every**
+removal/swap in a chain missed, or when a **standalone** `-{}` / `/{}/{}` missed. Those
+are always mistakes, and they are what drift produces.
 
 ### CL04xx — render
 

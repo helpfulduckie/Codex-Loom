@@ -28,12 +28,20 @@ const { CODES } = require('../diag');
  *
  * Both '*' and an explicit key can match at the same level; explicit adds to wildcard.
  *
+ * A null `*` (`'*': ~`) is skipped rather than honored — read literally it excludes the
+ * item from every branch, which nobody means, and honoring it would silently empty an
+ * item out of a whole scenario. `_: ~` is the catch-all for what authors want here. The
+ * skip stays, but it is no longer silent: pass `onWarn` and `'*': ~` anywhere in the spec
+ * raises `CL0327` once per spec object.
+ *
  * @param {object|null} spec - the branches: mapping on an item def
  * @param {string[]} branchPath - leaf branch path e.g. ['A', 'X']
+ * @param {function} [onWarn] - `onWarn(code, message)`; only used to raise CL0327
  * @returns {null | string[]}
  */
-function resolveBranchSpec(spec, branchPath) {
+function resolveBranchSpec(spec, branchPath, onWarn = null) {
   if (!spec || typeof spec !== 'object') return [];
+  if (onWarn) warnWildcardUnbind(spec, onWarn);
 
   const variantNames = [];
   let activeSpecs = [spec];
@@ -54,7 +62,9 @@ function resolveBranchSpec(spec, branchPath) {
         }
       }
 
-      // Collect wildcard baseline
+      // Collect wildcard baseline. A null `*` falls through untouched — the reading it
+      // would need ("exclude everywhere") is never intended; `warnWildcardUnbind` above
+      // raises CL0327 for it rather than the walker acting on it.
       if ('*' in currentSpec && currentSpec['*'] !== null) {
         const wildcardVal = currentSpec['*'];
         variantNames.push(...extractApplyList(wildcardVal));
@@ -86,6 +96,38 @@ function resolveBranchSpec(spec, branchPath) {
   }
 
   return variantNames;
+}
+
+/**
+ * One CL0327 per spec object, however many leaves resolve against it.
+ *
+ * The offense is a static property of the spec — a `'*'` key mapped to `~` at any depth —
+ * not of the leaf being resolved, so the finding is keyed on the spec object's identity.
+ * `resolveBranchSpec` runs per item per leaf and the same `branches:` object is shared
+ * across every leaf, so a `WeakSet` collapses the repeat without the walker needing an
+ * item id or a position label.
+ */
+const WARNED_WILDCARD_UNBIND = new WeakSet();
+
+function hasWildcardUnbind(map) {
+  if (!map || typeof map !== 'object' || Array.isArray(map)) return false;
+  for (const [key, val] of Object.entries(map)) {
+    if (key === '*' && (val === null || val === undefined)) return true;
+    if (val && typeof val === 'object' && !Array.isArray(val) && hasWildcardUnbind(val.branches)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function warnWildcardUnbind(spec, onWarn) {
+  if (WARNED_WILDCARD_UNBIND.has(spec) || !hasWildcardUnbind(spec)) return;
+  WARNED_WILDCARD_UNBIND.add(spec);
+  onWarn(CODES.BRANCH_WILDCARD_UNBIND,
+    "branch spec maps '*' to ~ (a null wildcard). Read literally that excludes the item "
+    + 'from every branch, which is never what anyone means, so the walker skips it and the '
+    + 'item stays included everywhere — the opposite of how it reads. Use \'_: ~\' as the '
+    + 'catch-all to drop the branches you did not name.');
 }
 
 /**

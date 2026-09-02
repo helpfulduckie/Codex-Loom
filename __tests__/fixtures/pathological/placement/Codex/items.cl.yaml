@@ -17,6 +17,48 @@
       slot: cast
       order: 1
 
+# ── §3.3: a null wildcard in a branch spec — CL0327 ─────────────────────────
+# `'*': ~` reads as "exclude from every branch", which nobody means, so the walker skips
+# it and the item stays included everywhere. Before CL0327 that skip was silent; now it
+# is one WARN per spec object, however many leaves resolve against it — so this fires
+# once, not once per branch. `_: ~` is the form the author wanted.
+- id: NullWildcard
+  name: NullWildcard
+  aid:
+    type: Character
+    triggers: [NullWildcard]
+  body:
+    Tagline: Its spec says drop it everywhere; the walker keeps it everywhere instead.
+  branches:
+    '*': ~
+  render:
+    plotEssential:
+      slot: cast
+      order: 6
+
+# ── §3.2: a field op whose target substring is absent — CL0328 ──────────────
+# The `worn` variant removes "in a controlled bun" from a Tagline that never held the
+# phrase. `-{}` is `split().join()`, which hands back the original on a miss, so the op
+# silently does nothing. A standalone `-{}` that matches nothing is always a mistake —
+# usually the text it was written against has drifted. Only `open` dispatches `worn`, so
+# this fires once, on that branch.
+- id: DriftedOp
+  name: DriftedOp
+  aid:
+    type: Character
+    triggers: [DriftedOp]
+  body:
+    Tagline: A tagline that never mentioned how the hair was tied.
+  branches:
+    open: worn
+  variants:
+    worn:
+      Tagline: "-{in a controlled bun}"
+  render:
+    plotEssential:
+      slot: cast
+      order: 7
+
 # ── §12.3 check 1: an undeclared placeholder, latent until Phase 4 ───────────
 # `%heroName%` is declared in ../compile.cl.yaml; `%ghostName%` is not. Today both survive
 # into compiled output as literal text and nothing reports the second.

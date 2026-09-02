@@ -434,7 +434,7 @@ function findSectionVariant(section, name) {
  * `normalizeComponent` uses — position, then declaration order.
  */
 function sectionsForBranch(component, branchPath, onWarn = () => {}) {
-  const fanned = resolveBranchSpec(component.branches, branchPath);
+  const fanned = resolveBranchSpec(component.branches, branchPath, onWarn);
   if (fanned === null) return null; // component-level ~ — excluded from this branch
 
   for (const name of fanned) {
@@ -449,7 +449,7 @@ function sectionsForBranch(component, branchPath, onWarn = () => {}) {
 
   const applicable = [];
   for (const section of component.sections) {
-    const variants = section.branches ? resolveBranchSpec(section.branches, branchPath) : [];
+    const variants = section.branches ? resolveBranchSpec(section.branches, branchPath, onWarn) : [];
     if (variants === null) continue;
 
     let resolved = section;

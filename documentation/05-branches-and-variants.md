@@ -199,7 +199,7 @@ path: [knight]
 
 **A null wildcard does nothing.** `'*': ~` is skipped rather than excluding anything — the walker ignores a null `*` entirely, so every branch is still included with whatever else matched.
 
-That is deliberate. Read literally, `'*': ~` says *exclude this item from every branch*, which is never a thing anyone means to write — an item excluded everywhere may as well be deleted — and honoring it would silently empty an item out of a whole scenario. So the walker refuses the reading rather than acting on it. **`_` exists for what people actually mean here**, and predates v4.
+That is deliberate. Read literally, `'*': ~` says *exclude this item from every branch*, which is never a thing anyone means to write — an item excluded everywhere may as well be deleted — and honoring it would silently empty an item out of a whole scenario. So the walker refuses the reading rather than acting on it, and raises **`CL0327`** to say so — `'*': ~` anywhere in a spec is a warning, once per spec, naming `'_': ~` as the fix. **`_` exists for what people actually mean here**, and predates v4.
 
 ### Fallback `_` — only when nothing else matched
 
@@ -289,7 +289,7 @@ branches:
   _: ~             # all other branches: excluded
 ```
 
-Use `_`, not `'*'`, for this. A null wildcard is skipped rather than honored, so `'*': ~` leaves the item **included** in every branch — the opposite of what it reads as, and with no diagnostic.
+Use `_`, not `'*'`, for this. A null wildcard is skipped rather than honored, so `'*': ~` leaves the item **included** in every branch — the opposite of what it reads as. It is a warning (`CL0327`), not a silent skip.
 
 **Null excludes immediately** — when the dispatch walker encounters a null for the exact branch key, it returns `null` and the item is skipped entirely for that branch, with no further wildcard processing at that level.
 
