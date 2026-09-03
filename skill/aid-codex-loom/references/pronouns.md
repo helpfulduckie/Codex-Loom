@@ -47,10 +47,11 @@ Resolves to:
 - `"you"` if `Aness` is the **active branch protagonist**
 - The character's **display name** otherwise
 
-Also sets the conjugation scope to that character's effective pronoun set.
+Sets the conjugation scope. A rendered **name** conjugates singular whatever the character's `pronouns:` — `{$Zephon} answer[s]` is "Zephon answers" for a they/them character. The **protagonist** "you" swap sets the plural `you`-set instead.
 
 ```yaml
 - {$Aness} love[s] magic research — {$Aness.she} instinctively leap[s]
+- {$Zephon} answer[s] the question {$Zephon.they} wish[es] had been asked
 ```
 
 When Aness is protagonist (you-set):
@@ -58,6 +59,9 @@ When Aness is protagonist (you-set):
 
 When Aness is NPC with `pronouns: female`:
 > Aness loves magic research — she instinctively leaps
+
+Zephon as an NPC with `pronouns: they` — the name conjugates singular, the scoped pronoun plural:
+> Zephon answers the question they wish had been asked
 
 ---
 
@@ -98,9 +102,9 @@ The player's history with {$LI} is unresolved. {$LI.he} does not raise it unprom
 
 ## Verb Conjugation Markers
 
-Based on the **most recently referenced `{$Id}` or `{$Id.pronoun}` token** in the string.
+Based on the **most recently referenced `{$Id}` or `{$Id.pronoun}` token** in the string, and the marker agrees with **what that token rendered** — a name is singular, a pronoun carries its set.
 
-| Marker | Singular (she/he) | Plural (they/you) |
+| Marker | Singular (she/he, a name) | Plural (they/you) |
 |---|---|---|
 | `[s]` | `s` | `` (empty) |
 | `[es]` | `es` | `` (empty) |
@@ -109,12 +113,14 @@ Based on the **most recently referenced `{$Id}` or `{$Id.pronoun}` token** in th
 | `[has]` | `has` | `have` |
 
 **Scope rules:**
-- `{$Id}` and `{$Id.pronoun}` set the scope to that character's effective pronoun set
+- `{$Id}` rendering a name sets the scope to **singular**, regardless of the character's pronoun set
+- `{$Id}` for the protagonist renders "you" and sets the plural `you`-set
+- `{$Id.pronoun}` sets the scope to that character's effective pronoun set — this is the form that carries they/them into the verb
 - `{$she}` unscoped does **not** set the scope
 - Scope carries forward until a new `{$Id}` is encountered
 - If no scope set, conjugation falls back to the item's own `pronouns:` field
 
-**Avoid mixing forms for the same character.** Use `{$Id.pronoun}` consistently when writing about a specific character so the scope is always explicitly set.
+**Mixing `{$Id}` and `{$Id.they}` for one character is fine and often correct** — the name conjugates singular, the pronoun plural, and each verb agrees with the token in front of it.
 
 ---
 

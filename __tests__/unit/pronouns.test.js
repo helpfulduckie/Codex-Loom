@@ -346,6 +346,39 @@ describe('applyTokenPass — scope tracking across tokens', () => {
   });
 });
 
+describe('applyTokenPass — bare {$Id} name conjugates singular regardless of pronouns', () => {
+  // A rendered proper name takes a third-person-singular verb. The verb marker fires on
+  // the name as readily as on a pronoun, so a they/them NPC referenced as {$Zephon} must
+  // still read "Zephon answers", not "Zephon answer".
+  const zephon = makeItem('zephon', 'they');
+  const registry = new Map([['zephon', zephon]]);
+
+  test('{$Id} + [s] → singular for a they/them NPC', () => {
+    expect(applyTokenPass('{$Zephon} answer[s]', { item: zephon, registry, branchProtagonist: null }))
+      .toBe('Zephon answers');
+  });
+
+  test('{$Id} + [es] → singular for a they/them NPC', () => {
+    expect(applyTokenPass('{$Zephon} rush[es] in', { item: zephon, registry, branchProtagonist: null }))
+      .toBe('Zephon rushes in');
+  });
+
+  test('{$Id} + [is]/[was]/[has] → singular for a they/them NPC', () => {
+    expect(applyTokenPass('{$Zephon} [is] here, {$Zephon} [was] late, {$Zephon} [has] left', { item: zephon, registry, branchProtagonist: null }))
+      .toBe('Zephon is here, Zephon was late, Zephon has left');
+  });
+
+  test('name sets singular scope, then {$Id.they} flips it to plural in the same string', () => {
+    expect(applyTokenPass('{$Zephon} answer[s] the question {$Zephon.they} wish[es] had been asked', { item: zephon, registry, branchProtagonist: null }))
+      .toBe('Zephon answers the question they wish had been asked');
+  });
+
+  test('protagonist they/them still conjugates plural via the "you" swap', () => {
+    expect(applyTokenPass('{$Zephon} answer[s]', { item: zephon, registry, branchProtagonist: 'zephon' }))
+      .toBe('you answer');
+  });
+});
+
 // ── getDisplayName ────────────────────────────────────────────────────────────
 
 describe('getDisplayName', () => {

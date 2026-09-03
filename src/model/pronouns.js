@@ -16,7 +16,12 @@ const { CODES } = require('../diag');
  *   {$Id.she} {$Id.her~} etc.  - scoped pronoun; resolves vs Id's pronouns, protagonist-aware
  *
  * Verb conjugation:
- *   [s] [es] [is] [was] [has]  - conjugate based on most-recently-referenced {$Id}
+ *   [s] [es] [is] [was] [has]  - conjugate against the current scope, which the most
+ *     recently referenced token sets: a scoped pronoun ({$Id.they}) or unscoped-but-
+ *     scope-setting form sets it to a pronoun set, while a bare {$Id} that renders a
+ *     proper name sets the NAME_SCOPE sentinel — a rendered name takes a singular verb
+ *     ("Zephon answers") whatever the character's pronouns, and only the protagonist
+ *     "you" swap makes a bare {$Id} conjugate plural.
  */
 
 const PRONOUN_SETS = {
@@ -60,6 +65,11 @@ const PRONOUN_SETS = {
 
 // Pronoun sets that use plural verb forms (drop [s], [es])
 const PLURAL_SETS = new Set(['nonbinary', 'they', 'you']);
+
+// Conjugation scope set by a bare {$Id} that renders a proper name. Deliberately not in
+// PLURAL_SETS: a rendered name takes a third-person-singular verb regardless of the
+// character's pronoun set, so "{$Zephon} answer[s]" is "Zephon answers" even for they/them.
+const NAME_SCOPE = 'name';
 
 const PRONOUN_TOKEN_MAP = {
   'she':        'subject',
@@ -386,11 +396,12 @@ function applyTokenPass(str, opts) {
     // Is it a registry ID? → character reference
     if (registry.has(innerLower)) {
       const refItem = (resolvedById && resolvedById.get(innerLower)) || registry.get(innerLower);
-      const refPronounSet = getEffectivePronounSet(refItem, innerLower, branchProtagonist);
-      // Sets conjugation scope
-      currentScope = refPronounSet || 'nonbinary';
-
       const isProtagonist = branchProtagonist && branchProtagonist === innerLower;
+      // A bare {$Id} renders a proper name or "you", and a following verb marker agrees
+      // with what was rendered — not with the character's pronouns. A name is third-person
+      // singular (NAME_SCOPE); only the protagonist "you" swap conjugates plural. A scoped
+      // pronoun token ({$Id.they}) is the form that carries the pronoun set into scope.
+      currentScope = isProtagonist ? 'you' : NAME_SCOPE;
       if (isProtagonist) return 'you';
       return matchCase(getDisplayName(refItem), inner);
     }

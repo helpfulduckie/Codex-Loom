@@ -58,11 +58,12 @@
       hair: long brown hair, tied back
     Personality:
       keywords: [precise, restless]
-      # Bracket-verb agreement follows the item's `pronouns:`, not the word in front of it.
-      # Zephon is `they`, so `{$Zephon} answer[s]` renders "Zephon answer" — the plural
-      # rule fires on the name as readily as on the pronoun. Lead with the pronoun where
-      # the verb has to agree, and this reads correctly for every pronoun set.
-      expanded: '{$Zephon.They} answer[s] the question {$Zephon.they} wish[es] had been asked.'
+      # Bracket-verb agreement follows what the token in front of it rendered. A bare
+      # `{$Zephon}` is a proper name, so it takes a singular verb — "Zephon answers" —
+      # whatever the item's `pronouns:`. A scoped `{$Zephon.they}` is the pronoun, so it
+      # takes the plural — "they wish". Both forms sit in one sentence here and each
+      # conjugates on its own.
+      expanded: '{$Zephon} answer[s] the question {$Zephon.they} wish[es] had been asked.'
     Background:
       - Left the archive without giving a reason anyone believed.
     secret: Zephon still has a key to the closed stacks.

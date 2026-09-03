@@ -243,7 +243,7 @@ Then run: `codex-loom ./my-project`
 
 **Player placeholders** (`%heroName%`) are questions the player answers once at the start of an adventure; the answer is substituted everywhere the key appears. Declared under `placeholders:` in `compile.yaml`, at root or per branch, merging per key down the tree. They work in every component and in a card's entry, name, triggers and notes — but never in the Description or a card's `type`, which are ERRORs. AID's native `${What is your name?}` spelling is also valid to write raw, and Latitude's premade `${character.name}` and its pronoun siblings *must* be, since they have no `%key%` form.
 
-**Pronoun tokens** (`{$she}`, `{$her~}`, `{$she's}`) resolve against an item's `pronouns:` field. Character ID tokens (`{$Aria}`) resolve to "you" if that character is the active protagonist, or to their display name otherwise — with automatic verb conjugation via `[s]`, `[is]`, `[was]` markers.
+**Pronoun tokens** (`{$she}`, `{$her~}`, `{$she's}`) resolve against an item's `pronouns:` field. Character ID tokens (`{$Aria}`) resolve to "you" if that character is the active protagonist, or to their display name otherwise — with automatic verb conjugation via `[s]`, `[is]`, `[was]` markers, where a rendered name conjugates singular whatever the character's pronouns and only a scoped `{$Aria.they}` or the "you" swap conjugates plural.
 
 ---
 

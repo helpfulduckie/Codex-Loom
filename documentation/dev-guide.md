@@ -272,11 +272,11 @@ Three rules there are justified by what `velvet_lattice/loader.py` actually does
 **`applyTokenPass`** processes the combined regex `/{(\$[^{}]+)\}|\[(s|es|is|was|has)\]/g` left-to-right. A leading role name is rewritten via `resolveRole` first (on the item path that rewrite is already done, so it is a no-op on the resulting ids); then, in order:
 
 - `{$she}` / `{$her~}` etc. (unscoped, no dot) → resolve against item's own `pronouns:` field. Does **not** set the conjugation scope.
-- `{$Id}` (registry ID, no dot) → "you" if protagonist, else display name. Sets scope to Id's pronoun set.
-- `{$Id.pronoun}` (registry ID + pronoun token) → resolve pronoun against Id's effective pronoun set. Sets scope to Id's pronoun set.
+- `{$Id}` (registry ID, no dot) → "you" if protagonist, else display name. Sets scope: the `you`-set for the protagonist, else the `NAME_SCOPE` sentinel — a rendered name conjugates singular whatever Id's pronoun set, so `{$Zephon} answer[s]` is "Zephon answers" for they/them. `NAME_SCOPE` is deliberately absent from `PLURAL_SETS`.
+- `{$Id.pronoun}` (registry ID + pronoun token) → resolve pronoun against Id's effective pronoun set. Sets scope to Id's pronoun set — this is the form that carries they/them into a following marker.
 - `{$Id.full}` / `{$Id.display}` → full or display name. Does not set scope.
 - `{$Id.body.Field}` (registry ID + body path) → re-emitted as `{$<id>.body.Field}`. On the item path `applyCrossItemRefs` already resolved every such ref whose field exists, so a survivor is a missing field; on the other paths there is no cross-item resolution and it leaks. Either way the output sweep reports it as `CL0430`.
-- `[s]` / `[es]` / `[is]` / `[was]` / `[has]` → conjugate using the current scope (or item's own pronouns if no scope set).
+- `[s]` / `[es]` / `[is]` / `[was]` / `[has]` → conjugate using the current scope (or item's own pronouns if no scope set). `NAME_SCOPE` and the singular pronoun sets take the singular form; `they`/`nonbinary`/`you` take the plural.
 - A leading name that resolves to neither a role nor a registry ID, when the branch is role-aware (`roles` non-null) → `CL0540` (`CL0541`–`CL0543` cover a role that is declared but cannot resolve).
 
 Scope tracking via `currentScope` is local to each string processed by `applyTokenPass`, reset for each call. `applyRolePass`, `applyCrossItemRefs` and `applyPronounPasses` all route through `walkItemTextFields`, so they reach the same fields (`body`/`aid`/`render`/`name`).

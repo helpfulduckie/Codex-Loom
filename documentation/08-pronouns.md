@@ -6,7 +6,7 @@ Codex Loom resolves pronoun tokens in item field values and templates. Tokens ar
 2. **Character ID references** — resolve to "you" or the character's name based on protagonist context
 3. **Scoped pronoun tokens** — resolve against a specific character's pronouns, protagonist-aware
 
-Verb conjugation markers `[s]`, `[es]`, `[is]`, `[was]`, `[has]` are also resolved based on the most recently referenced character's pronoun set.
+Verb conjugation markers `[s]`, `[es]`, `[is]`, `[was]`, `[has]` are also resolved from the most recent reference: a bare `{$Id}` name conjugates singular, "you" and scoped `{$Id.pronoun}` tokens conjugate from the pronoun set.
 
 **A leading `{$X...}` identifier may also be a role** — a per-branch name bound to an item id, resolved to that id before anything on this page runs. See [Roles](13-roles.md); everything below applies identically once a role has resolved to the item it names.
 
@@ -132,13 +132,26 @@ Aness / Aness Rozen
 
 The markers `[s]`, `[es]`, `[is]`, `[was]`, `[has]` conjugate based on the **most recently referenced `{$Id}` or `{$Id.pronoun}` token** in the string (the "current scope").
 
-| Marker | Singular (she/he) | Plural (they/you) |
+| Marker | Singular (she/he, a name) | Plural (they/you) |
 |---|---|---|
 | `[s]` | `s` | `` (empty) |
 | `[es]` | `es` | `` (empty) |
 | `[is]` | `is` | `are` |
 | `[was]` | `was` | `were` |
 | `[has]` | `has` | `have` |
+
+**A marker agrees with what the preceding token rendered, not with the character's pronouns.** A bare `{$Id}` renders a proper name, and a name takes a singular verb whatever the character's `pronouns:` — `{$Zephon} answer[s]` is "Zephon answers" even when Zephon is they/them. The plural forms come from a pronoun: either a scoped `{$Id.they}` token, or the protagonist "you" swap turning a bare `{$Id}` into "you".
+
+```text transform=pronoun-pass id=conj-name-vs-pronoun
+text: "{$Zephon} answer[s] the question {$Zephon.they} wish[es] had been asked"
+cast:
+  Zephon: { name: Zephon, pronouns: they }
+protagonist: Veyrn
+```
+
+``` expect=conj-name-vs-pronoun
+Zephon answers the question they wish had been asked
+```
 
 When Aness is the protagonist, `{$Aness}` becomes "you" and the plural `you`-set drives the markers:
 
@@ -167,8 +180,9 @@ Aness loves magic research — she instinctively leaps
 ```
 
 **Scope rules:**
-- `{$Id}` sets the scope to that character's effective pronoun set
-- `{$Id.pronoun}` sets the scope to that character's effective pronoun set
+- `{$Id}` rendering a name sets the scope to **singular** — a name conjugates `[s]`/`[is]`/`[was]`/`[has]` regardless of the character's pronoun set
+- `{$Id}` for the **protagonist** renders "you" and sets the scope to the plural `you`-set
+- `{$Id.pronoun}` sets the scope to that character's effective pronoun set (this is the form that carries they/them into the verb)
 - `{$she}` (unscoped) does NOT set the scope
 - Scope carries forward within the string until a new `{$Id}` or `{$Id.pronoun}` is encountered
 - If no scope has been set, conjugation falls back to the item's own `pronouns:` field
@@ -224,6 +238,6 @@ An item's `{$Id}` tokens resolve to "you" when `Id` matches the active branch pr
 | The item is about character X and refers to X's own pronouns | `{$she}` unscoped — resolves against the item's `pronouns:` |
 | Referring to a specific named character from any item | `{$Aness.she}` scoped — resolves against Aness's pronouns, protagonist-aware |
 | Referring to a character by name (may become "you") | `{$Aness}` ID reference |
-| Verb agreement following a character reference | `[s]`, `[is]` etc. — follows the most recent `{$Id}` scope |
+| Verb agreement following a character reference | `[s]`, `[is]` etc. — a bare `{$Id}` name conjugates singular; a scoped `{$Id.pronoun}` or the "you" swap conjugates from the pronoun set |
 
-**Avoid mixing forms for the same character.** Use scoped tokens `{$Id.pronoun}` consistently when writing about a specific character, so the conjugation scope is always explicitly set.
+**Mixing `{$Id}` and `{$Id.pronoun}` for one character is fine.** A bare `{$Id}` renders a name and its verb is singular; a scoped `{$Id.they}` renders the pronoun and its verb agrees with the set. Each marker follows the token in front of it, so `{$Zephon} answer[s]` and `{$Zephon.they} wish[es]` in one sentence both read correctly.
