@@ -1,7 +1,7 @@
 Title,Type,Triggers,Seeded By,Seeded in Opening
 Felix Grayls,character,2,0,FALSE
 Kaiden Ross,character,2,0,FALSE
-Elder Roshan,character,2,0,FALSE
+Elder Roshan,character,2,1,FALSE
 Ilan Voss,character,2,0,TRUE
 The Alchemists' Guild,faction,2,1,FALSE
 The Royal Academy,location,2,5,FALSE

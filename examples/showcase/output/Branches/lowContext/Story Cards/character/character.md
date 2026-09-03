@@ -3,7 +3,7 @@
 triggers: [Felicia, Grayls]
 encapsulate: false
 ~~~
-Tagline: Court Alchemist; guild liaison
+Felicia Grayls - Court Alchemist; guild liaison
 Appearance: female; mid 20s; silver hair, in a controlled bun
 Personality: precise, guarded
 
@@ -15,7 +15,7 @@ meta:
   duckieConv:
     role: anchor
 ~~~
-Tagline: Hedge Knight without a house
+Kaiden Ross - Hedge Knight without a house
 Appearance: male; early 30s; dark, close-cropped
 Personality: wry, watchful
 
@@ -28,7 +28,7 @@ meta:
     role: standard
 notes: '[e]'
 ~~~
-Tagline: Master Archivist of the Academy
+Elder Roshan - Master Archivist of the Academy
 Appearance: male; 60s; white beard, bald
 Personality: wise, patient, cryptic
 
@@ -37,7 +37,7 @@ Personality: wise, patient, cryptic
 triggers: [Voss, Ilan]
 encapsulate: false
 ~~~
-Tagline: The rival who never conceded
+Ilan Voss - The rival who never conceded
 Vibe: [driven; unsentimental; patient]
 Appearance: nonbinary; 30s; braided black hair
 Personality: driven, unsentimental

@@ -46,24 +46,20 @@ Setting: Feudal empire; The Royal Academy, %house% wing
 ]
 
 {
-Tagline: %heroName%, Sworn Protector
+You: %heroName%, Sworn Protector
 Appearance: female; late 20s; short silver hair
 Personality: determined, loyal, reserved
 you love a clean solution — you act before you explain.
 }
 
 {
-Cast
-
-Tagline: Master Archivist of the Academy
+Elder Roshan - Master Archivist of the Academy
 Appearance: male; 60s; white beard, bald
 Personality: wise, patient, cryptic
 }
 
-Hints
-
 {
-Tagline: Ask about the stacks
+Opening Hint - Ask about the stacks
 }
 ```
 
@@ -76,9 +72,7 @@ Tagline: Ask about the stacks
 triggers: [Felix, Grayls]
 encapsulate: false
 ~~~
-Tagline:
-- Court Alchemist; guild liaison
-- sworn to the Academy
+Felix Grayls - Court Alchemist; guild liaison; sworn to the Academy
 Vibe: [precise; guarded; curious]
 Appearance: male; mid 20s; silver hair
 Personality: precise, guarded
@@ -91,7 +85,7 @@ meta:
   duckieConv:
     role: anchor
 ~~~
-Tagline: Hedge Knight without a house
+Kaiden Ross - Hedge Knight without a house
 Vibe: [wry; watchful; steady]
 Appearance: male; early 30s; dark, close-cropped
 Personality: wry, watchful
@@ -106,7 +100,7 @@ meta:
     role: standard
 notes: '[e]'
 ~~~
-Tagline: Master Archivist of the Academy
+Elder Roshan - Master Archivist of the Academy
 Vibe: [patient; cryptic; exacting]
 Appearance: male; 60s; white beard, bald
 Personality: wise, patient, cryptic
@@ -121,7 +115,7 @@ Background:
 triggers: [Voss, Ilan]
 encapsulate: false
 ~~~
-Tagline: The rival who never conceded
+Ilan Voss - The rival who never conceded
 Vibe: [driven; unsentimental; patient]
 Appearance: nonbinary; 30s; braided black hair
 Personality: driven, unsentimental
@@ -137,7 +131,7 @@ triggers: [Guild, Alchemists]
 encapsulate: false
 kind: reference
 ~~~
-Tagline: Chartered monopoly on refined reagents
+The Alchemists' Guild - Chartered monopoly on refined reagents
 The guild predates the academy. It has outlasted three charters.
 Purpose: Control the reagent trade
 Structure: A masters' council of nine
@@ -150,10 +144,7 @@ Status: active
 triggers: [Academy, Royal Academy]
 encapsulate: false
 ~~~
-Tagline:
-- Seven towers around a frozen courtyard
-- the wing that admits only sworn houses
-- under a standing snow
+The Royal Academy - Seven towers around a frozen courtyard; the wing that admits only sworn houses; under a standing snow
 Culture Vibe: [austere; competitive; old]
 - The lower stacks
 - The frozen courtyard
@@ -166,7 +157,7 @@ Pantheon:
 triggers: [Warrens]
 encapsulate: false
 ~~~
-Tagline: Tenements below the Academy wall
+The Warrens - Tenements below the Academy wall
 Culture Vibe: [crowded; wary; resourceful]
 The cistern market
 
@@ -216,15 +207,14 @@ Setting: Feudal empire; The Royal Academy, %house% wing
 ]
 
 {
-Tagline: %heroName%, Sworn Protector
+You: %heroName%, Sworn Protector
 Appearance: female; late 20s; short silver hair
 Personality: determined, loyal, reserved
+you love a clean solution — you act before you explain.
 }
 
 {
-Cast
-
-Tagline: Master Archivist of the Academy
+Elder Roshan - Master Archivist of the Academy
 Appearance: male; 60s; white beard, bald
 Personality: wise, patient, cryptic
 }
@@ -239,7 +229,7 @@ Personality: wise, patient, cryptic
 triggers: [Felicia, Grayls]
 encapsulate: false
 ~~~
-Tagline: Court Alchemist; guild liaison
+Felicia Grayls - Court Alchemist; guild liaison
 Appearance: female; mid 20s; silver hair, in a controlled bun
 Personality: precise, guarded
 
@@ -251,7 +241,7 @@ meta:
   duckieConv:
     role: anchor
 ~~~
-Tagline: Hedge Knight without a house
+Kaiden Ross - Hedge Knight without a house
 Appearance: male; early 30s; dark, close-cropped
 Personality: wry, watchful
 
@@ -264,7 +254,7 @@ meta:
     role: standard
 notes: '[e]'
 ~~~
-Tagline: Master Archivist of the Academy
+Elder Roshan - Master Archivist of the Academy
 Appearance: male; 60s; white beard, bald
 Personality: wise, patient, cryptic
 
@@ -273,7 +263,7 @@ Personality: wise, patient, cryptic
 triggers: [Voss, Ilan]
 encapsulate: false
 ~~~
-Tagline: The rival who never conceded
+Ilan Voss - The rival who never conceded
 Vibe: [driven; unsentimental; patient]
 Appearance: nonbinary; 30s; braided black hair
 Personality: driven, unsentimental
@@ -289,7 +279,7 @@ triggers: [Guild, Alchemists]
 encapsulate: false
 kind: reference
 ~~~
-Tagline: Chartered monopoly on refined reagents
+The Alchemists' Guild - Chartered monopoly on refined reagents
 Purpose: Control the reagent trade
 Status: active
 
@@ -300,10 +290,7 @@ Status: active
 triggers: [Academy, Royal Academy]
 encapsulate: false
 ~~~
-Tagline:
-- Seven towers around a frozen courtyard
-- the wing that admits only sworn houses
-- under a standing snow
+The Royal Academy - Seven towers around a frozen courtyard; the wing that admits only sworn houses; under a standing snow
 
 #### zz_AIN
 
@@ -351,24 +338,20 @@ Setting: Feudal empire; The Royal Academy, %house% wing
 ]
 
 {
-Tagline: %heroName%, Academy Mage
+You: %heroName%, Academy Mage
 Appearance: female; late 20s; short silver hair; silver staff
 Personality: determined, loyal, reserved
 you love a clean solution — you act before you explain.
 }
 
 {
-Cast
-
-Tagline: Master Archivist of the Academy
+Elder Roshan - Master Archivist of the Academy
 Appearance: male; 60s; white beard, bald
 Personality: wise, patient, cryptic
 }
 
-Hints
-
 {
-Tagline: Ask about the stacks
+Opening Hint - Ask about the stacks
 }
 ```
 
@@ -381,7 +364,7 @@ Tagline: Ask about the stacks
 triggers: [Felicia, Grayls]
 encapsulate: false
 ~~~
-Tagline: Court Alchemist; guild liaison
+Felicia Grayls - Court Alchemist; guild liaison
 Vibe: [precise; guarded; curious]
 Appearance: female; mid 20s; silver hair, in a controlled bun
 Personality: precise, guarded
@@ -394,7 +377,7 @@ meta:
   duckieConv:
     role: anchor
 ~~~
-Tagline: Hedge Knight without a house
+Kaiden Ross - Hedge Knight without a house
 Vibe: [wry; watchful; steady]
 Appearance: male; early 30s; dark, close-cropped
 Personality: wry, watchful
@@ -409,7 +392,7 @@ meta:
     role: standard
 notes: '[e]'
 ~~~
-Tagline: Master Archivist of the Academy
+Elder Roshan - Master Archivist of the Academy
 Vibe: [patient; cryptic; exacting]
 Appearance: male; 60s; white beard, bald
 Personality: wise, patient, cryptic
@@ -427,7 +410,7 @@ triggers: [Guild, Alchemists]
 encapsulate: false
 kind: reference
 ~~~
-Tagline: Chartered monopoly on refined reagents
+The Alchemists' Guild - Chartered monopoly on refined reagents
 The guild predates the academy. It has outlasted three charters.
 Purpose: Control the reagent trade
 Structure: A masters' council of nine
@@ -440,10 +423,7 @@ Status: active
 triggers: [Academy, Royal Academy]
 encapsulate: false
 ~~~
-Tagline:
-- Seven towers around a frozen courtyard
-- the wing that admits only sworn houses
-- under a standing snow
+The Royal Academy - Seven towers around a frozen courtyard; the wing that admits only sworn houses; under a standing snow
 Culture Vibe: [austere; competitive; old]
 - The lower stacks
 - The frozen courtyard
@@ -456,7 +436,7 @@ Pantheon:
 triggers: [Warrens]
 encapsulate: false
 ~~~
-Tagline: Tenements below the Academy wall
+The Warrens - Tenements below the Academy wall
 Culture Vibe: [crowded; wary; resourceful]
 The cistern market
 

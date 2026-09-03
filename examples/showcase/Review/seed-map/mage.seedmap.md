@@ -7,7 +7,8 @@
 — _(no inbound seeds)_
 
 **Elder Roshan** `[Roshan, Elder]`
-— _(no inbound seeds)_
+- seeded by _Plot Essentials_ · via _Roshan_
+- seeded by _Plot Essentials_ · via _Elder_
 
 **The Alchemists' Guild** `[Guild, Alchemists]`
 - seeded by **Felicia Grayls** · via _Guild_

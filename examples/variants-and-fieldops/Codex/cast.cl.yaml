@@ -1,7 +1,8 @@
 # The cast, imported from the core library set and dispatched across the setting × tone
 # grid. Every character carries the library's `magical` / `mundane` tone variants; Aness
 # additionally carries a per-setting flavor delta, and that is the difference the file is
-# built to show.
+# built to show. The cast fills the Plot Essentials roster (`CharacterRoster`, one terse
+# line each) and — for Aness and Zephon — a full story card as well.
 # doc: 04-imports-and-includes.md
 
 # The player character. Placeholder-defined, so this project declares `heroName` and
@@ -15,15 +16,15 @@
   branches:
     '*': { branches: { magical: magical, mundane: mundane } }
 
-# Aness fills a Plot Essentials cast slot, and her Tagline is where a setting flavor and a
-# tone delta compose: `medievalFlavor` appends first, then `magical` (sourced from the
-# library item's own variant tree) appends on top. Two `+{}` chains on one field, joined
-# by the shared table's `Tagline: { join: "" }`.
+# Aness's Tagline is where a setting flavor and a tone delta compose: `medievalFlavor`
+# appends first, then `magical` (sourced from the library item's own variant tree) appends
+# on top. Two `+{}` chains on one field. The composed Tagline shows on her story-card name
+# line (`{$aid.title} - {join("", $body.Tagline)}`); the roster line reads `role` instead.
 # doc: 06-field-operations.md#chained-operations
 - import: Aness
   render:
     template: Character
-    plotEssential: { slot: cast, order: 1, template: CharacterBrief }
+    plotEssential: { slot: cast, order: 1, template: CharacterRoster }
   variants:
     magical: { importVariants: [magical] }
     mundane: { importVariants: [mundane] }
@@ -48,7 +49,7 @@
 - import: Zephon
   render:
     template: Character
-    plotEssential: { slot: cast, order: 2, template: CharacterBrief }
+    plotEssential: { slot: cast, order: 2, template: CharacterRoster }
   variants:
     magical: { importVariants: [magical] }
     mundane: { importVariants: [mundane] }

@@ -10,12 +10,25 @@
 # A project reads this through `structure.input.templates`, not through
 # `structure.input.library`.
 
+# ── The name line ────────────────────────────────────────────────────────────
+#
+# Every rendered body leads with the item's own name. The Story Card *title* (`## Name`)
+# is invisible to the AI storyteller — it only ever reads the body — so the name has to be
+# a rendered line. Three partials carry the three shapes a field list cannot express:
+#
+#   cardName.partial    `{$aid.title} - {tagline}`   — story cards, and the World slot
+#   rosterLine.partial  `{$aid.title} - {role}; {gender}; {age}; {hair}` — the cast roster
+#   youLine.partial     `You: {$name.display}`       — the player, in the You slot
+#
+# `Tagline` is deliberately NOT declared as a field. It is consumed by `cardName` rather
+# than rendered as its own `Tagline:` stanza, and field operations act on the raw body
+# value, which needs no declaration. Declaring it would render it twice — once in the name
+# line, once as a label — or raise CL0428 if listed nowhere.
+
 fields:
-  # `join: ""` is what keeps an appended Tagline on one line. `+{x}` against a string value
-  # produces a two-element list, which renders as a bullet pair under the default `list`
-  # rendering — so every Tagline append in these sets writes its own separator inside the
-  # braces (`+{; hedge-trained}`) and the empty join concatenates them.
-  Tagline:     { label: Tagline, join: "" }
+  # The one-word epithet the cast roster reads. Also rendered as a `Role:` line on the
+  # full story card, which is what keeps it a used declaration rather than a dead one.
+  role:        { label: Role }
   vibe:        { label: Vibe, join: "; ", wrap: "[]" }
   appearance:  { label: Appearance,
                  from: [Physical Traits.gender, Physical Traits.age,
@@ -44,14 +57,20 @@ fields:
   practitioners: { label: Practitioners, render: list }
 
 groups:
-  core: [Tagline, vibe, appearance, personality, personalityExpanded]
+  core: [role, vibe, appearance, personality, personalityExpanded]
 
 templates:
-  Character: [core, Magic, Background, relationships, secret]
+  # Story cards and the World slot: the name line, then the fields.
+  Character:   [{ include: cardName }, core, Magic, Background, relationships, secret]
+  Location:    [{ include: cardName }, vibe, era, technology, landmarks, factions]
+  MagicSystem: [{ include: cardName }, source, cost, limits, practitioners]
 
-  # The brief form, for a Plot Essentials cast slot.
-  CharacterBrief: [Tagline, appearance, personality]
+  # The Plot Essentials cast roster — one terse line per character, all inside one [ ]
+  # block. A slot-only template, never audited, so the partial may read a subset.
+  CharacterRoster: [{ include: rosterLine }]
 
-  Location: [Tagline, vibe, era, technology, landmarks, factions]
+  # The Plot Essentials You block — the player, addressed as "You".
+  Player: [{ include: youLine }, personality, Magic]
 
-  MagicSystem: [Tagline, source, cost, limits, practitioners]
+  # A one-line entry for the Summary component's open-threads slot — name line only.
+  Thread: [{ include: cardName }]

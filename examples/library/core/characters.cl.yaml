@@ -18,6 +18,7 @@
     template: Character
   body:
     Tagline: Fixer; knows who owes whom
+    role: Fixer
     vibe: [dry, unhurried, well-connected]
     Physical Traits:
       gender: female
@@ -51,6 +52,7 @@
     template: Character
   body:
     Tagline: Archivist turned courier
+    role: Archivist
     vibe: [precise, restless, evasive]
     Physical Traits:
       gender: nonbinary
@@ -76,6 +78,7 @@
     mundane:
       body:
         Tagline: /{Archivist turned courier}/{Courier; former archivist}
+        role: Courier
 
 - id: Kaiden
   name: {display: Kaiden, full: Kaiden Ross}
@@ -88,6 +91,7 @@
     template: Character
   body:
     Tagline: Outrider without a house
+    role: Outrider
     vibe: [wry, watchful, steady]
     Physical Traits:
       gender: male
@@ -120,13 +124,12 @@
     triggers: ['%heroName%']
   notes: The player character, named at adventure start.
   render:
-    template: Character
+    # `Player` renders `You: %heroName%` from `youLine.partial`, then personality and magic.
+    # It never reads `Tagline`, so this item does not carry one.
+    template: Player
     storyCard: false
-    plotEssential: {slot: you, order: 1}
+    plotEssential: {slot: you, order: 1, template: Player}
   body:
-    Tagline: '%heroName%, %heroTrait%'
-    Physical Traits:
-      other: as the player describes
     Personality:
       keywords: ['%heroTrait%']
   variants:

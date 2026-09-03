@@ -15,9 +15,9 @@
     triggers: [Aria, Voss]
   notes: The player character.
   render:
-    template: Character
+    template: Player
     storyCard: false
-    plotEssential: {slot: you, order: 1}
+    plotEssential: {slot: you, order: 1, template: Player}
   body:
     Tagline: '%heroName%, Sworn Protector'
     Physical Traits:

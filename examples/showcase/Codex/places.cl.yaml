@@ -20,6 +20,7 @@
 - id: OpeningHint
   name: Opening Hint
   aid:
+    title: Opening Hint
     type: character
   render:
     template: CharacterBrief

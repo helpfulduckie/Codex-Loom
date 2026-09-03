@@ -1,8 +1,13 @@
 # The shared field table. Exercises every declaration key in the chapter below.
 # doc: 10-field-declarations.md#declaration-keys
 
+# Every rendered body leads with the item's own name — the Story Card title is invisible
+# to the AI storyteller. `cardName.partial` (`{$aid.title} - {tagline}`) carries it, and
+# `youLine.partial` (`You: {tagline}`) carries the player block. `Tagline` is consumed by
+# those partials rather than declared as its own stanza; field operations act on the raw
+# body value, which needs no declaration.
+
 fields:
-  Tagline:     { label: Tagline }
   vibe:        { label: Vibe, join: "; ", wrap: "[]" }
   appearance:  { label: Appearance,
                  from: [Physical Traits.gender, Physical Traits.age,
@@ -28,15 +33,18 @@ fields:
   status:      { label: Status, always: true }
 
 groups:
-  core: [Tagline, vibe, appearance, originalAppearance, personality, personalityExpanded]
+  core: [vibe, appearance, originalAppearance, personality, personalityExpanded]
 
 templates:
-  Character: [core, Magic, Background, relationships, secret]
+  Character: [{ include: cardName }, core, Magic, Background, relationships, secret]
 
   # An inline override: `vibe` renders under a different label and without the join.
-  Location: [Tagline, { field: vibe, label: Culture Vibe, render: bare }, landmarks, pantheon]
+  Location: [{ include: cardName }, { field: vibe, label: Culture Vibe, render: bare }, landmarks, pantheon]
 
-  Faction: [Tagline, overview, purpose, structure, methods, status]
+  Faction: [{ include: cardName }, overview, purpose, structure, methods, status]
 
-  # A brief list for the Plot Essentials cast slot.
-  CharacterBrief: [Tagline, appearance, personality]
+  # A brief list for the Plot Essentials cast slot — still name-led.
+  CharacterBrief: [{ include: cardName }, appearance, personality]
+
+  # The Plot Essentials You block — the player, addressed as "You".
+  Player: [{ include: youLine }, appearance, personality, personalityExpanded]

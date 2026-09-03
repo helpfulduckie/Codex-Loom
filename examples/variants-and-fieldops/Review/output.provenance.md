@@ -7,7 +7,6 @@
 | grimwood | library:grimwood | ../library/grimwood/places.cl.yaml | — | resolved |
 | hollis | library:grimwood | ../library/grimwood/places.cl.yaml | — | resolved |
 | kaiden | library:core | ../library/core/characters.cl.yaml | — | resolved |
-| leynote | project | Codex/world.cl.yaml | — | resolved |
 | magic | library:core | ../library/core/magic.cl.yaml | — | ambiguous |
 | magic | library:grimwood | ../library/grimwood/magic.cl.yaml | — | ambiguous |
 | medievalkingdom | library:core | ../library/core/settings.cl.yaml | — | resolved |

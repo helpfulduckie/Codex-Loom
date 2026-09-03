@@ -1,26 +1,26 @@
 Branch,Target,Title,Kind,Compiled,On Upload,Limit,Remaining,Status
-knight,Card,Elder Roshan,story,368,368,2000,1632,OK
-mage,Card,Elder Roshan,story,368,368,2000,1632,OK
-knight,Card,Ilan Voss,story,325,325,2000,1675,OK
-lowContext,Card,Ilan Voss,story,325,325,2000,1675,OK
-knight,Card,The Royal Academy,story,259,259,2000,1741,OK
-mage,Card,The Royal Academy,story,259,259,2000,1741,OK
-knight,Card,Kaiden Ross,story,215,215,2000,1785,OK
-mage,Card,Kaiden Ross,story,215,215,2000,1785,OK
-knight,Card,The Alchemists' Guild,reference,200,200,2000,1800,OK
-mage,Card,The Alchemists' Guild,reference,200,200,2000,1800,OK
-knight,Card,Felix Grayls,story,167,167,2000,1833,OK
-mage,Card,Felicia Grayls,story,165,165,2000,1835,OK
-lowContext,Card,Felicia Grayls,story,131,131,2000,1869,OK
-lowContext,Card,Elder Roshan,story,117,117,2000,1883,OK
-lowContext,Card,The Royal Academy,story,114,114,2000,1886,OK
-lowContext,Card,Kaiden Ross,story,113,113,2000,1887,OK
+knight,Card,Elder Roshan,story,374,374,2000,1626,OK
+mage,Card,Elder Roshan,story,374,374,2000,1626,OK
+knight,Card,Ilan Voss,story,328,328,2000,1672,OK
+lowContext,Card,Ilan Voss,story,328,328,2000,1672,OK
+knight,Card,The Royal Academy,story,266,266,2000,1734,OK
+mage,Card,The Royal Academy,story,266,266,2000,1734,OK
+knight,Card,Kaiden Ross,story,220,220,2000,1780,OK
+mage,Card,Kaiden Ross,story,220,220,2000,1780,OK
+knight,Card,The Alchemists' Guild,reference,215,215,2000,1785,OK
+mage,Card,The Alchemists' Guild,reference,215,215,2000,1785,OK
+mage,Card,Felicia Grayls,story,173,173,2000,1827,OK
+knight,Card,Felix Grayls,story,170,170,2000,1830,OK
+lowContext,Card,Felicia Grayls,story,139,139,2000,1861,OK
+lowContext,Card,Elder Roshan,story,123,123,2000,1877,OK
+lowContext,Card,The Royal Academy,story,121,121,2000,1879,OK
+lowContext,Card,Kaiden Ross,story,118,118,2000,1882,OK
+lowContext,Card,The Alchemists' Guild,reference,112,112,2000,1888,OK
 knight,Card,AI Instructions — Scenario Rules Only,reference,110,110,2000,1890,OK
 lowContext,Card,AI Instructions — Scenario Rules Only,reference,110,110,2000,1890,OK
 mage,Card,AI Instructions — Scenario Rules Only,reference,110,110,2000,1890,OK
-knight,Card,The Warrens,story,103,103,2000,1897,OK
-mage,Card,The Warrens,story,103,103,2000,1897,OK
-lowContext,Card,The Alchemists' Guild,reference,97,97,2000,1903,OK
+knight,Card,The Warrens,story,108,108,2000,1892,OK
+mage,Card,The Warrens,story,108,108,2000,1892,OK
 knight,Card,AI Instructions — Full,reference,95,95,2000,1905,OK
 lowContext,Card,AI Instructions — Full,reference,95,95,2000,1905,OK
 mage,Card,AI Instructions — Full,reference,95,95,2000,1905,OK

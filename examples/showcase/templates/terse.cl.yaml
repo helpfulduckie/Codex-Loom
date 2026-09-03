@@ -5,13 +5,14 @@
 # the library. Only `templates:` is read here — a slot file's `fields:` block is ignored.
 
 templates:
-  # Omission: the terse cast drops magic, background, relationships and the secret.
-  Character: [Tagline, appearance, personality]
+  # Omission: the terse cast drops magic, background, relationships and the secret. The
+  # name line stays — it is the one line a card cannot be read without.
+  Character: [{ include: cardName }, appearance, personality]
 
-  Location: [Tagline]
+  Location: [{ include: cardName }]
 
-  Faction: [Tagline, purpose, status]
+  Faction: [{ include: cardName }, purpose, status]
 
   # Pattern 2 — a free-standing name, reachable only through templateFor. The one NPC who
   # must stay detailed even on the tiered branch writes `render.template: CharacterFull`.
-  CharacterFull: [Tagline, vibe, appearance, personality, Magic, Background, secret]
+  CharacterFull: [{ include: cardName }, vibe, appearance, personality, Magic, Background, secret]

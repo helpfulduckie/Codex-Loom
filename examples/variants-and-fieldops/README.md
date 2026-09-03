@@ -36,8 +36,8 @@ node scripts/rebaseline.js
 | Wildcard `*` dispatch factoring the uniform axis | every cast import's `branches:` |
 | `apply:` at the setting level where each delta differs | `Aness` in `Codex/cast.cl.yaml` |
 | `_: ~` — present on one branch, excluded everywhere else | the three settings in `Codex/world.cl.yaml` |
-| `~` forced by `CL0610` — no reachable target on a branch | `LeyNote` in `Codex/world.cl.yaml` |
 | Name-vs-pronoun verb conjugation in one sentence | `Zephon`'s `expanded` (from the library) |
+| A `role` delta that swaps per tone, driving the cast roster | `Zephon` (`Archivist` / `Courier`) |
 
 ---
 
@@ -52,12 +52,12 @@ The setting axis has to name its three branches because each one's `apply:` list
 different — `medievalFlavor` is not `sciFiFlavor`. `Aness` shows both; `Zephon` and `Kaiden`
 show the tone-only one-liner.
 
-**`LeyNote`'s exclusion from the `mundane` leaves is forced, not chosen.** Its Plot
-Essentials target and its body both live in the `magical` variant, so on a `mundane` leaf it
-has `storyCard: false` and no declared target — it resolves onto the branch and produces
-nothing, which is `CL0610` (ERROR). Change its `mundane: ~` to `mundane: []` and the three
-`mundane` leaves stop compiling. That is the "no reachable target" shape arising as a
-consequence rather than being staged.
+**Every rendered body leads with the item's own name.** The library's field table carries
+three partials for the shapes a field list cannot express: `cardName` (`{$aid.title} -
+{tagline}`) on story cards and the World block, `rosterLine` (`{$aid.title} - {role};
+{gender}; {age}; {hair}`) for the one-line cast roster, and `youLine` (`You:
+{$name.display}`) for the player. The Story Card *title* is invisible to the AI
+storyteller, so the name has to be a rendered line.
 
 ---
 

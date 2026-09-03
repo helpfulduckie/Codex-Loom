@@ -3,26 +3,13 @@ Genre: Low fantasy
 Setting: The Medieval Kingdom
 ]
 
-{
-Tagline: %heroName%, %heroTrait%
-Personality: %heroTrait%
-}
+[
+Aness Kolar - Fixer; female; mid 30s; black hair, cropped short
+Zephon Adrel - Courier; nonbinary; late 20s; long brown hair, tied back
+]
 
 {
-Cast
-
-Tagline: Fixer; knows who owes whom; sworn to a house; strictly unmagical
-Appearance: female; mid 30s; black hair, cropped short
-Personality: dry, patient, transactional
-Tagline: Courier; former archivist
-Appearance: nonbinary; late 20s; long brown hair, tied back
-Personality: precise, restless
-}
-
-World
-
-{
-Tagline: A cold agrarian kingdom held together by oaths, and by nothing else
+The Kingdom - A cold agrarian kingdom held together by oaths, and by nothing else
 Vibe: [hierarchical; hungry; ceremonial]
 Era: Late feudal
 Technology: Water mills, poor roads, no printing
@@ -32,4 +19,9 @@ Landmarks:
 Factions:
 - The sworn houses
 - The tithe collectors
+}
+
+{
+You: %heroName%
+Personality: %heroTrait%
 }

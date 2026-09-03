@@ -171,7 +171,7 @@ keywords:
 
 ### Two variants appending to one field
 
-An `+{…}` op does not have to come from one variant. When branch dispatch applies more than one variant to an item, each variant's op on a field runs in dispatch order, and the appends accumulate. `examples/variants-and-fieldops/` is built around this: a per-setting flavor variant and a per-tone variant both append to `Aness`'s `Tagline`, and the shared field table's `Tagline: { join: "" }` concatenates the pieces into one line.
+An `+{…}` op does not have to come from one variant. When branch dispatch applies more than one variant to an item, each variant's op on a field runs in dispatch order, and the appends accumulate. `examples/variants-and-fieldops/` is built around this: a per-setting flavor variant and a per-tone variant both append to `Aness`'s `Tagline`. Each append carries its own separator inside the braces (`+{; sworn to a house}`), so the pieces read as one clause when the field is rendered.
 
 ```yaml surface=item from=variants-and-fieldops/Codex/cast.cl.yaml
 - import: Aness
@@ -183,7 +183,7 @@ An `+{…}` op does not have to come from one variant. When branch dispatch appl
     medieval: { apply: [medievalFlavor] }
 ```
 
-On the `medieval/magical` leaf the dispatch collects `[medievalFlavor, magical]`, so `Tagline` starts at the library base, gains `; sworn to a house` from the project's own variant, then gains `; hedge-trained` from the library's `magical` variant — `Fixer; knows who owes whom; sworn to a house; hedge-trained`. Each append writes its own separator inside the braces because `join: ""` adds none.
+On the `medieval/magical` leaf the dispatch collects `[medievalFlavor, magical]`, so `Tagline` starts at the library base, gains `; sworn to a house` from the project's own variant, then gains `; hedge-trained` from the library's `magical` variant. Rendered on the story-card name line as `Aness Kolar - Fixer; knows who owes whom; sworn to a house; hedge-trained`.
 
 ---
 

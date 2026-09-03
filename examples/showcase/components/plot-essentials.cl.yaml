@@ -15,12 +15,10 @@ sections:
 
   cast:
     slot: true
-    heading: Cast
-    render: {position: 6, wrapper: curly, wrap: all}
+    render: {position: 6, wrapper: curly}          # wrap: each — one block per character
 
   hints:
     slot: true
-    heading: Hints
     render: {position: 7, wrapper: curly}
     branches:
       lowContext: ~            # gate the whole slot off the tier

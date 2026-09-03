@@ -37,6 +37,7 @@
     template: Character
   body:
     Tagline: Line-born; keeps the boundary stones
+    role: Line-born
     vibe: [blunt, unbothered, exact]
     Physical Traits:
       gender: female

@@ -4,7 +4,7 @@ triggers: [Tessene, colony, the planet]
 encapsulate: false
 kind: reference
 ~~~
-Tagline: A contract colony three decades past its founding charter, where something in the seabed answers
+Tessene - A contract colony three decades past its founding charter, where something in the seabed answers
 Vibe: [provisional; monitored; improvised]
 Era: Second-generation colonial
 Technology: Orbital lift, printed parts, patchy comms

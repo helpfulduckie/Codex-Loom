@@ -3,27 +3,13 @@ Genre: Low fantasy
 Setting: Ashbourne
 ]
 
-{
-Tagline: %heroName%, %heroTrait%
-Personality: %heroTrait%
-Magic: undeclared; whatever the player claims it is
-}
+[
+Aness Kolar - Fixer; female; mid 30s; black hair, cropped short
+Zephon Adrel - Archivist; nonbinary; late 20s; long brown hair, tied back
+]
 
 {
-Cast
-
-Tagline: Fixer; knows who owes whom; unaffiliated; hedge-trained
-Appearance: female; mid 30s; black hair, cropped short
-Personality: dry, patient, transactional
-Tagline: Archivist turned courier
-Appearance: nonbinary; late 20s; long brown hair, tied back
-Personality: precise, restless
-}
-
-World
-
-{
-Tagline: A river city that outgrew its bridges, and kept a few of its older arrangements
+Ashbourne - A river city that outgrew its bridges, and kept a few of its older arrangements
 Vibe: [crowded; transactional; restless]
 Era: Present day
 Technology: Ubiquitous, unevenly maintained
@@ -37,5 +23,7 @@ Factions:
 }
 
 {
-Tagline: What answers here, and what it charges to answer.
+You: %heroName%
+Personality: %heroTrait%
+Magic: undeclared; whatever the player claims it is
 }

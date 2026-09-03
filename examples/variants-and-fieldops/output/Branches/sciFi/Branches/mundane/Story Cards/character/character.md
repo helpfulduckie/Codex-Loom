@@ -3,7 +3,8 @@
 triggers: [Aness, Kolar]
 encapsulate: false
 ~~~
-Tagline: Fixer; knows who owes whom; contract-bound; strictly unmagical
+Aness Kolar - Fixer; knows who owes whom; contract-bound; strictly unmagical
+Role: Fixer
 Vibe: [dry; unhurried; well-connected]
 Appearance: female; mid 30s; black hair, cropped short
 Personality: dry, patient, transactional
@@ -16,7 +17,8 @@ Relationships: Has done work for every faction and joined none.
 triggers: [Kaiden, Ross]
 encapsulate: false
 ~~~
-Tagline: Outrider without a house
+Kaiden Ross - Outrider without a house
+Role: Outrider
 Vibe: [wry; watchful; steady]
 Appearance: male; early 30s; dark, close-cropped
 Personality: wry, watchful
@@ -27,7 +29,8 @@ Relationships: Rides the long circuit alone when the roads are bad.
 triggers: [Zephon, Adrel]
 encapsulate: false
 ~~~
-Tagline: Courier; former archivist
+Zephon Adrel - Courier; former archivist
+Role: Courier
 Vibe: [precise; restless; evasive]
 Appearance: nonbinary; late 20s; long brown hair, tied back
 Personality: precise, restless

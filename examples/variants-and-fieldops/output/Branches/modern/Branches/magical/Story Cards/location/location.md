@@ -4,7 +4,7 @@ triggers: [Ashbourne, the city, downtown]
 encapsulate: false
 kind: reference
 ~~~
-Tagline: A river city that outgrew its bridges, and kept a few of its older arrangements
+Ashbourne - A river city that outgrew its bridges, and kept a few of its older arrangements
 Vibe: [crowded; transactional; restless]
 Era: Present day
 Technology: Ubiquitous, unevenly maintained

@@ -4,7 +4,7 @@ triggers: [blood magic, the old working, bleeding]
 encapsulate: false
 kind: reference
 ~~~
-Tagline: Inherited magic; fast, cheap to start, and owed
+Blood Magic - Inherited magic; fast, cheap to start, and owed
 Source: Descent. It runs in a line and cannot be taught to someone outside it.
 Cost: Blood, and afterwards a debt the working keeps track of on its own.
 Limits:
@@ -21,7 +21,7 @@ triggers: [elemental magic, spell, casting]
 encapsulate: false
 kind: reference
 ~~~
-Tagline: Practiced magic; learned, licensed, and slow
+Elemental Magic - Practiced magic; learned, licensed, and slow
 Source: Study. An affinity is trained, not inherited.
 Cost: Time and attention. A caster who hurries gets a smaller effect, not a worse one.
 Limits:

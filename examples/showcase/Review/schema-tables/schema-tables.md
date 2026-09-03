@@ -9,7 +9,6 @@ conventions (`SCHEMA.md` sections 1 and 7) are hand-written and not reproduced h
 
 | Field | Label | Renders | Reads |
 |---|---|---|---|
-| `Tagline` | Tagline | bare | `Tagline` |
 | `vibe` | Vibe | join "; " | `vibe` _(wrap [])_ |
 | `appearance` | Current Appearance / Appearance _(conditional)_ | join "; " | `Physical Traits.gender`, `Physical Traits.age`, `Physical Traits.hair`, `Physical Traits.other` |
 | `originalAppearance` | Original Appearance | join "; " | `originalAppearance` |
@@ -31,7 +30,7 @@ conventions (`SCHEMA.md` sections 1 and 7) are hand-written and not reproduced h
 
 | Group | Members | Named by |
 |---|---|---|
-| `core` | `Tagline`, `vibe`, `appearance`, `originalAppearance`, `personality`, `personalityExpanded` | `Character` |
+| `core` | `vibe`, `appearance`, `originalAppearance`, `personality`, `personalityExpanded` | `Character` |
 
 ## Type to fields
 
@@ -39,7 +38,8 @@ _Every field a template renders, in order. A group name expands to its members._
 
 ### `Character`
 
-- **core** _(group)_: `Tagline`, `vibe`, `appearance`, `originalAppearance`, `personality`, `personalityExpanded`
+- _(include: cardName)_
+- **core** _(group)_: `vibe`, `appearance`, `originalAppearance`, `personality`, `personalityExpanded`
 - `Magic`
 - `Background`
 - `relationships`
@@ -47,14 +47,14 @@ _Every field a template renders, in order. A group name expands to its members._
 
 ### `Location`
 
-- `Tagline`
+- _(include: cardName)_
 - `vibe` _(override)_
 - `landmarks`
 - `pantheon`
 
 ### `Faction`
 
-- `Tagline`
+- _(include: cardName)_
 - `overview`
 - `purpose`
 - `structure`
@@ -63,9 +63,16 @@ _Every field a template renders, in order. A group name expands to its members._
 
 ### `CharacterBrief`
 
-- `Tagline`
+- _(include: cardName)_
 - `appearance`
 - `personality`
+
+### `Player`
+
+- _(include: youLine)_
+- `appearance`
+- `personality`
+- `personalityExpanded`
 
 ## Role and tier templates
 
@@ -77,7 +84,8 @@ into with `render.template`. Each list expands one level of groups, like the tab
 
 #### `Character`
 
-- **core** _(group)_: `Tagline`, `vibe`, `appearance`, `originalAppearance`, `personality`, `personalityExpanded`
+- _(include: cardName)_
+- **core** _(group)_: `vibe`, `appearance`, `originalAppearance`, `personality`, `personalityExpanded`
 - `Magic`
 - `Background`
 - `relationships`
@@ -85,14 +93,14 @@ into with `render.template`. Each list expands one level of groups, like the tab
 
 #### `Location`
 
-- `Tagline`
+- _(include: cardName)_
 - `vibe` _(override)_
 - `landmarks`
 - `pantheon`
 
 #### `Faction`
 
-- `Tagline`
+- _(include: cardName)_
 - `overview`
 - `purpose`
 - `structure`
@@ -101,31 +109,38 @@ into with `render.template`. Each list expands one level of groups, like the tab
 
 #### `CharacterBrief`
 
-- `Tagline`
+- _(include: cardName)_
 - `appearance`
 - `personality`
+
+#### `Player`
+
+- _(include: youLine)_
+- `appearance`
+- `personality`
+- `personalityExpanded`
 
 ### Branch `lowContext` — role `base`
 
 #### `Character`
 
-- `Tagline`
+- _(include: cardName)_
 - `appearance`
 - `personality`
 
 #### `Location`
 
-- `Tagline`
+- _(include: cardName)_
 
 #### `Faction`
 
-- `Tagline`
+- _(include: cardName)_
 - `purpose`
 - `status`
 
 #### `CharacterFull`
 
-- `Tagline`
+- _(include: cardName)_
 - `vibe`
 - `appearance`
 - `personality`

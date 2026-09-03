@@ -7,7 +7,8 @@
 — _(no inbound seeds)_
 
 **Elder Roshan** `[Roshan, Elder]`
-— _(no inbound seeds)_
+- seeded by _Plot Essentials_ · via _Roshan_
+- seeded by _Plot Essentials_ · via _Elder_
 
 **Ilan Voss** `[Voss, Ilan]` _(seeded in Opening)_
 — _(no inbound seeds)_

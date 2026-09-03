@@ -12,13 +12,13 @@ _Which items landed in which slot, on which branch._
 |---|---|
 | Aria | all 3 |
 
-### `cast` — Cast
+### `cast`
 
 | Occupants | Branches |
 |---|---|
 | Mentor | all 3 |
 
-### `hints` — Hints
+### `hints`
 
 | Occupants | Branches |
 |---|---|

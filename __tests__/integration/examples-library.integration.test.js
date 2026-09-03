@@ -107,12 +107,12 @@ beforeAll(() => {
     '  importVariants: [magical]',
     '  render:',
     '    template: Character',
-    '    plotEssential: {slot: cast, order: 1, template: CharacterBrief}',
+    '    plotEssential: {slot: cast, order: 1, template: CharacterRoster}',
     '- import: Zephon',
     '  importVariants: [mundane]',
     '  render:',
     '    template: Character',
-    '    plotEssential: {slot: cast, order: 2, template: CharacterBrief}',
+    '    plotEssential: {slot: cast, order: 2, template: CharacterRoster}',
     '- import: Kaiden',
     '- import: grimwood:Hollis',
     '- import: MedievalKingdom',
@@ -125,9 +125,9 @@ beforeAll(() => {
     '# A project-local item routed into the library Summary format\'s one slot.',
     '- id: DebtThread',
     '  name: The unpaid working',
-    '  aid: {type: thread}',
+    '  aid: {title: The unpaid working, type: thread}',
     '  render:',
-    '    template: CharacterBrief',
+    '    template: Thread',
     '    storyCard: false',
     '    summary: {slot: openThreads, order: 1}',
     '  body:',
@@ -267,19 +267,27 @@ describe('the colliding magic pair (§17.2–§17.4)', () => {
 describe('the library items compile against the shared field table', () => {
   test('a tone variant selected with importVariants reaches the output', () => {
     const text = outputText();
-    // `Aness` imported with `magical`; `Zephon` with `mundane`.
+    // `Aness` imported with `magical`; `Zephon` with `mundane`. Both appear on the story
+    // card name line — the roster line carries `role`, not the Tagline.
     expect(text).toContain('hedge-trained');
     expect(text).toContain('Courier; former archivist');
   });
 
-  test('a Tagline append stays on one line', () => {
-    // `join: ""` on Tagline is what stops `+{; hedge-trained}` rendering as a bullet pair.
+  test('an appended Tagline collapses on the story-card name line', () => {
+    // `cardName.partial` renders `{$aid.title} - {join("", $body.Tagline)}`, so the
+    // two-element list `+{; hedge-trained}` produced folds back to one line.
     const text = outputText();
-    expect(text).toContain('Fixer; knows who owes whom; hedge-trained');
+    expect(text).toContain('Aness Kolar - Fixer; knows who owes whom; hedge-trained');
   });
 
-  test('the placeholder-defined character carries its tokens into the project', () => {
+  test('the cast roster reads role, and swaps it per tone', () => {
+    // `Zephon` was imported with `mundane`, whose delta sets `role: Courier`.
     const text = outputText();
-    expect(text).toContain('%heroName%');
+    expect(text).toContain('Zephon Adrel - Courier; nonbinary; late 20s; long brown hair, tied back');
+  });
+
+  test('the placeholder-defined character is addressed as You', () => {
+    const text = outputText();
+    expect(text).toContain('You: %heroName%');
   });
 });

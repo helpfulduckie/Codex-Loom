@@ -4,7 +4,7 @@ triggers: [Kingdom, court, crown]
 encapsulate: false
 kind: reference
 ~~~
-Tagline: A cold agrarian kingdom held together by oaths, and by the wards along its borders
+The Kingdom - A cold agrarian kingdom held together by oaths, and by the wards along its borders
 Vibe: [hierarchical; hungry; ceremonial]
 Era: Late feudal
 Technology: Water mills, poor roads, no printing
