@@ -40,11 +40,42 @@ const FIELD_TABLE_BASENAMES = Object.freeze(['fields.cl.yaml', 'fields.cl.yml'])
  * and rides in the template's list as a `{ allowExtra: true }` marker (Decision 4).
  */
 const FIELD_KEYS = Object.freeze([
-  'label', 'render', 'join', 'wrap', 'wrapLabel', 'block', 'from', 'always', 'labelWhen',
+  'label', 'render', 'join', 'wrap', 'wrapLabel', 'block', 'from', 'always', 'labelWhen', 'parts', 'try',
 ]);
 
 function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * `from:`, `parts:` and `try:` are mutually exclusive on one declaration (2026-09-03 handoff,
+ * composition primitive steps 3a/4) — all three are source specifications (a plain source, a
+ * source plus a composition, and an ordered list of alternatives), so a declaration naming
+ * more than one is an author error rather than settings that combine. Reported as `CL0422`
+ * (the existing "entry has the wrong shape" code): no code in the `CL04xx` band already
+ * covers "two keys that cannot compose", and diagnostic numbering is a decision for a human,
+ * not something to invent here. Recurses into `parts:` and `try:` themselves, so a nested
+ * declaration carrying more than one source key is caught the same way, at whatever depth.
+ */
+function checkSourceConflict(decl, label, file, report) {
+  if (!isPlainObject(decl)) return;
+  const present = ['from', 'parts', 'try'].filter((k) => decl[k] !== undefined);
+  if (present.length > 1) {
+    report(CODES.FIELD_TABLE_MALFORMED,
+      `${label} in ${path.basename(file)} carries ${present.map((k) => `${k}:`).join(' and ')} `
+      + '— from:, parts: and try: are all source specifications, and only one may be given '
+      + 'on one declaration.');
+  }
+  if (Array.isArray(decl.parts)) {
+    for (const entry of decl.parts) {
+      if (isPlainObject(entry)) checkSourceConflict(entry, `A nested part of ${label}`, file, report);
+    }
+  }
+  if (Array.isArray(decl.try)) {
+    for (const entry of decl.try) {
+      if (isPlainObject(entry)) checkSourceConflict(entry, `A nested try source of ${label}`, file, report);
+    }
+  }
 }
 
 /**
@@ -93,6 +124,7 @@ function foldDocument(doc, file, acc, diagnostics) {
           report(CODES.FIELD_TABLE_UNKNOWN_KEY,
             `Field "${name}" declares render: "${decl.render}", not one of ${FUNCTION_NAMES.join(', ')}.`);
         }
+        checkSourceConflict(decl, `Field "${name}"`, file, report);
         acc.fields[name] = decl; // replace-per-entry (Decision 5), not deep
       }
     }

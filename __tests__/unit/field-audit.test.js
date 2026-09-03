@@ -70,16 +70,16 @@ const mkImported = (id, type, body, projectAuthored) => {
 describe('readablePathsFor', () => {
   test('a bare field contributes its name as a content path; a from: field its from-paths', () => {
     const { content } = readablePathsFor(TABLE.templates.Person, TABLE, PARTIALS);
-    expect(content.has('name')).toBe(true);
-    expect(content.has('vibe')).toBe(true);
-    expect(content.has('personality.keywords')).toBe(true);
-    expect(content.has('personality.expanded')).toBe(true);
+    expect(content.has('body.name')).toBe(true);
+    expect(content.has('body.vibe')).toBe(true);
+    expect(content.has('body.personality.keywords')).toBe(true);
+    expect(content.has('body.personality.expanded')).toBe(true);
   });
 
   test('an {if $body.X} guard only acknowledges X — it is not a content read', () => {
     const { content, ack } = readablePathsFor(TABLE.templates.Person, TABLE, PARTIALS);
-    expect(ack.has('personality')).toBe(true);
-    expect(content.has('personality')).toBe(false);
+    expect(ack.has('body.personality')).toBe(true);
+    expect(content.has('body.personality')).toBe(false);
   });
 
   test('{ allowExtra: true } sets the flag', () => {
@@ -89,20 +89,105 @@ describe('readablePathsFor', () => {
 
   test('a passthrough {include} scans the partial body for $body refs', () => {
     const { content } = readablePathsFor(['name', { include: 'namewithtagline' }], TABLE, PARTIALS);
-    expect(content.has('tagline')).toBe(true);
+    expect(content.has('body.tagline')).toBe(true);
+  });
+
+  // Composition primitive, step 3a (2026-09-03 handoff, Decision 8's `parts:` half): every
+  // ref at every depth of a `parts:` list must reach `content`, root-qualified, or a field
+  // an item genuinely reads through `parts:` looks unread to the audit.
+  describe('parts: refs at every depth', () => {
+    const partsTable = {
+      fields: {
+        line: {
+          parts: [
+            '$name.full',
+            ' - ',
+            { parts: [{ from: 'tagline' }, '; ', { from: 'notes.extra' }] },
+          ],
+        },
+      },
+      groups: {}, templates: { Line: ['line'] },
+      _sources: ['fields.cl.yaml'],
+    };
+
+    test('a top-level $ ref qualifies to its own root, not body', () => {
+      const { content } = readablePathsFor(partsTable.templates.Line, partsTable, new Map());
+      expect(content.has('name.full')).toBe(true);
+      expect(content.has('body.name.full')).toBe(false);
+    });
+
+    test('a nested from: ref reaches content, body-qualified, at any depth', () => {
+      const { content } = readablePathsFor(partsTable.templates.Line, partsTable, new Map());
+      expect(content.has('body.tagline')).toBe(true);
+      expect(content.has('body.notes.extra')).toBe(true);
+    });
+
+    test('a literal part contributes no ref', () => {
+      const { content } = readablePathsFor(partsTable.templates.Line, partsTable, new Map());
+      expect([...content].some((c) => c.includes('-'))).toBe(false);
+    });
+
+    test('a body key read only through a nested parts: ref is not flagged CL0426', () => {
+      const d = sink();
+      const a = buildFieldAudit({ fieldTable: partsTable, partials: new Map() });
+      a.collectForItem(
+        mk('L', 'Line', { tagline: 'hi', notes: { extra: 'more' } }),
+        partsTable.templates.Line, 'Line',
+      );
+      a.finish(d);
+      expect(d.codes()).not.toContain('CL0426');
+    });
+  });
+
+  // `try:` (Decision 7's field-audit half, 2026-09-03 handoff): every source is read,
+  // whichever one resolves at render time — unlike `parts:`, `try:` has no literal entries
+  // to skip, so every source must reach `content` or a genuinely-read one looks unread.
+  describe('try: sources all reach content, not just the winner', () => {
+    const tryTable = {
+      fields: {
+        directory: { try: ['content', 'entries'], render: 'list' },
+        nested: { try: [{ from: 'a' }, { parts: ['$body.b', '; ', { from: 'notes.c' }] }] },
+      },
+      groups: {}, templates: { Directory: ['directory'], Nested: ['nested'] },
+      _sources: ['fields.cl.yaml'],
+    };
+
+    test('a bare try: source qualifies with refRoot, like a from: path', () => {
+      const { content } = readablePathsFor(tryTable.templates.Directory, tryTable, new Map());
+      expect(content.has('body.content')).toBe(true);
+      expect(content.has('body.entries')).toBe(true);
+    });
+
+    test('the second source is read even though the first would win at render time', () => {
+      const d = sink();
+      const a = buildFieldAudit({ fieldTable: tryTable, partials: new Map() });
+      a.collectForItem(
+        mk('D', 'Directory', { content: 'c1', entries: 'c2' }),
+        tryTable.templates.Directory, 'Directory',
+      );
+      a.finish(d);
+      expect(d.codes()).not.toContain('CL0426');
+    });
+
+    test('a nested from:/parts: source inside try: reaches content at every depth', () => {
+      const { content } = readablePathsFor(tryTable.templates.Nested, tryTable, new Map());
+      expect(content.has('body.a')).toBe(true);
+      expect(content.has('body.b')).toBe(true);
+      expect(content.has('body.notes.c')).toBe(true);
+    });
   });
 });
 
 describe('bodyLeafPaths', () => {
   test('descent stops at a content path — sub-keys of a rendered map are not leaves', () => {
-    const content = new Set(['subAreas']);
-    expect(bodyLeafPaths({ subAreas: { a: '1', b: '2' }, x: '3' }, content)).toEqual(['x']);
+    const content = new Set(['body.subAreas']);
+    expect(bodyLeafPaths({ subAreas: { a: '1', b: '2' }, x: '3' }, content)).toEqual(['body.x']);
   });
 
   test('descends past a key that has content paths beneath it', () => {
-    const content = new Set(['personality.keywords']);
+    const content = new Set(['body.personality.keywords']);
     expect(bodyLeafPaths({ personality: { keywords: [], other: 'x' } }, content))
-      .toEqual(['personality.other']);
+      .toEqual(['body.personality.other']);
   });
 });
 
@@ -388,7 +473,7 @@ describe('buildFieldAudit — case-insensitive matching (renderer parity)', () =
 
   test('a group named in a template list resolves its members when the group name case differs', () => {
     const { content } = readablePathsFor(['lore'], CI_TABLE, PARTIALS);
-    expect(content.has('background')).toBe(true);
+    expect(content.has('body.background')).toBe(true);
   });
 
   test('a genuinely undeclared body key still raises CL0426 — no over-suppression', () => {

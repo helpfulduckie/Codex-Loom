@@ -48,6 +48,28 @@ const FIELD_DECL = {
 };
 
 /**
+ * A `parts:` list (Decisions 1, 2, 4 — 2026-09-03 handoff): a `$`-prefixed string is a ref,
+ * any other string is template-source literal text, and a mapping is a nested declaration —
+ * the same shape as a `fields:` entry, recursively, since a part may itself carry `parts:`.
+ * `PART_ENTRY.keys` is `FIELD_DECL.keys` by reference, so the cycle (a part may declare
+ * `parts:`, whose entries may again be `PART_ENTRY`) is real rather than approximated one
+ * level deep.
+ */
+const PART_ENTRY = { type: [TYPES.STRING, TYPES.MAP], keys: FIELD_DECL.keys };
+const PARTS_LIST = { type: TYPES.SEQ, of: PART_ENTRY };
+FIELD_DECL.keys.parts = PARTS_LIST;
+
+/**
+ * A `try:` list (Decision 7 — 2026-09-03 handoff): an ordered list of sources, the first that
+ * resolves rendering. Every entry is a source rather than `parts:`'s ref-or-literal split — a
+ * string follows `from:`'s ref rules (bare is root-relative, `$`-prefixed is absolute) and a
+ * mapping is a nested declaration — so `TRY_ENTRY` shares `PART_ENTRY`'s shape exactly rather
+ * than restating it.
+ */
+const TRY_LIST = { type: TYPES.SEQ, of: PART_ENTRY };
+FIELD_DECL.keys.try = TRY_LIST;
+
+/**
  * A `templates:` list entry (§13.3, §13.5). A bare string names a field or group; a
  * mapping is one of the escape forms — an inline override (`field:` plus any `FIELD_DECL`
  * key), a `.partial` drop-in (`include:`), a literal line (`raw:`), or the whole-template
@@ -81,4 +103,5 @@ const FIELD_TABLE_SCHEMA = {
 
 module.exports = {
   FIELD_TABLE_SCHEMA, FIELD_DECL, TEMPLATE_ENTRY, GROUP_LIST, TEMPLATE_LIST, RENDER_FUNCTIONS,
+  PARTS_LIST, TRY_LIST,
 };

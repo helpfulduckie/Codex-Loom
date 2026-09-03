@@ -73,7 +73,8 @@ function lookupCI(map, name) {
   return key === undefined ? undefined : map[key];
 }
 
-/** `from:` as an array, or `[name]` when absent. */
+/** `from:` as an array, or `[name]` when absent. Entries may be bare (root-relative) or
+ * `$`-prefixed (absolute); `qualify` below resolves either into a root-qualified path. */
 function fromPaths(decl, name) {
   if (decl && decl.from !== undefined && decl.from !== null) {
     return Array.isArray(decl.from) ? decl.from.map(String) : [String(decl.from)];
@@ -81,19 +82,41 @@ function fromPaths(decl, name) {
   return name ? [name] : [];
 }
 
-const IF_GUARD_RE = /\{if\s+\$(?:body|notes)\.([\w.]+)/g;
+/**
+ * Root-qualify a dotted path. A bare path is root-relative — it takes `refRoot` (`body`
+ * for a story-card/component render, `notes` for a `templateFor.notes` list). A
+ * `$`-prefixed path is already absolute (`$body.X`, `$notes.X`, or another root such as
+ * `$name.full`) and qualifies to itself with the `$` stripped — including to a root that
+ * can never match a body leaf, which is what lets a `$name.` / `$aid.` ref fall out of the
+ * body audit for free, with no exclusion rule to write.
+ */
+function qualify(path, refRoot) {
+  const s = String(path);
+  return s.startsWith('$') ? s.slice(1) : `${refRoot}.${s}`;
+}
+
+const IF_GUARD_RE = /\{if\s+\$(body|notes)\.([\w.]+)/g;
 const IF_TAG_RE = /\{\/?if\b[^}]*\}/g;
-const BODY_REF_RE = /\$(?:body|notes)\.([\w.]+)/g;
+const BODY_REF_RE = /\$(body|notes)\.([\w.]+)/g;
 const INCLUDE_RE = /\{include\s+([\w.-]+)\s*\}/g;
 
 /**
  * Resolve a template list to `{ content, ack, allowExtra }`.
  *
+ * `content` and `ack` hold root-qualified dotted paths (`body.X`, `notes.X`) rather than
+ * the bare or `$`-prefixed spelling a declaration or raw block used — qualifying by root
+ * is what keeps a `$notes.known` reference from also marking a `body.known` key read, and
+ * what makes a `$`-prefixed `from:` path readable at all (§ latent bug, 2026-09-03 handoff).
+ *
  * `content` — dotted paths that are rendered; a body path equal to or under one is read.
- * `ack`     — dotted paths named only by an `{if $body.X}` existence guard; the exact
- *             path is not a finding, but its children still are.
+ * `ack`     — dotted paths named only by an `{if $body.X}` / `{if $notes.X}` existence
+ *             guard; the exact path is not a finding, but its children still are.
+ *
+ * @param {string} refRoot  the root a *bare* path in this list qualifies to — `body` for a
+ *   story-card/component render, `notes` for a `templateFor.notes` list. A raw block's own
+ *   `$body.` / `$notes.` references are already absolute and ignore this.
  */
-function readablePathsFor(list, fieldTable, partials) {
+function readablePathsFor(list, fieldTable, partials, refRoot = 'body') {
   const content = new Set();
   const ack = new Set();
   let allowExtra = false;
@@ -101,17 +124,77 @@ function readablePathsFor(list, fieldTable, partials) {
   const scanRaw = (str) => {
     let m;
     IF_GUARD_RE.lastIndex = 0;
-    while ((m = IF_GUARD_RE.exec(str)) !== null) ack.add(m[1].toLowerCase());
+    while ((m = IF_GUARD_RE.exec(str)) !== null) ack.add(`${m[1]}.${m[2]}`.toLowerCase());
     const stripped = String(str).replace(IF_TAG_RE, ' ');
     BODY_REF_RE.lastIndex = 0;
-    while ((m = BODY_REF_RE.exec(stripped)) !== null) content.add(m[1].toLowerCase());
+    while ((m = BODY_REF_RE.exec(stripped)) !== null) content.add(`${m[1]}.${m[2]}`.toLowerCase());
+  };
+
+  /**
+   * `parts:` (Decision 8's field-audit half, applied to the composition primitive): every
+   * ref at every depth must reach `content`, root-qualified, or a `parts:` field the item
+   * genuinely reads raises a phantom CL0428 dead-declaration finding. A `$`-prefixed entry
+   * is a ref; any other string is a literal and contributes nothing; a mapping is a nested
+   * declaration, walked the same way `addField` walks a top-level one — recursively through
+   * its own `parts:`, and through `from:` if it carries that instead (the two are mutually
+   * exclusive by CL0422, but this does not assume the loader caught it).
+   */
+  const collectPartsRefs = (parts) => {
+    for (const entry of parts || []) {
+      if (typeof entry === 'string') {
+        if (entry.startsWith('$')) content.add(qualify(entry, refRoot).toLowerCase());
+        continue; // a literal — no ref
+      }
+      if (!isPlainObject(entry)) continue;
+      if (entry.from !== undefined) {
+        for (const p of fromPaths(entry, undefined)) content.add(qualify(p, refRoot).toLowerCase());
+      }
+      if (entry.parts !== undefined) collectPartsRefs(entry.parts);
+      if (entry.try !== undefined) collectTryRefs(entry.try);
+      if (isPlainObject(entry.labelWhen)) {
+        const whenKey = Object.keys(entry.labelWhen)[0];
+        if (whenKey) ack.add(qualify(whenKey, refRoot).toLowerCase());
+      }
+    }
+  };
+
+  /**
+   * `try:` (Decision 7's field-audit half): every source is read, whichever one resolves at
+   * render time, so all of them must reach `content` — unlike `parts:`'s literals, `try:`
+   * has no non-source entries to skip. A bare string follows `from:`'s ref rules (root-
+   * relative, qualified by `refRoot`) and a `$`-prefixed string is already absolute; a
+   * mapping is a nested declaration, walked the same way `addField` walks a top-level one.
+   */
+  const collectTryRefs = (list) => {
+    for (const entry of list || []) {
+      if (typeof entry === 'string') {
+        content.add(qualify(entry, refRoot).toLowerCase());
+        continue;
+      }
+      if (!isPlainObject(entry)) continue;
+      if (entry.from !== undefined) {
+        for (const p of fromPaths(entry, undefined)) content.add(qualify(p, refRoot).toLowerCase());
+      }
+      if (entry.parts !== undefined) collectPartsRefs(entry.parts);
+      if (entry.try !== undefined) collectTryRefs(entry.try);
+      if (isPlainObject(entry.labelWhen)) {
+        const whenKey = Object.keys(entry.labelWhen)[0];
+        if (whenKey) ack.add(qualify(whenKey, refRoot).toLowerCase());
+      }
+    }
   };
 
   const addField = (name, decl) => {
-    for (const p of fromPaths(decl, name)) content.add(p.toLowerCase());
+    if (decl && decl.try !== undefined) {
+      collectTryRefs(decl.try);
+    } else if (decl && decl.parts !== undefined) {
+      collectPartsRefs(decl.parts);
+    } else {
+      for (const p of fromPaths(decl, name)) content.add(qualify(p, refRoot).toLowerCase());
+    }
     if (decl && isPlainObject(decl.labelWhen)) {
       const whenKey = Object.keys(decl.labelWhen)[0];
-      if (whenKey) ack.add(String(whenKey).toLowerCase());
+      if (whenKey) ack.add(qualify(whenKey, refRoot).toLowerCase());
     }
   };
 
@@ -152,24 +235,27 @@ function readablePathsFor(list, fieldTable, partials) {
   return { content, ack, allowExtra };
 }
 
-/** Flatten `body` to dotted leaf paths, stopping descent at a content path. */
+/** Flatten `body` to `body.`-qualified dotted leaf paths, stopping descent at a content
+ * path. `content` is itself root-qualified (`body.X` / `notes.X`), so a `notes.` entry
+ * never suppresses a `body.` leaf — qualifying both sides is what closes that collapse. */
 function bodyLeafPaths(body, content) {
   const out = [];
   // Comparisons are case-folded (the renderer matches body fields case-insensitively); a
   // caller may pass a content set in either case, so fold a working copy rather than assume.
   const contentLc = new Set([...content].map((c) => String(c).toLowerCase()));
-  const hasContentBelow = (prefix) => {
-    const p = `${prefix.toLowerCase()}.`;
+  const hasContentBelow = (qualifiedPrefix) => {
+    const p = `${qualifiedPrefix.toLowerCase()}.`;
     for (const c of contentLc) if (c.startsWith(p)) return true;
     return false;
   };
   const walk = (obj, prefix) => {
     for (const key of Object.keys(obj)) {
       const p = prefix ? `${prefix}.${key}` : key;
-      if (contentLc.has(p.toLowerCase())) continue; // rendered — and so is everything under it
+      const qualified = `body.${p}`;
+      if (contentLc.has(qualified.toLowerCase())) continue; // rendered — and so is everything under it
       const val = obj[key];
-      if (isPlainObject(val) && hasContentBelow(p)) walk(val, p);
-      else out.push(p);
+      if (isPlainObject(val) && hasContentBelow(qualified)) walk(val, p);
+      else out.push(qualified);
     }
   };
   if (isPlainObject(body)) walk(body, '');
@@ -205,10 +291,15 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
     }
   }
 
-  const readableCache = new Map(); // list reference → { content, ack, allowExtra }
-  const readable = (list) => {
-    let hit = readableCache.get(list);
-    if (!hit) { hit = readablePathsFor(list, table, partials); readableCache.set(list, hit); }
+  // list reference → refRoot → { content, ack, allowExtra }. Keyed on both, in case the
+  // same list object is ever read under two roots (not true of today's two call sites,
+  // which are both `body`, but nothing here should assume it stays that way).
+  const readableCache = new Map();
+  const readable = (list, refRoot) => {
+    let byRoot = readableCache.get(list);
+    if (!byRoot) { byRoot = new Map(); readableCache.set(list, byRoot); }
+    let hit = byRoot.get(refRoot);
+    if (!hit) { hit = readablePathsFor(list, table, partials, refRoot); byRoot.set(refRoot, hit); }
     return hit;
   };
 
@@ -239,12 +330,16 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
 
   // `templateName` is kept in the signature for call-site symmetry with the render paths
   // that pass it; the per-item check names no single template, so it is not read here.
+  // `opts.refRoot` is the root a bare path in `list` qualifies to — `body` for a
+  // story-card/component render, `notes` for a `templateFor.notes` list; defaults to
+  // `body` since every call site today is a body render.
   function collectForItem(item, list, templateName, opts = {}) {
     if (!list) return;
     const body = item && item.body;
     if (!isPlainObject(body)) return;
     const itemId = (item.id || item.name || '').toString();
-    const { content, ack, allowExtra } = readable(list);
+    const refRoot = opts.refRoot || 'body';
+    const { content, ack, allowExtra } = readable(list, refRoot);
     const fromTemplateFor = listFromTemplateFor(list, opts.templateFor);
 
     let acc = perItem.get(itemId);
@@ -284,9 +379,13 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
       if (acc.allowExtra) continue;
       const { content, ack } = acc;
       for (const { body, file, projectAuthored } of acc.bodies) {
-        for (const leaf of bodyLeafPaths(body, content)) {
+        for (const qualifiedLeaf of bodyLeafPaths(body, content)) {
+          // `qualifiedLeaf` is `body.X` (bodyLeafPaths only ever walks item.body); strip
+          // the root back off for the bare leaf everything downstream — declaredness,
+          // messages, `projectAuthored` — already speaks in.
+          const leaf = qualifiedLeaf.slice('body.'.length);
           const leafLc = leaf.toLowerCase();
-          if (ack.has(leafLc)) continue;
+          if (ack.has(qualifiedLeaf.toLowerCase())) continue;
           const key = `${itemId}\x00${leaf}`;
           if (findings.has(key)) continue;
           if (projectAuthored && !projectAuthored.has(leafLc)) continue;
@@ -294,8 +393,8 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
           const firstSeg = leaf.split('.')[0];
           const declKey = isDeclared(leaf) ? leaf : (isDeclared(firstSeg) ? firstSeg : null);
           const declKeyLc = declKey ? declKey.toLowerCase() : null;
-          const contentTouches = declKeyLc && (content.has(declKeyLc)
-            || [...content].some((c) => c.startsWith(`${declKeyLc}.`)));
+          const contentTouches = declKeyLc && (content.has(`body.${declKeyLc}`)
+            || [...content].some((c) => c.startsWith(`body.${declKeyLc}.`)));
 
           // CL0427 only when the declared field is genuinely routed elsewhere — nothing
           // about it is read by any of this item's renders. A sub-key of a field one of
@@ -347,16 +446,17 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
     // object) directly. An `{ include: partial }` entry contributes every `$body.` /
     // `$notes.` field the partial references — `readablePathsFor` already opens partials
     // and follows nested includes for CL0426/CL0427, and CL0428 has to see the same reads
-    // or it reports a partial-only field dead. The first dotted segment is the field name;
-    // a deeper `from:` path (`physical traits.gender`) resolves to a segment that is not a
-    // declared field, which the `Object.keys(fields)` loop below simply never matches.
+    // or it reports a partial-only field dead. `content`/`ack` are root-qualified
+    // (`body.X` / `notes.X`); the segment after the root is the field name — a deeper
+    // `from:` path (`physical traits.gender`) resolves to a segment that is not a declared
+    // field, which the `Object.keys(fields)` loop below simply never matches.
     const addFromEntry = (entry) => {
       const name = entryName(entry);
       if (name) { addName(name, true); return; }
       if (isPlainObject(entry) && entry.include !== undefined) {
         const { content, ack } = readablePathsFor([entry], table, partials);
-        for (const p of content) addName(String(p).split('.')[0], false);
-        for (const p of ack) addName(String(p).split('.')[0], false);
+        for (const p of content) addName(String(p).split('.')[1], false);
+        for (const p of ack) addName(String(p).split('.')[1], false);
       }
     };
     for (const list of Object.values(templates)) {

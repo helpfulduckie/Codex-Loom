@@ -383,7 +383,9 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
         // misrouted (§13.6). Gated on `extra.fieldAudit`, which the caller passes only for
         // an item that also emits a card (the audit's item set is unchanged this way).
         if (extra.fieldAudit) {
-          extra.fieldAudit.collectForItem(item, hit.list, hit.name, { templateFor });
+          // This is a story-card/component body render, so a bare `from:`/implied-source
+          // path in `hit.list` qualifies against `body` (§ Decision 8).
+          extra.fieldAudit.collectForItem(item, hit.list, hit.name, { templateFor, refRoot: 'body' });
         }
         return renderFieldList(hit.list, fieldTable, context, {
           diagnostics, file: null, name: hit.name, partials, variables,
@@ -635,7 +637,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     // carries? Runs on the field-list body only — a `.template` text body names nothing to
     // check against. Findings are deduped compile-wide and emitted once, after every leaf.
     if (fieldAudit && bodyRender.kind === 'fieldList') {
-      fieldAudit.collectForItem(item, bodyRender.list, bodyRender.name, { templateFor });
+      fieldAudit.collectForItem(item, bodyRender.list, bodyRender.name, { templateFor, refRoot: 'body' });
     }
 
     // Build render context: top-level item fields + body for {$body.X} access

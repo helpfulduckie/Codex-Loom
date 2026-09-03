@@ -131,6 +131,102 @@ A label-less field is always wrapped whole, since there is no label to place ins
 
 ---
 
+## `parts:` — Composing a Value From Several Sources
+
+**`parts:` is an ordered list of pieces rendered in sequence** — the primitive for the one shape a plain `from:`/`join:` declaration cannot say: two value expressions plus a literal on one line, such as a name followed by a conditional tagline. Each entry is one of three things:
+
+- a **`$`-prefixed string** — a ref, e.g. `$body.tagline`, `$name.full`, `$aid.title`;
+- **any other string** — a literal, inserted as **template source**, the same contract `raw:` already has (see below);
+- a **mapping** — a nested declaration, carrying its own `from:` / `render:` / `join:` / `parts:` and so on.
+
+```yaml surface=fieldtable
+fields:
+  nameLine: { parts: [$name.full, " - ", { from: tagline, join: "; " }] }
+```
+
+**A bare string inside a nested declaration's `from:` is root-relative, exactly as it is on an ordinary field** — `tagline` above reads `$body.tagline` in a story-card body render and `$notes.tagline` inside a `templateFor.notes` list. A `$`-prefixed part is always absolute and ignores that root entirely, which is what lets `$name.full` and `$aid.title` reach outside `body`/`notes` from any `parts:` list, at any depth.
+
+**`parts:` and `from:` cannot both be given on one declaration.** `from:` names a source; `parts:` is a source plus a composition, so the two do not combine — carrying both is a load-time error (`CL0422`), caught at any nesting depth.
+
+### Literal drop — the adjacency rule
+
+**A literal renders iff every adjacent ref that exists in the list renders.** A middle literal has two neighbors and needs both; a head or tail literal has one neighbor and needs that one. A nested declaration counts as one neighbor and is present when any of its own refs is, so a nested group drops together rather than per-ref.
+
+**"Present" is the same test `{if}` uses, which is not quite "produced non-empty text".** A missing key, an empty list, an empty mapping, `false` and `0` all count as absent, so the common cases behave as you would expect. **An empty-string value does not** — `x: ""` is present, so its adjacent literal renders and can leave a trailing separator. That is a property of `isTruthy` in `src/render/eval.js`, shared with every `{if}` in the system, rather than anything specific to `parts:`.
+
+| Shape | Ref present? | Output |
+|---|---|---|
+| `["PRE-", $a]` | `a` present | `PRE-<a>` |
+| `["PRE-", $a]` | `a` absent | *(nothing — the literal drops with its one neighbor)* |
+| `[$a, "-POST"]` | `a` present | `<a>-POST` |
+| `[$a, "-POST"]` | `a` absent | *(nothing)* |
+| `[$a, "-MID-", $b]` | both present | `<a>-MID-<b>` |
+| `[$a, "-MID-", $b]` | one absent | *(that literal drops — a middle literal needs both neighbors)* |
+
+**Three or more refs with separators between them is deliberately left to nested parts, not a collapse pass.** `[$a, "-", $b, "-", $c]` with `b` absent yields `ac`, not `a-c`: both literals lose a neighbor (the first loses `b`, the second loses `b` too) and both drop, exactly as the two-neighbor rule above says. An author who wants a middle ref's absence handled some other way nests instead:
+
+```yaml surface=fieldtable
+fields:
+  triple: { parts: [$a, { parts: ["-", $b, "-"] }] }
+```
+
+— now the whole nested group drops together when `$b` is absent, because a nested declaration's own presence is "did it render anything", not "is each of its refs individually present".
+
+### Literals are template source, not escaped text
+
+**A `parts:` literal is inserted as template source**, the same contract `raw:` already has — a literal containing `{$body.x}` renders the field's value, not the literal characters `{$body.x}`. To emit a literal brace, escape it with `{{`/`}}`, and wrap the escaped text in `{preserve}...{/preserve}` if it needs protecting from whitespace normalization:
+
+```yaml transform=stanza-source id=stanza-parts-literal-source
+tag: { parts: [$body.a, " {preserve}{{lit}}{/preserve}"] }
+```
+
+``` expect=stanza-parts-literal-source
+{if $body.a}
+{$body.a}{if $body.a} {preserve}{{lit}}{/preserve}{/if}
+{/if}
+```
+
+---
+
+## `try:` — Rendering the First Source That Resolves
+
+**`try:` is an ordered list of sources; the first one that resolves renders, and the rest are never reached.** It is the operation the field table has never had — do not confuse it with `from: [a, b]`, which renders **both**, joined:
+
+| Key | Given `content` absent, `entries` present | Given both present |
+|---|---|---|
+| `from: [content, entries]` | renders `entries` alone | renders `content` **and** `entries`, joined |
+| `try: [content, entries]` | renders `entries` | renders `content` only — `entries` is never reached |
+
+That contrast is the single most likely thing to get wrong: reaching for `try:` where `from:`'s join was actually wanted, or the reverse.
+
+Each entry is one of two things — there is no literal form, unlike `parts:`:
+
+- a **string** — a source, following the same ref rules `from:` does: a bare path is root-relative (`content` reads `$body.content` in a story-card body render, `$notes.content` inside a `templateFor.notes` list) and a `$`-prefixed path is absolute (`$name.full`, `$aid.title`);
+- a **mapping** — a nested declaration, carrying its own `from:` / `render:` / `join:` / `parts:` / `try:` and so on, resolved recursively.
+
+```yaml surface=fieldtable
+fields:
+  directory: { try: [content, entries], render: list }
+```
+
+**`render:` and `join:` on the outer declaration apply to whichever plain-string source wins**, the same way they apply to a single-path `from:`. A nested-declaration source supplies its own `render:`/`join:` instead and ignores the outer ones.
+
+```yaml transform=stanza-source id=stanza-try-directory
+directory: { try: [content, entries], render: list }
+```
+
+``` expect=stanza-try-directory
+{if $body.content}
+{if $body.content}{list($body.content)}{else}{list($body.entries)}{/if}
+{else}{if $body.entries}
+{if $body.content}{list($body.content)}{else}{list($body.entries)}{/if}
+{/if}{/if}
+```
+
+**`try:` is mutually exclusive with both `from:` and `parts:`.** All three are source specifications — `from:` names a source (or several, joined), `parts:` is a source plus a composition, `try:` is an ordered set of alternatives — so a declaration naming more than one is a load-time error (`CL0422`), caught at any nesting depth, the same check `parts:` and `from:` already share.
+
+---
+
 ## Groups and Template Lists
 
 **A group is a named sub-list** — what a partial's grouping role becomes. **A template is an ordered list of field or group names**, expanded in place, with list order equal to output order.

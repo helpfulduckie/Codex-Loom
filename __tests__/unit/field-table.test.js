@@ -112,6 +112,96 @@ describe('loadFieldTable', () => {
     });
   });
 
+  // Composition primitive, step 3a (2026-09-03 handoff): `parts:` is a source *plus* a
+  // composition, so carrying it alongside `from:` on one declaration is an author error
+  // rather than two settings that combine. No CL04xx code already names "two mutually
+  // exclusive keys given together"; CL0422 ("entry has the wrong shape") is reused rather
+  // than a new code being minted, since diagnostic numbering is a human decision.
+  describe('parts: and from: are mutually exclusive', () => {
+    const dir = path.join(FIXTURE, '__parts-from-conflict__');
+    beforeAll(() => {
+      require('fs').mkdirSync(dir, { recursive: true });
+      require('fs').writeFileSync(path.join(dir, 'fields.cl.yaml'), [
+        'fields:',
+        '  conflicted: { label: X, from: a, parts: [$body.a] }',
+        '  nested: { label: Y, parts: [$body.a, { from: b, parts: [$body.c] }] }',
+        '  clean: { label: Z, parts: [$body.a] }',
+      ].join('\n'));
+    });
+    afterAll(() => require('fs').rmSync(dir, { recursive: true, force: true }));
+
+    test('a top-level from: + parts: conflict is CL0422, and the field still loads', () => {
+      const d = new Diagnostics();
+      const table = loadFieldTable([dir], { diagnostics: d });
+      const codes = d.errors.map((e) => e.code);
+      expect(codes).toContain(CODES.FIELD_TABLE_MALFORMED);
+      expect(d.errors.some((e) => e.message.includes('conflicted'))).toBe(true);
+      expect(table.fields.conflicted).toBeDefined();
+    });
+
+    test('the conflict is caught inside a nested part too', () => {
+      const d = new Diagnostics();
+      loadFieldTable([dir], { diagnostics: d });
+      const msgs = d.errors.filter((e) => e.code === CODES.FIELD_TABLE_MALFORMED).map((e) => e.message);
+      expect(msgs.some((m) => m.includes('nested part') && m.includes('nested'))).toBe(true);
+    });
+
+    test('a clean parts: declaration with no from: raises nothing', () => {
+      const d = new Diagnostics();
+      loadFieldTable([dir], { diagnostics: d });
+      const msgs = d.errors.filter((e) => e.code === CODES.FIELD_TABLE_MALFORMED).map((e) => e.message);
+      expect(msgs.some((m) => m.includes('"clean"'))).toBe(false);
+    });
+  });
+
+  // `try:` (Decision 7 — 2026-09-03 handoff) is a third source specification, mutually
+  // exclusive with `from:` and `parts:` the same way those two are exclusive with each other —
+  // `checkSourceConflict` covers all three pairings rather than a second, parallel check.
+  describe('try: is mutually exclusive with from: and parts:', () => {
+    const dir = path.join(FIXTURE, '__try-source-conflict__');
+    beforeAll(() => {
+      require('fs').mkdirSync(dir, { recursive: true });
+      require('fs').writeFileSync(path.join(dir, 'fields.cl.yaml'), [
+        'fields:',
+        '  tryFrom: { label: X, from: a, try: [b, c] }',
+        '  tryParts: { label: Y, parts: [$body.a], try: [b, c] }',
+        '  nested: { label: Z, try: [b, { from: c, try: [d] }] }',
+        '  clean: { label: W, try: [b, c] }',
+      ].join('\n'));
+    });
+    afterAll(() => require('fs').rmSync(dir, { recursive: true, force: true }));
+
+    test('try: + from: on one declaration is CL0422, and the field still loads', () => {
+      const d = new Diagnostics();
+      const table = loadFieldTable([dir], { diagnostics: d });
+      const codes = d.errors.map((e) => e.code);
+      expect(codes).toContain(CODES.FIELD_TABLE_MALFORMED);
+      expect(d.errors.some((e) => e.message.includes('tryFrom'))).toBe(true);
+      expect(table.fields.tryFrom).toBeDefined();
+    });
+
+    test('try: + parts: on one declaration is CL0422 too', () => {
+      const d = new Diagnostics();
+      loadFieldTable([dir], { diagnostics: d });
+      expect(d.errors.some((e) => e.code === CODES.FIELD_TABLE_MALFORMED
+        && e.message.includes('tryParts'))).toBe(true);
+    });
+
+    test('the conflict is caught inside a nested try: source too', () => {
+      const d = new Diagnostics();
+      loadFieldTable([dir], { diagnostics: d });
+      const msgs = d.errors.filter((e) => e.code === CODES.FIELD_TABLE_MALFORMED).map((e) => e.message);
+      expect(msgs.some((m) => m.includes('nested try source') && m.includes('nested'))).toBe(true);
+    });
+
+    test('a clean try: declaration with no from:/parts: raises nothing', () => {
+      const d = new Diagnostics();
+      loadFieldTable([dir], { diagnostics: d });
+      const msgs = d.errors.filter((e) => e.code === CODES.FIELD_TABLE_MALFORMED).map((e) => e.message);
+      expect(msgs.some((m) => m.includes('"clean"'))).toBe(false);
+    });
+  });
+
   test('CL0422–CL0425 form a contiguous band in the render decade', () => {
     expect([
       CODES.FIELD_TABLE_MALFORMED,
