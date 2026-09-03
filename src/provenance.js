@@ -3,15 +3,15 @@
 /**
  * §17.2's provenance report — every resolved item with its library set and source file.
  *
- * The registry already stamps `_canonSource` (the canon set name) and `_source` (the file
+ * The registry already stamps `_canonSource` (the library set name) and `_source` (the file
  * path) at load time. This report reads those stamps rather than re-deriving them, and it
  * keeps the three provenance answers separate:
  *
  *   - uniquely resolved items (`registry` plain keys)
  *   - ambiguous items (`registry.ambiguous`, one row per rival)
- *   - imported items (`import:` on a project def, whose local id may differ from the canon id)
+ *   - imported items (`import:` on a project def, whose local id may differ from the library id)
  *
- * A project item that shadows a canon id is an ERROR at merge time, so it never reaches
+ * A project item that shadows a library id is an ERROR at merge time, so it never reaches
  * this report. A rename-on-import is shown in the `via` column so the row still answers
  * "where did this come from" even when the local id has moved.
  */
@@ -27,7 +27,7 @@ function csvCell(value) {
 }
 
 function sourceLabel(item) {
-  if (item._canonSource) return `canon:${item._canonSource}`;
+  if (item._canonSource) return `library:${item._canonSource}`;
   return 'project';
 }
 

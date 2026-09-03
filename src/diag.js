@@ -90,7 +90,7 @@ const REGISTRY = Object.freeze({
   ITEM_WITHOUT_IDENTITY:        { id: 'CL0140', severity: ERROR, summary: 'An item has neither id: nor name:.' },
   DUPLICATE_ITEM_ID:            { id: 'CL0141', severity: ERROR, summary: 'Duplicate item id.' },
   MULTIPLE_VAR_ALIASES:         { id: 'CL0142', severity: WARN,  summary: 'An item declares more than one v: alias; they are merged.' },
-  ID_CONTAINS_COLON:            { id: 'CL0144', severity: ERROR, summary: 'An item id contains ":", which is reserved as the canon-set separator.' },
+  ID_CONTAINS_COLON:            { id: 'CL0144', severity: ERROR, summary: 'An item id contains ":", which is reserved as the library separator.' },
 
   // ── CL02xx  schema ────────────────────────────────────────────────────────
   UNKNOWN_KEY:                  { id: 'CL0201', severity: ERROR, summary: 'Unknown key. Carries a spelling suggestion when one is close.' },
@@ -115,9 +115,9 @@ const REGISTRY = Object.freeze({
   BRANCH_WILDCARD_UNBIND:       { id: 'CL0327', severity: WARN,  summary: "A branch spec maps '*' to ~, which reads as \"exclude from every branch\" and is silently skipped; the author meant '_: ~'." },
   FIELD_OP_NOOP:                { id: 'CL0328', severity: WARN,  summary: "A field op's target is absent so it changes nothing — every op in a chain missed, or a lone -{} / swap missed." },
   CROSS_ITEM_REF_MISSING:       { id: 'CL0330', severity: WARN,  summary: 'A cross-item reference names an item that does not exist.' },
-  AMBIGUOUS_REF:                { id: 'CL0340', severity: ERROR, summary: 'A reference is defined in more than one canon set and is not qualified.' },
-  UNKNOWN_CANON_SOURCE:         { id: 'CL0341', severity: ERROR, summary: 'A reference names a canon set not declared in structure.input.library.' },
-  REF_NOT_FOUND:                { id: 'CL0342', severity: ERROR, summary: 'A reference names an id that no canon set defines.' },
+  AMBIGUOUS_REF:                { id: 'CL0340', severity: ERROR, summary: 'A reference is defined in more than one library set and is not qualified.' },
+  UNKNOWN_CANON_SOURCE:         { id: 'CL0341', severity: ERROR, summary: 'A reference names a library set not declared in structure.input.library.' },
+  REF_NOT_FOUND:                { id: 'CL0342', severity: ERROR, summary: 'A reference names an id that no library set defines.' },
 
   // ── CL04xx  render ────────────────────────────────────────────────────────
   TEMPLATE_CONTAINS_FENCE:      { id: 'CL0410', severity: ERROR, summary: 'A .template or .partial still contains a ~~~ fence.' },
@@ -325,7 +325,7 @@ class Diagnostic {
    *
    *   ERROR CL0310 codex/npcs.cl.yaml:112:9
    *     Item "Kaiden" dispatches branch "felix" to variant "Felix", which is not
-   *     defined on this item or on canon item "Kaiden" (canon:main).
+   *     defined on this item or on library item "Kaiden" (library:main).
    */
   format() {
     const head = [SEVERITY_LABEL[this.severity] || this.severity, this.code, this.location]

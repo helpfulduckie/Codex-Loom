@@ -70,18 +70,18 @@ describe('resolveItemRef — ItemRegistry', () => {
     expect(resolveItemRef(registry, 'grimwood:kaiden').item.id).toBe('kaiden');
   });
 
-  test('an ambiguous plain ref reports both canon sources and a hint naming both qualified forms', () => {
+  test('an ambiguous plain ref reports both library sources and a hint naming both qualified forms', () => {
     const registry = buildRegistry();
     const result = resolveItemRef(registry, 'magic');
     expect(result.item).toBeNull();
     expect(result.code).toBe(CODES.AMBIGUOUS_REF);
-    expect(result.message).toContain('canon:grimwood');
-    expect(result.message).toContain('canon:hollow');
+    expect(result.message).toContain('library:grimwood');
+    expect(result.message).toContain('library:hollow');
     expect(result.hint).toContain('grimwood:magic');
     expect(result.hint).toContain('hollow:magic');
   });
 
-  test('a qualifier naming an undeclared canon set reports UNKNOWN_CANON_SOURCE', () => {
+  test('a qualifier naming an undeclared library set reports UNKNOWN_CANON_SOURCE', () => {
     const registry = buildRegistry();
     const result = resolveItemRef(registry, 'nowhere:magic');
     expect(result.item).toBeNull();
@@ -96,7 +96,7 @@ describe('resolveItemRef — ItemRegistry', () => {
     const result = resolveItemRef(registry, 'hollow:kaiden');
     expect(result.item).toBeNull();
     expect(result.code).toBe(CODES.REF_NOT_FOUND);
-    expect(result.message).toContain('canon set "hollow"');
+    expect(result.message).toContain('library set "hollow"');
   });
 });
 

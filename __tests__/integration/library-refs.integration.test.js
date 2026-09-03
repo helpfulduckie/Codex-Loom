@@ -6,7 +6,7 @@ const fs = require('fs');
 const { compile } = require('../../src/compile');
 
 // A self-contained fixture (not the shared golden tree under test/) so this doesn't touch
-// the snapshot other integration tests guard. Two canon sets both define "dup"; the project
+// the snapshot other integration tests guard. Two library sets both define "dup"; the project
 // reaches one qualified and renames the other on import (§17.4), and both must land in the
 // compiled output distinctly.
 
@@ -99,7 +99,7 @@ function characterCardFile() {
   return path.join(tmpDir, 'output', 'Branches', 'main', 'Story Cards', 'Character', 'Character.md');
 }
 
-describe('canon resolution — qualified import and rename-on-import (§17)', () => {
+describe('shared library resolution — qualified import and rename-on-import (§17)', () => {
   test('both the qualified import and the renamed import reach the compiled output', () => {
     const content = fs.readFileSync(characterCardFile(), 'utf8');
     expect(content).toContain('Alpha Dup - from alpha');

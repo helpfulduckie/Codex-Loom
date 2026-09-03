@@ -51,10 +51,10 @@ around them.
 2. **Ergonomic YAML.** No defensive quoting, no invisible significant whitespace.
 3. **Loud failures with locations.** Every diagnostic names a file and, where the loader
    can supply one, a line. A schema-key typo is an ERROR, not a silent no-op.
-4. **Canon on the author's schedule.** A scenario pins the library version it compiled
-   against and moves off it deliberately.
-5. **Canon for everything.** AI Instructions, Author's Note and Plot Essentials layouts
-   get the same import / variant / branch grammar items already have.
+4. **Shared library on the author's schedule.** A scenario pins the library version it
+   compiled against and moves off it deliberately.
+5. **Shared library for everything.** AI Instructions, Author's Note and Plot Essentials
+   layouts get the same import / variant / branch grammar items already have.
 6. **Expressive references.** Refer to *the love interest* or *the protagonist* without
    knowing which item that is on this branch.
 7. **A quarantined output format.** All Velvet Lattice knowledge lives in one module.
@@ -109,7 +109,7 @@ directory roster is exactly `branches.js`, `component.js`, `fieldops.js`, `item.
 test, not a place a `console.warn` can quietly reappear.
 
 **`import:` versus `imports:` is a cardinality signal.** `import:` (items) takes exactly
-one canon counterpart — an item either *is* a canon item with local deltas or it is a
+one library counterpart — an item either *is* a library item with local deltas or it is a
 local item. `imports:` (components) takes a list, because a component composes a
 house-style base, then a world layer, then project deltas. The `s` is the difference and
 it is deliberate.
@@ -181,8 +181,8 @@ shared engine in `src/schema.js`.
 
 Unknown-key handling checks for **relocation before spelling**. A misspelled key usually
 produces output that is visibly missing something; a *correctly spelled key at the wrong
-level* produces output that looks complete and is quietly wrong, and can sit in shared
-canon inherited by every consuming project. So the validator first checks whether the key
+level* produces output that looks complete and is quietly wrong, and can sit in a shared
+library inherited by every consuming project. So the validator first checks whether the key
 is valid at another level (`CL0210`, which names the level), and only falls back to an
 edit-distance spelling suggestion (`CL0201`) when no relocation match exists. Spelling
 uses Damerau-Levenshtein, which counts a transposition as one edit — plain Levenshtein
@@ -281,9 +281,9 @@ story card with a deliberately empty trigger list, which no render target can ex
 The rule is that soft heuristics skip reference items and hard limits apply to
 everything: a card over AID's field cap is malformed whatever it exists for.
 
-**`kind:` is a property of the copy, not of the canon item.** Importing a narrative item
+**`kind:` is a property of the copy, not of the library item.** Importing a narrative item
 and declaring `kind: reference` on the import makes that copy reference material and
-leaves the canon item alone; a variant can change it too. The compiled card carries
+leaves the library item alone; a variant can change it too. The compiled card carries
 `kind: reference` in its fence so the reports — which read the compiled tree, not the
 YAML — can tell which cards to treat as reference material. Velvet Lattice keeps
 unrecognized fence keys as metadata and forwards them to AID nowhere, so the key changes
@@ -346,7 +346,7 @@ per-type map in sequence and returned the first name match, so `{@pe}` resolved
 identically no matter which type declared it — no project could depend on the grouping,
 because the grouping never worked.
 
-**Canon and library names are now auto-exposed as `{%variable}` tokens.**
+**Library names are now auto-exposed as `{%variable}` tokens.**
 `{%characters}/Aness.cl.yaml` does what `{@characters}/…` used to. That leaves one naming
 system and one expander. A library name colliding with a declared variable is `CL0521`,
 an ERROR rather than a silent precedence rule, because there is no answer to "which one
@@ -361,8 +361,8 @@ changed.
 library entry `libNovalune: '{%libraryRoot}/StoryCards/Novalune'` resolves against
 `libraryRoot` whether it is declared above or below. v3 already worked this way; what v4
 adds is diagnostic quality — a cycle names every key in the loop (`CL0511`), not only the
-one where detection happened. Canon path resolution no longer needs the bespoke two-pass
-v3 used to build a lookup table first: a canon entry naming a sibling is just a variable
+one where detection happened. Library path resolution no longer needs the bespoke two-pass
+v3 used to build a lookup table first: a library entry naming a sibling is just a variable
 naming a variable, and the one expander handles it.
 
 ### §6.3 `scripts:` is top-level and merges per file
@@ -644,9 +644,9 @@ a convention pack.
 leaf's compiled cards to check a mod's configuration.** Mod config lives in `notes:`, and
 the person who knows what a mod accepts is its author; baking one mod's rules into the
 compiler makes the Codex Loom maintainer a bottleneck for every mod anyone uses. A pack
-ships alongside the canon it depends on, is opt-in via `lint.packs`, and consuming it is
-not a trust decision. The mechanism and the two bundled packs (`wtg`, `duckieConv`) are
-documented in `documentation/14-convention-packs.md`.
+ships alongside the shared library it depends on, is opt-in via `lint.packs`, and
+consuming it is not a trust decision. The mechanism and the two bundled packs (`wtg`,
+`duckieConv`) are documented in `documentation/14-convention-packs.md`.
 
 ### §8.4 `encapsulate` and `wrapper` are the same operation
 
@@ -775,9 +775,9 @@ is declared but cannot resolve leaves its token unresolved on purpose, so the ou
 sweep's `CL0430` catches it a second time. That two-reports overlap is deliberate:
 `CL0540` names the cause at its source, `CL0430` names the fact in the output.
 
-### §9.4 Canon cards carry a consumer contract
+### §9.4 Shared library cards carry a consumer contract
 
-**A shared canon card that references `{$LI}` needs the consuming project to bind `LI`,
+**A shared library card that references `{$LI}` needs the consuming project to bind `LI`,
 and `--snapshot` computes that requirement rather than trusting a declaration.** It scans
 each library entry's own frozen files for every `{$X}` token and checks whether `X`
 resolves to an item id anywhere in the snapshotted library. What resolves nowhere is
@@ -883,7 +883,7 @@ question it exists to answer.
 
 ### §11.3 Scale
 
-Whole-directory copies, no `--used-only` option. The measured shared canon tree is ~58
+Whole-directory copies, no `--used-only` option. The measured shared library tree is ~58
 files / ~195 KB, so disk is a non-issue; the binding constraint is review burden at sync
 time, and a sync whose diff is too large to read defeats the purpose. Revisit above
 ~1,000 files.
@@ -1231,13 +1231,13 @@ change is not done until the goldens are confirmed to have actually run.
 
 ---
 
-## §17. Canon resolution — multiple sets in one project
+## §17. Shared Library resolution — multiple library sets in one project
 
 ### §17.1 The problem
 
-**`buildCanonRegistry` errors on any id defined in two canon sources**, which is correct
+**`buildCanonRegistry` errors on any id defined in two library sets**, which is correct
 while every set is the author's own and a duplicate means a mistake. It stops being
-correct the moment canon is shared between authors: two settings both name an item
+correct the moment a library is shared between authors: two settings both name an item
 `magic`, one meaning elemental manipulation and the other blood magic, both authors right,
 and a third author wanting both currently cannot have them. Personal curation — renaming
 your copy of someone else's set — is the un-Codex-Loom answer: it diverges the local copy
@@ -1245,7 +1245,7 @@ from upstream, which is exactly what the library snapshot (§11) exists to preve
 
 ### §17.2 Qualified references
 
-**A reference is a plain id (`kaiden`) or one qualified with the canon set that owns it
+**A reference is a plain id (`kaiden`) or one qualified with the library set that owns it
 (`grimwood:magic`).** Qualification is optional and needed only where two sets define the
 same id. `:` is illegal inside an item id (`CL0144`), so the first colon is unambiguously
 the separator.
@@ -1257,13 +1257,13 @@ registry is a plain `Map` first — plain lowercase id → item, so every existi
 
 | Sidecar | Holds |
 |---|---|
-| `qualified` | `set:id` → item, for every canon item, so `grimwood:magic` always resolves |
+| `qualified` | `set:id` → item, for every library item, so `grimwood:magic` always resolves |
 | `ambiguous` | plain id → the rival items, for ids more than one set defines |
 | `sources` | the declared set names, so an unknown qualifier (`CL0341`) is distinguishable from a known set that lacks the id (`CL0342`) |
 
 ### §17.3 Ambiguity is reported at the reference, not at load
 
-**A duplicate id across two canon sets is not fatal and is not resolved by declaration
+**A duplicate id across two library sets is not fatal and is not resolved by declaration
 order.** Both copies are kept and the plain key is left empty; only a reference that
 cannot choose between them fails, and it fails at the reference (`CL0340`, which names both
 rivals and the qualified forms). The absence of the plain key *is* the mechanism — the
@@ -1271,7 +1271,7 @@ unqualified lookup has to miss before the resolver can reach the sidecar and nam
 alternatives.
 
 The asymmetry with the two fatal cases is deliberate. One set owning an id twice is a
-mistake inside that set; a project id colliding with a canon id is a clash whose both
+mistake inside that set; a project id colliding with a library id is a clash whose both
 sides the author owns. A cross-set clash is neither, so it is reported where a project can
 act on it rather than refused at load.
 
@@ -1279,9 +1279,9 @@ act on it rather than refused at load.
 
 **An `import:` def may carry its own `id:`, which registers the imported item under the
 local name** — `id: blood-magic` over `import: grimwood:magic` to hold both magic systems
-side by side, or `id: dragon` over `import: wyvern` with local `v:` deltas for a canon
-monster plus a near neighbor. The single-canon case is what justifies this, not the
-multi-canon one: the wyvern/dragon shape is useful in a project loading one set.
+side by side, or `id: dragon` over `import: wyvern` with local `v:` deltas for a library
+monster plus a near neighbor. The single-library case is what justifies this, not the
+multi-library one: the wyvern/dragon shape is useful in a project loading one set.
 
 **Only the id moves.** `name:` is left at whatever the imported item called it — `id:
 dragon` over `import: wyvern` is still named Wyvern until the author writes `name: Dragon`,
@@ -1289,9 +1289,9 @@ which is the line that says what they meant. Inferring a display name from an id
 guessing from a slug and would be wrong for every id that is shorter, lowercased or
 hyphenated. Two import defs renaming to the same local id are a duplicate that
 `buildRegistry` can no longer see, so the check moves to where renamed imports register
-(`CL0325`), and a renamed item's provenance row reads `project`, not `canon:<set>`.
+(`CL0325`), and a renamed item's provenance row reads `project`, not `library:<set>`.
 
-### §17.6 Templates following the canon set
+### §17.6 Templates following the library set
 
 A `library.cl.yaml` declaring per-set default templates — so a set that files age and gender
 under `appearance` ships the template that renders them — is **reserved, not yet built**.
@@ -1308,7 +1308,7 @@ covers it. Later work is a task queue, not a phase — there is no Phase 18.
 | Phase | Shipped | Sections |
 |---|---|---|
 | 0 | Golden fixtures frozen from three real scenarios on v3 | §14.3 |
-| 1 | Foundation: `preparse.js`, `diag.js`, schema validation, config/loader split, one branch walker, table-driven components, card→item rename, `{@}`→`{%}`, `structure.input.components` removed, canon resolution | §3, §4.1, §4.3, §4.4, §5.1, §6.1, §17.2–§17.4 |
+| 1 | Foundation: `preparse.js`, `diag.js`, schema validation, config/loader split, one branch walker, table-driven components, card→item rename, `{@}`→`{%}`, `structure.input.components` removed, shared library resolution | §3, §4.1, §4.3, §4.4, §5.1, §6.1, §17.2–§17.4 |
 | 2 | `emit/vl.js`; templates render body only; shared parser; trigger `_` padding; `notes:` field; `encapsulate`→`wrapper` | §4.2, §4.5, §8, §8.4, §8.6 |
 | 3 | Item/slot model; `pe.js` deleted; component sections; the no-output invariant; `--with-inventory` | §7.2, §7.4, §7.9 |
 | 4 | Player placeholders + the `${…}` confusability lint | §12 |

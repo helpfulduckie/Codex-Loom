@@ -254,14 +254,14 @@ describe('registries', () => {
     expect(() => buildRegistry(items, 'proj')).toThrow(/Duplicate item ID "dragon"/);
   });
 
-  test('mergeRegistries unions canon and project', () => {
+  test('mergeRegistries unions library and project', () => {
     const merged = mergeRegistries(buildRegistry([item('A')], 'c'), buildRegistry([item('B')], 'p'));
     expect([...merged.keys()].sort()).toEqual(['a', 'b']);
   });
 
-  test('mergeRegistries throws on a canon/project collision', () => {
+  test('mergeRegistries throws on a library/project collision', () => {
     expect(() => mergeRegistries(buildRegistry([item('A')], 'c'), buildRegistry([item('A')], 'p')))
-      .toThrow('exists in both canon and project');
+      .toThrow('exists in both a library set and the project');
   });
 
   test('a duplicate id raises CL0141 on the bus and keeps the first definition', () => {
@@ -282,25 +282,25 @@ describe('registries', () => {
     expect(diagnostics.errors.some((d) => d.code === CODES.ITEM_WITHOUT_IDENTITY)).toBe(true);
   });
 
-  test('mergeRegistries raises CL0141 on a canon/project collision and keeps the canon item', () => {
+  test('mergeRegistries raises CL0141 on a library/project collision and keeps the library item', () => {
     const diagnostics = new Diagnostics();
-    const canon = buildRegistry([item('A', 'canon.yaml')], 'c');
+    const canon = buildRegistry([item('A', 'library.yaml')], 'c');
     const project = buildRegistry([item('A', 'project.yaml')], 'p');
     const merged = mergeRegistries(canon, project, { diagnostics });
-    expect(merged.get('a')._source).toBe('canon.yaml');
+    expect(merged.get('a')._source).toBe('library.yaml');
     expect(diagnostics.errors.some((d) => d.code === CODES.DUPLICATE_ITEM_ID)).toBe(true);
   });
 });
 
-describe('canon registry', () => {
-  test('loads every named canon directory', () => {
+describe('library registry', () => {
+  test('loads every named library directory', () => {
     write('canonA/a.cl.yaml', 'id: A\n');
     write('canonB/b.cl.yaml', 'id: B\n');
     const map = new Map([['a', path.join(tmpDir, 'canonA')], ['b', path.join(tmpDir, 'canonB')]]);
     expect([...buildCanonRegistry(map).keys()].sort()).toEqual(['a', 'b']);
   });
 
-  test('a duplicate id across canon sources loads both, unqualified and unreachable (§17.3)', () => {
+  test('a duplicate id across library sets loads both, unqualified and unreachable (§17.3)', () => {
     write('canonA/a.cl.yaml', 'id: Dup\n');
     write('canonB/b.cl.yaml', 'id: Dup\n');
     const map = new Map([['a', path.join(tmpDir, 'canonA')], ['b', path.join(tmpDir, 'canonB')]]);
@@ -313,7 +313,7 @@ describe('canon registry', () => {
     expect(registry.itemCount).toBe(2);
   });
 
-  test('a missing canon directory warns and continues', () => {
+  test('a missing library directory warns and continues', () => {
     const diagnostics = new Diagnostics();
     const map = new Map([['gone', path.join(tmpDir, 'nope')]]);
     expect(buildCanonRegistry(map, { diagnostics }).size).toBe(0);

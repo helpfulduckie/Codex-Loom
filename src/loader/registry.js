@@ -4,7 +4,7 @@
  * Item loading and registry construction (v4 spec §3.2).
  *
  * Gathers what v3 split between `loader.js` (file loading, registry building, overlays)
- * and `compile.js` (canon registry, include resolution) — the two halves of one job,
+ * and `compile.js` (library registry, include resolution) — the two halves of one job,
  * separated only by which file happened to grow first.
  *
  * Items are validated against `loader/schema.js` as they load, so an unknown or
@@ -28,11 +28,11 @@ const { collectVariantDeltas, parseVariantsList } = require('../model/item');
  *
  * A `Map` first and foremost: plain lowercase id → item, exactly as before, so every
  * consumer that does `registry.get(id)` is untouched. Two sidecars carry what multi-set
- * canon added:
+ * shared libraries added:
  *
- *   `qualified`  `set:id` → item, for every canon item, so `grimwood:magic` always resolves
- *   `ambiguous`  plain id → the rival items, for ids more than one canon set defines
- *   `sources`    the declared canon set names, so an unknown qualifier is distinguishable
+ *   `qualified`  `set:id` → item, for every library item, so `grimwood:magic` always resolves
+ *   `ambiguous`  plain id → the rival items, for ids more than one library set defines
+ *   `sources`    the declared library set names, so an unknown qualifier is distinguishable
  *                from a known set that simply lacks the id
  *
  * An id claimed by two sets is deliberately absent from the plain keys. That is what makes
@@ -157,11 +157,11 @@ function loadItemsFromDir(dirs, options = {}) {
           });
         }
 
-        // `:` separates a canon set from an id in a reference (§17.2), so an id containing
+        // `:` separates a library set from an id in a reference (§17.2), so an id containing
         // one would make every reference to it ambiguous. Rejected at load, where the
         // position is still known, rather than at the confusing far end.
         if (typeof entry.id === 'string' && entry.id.includes(':')) {
-          const message = `item id "${entry.id}" contains ":", which separates a canon set from an id`;
+          const message = `item id "${entry.id}" contains ":", which separates a library set from an id`;
           if (diagnostics) diagnostics.error(CODES.ID_CONTAINS_COLON, message, { file });
           else throw new Error(`${message} (source: ${file})`);
         }
@@ -181,7 +181,7 @@ function loadItemsFromDir(dirs, options = {}) {
  *
  * An import def carrying its own `id:` is the exception, and registers under that local id
  * (§17.4). That is rename-on-import: `id: dragon` over `import: wyvern` is a second copy of
- * a canon item, not an override of the original.
+ * a library item, not an override of the original.
  */
 function buildRegistry(items, context, { diagnostics } = {}) {
   const registry = new Map();
@@ -209,11 +209,11 @@ function buildRegistry(items, context, { diagnostics } = {}) {
 }
 
 /**
- * Merge canon and project registries, erroring on any id collision between them.
+ * Merge library and project registries, erroring on any id collision between them.
  *
- * This stays a load-time ERROR while the cross-canon case became a reference-time one
+ * This stays a load-time ERROR while the cross-set case became a reference-time one
  * (§17.3), and the asymmetry is deliberate: there is exactly one project and its author owns
- * both sides of the clash, so renaming the local item is the available fix. A canon id that
+ * both sides of the clash, so renaming the local item is the available fix. A library id that
  * *is* ambiguous holds no plain key, so a project item of that name simply takes it — an
  * explicit local definition is a clear enough answer to "which magic did you mean".
  */
@@ -226,10 +226,10 @@ function mergeRegistries(canonRegistry, projectRegistry, { diagnostics } = {}) {
   }
   for (const [id, item] of projectRegistry) {
     if (merged.has(id)) {
-      const message = `Item ID "${id}" exists in both canon and project:\n  Canon: ${merged.get(id)._source}\n  Project: ${item._source}`;
+      const message = `Item ID "${id}" exists in both a library set and the project:\n  Library: ${merged.get(id)._source}\n  Project: ${item._source}`;
       if (diagnostics) {
         diagnostics.error(CODES.DUPLICATE_ITEM_ID, message, { file: item._source });
-        continue; // canon item wins — the project copy is skipped
+        continue; // the library item wins — the project copy is skipped
       }
       throw new Error(message);
     }
@@ -239,7 +239,7 @@ function mergeRegistries(canonRegistry, projectRegistry, { diagnostics } = {}) {
 }
 
 /**
- * Load every named canon directory into one registry (§17.2).
+ * Load every named library directory into one registry (§17.2).
  *
  * A duplicate id *within* one set is still an error, raised by `buildRegistry` — one set
  * owning an id twice is a mistake in that set, and no reference could disambiguate it.
@@ -251,11 +251,11 @@ function buildCanonRegistry(resolvedCanon, options = {}) {
   const registry = new ItemRegistry();
   if (!resolvedCanon) return registry;
 
-  const claims = new Map(); // plain id → every canon set's copy of it
+  const claims = new Map(); // plain id → every library set's copy of it
 
   for (const [name, canonPath] of resolvedCanon) {
     if (!fs.existsSync(canonPath)) {
-      const message = `canon path not found for "${name}": ${canonPath}`;
+      const message = `library path not found for "${name}": ${canonPath}`;
       if (options.diagnostics) options.diagnostics.warn(CODES.YAML_FILE_UNREADABLE, message);
       else console.warn(`  WARN: ${message}`);
       continue;
@@ -263,7 +263,7 @@ function buildCanonRegistry(resolvedCanon, options = {}) {
     registry.sources.add(String(name).toLowerCase());
 
     const items = loadItemsFromDir([canonPath], options);
-    for (const [id, item] of buildRegistry(items, `canon:${name}`, { diagnostics: options.diagnostics })) {
+    for (const [id, item] of buildRegistry(items, `library:${name}`, { diagnostics: options.diagnostics })) {
       const stamped = { ...item, _canonSource: name };
       registry.qualified.set(`${String(name).toLowerCase()}:${id}`, stamped);
       if (!claims.has(id)) claims.set(id, []);
@@ -309,7 +309,7 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
 
   for (const def of includeDefs) {
     // Root variables only: includes resolve once, before branches are enumerated (§5.1).
-    // Canon names are among those variables as of §6.1.
+    // Library names are among those variables as of §6.1.
     let includePath = resolveVariables(
       String(def.include), config._variables || config.variables || null,
       { diagnostics, file: def._source },

@@ -16,7 +16,7 @@ lets three things work:
 ```
 ERROR CL0310 codex/npcs.cl.yaml:112:9
   Item "Kaiden" dispatches branch "felix" to variant "Felix", which is not defined
-  on this item or on canon item "Kaiden" (canon:main).
+  on this item or on library item "Kaiden" (library:main).
 ```
 
 Severity is one of `ERROR`, `WARN`, `INFO`. The location degrades gracefully as
@@ -85,7 +85,7 @@ arriving by any route is still worth flagging.
 | `CL0140` | ERROR | An item has neither `id:` nor `name:`. |
 | `CL0141` | ERROR | Duplicate item id. |
 | `CL0142` | WARN | An item declares more than one `v:` alias; they are merged. |
-| `CL0144` | ERROR | An item id contains `:`, which is reserved as the canon-set separator in a reference. |
+| `CL0144` | ERROR | An item id contains `:`, which is reserved as the library separator in a reference. |
 
 ### CL0111–CL0115 in detail
 
@@ -136,7 +136,7 @@ resting on nothing. Sync still runs and the entry's files are still frozen; only
 The more valuable half of unknown-key checking, because of an asymmetry in how the two
 kinds of mistake fail. A misspelling usually produces output that is obviously missing
 something. A *correctly spelled key in the wrong position* produces output that looks
-complete and is quietly wrong — and it can sit in shared canon, inherited by every project
+complete and is quietly wrong — and it can sit in a shared library, inherited by every project
 that imports it, until something else happens to point near it.
 
 So the validator checks for relocation before reaching for edit distance, and only falls
@@ -165,9 +165,9 @@ Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein 
 | `CL0326` | WARN | A selector aimed at many items matched none of them. |
 | `CL0327` | WARN | A branch spec maps `'*'` to `~`; it is skipped, and `'_': ~` is what was meant. |
 | `CL0328` | WARN | A field op changes nothing: every op in a chain missed, or a lone `-{}` / `/{}/{}` missed. |
-| `CL0340` | ERROR | A reference is defined in more than one canon set and is not qualified. |
-| `CL0341` | ERROR | A reference names a canon set not declared in `structure.input.library`. |
-| `CL0342` | ERROR | A reference names an id that no canon set defines. |
+| `CL0340` | ERROR | A reference is defined in more than one library set and is not qualified. |
+| `CL0341` | ERROR | A reference names a library set not declared in `structure.input.library`. |
+| `CL0342` | ERROR | A reference names an id that no library set defines. |
 | `CL0330` | WARN | A cross-item reference names an item that does not exist. |
 
 The resolution layer touches no filesystem and prints nothing, so these are collected on

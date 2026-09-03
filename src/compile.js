@@ -265,7 +265,7 @@ function reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics) {
  *
  * `buildRegistry` throws on two defs claiming one id, but it never sees the whole
  * question: a bare `import:` def claims no id of its own — it *is* the item it names — so
- * it is filtered out before the registry's check runs. Two of them naming one canon item,
+ * it is filtered out before the registry's check runs. Two of them naming one library item,
  * or a bare import alongside an explicit def of the same id, therefore pass load and meet
  * for the first time here, as two resolved items with one id. What
  * reaches AID is two entries in one Plot Essentials slot and two story cards sharing a
@@ -713,7 +713,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
  * complete and is quietly missing something.
  *
  * Takes a cursor and returns the new one so a caller can check more than once — config
- * loading and item/canon loading each add to the same bus, and a config-level error must
+ * loading and item/library loading each add to the same bus, and a config-level error must
  * stop the compile before item loading ever touches disk, not only once both have run.
  * Without the cursor, calling this twice would reprint whatever the first call already
  * printed.
@@ -798,7 +798,7 @@ function compileRun(configPath, options, buses) {
   // field, or a bad path token in compile.yaml itself must stop the compile before
   // mkdirSync ever runs, not merely before the compiled tree is written. Folding this into
   // the single check below meant a config error still created the output directory and
-  // read canon/item files from disk before the throw was reached.
+  // read library/item files from disk before the throw was reached.
   let loadCursor = reportLoadDiagnostics(loadDiagnostics);
 
   // The lint-severity ceiling, set here because this is the first moment both halves of it
@@ -831,12 +831,12 @@ function compileRun(configPath, options, buses) {
   const fieldAudit = buildFieldAudit({ fieldTable, partials, tierTemplates });
   const cardTypeAudit = buildCardTypeAudit();
 
-  // Build canon registry
+  // Build library registry
   const canonRegistry = buildCanonRegistry(config._resolvedLibrary, { diagnostics: loadDiagnostics });
-  // itemCount, not size: an id two canon sets both define holds no plain key, and
+  // itemCount, not size: an id two library sets both define holds no plain key, and
   // "loaded 40 items" would otherwise quietly drop the very items worth mentioning.
   if (canonRegistry.itemCount > 0) {
-    console.log(`Loaded ${canonRegistry.itemCount} canonical item(s).`);
+    console.log(`Loaded ${canonRegistry.itemCount} library item(s).`);
   }
 
   // Load project items
@@ -845,7 +845,7 @@ function compileRun(configPath, options, buses) {
   // Resolve includes
   const includedItems = resolveIncludes(rawProjectItems, canonRegistry, config, { diagnostics: loadDiagnostics });
   if (includedItems.length > 0) {
-    console.log(`Loaded ${includedItems.length} included canonical item(s).`);
+    console.log(`Loaded ${includedItems.length} included library item(s).`);
   }
 
   loadCursor = reportLoadDiagnostics(loadDiagnostics, loadCursor);

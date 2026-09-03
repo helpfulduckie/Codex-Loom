@@ -3,8 +3,8 @@
 /**
  * Item reference resolution (v4 spec §17.2–§17.3).
  *
- * A reference is either a plain id — `kaiden` — or qualified with the canon set that owns
- * it — `grimwood:magic`. Qualification is optional, and needed only where two canon sets
+ * A reference is either a plain id — `kaiden` — or qualified with the library set that owns
+ * it — `grimwood:magic`. Qualification is optional, and needed only where two library sets
  * define the same id. §17.3 reports that collision here, at the reference, rather than at
  * registry build: loading two sets that both define `magic` is a fact about the sets, not a
  * fault in a project that references neither of them or references both qualified.
@@ -21,7 +21,7 @@ const { CODES } = require('../diag');
  * Split a reference into `{ source, id }`, both lowercased.
  *
  * `:` is illegal inside an item id (§17.2), so the first colon is unambiguously the
- * separator and there is no need to scan for the last one.
+ * library separator and there is no need to scan for the last one.
  */
 function splitRef(ref) {
   const text = String(ref);
@@ -57,10 +57,10 @@ function resolveItemRef(registry, ref) {
       return {
         item: null,
         code: CODES.UNKNOWN_CANON_SOURCE,
-        message: `"${label}" names canon set "${source}", which is not declared in structure.input.library.`,
+        message: `"${label}" names library set "${source}", which is not declared in structure.input.library.`,
         hint: known.length
-          ? `Declared canon sets: ${known.join(', ')}.`
-          : 'No canon sets are declared for this project.',
+          ? `Declared library sets: ${known.join(', ')}.`
+          : 'No library sets are declared for this project.',
       };
     }
 
@@ -71,7 +71,7 @@ function resolveItemRef(registry, ref) {
     return {
       item: null,
       code: CODES.REF_NOT_FOUND,
-      message: `no item with id "${id}" found in canon set "${source}"`,
+      message: `no item with id "${id}" found in library set "${source}"`,
     };
   }
 
@@ -81,13 +81,13 @@ function resolveItemRef(registry, ref) {
   const rival = registry.ambiguous ? registry.ambiguous.get(id) : undefined;
   if (rival && rival.length > 1) {
     const lines = rival
-      .map((c) => `  canon:${c._canonSource}  ${c._source}`)
+      .map((c) => `  library:${c._canonSource}  ${c._source}`)
       .join('\n');
     const options = rival.map((c) => `\`${c._canonSource}:${id}\``);
     return {
       item: null,
       code: CODES.AMBIGUOUS_REF,
-      message: `"${id}" is defined in ${rival.length} canon sets.\n${lines}`,
+      message: `"${id}" is defined in ${rival.length} library sets.\n${lines}`,
       hint: `Qualify the reference: ${options.join(' or ')}.`,
     };
   }

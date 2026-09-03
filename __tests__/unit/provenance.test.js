@@ -13,15 +13,15 @@ const {
 const { ItemRegistry } = require('../../src/loader/registry');
 
 describe('provenance collectRows', () => {
-  test('lists resolved items with canon source and project source', () => {
+  test('lists resolved items with library source and project source', () => {
     const registry = new ItemRegistry();
-    registry.set('aness', { id: 'aness', _canonSource: 'main', _source: 'canon/Aness.yaml' });
+    registry.set('aness', { id: 'aness', _canonSource: 'main', _source: 'library/Aness.yaml' });
     registry.set('guildmember', { id: 'guildmember', _source: 'project/cards.yaml' });
 
     const rows = collectRows(registry);
     expect(rows).toEqual([
       {
-        id: 'aness', source: 'canon:main', file: 'canon/Aness.yaml', via: '', status: 'resolved',
+        id: 'aness', source: 'library:main', file: 'library/Aness.yaml', via: '', status: 'resolved',
       },
       {
         id: 'guildmember', source: 'project', file: 'project/cards.yaml', via: '', status: 'resolved',
@@ -40,7 +40,7 @@ describe('provenance collectRows', () => {
     const rows = collectRows(registry);
     expect(rows).toHaveLength(2);
     expect(rows.every((r) => r.status === 'ambiguous')).toBe(true);
-    expect(rows.map((r) => r.source).sort()).toEqual(['canon:grimwood', 'canon:hollow']);
+    expect(rows.map((r) => r.source).sort()).toEqual(['library:grimwood', 'library:hollow']);
   });
 
   test('includes import ref in via column', () => {
@@ -55,11 +55,11 @@ describe('provenance collectRows', () => {
 describe('provenance formatting', () => {
   test('formatProvenanceMd renders a table', () => {
     const rows = [
-      { id: 'aness', source: 'canon:main', file: 'canon/Aness.yaml', via: '', status: 'resolved' },
+      { id: 'aness', source: 'library:main', file: 'library/Aness.yaml', via: '', status: 'resolved' },
     ];
     const md = formatProvenanceMd('output', rows);
     expect(md).toContain('# Item Provenance — output');
-    expect(md).toContain('| aness | canon:main | canon/Aness.yaml | — | resolved |');
+    expect(md).toContain('| aness | library:main | library/Aness.yaml | — | resolved |');
   });
 
   test('formatProvenanceCsv escapes commas and quotes', () => {

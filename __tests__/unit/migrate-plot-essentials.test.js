@@ -81,9 +81,9 @@ describe('style: and isPlayer: become a per-target template', () => {
 // ── the lookup ───────────────────────────────────────────────────────────────
 
 describe('buildItemLookup', () => {
-  test('a project import: layers its render over the canon item rather than colliding', () => {
-    // `mergeRegistries` refuses an id in both canon and project, which is the shape every
-    // `- import:` has — so the conversion cannot reuse it and needs the opposite rule.
+  test('a project import: layers its render over the library item rather than colliding', () => {
+    // `mergeRegistries` refuses an id in both a library set and the project, which is the
+    // shape every `- import:` has — so the conversion cannot reuse it and needs the opposite rule.
     const canon = registryOf({ Kaiden: { render: { template: 'Character', wrapper: 'curly' } } });
     const lookup = buildItemLookup(canon, [{ import: 'Kaiden', render: { wrapper: 'square' } }]);
     expect(lookup.get('kaiden').render).toEqual({ template: 'Character', wrapper: 'square' });
