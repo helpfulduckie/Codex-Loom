@@ -24,6 +24,12 @@
 # than rendered as its own `Tagline:` stanza, and field operations act on the raw body
 # value, which needs no declaration. Declaring it would render it twice — once in the name
 # line, once as a label — or raise CL0428 if listed nowhere.
+#
+# `role` sits in the `core` group (rendered as a `Role:` line on the full card) rather than
+# being referenced only from `rosterLine.partial`, because CL0428's dead-declaration sweep
+# does not scan partials. Both this and the undeclared `Tagline` are workarounds for the
+# unread-field audit's shape — a planned re-scope removes the need for them (see the vault:
+# "2026-09-02 Field Audit Rescoping Handoff").
 
 fields:
   # The one-word epithet the cast roster reads. Also rendered as a `Role:` line on the
