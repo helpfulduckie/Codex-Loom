@@ -32,6 +32,9 @@ node scripts/rebaseline.js
 
 That is a dry run. Add `--write` once the reported diff is the one you intended, widening
 the allowed shape explicitly (`--allow body`) rather than by default — v4 spec §14.3.
+`--write` regenerates the `.md` tree and every node's `Placeholders.yaml`; it will not
+seed a *first* baseline (it never writes `library-dependencies.json`), so a brand-new
+project needs one in-place `node src/cli.js examples/showcase` first, then the re-baseliner.
 
 ---
 

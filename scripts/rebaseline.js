@@ -16,6 +16,11 @@
  *   node scripts/rebaseline.js --set golden    the private fixtures rather than examples/
  *   node scripts/rebaseline.js showcase        one project rather than the whole set
  *
+ * A first baseline needs one in-place compile to seed `library-dependencies.json`, which
+ * this never writes (see below). `--write` against a project that has no committed baseline
+ * yet refuses with that instruction rather than producing a baseline one file short;
+ * everything else — the `.md` tree and every node's `Placeholders.yaml` — it regenerates.
+ *
  * `--set` picks which fixture set to regenerate and defaults to `examples`, the committed
  * one. The two sets differ only in their manifests; see `examples/projects.js` for what
  * each field means and `__tests__/helpers/baselineHarness.js` for the reading half.
@@ -35,13 +40,16 @@
  *   - It never copies `library-dependencies.json`. The manifest stamps the compile root, so
  *     a baseline written from a temp directory bakes that path in and defeats the
  *     harness's normalization on every later run.
- *   - It copies markdown only, with one exception. A non-markdown file under a `Scripts/`
- *     segment that left one path and reappeared byte-identically at another is *relocated*
- *     — Phase 12 Step 6 lifts a project's `Scripts/` dir root-ward when every leaf resolved
- *     the same one, and the re-baseline follows by moving the file, not re-contenting it. A
- *     shipped `.js` whose bytes changed, or one that vanished with no byte-identical
- *     counterpart, still aborts the run: scripts are copied input and a change to one has
- *     to be seen, not absorbed.
+ *   - It copies markdown only, with two exceptions. First: `Placeholders.yaml` (one per
+ *     node) is non-`.md` but is derived, deterministic compiler output — pure scenario
+ *     data, no paths or timestamps — so it is regenerated wholesale like a `.md` card,
+ *     added/changed/removed via `report.derived`. Second: a non-markdown file under a
+ *     `Scripts/` segment that left one path and reappeared byte-identically at another is
+ *     *relocated* — Phase 12 Step 6 lifts a project's `Scripts/` dir root-ward when every
+ *     leaf resolved the same one, and the re-baseline follows by moving the file, not
+ *     re-contenting it. A shipped `.js` whose bytes changed, or one that vanished with no
+ *     byte-identical counterpart, still aborts the run: scripts are copied input and a
+ *     change to one has to be seen, not absorbed.
  *   - It compiles into a temp copy of the whole `goldenFixtures/` tree, because each
  *     project's compile.yaml writes to `../Velvet Lattice/` and reaches up three levels
  *     for shared canon, so neither the output nor the inputs can be redirected.
@@ -276,7 +284,9 @@ function quietly(fn) {
 function diffTree(actualDir, expectedDir, { markdownOnly }) {
   const actual = new Set(listFiles(actualDir));
   const expected = new Set(listFiles(expectedDir));
-  const report = { changed: [], added: [], removed: [], relocated: [], classes: new Set() };
+  const report = {
+    changed: [], added: [], removed: [], relocated: [], derived: [], classes: new Set(),
+  };
 
   for (const rel of expected) if (!actual.has(rel)) report.removed.push(rel);
   for (const rel of actual) if (!expected.has(rel)) report.added.push(rel);
@@ -322,6 +332,21 @@ function diffTree(actualDir, expectedDir, { markdownOnly }) {
     }
   }
 
+  // `Placeholders.yaml` (one per node) is non-`.md` but it is derived, deterministic
+  // compiler output — pure scenario data, no paths or timestamps — and is as safe to
+  // regenerate wholesale as a `.md` card, unlike a copied-input `Scripts/*.js`. Route its
+  // add/remove into `report.derived` so the `.md`-only write filter does not drop it (which
+  // left a first-seed baseline one file short) and so the OPAQUE non-markdown classification
+  // below never fires for a legitimate placeholder change. `library-dependencies.json` is
+  // the other derived output and stays excluded everywhere: it bakes in the compile root.
+  const isDerivedOutput = (rel) => path.basename(rel) === 'Placeholders.yaml';
+  if (markdownOnly) {
+    for (const rel of report.added.filter(isDerivedOutput)) report.derived.push({ rel, kind: 'write' });
+    for (const rel of report.removed.filter(isDerivedOutput)) report.derived.push({ rel, kind: 'remove' });
+    report.added = report.added.filter((rel) => !isDerivedOutput(rel));
+    report.removed = report.removed.filter((rel) => !isDerivedOutput(rel));
+  }
+
   for (const rel of [...actual].sort()) {
     if (!expected.has(rel)) continue;
     if (path.basename(rel) === 'library-dependencies.json') continue; // never re-baselined
@@ -329,6 +354,11 @@ function diffTree(actualDir, expectedDir, { markdownOnly }) {
     const actualPath = path.join(actualDir, ...rel.split('/'));
     const expectedPath = path.join(expectedDir, ...rel.split('/'));
     if (fs.readFileSync(actualPath).equals(fs.readFileSync(expectedPath))) continue;
+
+    if (markdownOnly && isDerivedOutput(rel)) {
+      report.derived.push({ rel, kind: 'write' });
+      continue;
+    }
 
     if (markdownOnly && !rel.endsWith('.md')) {
       report.changed.push({ rel, classes: [OPAQUE], summary: `${rel} — non-markdown output differs` });
@@ -353,12 +383,15 @@ function diffTree(actualDir, expectedDir, { markdownOnly }) {
 
 function printReport(label, report, { verbose }) {
   const reloc = report.relocated || [];
+  const derived = report.derived || [];
   const counts = `${report.changed.length} changed, ${report.added.length} added, ${report.removed.length} removed`
-    + (reloc.length ? `, ${reloc.length} relocated` : '');
+    + (reloc.length ? `, ${reloc.length} relocated` : '')
+    + (derived.length ? `, ${derived.length} derived` : '');
   console.log(`\n  ${label}: ${counts}`);
   for (const rel of report.added) console.log(`    + ${rel}`);
   for (const rel of report.removed) console.log(`    - ${rel}`);
   for (const move of reloc) console.log(`    ⇄ ${move.to}  (was ${move.from.length}× under Branches/)`);
+  for (const d of derived) console.log(`    ${d.kind === 'remove' ? '−' : '~'} ${d.rel}  (derived output, regenerated)`);
 
   const byClass = new Map();
   for (const change of report.changed) {
@@ -408,6 +441,29 @@ function main() {
   console.log(`set: ${setName}`);
   console.log(`allowed diff shape: ${[...allowed].join(', ')}`);
   if (only.length > 0) console.log(`allowed only in: ${only.join(', ')}`);
+
+  // `--write` cannot seed a first baseline on its own: it never writes
+  // `library-dependencies.json` (that file bakes in the compile root — see the header), so a
+  // baseline built from an empty directory comes out one file short and the next
+  // `examples.test.js` run fails its file-set assertion. Refuse with the one instruction that
+  // fixes it — compile the project in place once — rather than producing the short baseline.
+  if (write) {
+    const unseeded = projects.filter((project) => {
+      const dir = path.join(root, project.dir, BASELINE_SUBDIR);
+      return !fs.existsSync(dir) || fs.readdirSync(dir).length === 0;
+    });
+    if (unseeded.length > 0) {
+      console.error(`\nrebaseline: no committed baseline yet for: ${unseeded.map((p) => p.name).join(', ')}`);
+      console.error('--write regenerates an existing baseline; it cannot create the first one, because it');
+      console.error('never writes library-dependencies.json. Compile each project in place once to seed it,');
+      console.error('then re-run this command to regenerate and validate:');
+      for (const project of unseeded) {
+        console.error(`  node src/cli.js ${path.join(root, project.dir).split(path.sep).join('/')}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+  }
 
   const tmpDir = buildTempTree(projects, set);
   try {
@@ -479,6 +535,15 @@ function main() {
         copyFile(path.join(from, ...move.to.split('/')), path.join(to, ...move.to.split('/')));
         for (const old of move.from) fs.rmSync(path.join(to, ...old.split('/')), { force: true });
         written += 1 + move.from.length;
+      }
+
+      // `Placeholders.yaml` and any other derived non-`.md` output: regenerate wholesale, the
+      // same as a `.md` card. The `.md`-only filters above skip it; this writes it.
+      for (const d of output.derived || []) {
+        const dest = path.join(to, ...d.rel.split('/'));
+        if (d.kind === 'remove') fs.rmSync(dest, { force: true });
+        else copyFile(path.join(from, ...d.rel.split('/')), dest);
+        written++;
       }
 
       for (const unit of reports) {

@@ -13,12 +13,16 @@ A clean run prints six branch rows, no `ERROR` and no `WARN`.
 
 **`output/` and `Review/` are committed, not generated-and-ignored.** They are the baseline
 `__tests__/fixtures/examples.test.js` asserts against byte-for-byte, and the worked output
-to read beside the source. Regenerate `.md` content through the re-baseliner, which
-classifies the diff before it will write:
+to read beside the source. Regenerate `.md` content and every node's `Placeholders.yaml`
+through the re-baseliner, which classifies the diff before it will write:
 
 ```bash
 node scripts/rebaseline.js
 ```
+
+Seeding this project's baseline from an empty `output/` needs one in-place compile first —
+`node src/cli.js examples/variants-and-fieldops` — so `library-dependencies.json` lands;
+`rebaseline.js --write` refuses to seed a first baseline on its own and says so.
 
 `Review/` holds only the two `output.provenance.*` files — no report modes are frozen here.
 `showcase` owns the set's report baseline.

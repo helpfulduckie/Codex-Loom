@@ -110,3 +110,75 @@ const LIB = 'exports.shared = 1;\n// a fairly long line to make a byte flip unam
     expect([...report.classes]).toEqual([]);
   });
 });
+
+/**
+ * `Placeholders.yaml` is non-`.md` but is derived, deterministic compiler output. It must
+ * route into `report.derived` — not be dropped by the `.md`-only write filter (which left a
+ * first-seed baseline one file short) and not classify OPAQUE on a legitimate change.
+ */
+const PH = 'heroName: What should we call you?\n';
+
+(HAVE_FIXTURES ? describe : describe.skip)('diffTree — Placeholders.yaml is derived output', () => {
+  test('a first-seed Placeholders.yaml is routed to derived, not left in added', () => {
+    const expected = tree({ 'Label.md': '# Root\n' });
+    const actual = tree({ 'Label.md': '# Root\n', 'Placeholders.yaml': PH });
+
+    const report = diffTree(actual, expected, { markdownOnly: true });
+
+    expect(report.derived).toEqual([{ rel: 'Placeholders.yaml', kind: 'write' }]);
+    expect(report.added).toEqual([]);
+    expect([...report.classes]).toEqual([]);
+  });
+
+  test('a changed Placeholders.yaml is derived, not OPAQUE or changed', () => {
+    const expected = tree({ 'Placeholders.yaml': PH });
+    const actual = tree({ 'Placeholders.yaml': `${PH}house: Which wing?\n` });
+
+    const report = diffTree(actual, expected, { markdownOnly: true });
+
+    expect(report.derived).toEqual([{ rel: 'Placeholders.yaml', kind: 'write' }]);
+    expect(report.changed).toEqual([]);
+    expect([...report.classes]).toEqual([]);
+  });
+
+  test('a per-branch Placeholders.yaml is matched by basename', () => {
+    const expected = tree({ 'Label.md': '# Root\n' });
+    const actual = tree({ 'Label.md': '# Root\n', 'Branches/knight/Placeholders.yaml': 'oath: Which oath?\n' });
+
+    const report = diffTree(actual, expected, { markdownOnly: true });
+
+    expect(report.derived).toEqual([{ rel: 'Branches/knight/Placeholders.yaml', kind: 'write' }]);
+    expect(report.added).toEqual([]);
+  });
+
+  test('a stale Placeholders.yaml gone from the compile is a derived removal', () => {
+    const expected = tree({ 'Label.md': '# Root\n', 'Placeholders.yaml': PH });
+    const actual = tree({ 'Label.md': '# Root\n' });
+
+    const report = diffTree(actual, expected, { markdownOnly: true });
+
+    expect(report.derived).toEqual([{ rel: 'Placeholders.yaml', kind: 'remove' }]);
+    expect(report.removed).toEqual([]);
+  });
+
+  test('an identical Placeholders.yaml produces no derived entry', () => {
+    const files = { 'Label.md': '# Root\n', 'Placeholders.yaml': PH };
+    const report = diffTree(tree(files), tree(files), { markdownOnly: true });
+
+    expect(report.derived).toEqual([]);
+    expect([...report.classes]).toEqual([]);
+  });
+
+  test('a changed Scripts/*.js still aborts even with a derived Placeholders.yaml alongside', () => {
+    const expected = tree({ 'Scripts/library.js': LIB, 'Placeholders.yaml': PH });
+    const actual = tree({
+      'Scripts/library.js': LIB.replace('shared = 1', 'shared = 7'),
+      'Placeholders.yaml': `${PH}house: Which wing?\n`,
+    });
+
+    const report = diffTree(actual, expected, { markdownOnly: true });
+
+    expect(report.derived).toEqual([{ rel: 'Placeholders.yaml', kind: 'write' }]);
+    expect([...report.classes]).toContain(OPAQUE);
+  });
+});
