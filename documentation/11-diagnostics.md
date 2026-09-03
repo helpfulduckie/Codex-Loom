@@ -367,6 +367,7 @@ interpolated value, and the property belongs to the template, not to each field.
 | `CL0606` | ERROR | A component `imports:` entry names a `from:` that does not resolve to a file. |
 | `CL0607` | ERROR | A component import chain loops back on a file already being resolved. |
 | `CL0608` | WARN | A section is deleted with `~` but no import provided it. |
+| `CL0609` | ERROR | An item reaches a render target — a component slot or its own story-card body — but its body renders to nothing there. |
 | `CL0610` | ERROR | An item resolves onto a branch and produces no output there. |
 | `CL0611` | ERROR | A render target names a slot the component does not declare. |
 | `CL0612` | ERROR | A render target names a section that exists but is not a slot. |
@@ -428,12 +429,25 @@ stays a warning because the result is what the author asked for either way: no s
 that name. A document with no `imports:` at all never raises it, because there `~` is the
 plain "omit this" it has always been.
 
+`CL0609` is the render-level companion to `CL0610`. `CL0610` fires when nothing structural
+carried the item — no target reached a slot. `CL0609` fires when one did and the body
+rendered blank there: a field-list or `.template` that is all non-firing conditionals
+against an item that carries none of the keys, in a component slot or in the item's own
+story-card body. The two are mutually exclusive per target — a target that reached a slot
+and rendered nothing is `CL0609`'s, and `CL0610` stays quiet so one mistake is not
+reported twice. The slot filters the empty occupant back out at emit, so without this
+check the item would vanish from the branch silently. The intended way to drop an item
+from a branch is `~` on its branch dispatch or a `branches:` exclusion. `kind: reference`
+is exempt on the body path only — §4.8 puts a reference card's payload in `notes:`, and an
+empty body there is its normal shape.
+
 `CL0610` is the no-output invariant. It fires on *consequence*, not on mechanism: an item that
 resolved onto a branch has to leave a mark on it, and how it failed to — no target
 declared, or a target into a slot the component gated off on that branch — does not
 change the answer. That scoping is what lets slot-level gating stay a legitimate way to
 drop a whole slot's contents from one branch. An item whose own `branches:` excludes it is
-never resolved there and is never asked.
+never resolved there and is never asked. A target that reached a slot but rendered empty
+is `CL0609`, not this.
 
 `CL0611`, `CL0612` and `CL0613` are three readings of one mistake — a `slot:` that cannot
 be placed — kept apart because the fix differs. `CL0611` is the typo class: the name

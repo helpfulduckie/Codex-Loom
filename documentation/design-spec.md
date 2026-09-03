@@ -509,7 +509,11 @@ Failing to — no target declared, or a target into a slot the component gated o
 branch — is `CL0610`, and it fires on the consequence, not the mechanism. An item whose
 own `branches:` excludes it is never resolved there and is never asked, which is what
 lets slot-level gating stay a legitimate way to drop a whole slot's contents from one
-branch.
+branch. A target that *does* reach a slot but renders to nothing there — an
+all-conditional field list against an item that carries none of the keys — is `CL0609`,
+the render-level companion; the same code covers an item's own story-card body rendering
+blank, with `kind: reference` exempt on that path. `CL0609` and `CL0610` are mutually
+exclusive per target, so one silent placement is reported once.
 
 ### §7.6 Shared components get the item grammar
 

@@ -178,6 +178,7 @@ const REGISTRY = Object.freeze({
   IMPORT_NOT_FOUND:             { id: 'CL0606', severity: ERROR, summary: 'A component imports: entry names a from: that does not resolve to a file.' },
   IMPORT_CYCLE:                 { id: 'CL0607', severity: ERROR, summary: 'A component import chain loops back on a file already being resolved.' },
   IMPORT_DELETE_UNKNOWN:        { id: 'CL0608', severity: WARN,  summary: 'A section is deleted with ~ but no import provided it.' },
+  ITEM_RENDERS_EMPTY:           { id: 'CL0609', severity: ERROR, summary: 'An item reaches a render target but its body renders to nothing there.' },
   ITEM_NO_OUTPUT:               { id: 'CL0610', severity: ERROR, summary: 'An item resolves onto a branch and produces no output there.' },
   TARGET_UNDECLARED_SLOT:       { id: 'CL0611', severity: ERROR, summary: 'A render target names a slot the component does not declare.' },
   TARGET_NOT_A_SLOT:            { id: 'CL0612', severity: ERROR, summary: 'A render target names a section that exists but is not a slot.' },

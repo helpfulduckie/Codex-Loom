@@ -95,6 +95,33 @@
   render:
     storyCard: false
 
+# ── §7.4: a component target that reaches a live slot and renders blank ──────
+# `EmptyBody.template` is one non-firing `{if}`, so it renders to "" for any item that
+# does not carry a `never` key — which is all of them. `party` is declared on every
+# branch and gated off on none, so the target is live on all three: liveTargets is 1 and
+# outputs is 0 everywhere, which is CL0609 per leaf. It is *not* CL0610 — a target did
+# reach a slot — and the slot still counts as unfilled, so `party`'s own CL0614 is
+# unchanged. `~` on the branch dispatch is the way to actually drop it.
+- id: EmptyPlacement
+  name: EmptyPlacement
+  render:
+    storyCard: false
+    plotEssential:
+      slot: party
+      template: EmptyBody
+
+# ── §7.4: a story-card body that renders to nothing ─────────────────────────
+# Same template, no component target, storyCard left on. The body renders "", so the card
+# would ship to AID as a name and triggers with a blank value. CL0609 per leaf, and no
+# card is written. `kind: reference` is the exemption — this item is not one, so it fires.
+- id: EmptyCardBody
+  name: EmptyCardBody
+  aid:
+    type: Character
+    triggers: [EmptyCardBody]
+  render:
+    template: EmptyBody
+
 # ── §7.4: a target naming a slot no component declares ───────────────────────
 # The typo class. `casst` for `cast` — CL0611.
 - id: Typo

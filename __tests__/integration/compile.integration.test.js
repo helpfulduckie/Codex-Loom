@@ -431,8 +431,12 @@ describe('cross-item refs inside body field render functions', () => {
       "      - 'Alice ({join(\"; \", $Alice.body.physicalTraits)})'",
       "      - 'Carol ({join(\"; \", $Carol.body.physicalTraits)})'",
       '',
+      // Alice and Carol are data records: their bodies exist only to be cross-referenced
+      // by Store and Bishop, and `Item.template` reads no key they carry. `kind: reference`
+      // says so — without it each emits an empty-bodied card and earns CL0609.
       '- id: Carol',
       '  name: Carol',
+      '  kind: reference',
       '  aid:',
       '    type: Item',
       '    title: Carol',
@@ -445,6 +449,7 @@ describe('cross-item refs inside body field render functions', () => {
       '',
       '- id: Alice',
       '  name: Alice',
+      '  kind: reference',
       '  aid:',
       '    type: Item',
       '    title: Alice',

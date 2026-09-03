@@ -63,6 +63,10 @@ ERROR CL0532 Codex/items.cl.yaml
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
 ERROR CL0610 Codex/items.cl.yaml
   item "Silent" resolves on branch "open" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
+ERROR CL0609 Codex/items.cl.yaml
+  item "EmptyPlacement" reaches plotEssential slot "party" on branch "open" but its body renders to nothing there. Exclude it from the branch with "branches:" if that is what was meant.
+ERROR CL0609 Codex/items.cl.yaml
+  story card "EmptyCardBody" on branch "open" renders an empty body: template "EmptyBody" reads no key this item carries. Use "kind: reference" if the card is triggers and notes only.
 ERROR CL0611 Codex/items.cl.yaml
   item "Typo" targets slot "casst" in Plot Essentials on branch "open", which declares no such slot. Declared here: cast, party.
 ERROR CL0612 Codex/items.cl.yaml
@@ -125,6 +129,10 @@ ERROR CL0610 Codex/items.cl.yaml
   item "Ghost" resolves on branch "gated" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
 ERROR CL0610 Codex/items.cl.yaml
   item "Silent" resolves on branch "gated" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
+ERROR CL0609 Codex/items.cl.yaml
+  item "EmptyPlacement" reaches plotEssential slot "party" on branch "gated" but its body renders to nothing there. Exclude it from the branch with "branches:" if that is what was meant.
+ERROR CL0609 Codex/items.cl.yaml
+  story card "EmptyCardBody" on branch "gated" renders an empty body: template "EmptyBody" reads no key this item carries. Use "kind: reference" if the card is triggers and notes only.
 ERROR CL0611 Codex/items.cl.yaml
   item "Typo" targets slot "casst" in Plot Essentials on branch "gated", which declares no such slot. Declared here: cast, party.
 ERROR CL0612 Codex/items.cl.yaml
@@ -190,6 +198,10 @@ ERROR CL0532 Codex/items.cl.yaml
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
 ERROR CL0610 Codex/items.cl.yaml
   item "Silent" resolves on branch "silent" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
+ERROR CL0609 Codex/items.cl.yaml
+  item "EmptyPlacement" reaches plotEssential slot "party" on branch "silent" but its body renders to nothing there. Exclude it from the branch with "branches:" if that is what was meant.
+ERROR CL0609 Codex/items.cl.yaml
+  story card "EmptyCardBody" on branch "silent" renders an empty body: template "EmptyBody" reads no key this item carries. Use "kind: reference" if the card is triggers and notes only.
 ERROR CL0611 Codex/items.cl.yaml
   item "Typo" targets slot "casst" in Plot Essentials on branch "silent", which declares no such slot. Declared here: cast, party.
 ERROR CL0612 Codex/items.cl.yaml

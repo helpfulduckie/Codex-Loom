@@ -512,8 +512,12 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     const placement = resolvePlacements(item);
     const itemId = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
 
-    // Counts outputs, not targets: a target whose slot is gated off on this branch is
-    // legitimate and simply does not produce one.
+    // Two counts, because the no-output invariant and the empty-render check below ask
+    // different questions. `liveTargets` is targets that reached a real slot on this
+    // branch — a gated-off slot is not one. `outputs` is the subset of those that put
+    // visible text there. CL0610 fires when nothing reached a slot; CL0609 when something
+    // did and rendered blank.
+    let liveTargets = 0;
     let outputs = 0;
 
     for (const target of placement.targets) {
@@ -523,6 +527,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
       // nothing is said here. Whether that silence matters is the no-output invariant's
       // question, below, and it is the only one with enough context to answer it.
       if (known && !known.slots.has(String(target.slot).toLowerCase())) continue;
+      liveTargets++;
       const text = renderPlacementBody(item, target, templates, partials, variables, diagnostics, {
         fieldTable, templateFor,
         // Only for a card-emitting item: the audit collects the union of an item's render
@@ -530,6 +535,23 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
         fieldAudit: placement.storyCard ? fieldAudit : null,
       });
       if (text === null) continue;
+      // A live target that rendered to nothing (CL0609). `renderPlacementBody` already
+      // reported and returned null for a missing template or a render failure; this is the
+      // other way a placement goes silent — a field-list or `.template` that is all
+      // non-firing conditionals against an item that carries none of the keys. The slot
+      // filters the empty occupant back out at emit, so without this the item vanishes
+      // from the branch with nothing said. `~` on the branch dispatch or `branches:` is
+      // the intended way to drop an item from a branch.
+      if (String(text).trim() === '') {
+        diagnostics.error(
+          DIAG_CODES.ITEM_RENDERS_EMPTY,
+          `item "${itemId}" reaches ${target.component} slot "${target.slot}" on branch `
+          + `"${branchLabel}" but its body renders to nothing there. Exclude it from the `
+          + 'branch with "branches:" if that is what was meant.',
+          { file: item._source },
+        );
+        continue;
+      }
       // Scanned per placement rather than once on the assembled component, because the
       // same item body can land in two components on one branch and the author needs to
       // be told which routing carried the mistake.
@@ -557,8 +579,10 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     // it. Scoped by consequence rather than by mechanism — gating a slot off at the
     // component level stays a legitimate way to drop a whole slot's contents from one
     // branch, and only becomes an error when it would make an item vanish from every
-    // output it declared.
-    if (!placement.storyCard && outputs === 0) {
+    // output it declared. Keyed on `liveTargets`, not `outputs`: a target that reached a
+    // slot and rendered blank is CL0609's to report, and raising CL0610 too would
+    // describe one mistake twice.
+    if (!placement.storyCard && liveTargets === 0) {
       diagnostics.error(
         DIAG_CODES.ITEM_NO_OUTPUT,
         `item "${itemId}" resolves on branch "${branchLabel}" but produces no output there: `
@@ -619,6 +643,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
 
     let rendered;
     try {
+      const errorsBeforeBody = diagnostics.errors.length;
       const bodyText = bodyRender.kind === 'fieldList'
         ? renderFieldList(bodyRender.list, fieldTable, context, {
           diagnostics, file: null, name: bodyRender.name, partials, variables,
@@ -626,6 +651,27 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
         : render(bodyRender.entry.content, context, partials, variables, {
           diagnostics, file: bodyRender.entry._source, name: bodyRender.name,
         });
+      // A resolved template that rendered the card body to nothing (CL0609). `reference`
+      // cards are exempt — §4.8 puts their payload in `notes:` and an empty body there is
+      // the normal shape. For a `story` card it means the template reads keys this item
+      // does not carry, and the card would ship to AID as a name with a blank value.
+      // Suppressed when the render itself just reported an error (a malformed `join()`,
+      // an unclosed `{if}`): that is CL0413/CL0415's finding, and the empty body is its
+      // symptom, not a second mistake.
+      if (
+        item.kind !== 'reference'
+        && String(bodyText).trim() === ''
+        && diagnostics.errors.length === errorsBeforeBody
+      ) {
+        diagnostics.error(
+          DIAG_CODES.ITEM_RENDERS_EMPTY,
+          `story card "${itemId}" on branch "${branchLabel}" renders an empty body: `
+          + `template "${bodyRender.name}" reads no key this item carries. Use `
+          + '"kind: reference" if the card is triggers and notes only.',
+          { file: item._source },
+        );
+        continue;
+      }
       // The body arrives already wrapped — `render` applies render.wrapper — which is
       // what the length check needs when it measures the final string.
       rendered = renderCard({
