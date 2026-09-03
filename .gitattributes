@@ -1,5 +1,12 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Auto-detect text files and normalize to LF on commit. `eol=lf` additionally forces LF
+# on checkout, so `core.autocrlf=true` (the Git for Windows default) can't hand any machine
+# a CRLF working tree — which is what left this repo with a mix and produced spurious
+# whole-file diffs and "CRLF will be replaced by LF" warnings on every edit. Binary files
+# are still auto-detected and left untouched.
+* text=auto eol=lf
+
+# src/ is called out explicitly for findability; the line above already covers it.
+/src/** text eol=lf
 
 # The golden fixtures are compared byte-for-byte (v4 spec §14.3), so Git must not translate
 # their line endings in either direction — some baselines are legitimately stored with CRLF.
