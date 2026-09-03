@@ -1,0 +1,73 @@
+# The world: one setting per branch, the two magic systems held side by side, and a
+# component-only note whose exclusion from the mundane leaves is forced rather than chosen.
+# doc: 04-imports-and-includes.md
+
+# Each setting is present on its own branch and excluded everywhere else with `_: ~`
+# (every branch not named). On its own branch it descends to the tone axis: the library's
+# `magical` / `mundane` variants append to its Tagline and factions list.
+- import: MedievalKingdom
+  render:
+    template: Location
+    plotEssential: { slot: world, order: 1 }
+  variants:
+    magical: { importVariants: [magical] }
+    mundane: { importVariants: [mundane] }
+  branches:
+    medieval: { branches: { magical: magical, mundane: mundane } }
+    _: ~
+
+- import: SciFiPlanet
+  render:
+    template: Location
+    plotEssential: { slot: world, order: 1 }
+  variants:
+    magical: { importVariants: [magical] }
+    mundane: { importVariants: [mundane] }
+  branches:
+    sciFi: { branches: { magical: magical, mundane: mundane } }
+    _: ~
+
+- import: ModernCity
+  render:
+    template: Location
+    plotEssential: { slot: world, order: 1 }
+  variants:
+    magical: { importVariants: [magical] }
+    mundane: { importVariants: [mundane] }
+  branches:
+    modern: { branches: { magical: magical, mundane: mundane } }
+    _: ~
+
+# The §17 colliding pair. `core:magic` keeps the library id; `grimwood:magic` is renamed
+# on import so the two register under names this project chose and sit side by side. Both
+# are present on a `magical` leaf and excluded from a `mundane` one.
+# doc: 04-imports-and-includes.md#qualified-references
+- import: core:magic
+  branches:
+    '*': { branches: { magical: [], mundane: ~ } }
+
+- id: blood-magic
+  import: grimwood:magic
+  branches:
+    '*': { branches: { magical: [], mundane: ~ } }
+
+# A component-only note routed into the World slot. Both the target and the body live in
+# the `magical` variant, so on a `mundane` leaf LeyNote has `storyCard: false` and no
+# declared target at all — it resolves onto the branch and produces nothing, which is
+# CL0610 (ERROR). The `mundane: ~` below is that consequence written back into the source:
+# drop `~` for `[]` and the three `mundane` leaves stop compiling.
+# doc: 05-branches-and-variants.md#excluding-items-from-branches
+- id: LeyNote
+  name: The workings underfoot
+  aid: { type: character }
+  render:
+    template: CharacterBrief
+    storyCard: false
+  variants:
+    magical:
+      render:
+        plotEssential: { slot: world, order: 2 }
+      body:
+        Tagline: What answers here, and what it charges to answer.
+  branches:
+    '*': { branches: { magical: magical, mundane: ~ } }

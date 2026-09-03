@@ -169,6 +169,22 @@ keywords:
   - compassionate
 ```
 
+### Two variants appending to one field
+
+An `+{…}` op does not have to come from one variant. When branch dispatch applies more than one variant to an item, each variant's op on a field runs in dispatch order, and the appends accumulate. `examples/variants-and-fieldops/` is built around this: a per-setting flavor variant and a per-tone variant both append to `Aness`'s `Tagline`, and the shared field table's `Tagline: { join: "" }` concatenates the pieces into one line.
+
+```yaml surface=item from=variants-and-fieldops/Codex/cast.cl.yaml
+- import: Aness
+  variants:
+    magical: { importVariants: [magical] }
+    medievalFlavor: { body: { Tagline: "+{; sworn to a house}" } }
+  branches:
+    '*': { branches: { magical: magical, mundane: mundane } }
+    medieval: { apply: [medievalFlavor] }
+```
+
+On the `medieval/magical` leaf the dispatch collects `[medievalFlavor, magical]`, so `Tagline` starts at the library base, gains `; sworn to a house` from the project's own variant, then gains `; hedge-trained` from the library's `magical` variant — `Fixer; knows who owes whom; sworn to a house; hedge-trained`. Each append writes its own separator inside the braces because `join: ""` adds none.
+
 ---
 
 ## Subfield Operations

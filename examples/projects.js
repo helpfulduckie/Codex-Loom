@@ -40,6 +40,19 @@ const PROJECTS = [
     reports: ['seed-map', 'card-sizes', 'lint', 'overview', 'leaf-review'],
     compileReports: ['inventory', 'schemaTables'],
   },
+  {
+    name: 'variants-and-fieldops',
+    dir: 'variants-and-fieldops',
+    /**
+     * No frozen reports. `showcase` owns the report baseline for the set — freezing all
+     * five post-hoc modes plus the two compile reports on every project would multiply
+     * each re-baseline diff for a derivation that only needs pinning once. `Review/` here
+     * holds just what `compile()` writes unconditionally: the two provenance files, which
+     * `REPORTS_IN_PLACE` brings under comparison so §17.4's rename row stays pinned.
+     */
+    reports: [],
+    compileReports: [],
+  },
 ];
 
 /** These projects use the `.cl.yaml` extension; the goldens' migrated sources do not. */

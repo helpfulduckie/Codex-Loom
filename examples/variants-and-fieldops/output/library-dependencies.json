@@ -1,0 +1,31 @@
+{
+  "generatedAt": "2026-09-03T04:17:04.904Z",
+  "compileYaml": "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\variants-and-fieldops\\compile.cl.yaml",
+  "variables": {
+    "genre": "Low fantasy",
+    "settingName": "unset"
+  },
+  "library": {
+    "core": {
+      "expression": "../library/core",
+      "resolvedPath": "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core",
+      "files": [
+        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core\\characters.cl.yaml",
+        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core\\components\\ai-instructions.cl.yaml",
+        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core\\components\\authors-note.cl.yaml",
+        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core\\components\\plot-essentials.cl.yaml",
+        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core\\components\\summary.cl.yaml",
+        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core\\magic.cl.yaml",
+        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core\\settings.cl.yaml"
+      ]
+    },
+    "grimwood": {
+      "expression": "../library/grimwood",
+      "resolvedPath": "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\grimwood",
+      "files": [
+        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\grimwood\\magic.cl.yaml",
+        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\grimwood\\places.cl.yaml"
+      ]
+    }
+  }
+}

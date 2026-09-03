@@ -1,0 +1,66 @@
+# The cast, imported from the core library set and dispatched across the setting × tone
+# grid. Every character carries the library's `magical` / `mundane` tone variants; Aness
+# additionally carries a per-setting flavor delta, and that is the difference the file is
+# built to show.
+# doc: 04-imports-and-includes.md
+
+# The player character. Placeholder-defined, so this project declares `heroName` and
+# `heroTrait` in compile.cl.yaml — the library cannot. Rides the tone axis only, so one
+# `*` line dispatches it across all six leaves.
+# doc: 05-branches-and-variants.md#wildcard---baseline-for-every-branch
+- import: Wayfarer
+  variants:
+    magical: { importVariants: [magical] }
+    mundane: { importVariants: [mundane] }
+  branches:
+    '*': { branches: { magical: magical, mundane: mundane } }
+
+# Aness fills a Plot Essentials cast slot, and her Tagline is where a setting flavor and a
+# tone delta compose: `medievalFlavor` appends first, then `magical` (sourced from the
+# library item's own variant tree) appends on top. Two `+{}` chains on one field, joined
+# by the shared table's `Tagline: { join: "" }`.
+# doc: 06-field-operations.md#chained-operations
+- import: Aness
+  render:
+    template: Character
+    plotEssential: { slot: cast, order: 1, template: CharacterBrief }
+  variants:
+    magical: { importVariants: [magical] }
+    mundane: { importVariants: [mundane] }
+    medievalFlavor: { body: { Tagline: "+{; sworn to a house}" } }
+    sciFiFlavor:    { body: { Tagline: "+{; contract-bound}" } }
+    modernFlavor:   { body: { Tagline: "+{; unaffiliated}" } }
+  branches:
+    '*': { branches: { magical: magical, mundane: mundane } }
+    medieval: { apply: [medievalFlavor] }
+    sciFi:    { apply: [sciFiFlavor] }
+    modern:   { apply: [modernFlavor] }
+
+# Zephon rides the tone axis only — no setting flavor — so the dispatch is the one `*`
+# line again. The contrast with Aness above is the whole point: the wildcard factors the
+# axis that is uniform across leaves, and the setting axis is enumerated only where a
+# per-setting delta makes each entry different.
+#
+# Zephon's `mundane` variant is a `/{old}/{new}` swap rather than an append, and the
+# `expanded` line mixes a bare `{$Zephon}` (a name, singular verb) with a scoped
+# `{$Zephon.they}` (the pronoun, plural verb) in one sentence.
+# doc: 08-pronouns.md#verb-conjugation
+- import: Zephon
+  render:
+    template: Character
+    plotEssential: { slot: cast, order: 2, template: CharacterBrief }
+  variants:
+    magical: { importVariants: [magical] }
+    mundane: { importVariants: [mundane] }
+  branches:
+    '*': { branches: { magical: magical, mundane: mundane } }
+
+# Kaiden ships a story card and nothing else. His library `mundane` variant is `{}` —
+# the base item is already the mundane reading, and the empty variant is what makes the
+# axis uniform to select against.
+- import: Kaiden
+  variants:
+    magical: { importVariants: [magical] }
+    mundane: { importVariants: [mundane] }
+  branches:
+    '*': { branches: { magical: magical, mundane: mundane } }

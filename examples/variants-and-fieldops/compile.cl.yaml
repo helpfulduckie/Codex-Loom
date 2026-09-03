@@ -1,0 +1,76 @@
+# Codex Loom v4 — worked example: stacking variants, field operations, and the §17
+# multi-library surface.
+#
+# The grid is setting (medieval / sciFi / modern) crossed with tone (magical / mundane),
+# six leaves. The tone axis is a layer over the whole cast rather than a dispatch that
+# selects different items: every character gains a Magic field on a `magical` leaf and
+# loses it on a `mundane` one, and the setting flavor a project adds composes with it on
+# the same field. That composition — two `+{}` chains on one Tagline — is the case field
+# operations exist for.
+# doc: 06-field-operations.md
+#
+# It is also the first example project that reads `examples/library/`, so it carries the
+# §17 colliding `magic` pair (core: elemental, grimwood: blood) held side by side through
+# rename-on-import.
+# doc: 04-imports-and-includes.md#qualified-references
+#
+# It does NOT set `structure.input.snapshot`. `--snapshot` freezes every declared library
+# entry at once — there is no way to pin `grimwood/` and leave `core/` live — and the
+# manifest it writes records an absolute `source:` path and a wall-clock `syncedAt`,
+# neither of which belongs in a committed baseline. Snapshot is exercised by
+# `__tests__/integration/snapshot.integration.test.js` and documented in 12-snapshot.md.
+
+version: 4
+title: Variants and Field Operations
+
+structure:
+  input:
+    items: [./Codex]
+    library:
+      core: ../library/core
+      grimwood: ../library/grimwood
+    templates: [../library/templates]
+  output: ./output
+  reports: ./Review
+
+variables:
+  genre: Low fantasy
+  settingName: unset            # every branch overrides this
+
+placeholders:
+  heroName: What should we call you?
+  heroTrait: What are you known for?
+
+templateFor:
+  base: fields.cl.yaml
+
+components:
+  plotEssential: '{%core}/components/plot-essentials.cl.yaml'
+  aiInstructions: '{%core}/components/ai-instructions.cl.yaml'
+  authorsNote: '{%core}/components/authors-note.cl.yaml'
+  opening: "You wake with the road behind you and no memory of the last mile."
+
+# setting × tone. The tone level is identical under every setting, so an item that only
+# rides the tone axis dispatches against it with one `*` line; an item whose setting
+# flavor composes with tone has to name the three settings, because each setting's delta
+# differs. That asymmetry is the point of the example.
+# doc: 05-branches-and-variants.md#how-dispatch-walks-nested-branches
+branches:
+  medieval:
+    variables:
+      settingName: The Medieval Kingdom
+    branches:
+      magical: {}
+      mundane: {}
+  sciFi:
+    variables:
+      settingName: Tessene
+    branches:
+      magical: {}
+      mundane: {}
+  modern:
+    variables:
+      settingName: Ashbourne
+    branches:
+      magical: {}
+      mundane: {}

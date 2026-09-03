@@ -1,0 +1,14 @@
+ID,Source,File,Via,Status
+aness,library:core,../library/core/characters.cl.yaml,,resolved
+blood-magic,project,Codex/world.cl.yaml,grimwood:magic,resolved
+grimwood,library:grimwood,../library/grimwood/places.cl.yaml,,resolved
+hollis,library:grimwood,../library/grimwood/places.cl.yaml,,resolved
+kaiden,library:core,../library/core/characters.cl.yaml,,resolved
+leynote,project,Codex/world.cl.yaml,,resolved
+magic,library:core,../library/core/magic.cl.yaml,,ambiguous
+magic,library:grimwood,../library/grimwood/magic.cl.yaml,,ambiguous
+medievalkingdom,library:core,../library/core/settings.cl.yaml,,resolved
+moderncity,library:core,../library/core/settings.cl.yaml,,resolved
+scifiplanet,library:core,../library/core/settings.cl.yaml,,resolved
+wayfarer,library:core,../library/core/characters.cl.yaml,,resolved
+zephon,library:core,../library/core/characters.cl.yaml,,resolved
