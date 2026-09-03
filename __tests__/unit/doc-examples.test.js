@@ -36,6 +36,12 @@
  * `from=` is a path under `examples/`; `key=` selects an item by `id` from a document that
  * is a list, or a dotted path from one that is a mapping. Omit `key=` to name the whole file.
  *
+ * **`key=` on a list matches `entry.id` literally — it does NOT match the effective id of a
+ * bare `import:`.** `select()` compares `key=` against `String(entry.id)`, so
+ * `- import: Aness` (no `id:` line) is unreachable by `key=Aness`; only `- id: Aness` /
+ * `- id: X\n  import: …` (a rename-on-import) is. Bind such a block with no `key=` — a
+ * file-level pointer — or point at a project item that carries an explicit `id:`.
+ *
  * **Two strengths, because a chapter snippet and an example are not the same artifact.** A
  * chapter teaches with the smallest case that shows the construct; an example has to compile
  * inside a project that exercises much more, so it carries extra fields, project-specific
