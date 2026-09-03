@@ -174,7 +174,7 @@ templates:
     - magic
 ```
 
-`{ allowExtra: true }` opts the **whole template** out of the unread-field audit below — used where a template composes its body from author-shaped sub-keys the field table cannot enumerate. Both `include` and `raw` interleave freely with field and group names.
+`{ allowExtra: true }` opts out of the unread-field audit below — used where a template composes its body from author-shaped sub-keys the field table cannot enumerate. The marker sits in one template's list, and any item that renders through that template is opted out. Both `include` and `raw` interleave freely with field and group names.
 
 ---
 
@@ -303,8 +303,12 @@ Having a declaration to compare against produces three checks, all WARN:
 | Code | Meaning |
 |---|---|
 | `CL0426` | A `body:` key no declaration names — a typo, and content silently dropped from the card. WARN rather than ERROR because a shared `library:` item can legitimately carry a field for a template another project uses, and an ERROR would make shared items unshareable |
-| `CL0427` | A key declared globally but absent from this template's list — misrouted. The message names the group it lives in |
-| `CL0428` | A declared field no template names — a dead declaration, and what stops the field table rotting the way a hand-maintained schema document does |
+| `CL0427` | A key declared globally but read by none of the item's renders — misrouted. The message names the group it lives in |
+| `CL0428` | A declared field no template names, directly, through a group, or inside a partial a template includes — a dead declaration, and what stops the field table rotting the way a hand-maintained schema document does |
+
+**The check is per item, not per template.** An item can render through more than one field list on a branch — its story card, a Plot Essentials roster slot, a shorter context tier — and a key read by *any* of them is read. `CL0426`/`CL0427` test a `body:` key against the union of every list the item resolves to, so a field in the full `Character` template but absent from the roster's line is not a misroute on the roster render. A key read only through a `templateFor` slot file (a tier, or a component rendering role) is never a `CL0427` — those lists omit declared fields by design.
+
+**On an imported item, only the consuming project's own keys are checked.** A `body:` key that came through `import:` unchanged is the library author's concern; `CL0426`/`CL0427` fire only on keys the consuming project introduced or gave a new value to. A library item can carry fields for consumers who want them without nagging one that renders a subset.
 
 **The audit runs on resolved leaf paths**, so `from: [personality.keywords, personality.expanded]` still flags a typo in a sub-key. Findings key on `(item id, field path)` and emit once — a `body:` field resolves through every `variants:` and `branches:` expansion, so one mistake would otherwise report once per leaf.
 

@@ -1141,20 +1141,32 @@ Having a declaration to compare against produces three checks, all WARN:
   from the card. WARN not ERROR because a shared `library:` item can legitimately carry a
   field for a template another project uses, and an ERROR would make shared items
   unshareable.
-- **`CL0427`** — a key declared globally but absent from this template's list: misrouted,
-  and the message names the group it lives in.
-- **`CL0428`** — a declared field no template names: a dead declaration, the counterpart
-  to `CL0545`, and what stops the field table rotting the way a hand-maintained schema
-  document does.
+- **`CL0427`** — a key declared globally but read by none of the item's renders:
+  misrouted, and the message names the group it lives in.
+- **`CL0428`** — a declared field no template names, directly, through a group, or inside
+  a partial a template includes: a dead declaration, the counterpart to `CL0545`, and
+  what stops the field table rotting the way a hand-maintained schema document does.
+
+**The check is per item, not per template.** An item can render through several field
+lists on a branch — its story card, a Plot Essentials roster slot, a shorter context
+tier — and a key read by any of them is read. `CL0426`/`CL0427` test a `body:` key
+against the union of every list the item resolves to, so a field in the full `Character`
+template but not the roster's line is not a misroute on the roster render. A key read
+only through a `templateFor` slot file (a tier, or a component rendering role) is never a
+`CL0427` — those lists omit declared fields by design — but a field named by no list
+anywhere is still a `CL0428`. On an imported item, `CL0426`/`CL0427` fire only on keys
+the consuming project introduced or gave a new value to (`resolveItem` stamps
+`_projectAuthoredBody`); a key inherited through `import:` unchanged is the library
+author's concern, which is the point the WARN-not-ERROR choice above was reaching for.
 
 The audit runs on resolved leaf paths (so `from: [personality.keywords,
 personality.expanded]` still flags a typo in a sub-key), keys findings on
 `(item id, field path)`, and emits each once — a `body:` field resolves through every
 `variants:` and `branches:` expansion, so one mistake would otherwise report once per
-leaf. `{ allowExtra: true }` opts a whole template out — Directory and Unstructured
-compose their bodies from author-shaped sub-keys feeding an interpolated value, and the
-property belongs to the template, not to each field. None of the three is an opinion
-code: a field is read or it is not.
+leaf. `{ allowExtra: true }` in any of an item's lists opts that item out — Directory and
+Unstructured compose their bodies from author-shaped sub-keys feeding an interpolated
+value, and the property belongs to the template, not to each field. None of the three is
+an opinion code: a field is read or it is not.
 
 ### §13.8 The schema document is generated
 

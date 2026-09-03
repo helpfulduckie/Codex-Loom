@@ -23,7 +23,7 @@ compiled tree went from 891 files to 186. **Phase 12** replaced the text-templat
 surface with declarations: a field is declared once in `fields.cl.yaml`, a
 template is an ordered list of field and group names, `templateFor` selects a
 template per rendering role, and an unread-field audit (`CL0426`–`CL0428`) flags
-a `body:` key no template reads.
+a `body:` key none of an item's renders read (rescoped per-item 2026-09-03).
 
 **Phase 7's library snapshot is the mechanism a snapshot question hits:**
 `structure.input.canon` is `library:`, `--snapshot` freezes it into a committed
