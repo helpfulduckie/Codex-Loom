@@ -62,10 +62,29 @@ disagreement rather than being edited to match.
 repository.** The golden projects are real AI Dungeon scenarios containing unpublished
 writing, so they live in a separate private repo cloned into the gitignored `goldenFixtures/`.
 
+**Baseline compiles pass `live: true`, so a set's committed sources are what its baseline is
+checked against.** Each golden project declares `structure.input.snapshot`, and without that
+flag every library entry and every out-of-base template dir resolves into the project's own
+frozen `snapshot/` copy — under which an edit to the shared `_CodexLoom/` tree compiles clean,
+moves no bytes, and passes. `baselineHarness.js` and `scripts/rebaseline.js` both set it, and
+they must stay in step or the regeneration and the check disagree about what they compiled.
+The harness also asserts per project that every snapshot entry still hashes equal to the live
+source it was frozen from, because that is now the only check standing between a stale freeze
+and nothing: `checkDrift`'s live-drift report is a bare `console.log` the harness mutes, and
+`CL0113` compares the frozen copy against its own manifest rather than against its source. A
+snapshot that has genuinely moved gets refreshed with `--snapshot` and committed.
+
+**`library-dependencies.json` is the one baseline `rebaseline.js` will not write**, because
+the manifest records absolute paths and a copy made from the temp tree bakes that root in. It
+is refreshed by compiling the project in place, copying the file into the baseline directory,
+and deleting the `Velvet Lattice/` output afterward — that directory is gitignored, so output
+left behind there is invisible to `git status` and is inherited by
+`migrate.integration.test.js`, which copies the golden tree unfiltered.
+
 **If that directory is absent, this is all working as intended.** `golden.test.js` and
 `migrate.integration.test.js` register their suites as skipped, one `describe` in
 `emit-vl.test.js` skips, and everything else runs. The full suite with the goldens present is
-**2,572 across 85 suites** (2026-09-02, examples harness session); without them the passing
+**2,704 across 86 suites** (2026-09-03, live-baseline session); without them the passing
 count is lower and the four fixture-dependent `describe`s register as skipped. **Do not try to
 repair this.** There is no missing dependency to install and no path to fix; the tests are
 skipping because the data they compare against is private. Treat that as green.

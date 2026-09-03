@@ -37,7 +37,8 @@ const path = require('path');
 const fs = require('fs');
 
 const { compile } = require('../../src/compile');
-const { loadCompileConfig } = require('../../src/config/load');
+const { loadCompileConfig, loadManifest } = require('../../src/config/load');
+const { collectEntries, entryLabel, hashTree } = require('../../src/snapshot');
 const { classifyDiff, OPAQUE } = require('./diffShape');
 
 /**
@@ -213,7 +214,17 @@ function describeBaselineSet(options) {
     try {
       for (const project of PROJECTS) {
         const configPath = path.join(tmpDir, project.dir, SOURCE_SUBDIR, CONFIG_NAME);
-        const compileOptions = {};
+        // `live: true` on every baseline compile, so a set's committed sources are the
+        // sources it is checked against. A project that declares `structure.input.snapshot`
+        // otherwise reads its frozen copy for every library entry and every out-of-base
+        // template dir, and an edit to the shared tree those were taken from compiles
+        // clean, changes nothing, and passes — the drift notice that would have said so is
+        // a bare console.log, swallowed by the mock two lines above. The snapshot
+        // redirection path keeps its own coverage in
+        // `__tests__/integration/snapshot.integration.test.js`; what a baseline set owes is
+        // corpus-scale evidence about the compiler, which is worthless read off a copy.
+        // Inert for a set that declares no snapshot, which is why it is unconditional.
+        const compileOptions = { live: true };
         for (const mode of project.compileReports || []) compileOptions[mode] = true;
         compile(configPath, compileOptions);
 
@@ -248,6 +259,52 @@ function describeBaselineSet(options) {
 
     test('emits exactly the baseline file set', () => {
       expect(listFiles(actualDir)).toEqual(listFiles(expectedDir));
+    });
+
+    /**
+     * The mirror of the bug `live: true` fixes.
+     *
+     * Compiling live makes a committed `snapshot/` a directory nothing reads, and therefore
+     * one free to rot — at which point someone editing the frozen copy to fix something has
+     * exactly the old failure back, pointed the other way. This asserts the two stay the
+     * same tree, and it is the only place that does: `checkDrift`'s live-drift report is a
+     * `console.log`, not a diagnostic, and CL0113 compares the frozen copy against its own
+     * manifest rather than against the source it was taken from.
+     *
+     * Reads the committed tree, not the temp copy, because the fixture on disk is what a
+     * `--snapshot` run would refresh. A set that declares no snapshot returns nothing.
+     */
+    test('every snapshot entry matches the live source it was frozen from', () => {
+      const configPath = path.join(root, project.dir, SOURCE_SUBDIR, CONFIG_NAME);
+      const config = loadCompileConfig(configPath, { live: true });
+      const snapshotDir = config._resolvedSnapshot;
+      const manifestPath = snapshotDir && path.join(snapshotDir, 'manifest.json');
+
+      const stale = [];
+      if (manifestPath && fs.existsSync(manifestPath)) {
+        const manifest = loadManifest(manifestPath, null) || {};
+        for (const entry of collectEntries(config)) {
+          const section = entry.kind === 'library'
+            ? (manifest.library || {})[entry.name]
+            : (manifest.templates || {})[entry.name];
+          if (!section) {
+            stale.push(`${entryLabel(entry)} — no entry in manifest.json`);
+            continue;
+          }
+          const live = hashTree(entry.sourcePath);
+          const frozen = section.files || {};
+          const changed = Object.keys(live).filter((rel) => rel in frozen && frozen[rel] !== live[rel]);
+          const added = Object.keys(live).filter((rel) => !(rel in frozen));
+          const removed = Object.keys(frozen).filter((rel) => !(rel in live));
+          if (changed.length || added.length || removed.length) {
+            stale.push(
+              `${entryLabel(entry)} — ${[...changed, ...added, ...removed].sort().join(', ')}`
+              + ' (re-run the CLI with --snapshot and commit the result)'
+            );
+          }
+        }
+      }
+      expect(stale).toEqual([]);
     });
 
     /**

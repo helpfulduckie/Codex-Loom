@@ -194,7 +194,11 @@ function buildTempTree(projects, set) {
     process.stdout.write(`compiling ${project.name}… `);
     quietly(() => {
       const configPath = path.join(tmpDir, project.dir, SOURCE_SUBDIR, CONFIG_NAME);
-      const compileOptions = {};
+      // `live: true` to match `baselineHarness.js` exactly — a baseline regenerated through
+      // a project's frozen snapshot while the harness checks it against the live sources is
+      // a baseline that passes for the wrong reason, which is the failure this whole file
+      // exists to avoid.
+      const compileOptions = { live: true };
       for (const mode of project.compileReports || []) compileOptions[mode] = true;
       compile(configPath, compileOptions);
 

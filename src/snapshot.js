@@ -385,4 +385,6 @@ function checkDrift(config, diagnostics) {
   }
 }
 
-module.exports = { syncLibrary, checkDrift, listAllFiles, hashFile, hashTree, CODES };
+module.exports = {
+  syncLibrary, checkDrift, listAllFiles, hashFile, hashTree, collectEntries, entryLabel, CODES,
+};
