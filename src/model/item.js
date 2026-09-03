@@ -135,6 +135,33 @@ function parseVariantsList(variants) {
 }
 
 /**
+ * Flatten a resolved `body` to a Map of dotted, lowercased leaf path → a stable string
+ * form of its value. Descent stops at anything that is not a plain object — a string, an
+ * array, a scalar is a leaf — which is how a field list addresses body keys. Used to tell
+ * a consuming project's edits to an imported body apart from the library's own content,
+ * for the unread-field audit's `_projectAuthoredBody` (§13.6).
+ */
+function bodyLeafValues(body, prefix = '', out = new Map()) {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return out;
+  for (const key of Object.keys(body)) {
+    const p = prefix ? `${prefix}.${key}` : key;
+    const v = body[key];
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) bodyLeafValues(v, p, out);
+    else out.set(p.toLowerCase(), JSON.stringify(v === undefined ? null : v));
+  }
+  return out;
+}
+
+/** Leaf paths whose value in `after` is absent from, or differs from, `before`. */
+function touchedLeafPaths(before, after) {
+  const touched = new Set();
+  for (const [p, v] of after) {
+    if (!before.has(p) || before.get(p) !== v) touched.add(p);
+  }
+  return touched;
+}
+
+/**
  * Strip compiler-internal metadata from an item before cloning.
  */
 function stripMeta(item) {
@@ -178,11 +205,27 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
       }
     }
 
+    // ── Unread-field audit provenance (§13.6) ────────────────────────────────
+    // Everything in the body right now came from the library: the canon clone plus its
+    // own importVariants. Every project-authored mutation from here on is diffed against
+    // a rolling snapshot so `field-audit.js` can hold the consuming project to account
+    // for the keys it introduced or changed, and stay silent about the library's fields.
+    // A value change counts — a project that overrides an inherited key's value is
+    // saying it wants that key rendered here.
+    const projectAuthoredBody = new Set();
+    let bodySnap = bodyLeafValues(item.body);
+    const recordProjectBodyEdits = () => {
+      const now = bodyLeafValues(item.body);
+      for (const p of touchedLeafPaths(bodySnap, now)) projectAuthoredBody.add(p);
+      bodySnap = now;
+    };
+
     // Apply import-level overrides as the project base, before branch variants run.
     // Branch variants always win over these — they are defaults, not finalizers.
     if (itemDef.body) {
       applyFieldsDelta(item, { body: itemDef.body }, onWarn);
     }
+    recordProjectBodyEdits();
     for (const key of ITEM_TOP_LEVEL_FIELDS) {
       if (itemDef[key] !== undefined) {
         const label = `${itemDef.id || item.id || item.name || '(unknown)'}.${key}`;
@@ -220,7 +263,18 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
         }
         applyDelta(item, delta, onWarn);
       }
+      // A branch variant defined on the import def is a project edit; one taken from the
+      // canon item is the library's. Attribute the first, only advance the baseline past
+      // the second.
+      if (variantSource === itemDef) recordProjectBodyEdits();
+      else bodySnap = bodyLeafValues(item.body);
     }
+
+    // Non-enumerable so it stays out of every report, snapshot and deep-equal that walks a
+    // resolved item; `field-audit.js` reads it by direct property access.
+    Object.defineProperty(item, '_projectAuthoredBody', {
+      value: [...projectAuthoredBody], enumerable: false, configurable: true, writable: true,
+    });
 
   } else {
     // ── Local item definition ────────────────────────────────────────────────

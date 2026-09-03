@@ -10,9 +10,9 @@ WARN CL0630 compile.cl.yaml
 WARN CL0631 compile.cl.yaml
   branch "south" resolves no aiInstructions:. Velvet Lattice writes an empty-string AI Instructions on AID's side for it, and an empty string suppresses AID's model-default instructions rather than falling back to them — the leaf plays with none at all. Give the branch an aiInstructions:, or one an ancestor passes down.
 WARN CL0426 Codex/items.cl.yaml
-  body key "strength" on item "Alba" is read by no field in template "Person" and no declaration names it — its content is dropped from the compiled card.
+  body key "strength" on item "Alba" is read by no template this item renders through and no declaration names it — its content is dropped from the compiled card.
 WARN CL0427 Codex/items.cl.yaml
-  body key "homeland" on item "Cairn" is a declared field but group \`origin\`, which template "Person" does not include — its content is dropped from the compiled card.
+  body key "homeland" on item "Cairn" is a declared field in group \`origin\`, which no template this item renders through includes — its content is dropped from the compiled card.
 WARN CL0428 templates/fields.cl.yaml
   field "deadField" is declared in the field table but no template names it, directly or through a group."
 `;

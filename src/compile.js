@@ -378,6 +378,13 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
   if (hit) {
     try {
       if (hit.kind === 'fieldList') {
+        // The unread-field audit reads every field list an item renders through, not just
+        // its story-card body — a key a slot's list omits but the card's reads is not
+        // misrouted (§13.6). Gated on `extra.fieldAudit`, which the caller passes only for
+        // an item that also emits a card (the audit's item set is unchanged this way).
+        if (extra.fieldAudit) {
+          extra.fieldAudit.collectForItem(item, hit.list, hit.name, { templateFor });
+        }
         return renderFieldList(hit.list, fieldTable, context, {
           diagnostics, file: null, name: hit.name, partials, variables,
         });
@@ -518,6 +525,9 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
       if (known && !known.slots.has(String(target.slot).toLowerCase())) continue;
       const text = renderPlacementBody(item, target, templates, partials, variables, diagnostics, {
         fieldTable, templateFor,
+        // Only for a card-emitting item: the audit collects the union of an item's render
+        // lists but its item set stays "items that produce a story card" this session.
+        fieldAudit: placement.storyCard ? fieldAudit : null,
       });
       if (text === null) continue;
       // Scanned per placement rather than once on the assembled component, because the
@@ -601,7 +611,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     // carries? Runs on the field-list body only — a `.template` text body names nothing to
     // check against. Findings are deduped compile-wide and emitted once, after every leaf.
     if (fieldAudit && bodyRender.kind === 'fieldList') {
-      fieldAudit.auditBody(item, bodyRender.list, bodyRender.name, { templateFor });
+      fieldAudit.collectForItem(item, bodyRender.list, bodyRender.name, { templateFor });
     }
 
     // Build render context: top-level item fields + body for {$body.X} access

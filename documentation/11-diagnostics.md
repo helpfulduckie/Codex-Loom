@@ -257,9 +257,9 @@ are always mistakes, and they are what drift produces.
 | `CL0423` | ERROR | A `fields:` entry carries an unknown key or an unknown `render:` function name. |
 | `CL0424` | WARN | A group member or template entry names something that is not a declared field or group. |
 | `CL0425` | WARN | A file in a templates directory looks like a misspelled `fields.cl.yaml` and is being ignored. |
-| `CL0426` | WARN | A `body:` key is read by no field in the resolved template and no declaration names it — a typo; its content is dropped. |
-| `CL0427` | WARN | A `body:` key is a declared field the resolved template's list does not include — misrouted; the message names the group it lives in. |
-| `CL0428` | WARN | A field is declared in the field table but no template names it, directly or through a group. |
+| `CL0426` | WARN | A `body:` key the consuming project authored is read by no template the item renders through and no declaration names it — a typo; its content is dropped. |
+| `CL0427` | WARN | A `body:` key the consuming project authored is a declared field that none of the item's renders include — misrouted; the message names the group it lives in. |
+| `CL0428` | WARN | A field is declared in the field table but no template names it, directly, through a group, or inside a partial a template includes. |
 | `CL0436` | WARN | A bracketed lowercase word is not a recognized verb-conjugation marker — likely a typo. |
 | `CL0437` | WARN | A bare `undefined`/`NaN` appears in rendered output. |
 
@@ -319,21 +319,41 @@ resembles one is left alone). A structurally broken entry is skipped and the res
 table still loads, because a downstream project may override the whole file.
 
 `CL0426`–`CL0428` are the unread-field audit. A field-list template names the
-`body:` keys it renders, so a key no field reads is content the compiler silently drops —
+`body:` keys it renders, so a key no template reads is content the compiler silently drops —
 the diagnostic the external schema reference was hand-maintained to stand in for. One
 symptom splits three ways: a key **no declaration names** is a typo (`CL0426`), a key
-**declared but absent from this template's list** is misrouted and the message names the
+**declared but read by none of the item's renders** is misrouted and the message names the
 group it lives in (`CL0427`), and a **declared field no template names** is a dead
 declaration (`CL0428`, the counterpart to `CL0545`). None is an opinion — a field is read
 or it is not — so `lint.level` cannot reach them.
+
+**The check is per item, not per template.** An item can render through more than one field
+list on a branch — its story card, a Plot Essentials roster slot, a shorter context tier —
+and a key read by *any* of them is read. `CL0426`/`CL0427` test a `body:` key against the
+union of every list the item resolves to, so `secret`, present in the full `Character`
+template but not the roster's line, is not a misroute on the roster render. A key read only
+by a list that came from a `templateFor` slot file (a tier, or a component rendering role)
+is never a `CL0427` — those lists omit declared fields by design — but a field that no list
+anywhere names is still a `CL0428`.
+
+**On an imported item, only the consuming project's own keys are audited.** A `body:` key
+that arrived through `import:` unchanged is the library author's concern; `CL0426`/`CL0427`
+fire only on keys the consuming project introduced or gave a new value to. A library item
+that carries fields for consumers who want them does not nag a consumer that renders a
+subset.
+
+**`CL0428` sees partials.** A field referenced only inside a `{ include: somePartial }` —
+`{$body.role}` in a roster-line partial, say — is named, not dead. The sweep reads the same
+`$body.` / `$notes.` references out of an included partial (and any partial it includes)
+that `CL0426`/`CL0427` already do.
 
 The audit runs on resolved leaf paths, not top-level keys, so `from: [personality.keywords,
 personality.expanded]` still flags `personality.other`. Findings key on `(item id, field
 path)` and are emitted once: a `body:` field resolves through every `variants:` and
 `branches:` expansion, so one mistake on a 32-leaf project would otherwise report 32 times.
-A `{ allowExtra: true }` marker in a template's list opts the whole template out — Directory
-and Unstructured compose their bodies from author-shaped sub-keys feeding an interpolated
-value, and the property belongs to the template, not to each field.
+A `{ allowExtra: true }` marker in any of an item's lists opts that whole item out —
+Directory and Unstructured compose their bodies from author-shaped sub-keys feeding an
+interpolated value, and the property belongs to the template, not to each field.
 
 ### CL06xx — components
 
