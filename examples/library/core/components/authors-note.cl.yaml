@@ -1,0 +1,8 @@
+# Shared Author's Note. Short on purpose — AID reads this close to the generation point,
+# and a long one costs more than it buys.
+# doc: 09-components.md
+
+sections:
+  style:
+    text: |
+      Keep paragraphs short. Concrete nouns over adjectives.

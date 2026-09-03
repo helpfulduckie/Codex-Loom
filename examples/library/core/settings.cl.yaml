@@ -1,0 +1,92 @@
+# Three settings, written to be comparable rather than to be complete.
+#
+# "Medieval Kingdom", not "Fantasy Kingdom": a project crossing these with a magical /
+# mundane tone axis would otherwise have "fantasy" naming both a setting and a tone.
+# doc: 03-item-yaml.md
+
+- id: MedievalKingdom
+  name: The Medieval Kingdom
+  aid:
+    title: The Kingdom
+    type: location
+    triggers: [Kingdom, court, crown]
+  kind: reference
+  render:
+    template: Location
+  body:
+    Tagline: A cold agrarian kingdom held together by oaths
+    vibe: [hierarchical, hungry, ceremonial]
+    era: Late feudal
+    technology: Water mills, poor roads, no printing
+    landmarks:
+      - The winter court at Harrowgate
+      - The tithe road
+    factions:
+      - The sworn houses
+      - The tithe collectors
+  variants:
+    magical:
+      body:
+        Tagline: +{, and by the wards along its borders}
+        factions: +{The warding orders}
+    mundane:
+      body:
+        Tagline: +{, and by nothing else}
+
+- id: SciFiPlanet
+  name: Tessene
+  aid:
+    title: Tessene
+    type: location
+    triggers: [Tessene, colony, the planet]
+  kind: reference
+  render:
+    template: Location
+  body:
+    Tagline: A contract colony three decades past its founding charter
+    vibe: [provisional, monitored, improvised]
+    era: Second-generation colonial
+    technology: Orbital lift, printed parts, patchy comms
+    landmarks:
+      - The lift terminus
+      - The dry seabed farms
+    factions:
+      - The charter administration
+      - The lift crews
+  variants:
+    magical:
+      body:
+        Tagline: +{, where something in the seabed answers}
+        factions: +{The seabed listeners}
+    mundane:
+      body:
+        Tagline: +{, and audited quarterly}
+
+- id: ModernCity
+  name: Ashbourne
+  aid:
+    title: Ashbourne
+    type: location
+    triggers: [Ashbourne, the city, downtown]
+  kind: reference
+  render:
+    template: Location
+  body:
+    Tagline: A river city that outgrew its bridges
+    vibe: [crowded, transactional, restless]
+    era: Present day
+    technology: Ubiquitous, unevenly maintained
+    landmarks:
+      - The four bridges
+      - The night market under the eastern span
+    factions:
+      - The bridge authority
+      - The night market traders
+  variants:
+    magical:
+      body:
+        Tagline: +{, and kept a few of its older arrangements}
+        factions: +{The bridge-keepers}
+    mundane:
+      body:
+        Tagline: +{, and paved over the rest}

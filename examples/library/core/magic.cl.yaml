@@ -1,0 +1,29 @@
+# `core:magic` — one half of the colliding pair.
+#
+# `grimwood/magic.cl.yaml` defines an item with this same id and a different meaning. That
+# is not an error: both copies are kept, the plain key `magic` is left empty, and only an
+# unqualified reference that cannot choose between them fails (CL0340), at the reference.
+# doc: 04-imports-and-includes.md#qualified-references
+
+- id: magic
+  name: Elemental Manipulation
+  aid:
+    # The title is what reaches AID, and a project may hold both magic systems at once —
+    # so neither set titles its card the bare word "Magic".
+    title: Elemental Magic
+    type: system
+    triggers: [elemental magic, spell, casting]
+  kind: reference
+  render:
+    template: MagicSystem
+  body:
+    Tagline: Practiced magic; learned, licensed, and slow
+    source: Study. An affinity is trained, not inherited.
+    cost: Time and attention. A caster who hurries gets a smaller effect, not a worse one.
+    limits:
+      - Nothing is created; something already present is moved or changed.
+      - A worked effect lasts about as long as the working took.
+      - Two casters working the same material interfere rather than combine.
+    practitioners:
+      - Licensed practitioners, examined and registered.
+      - Hedge-trained casters, competent and unregistered.

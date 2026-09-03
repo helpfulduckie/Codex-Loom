@@ -110,6 +110,49 @@ Imports a single item from the shared library by ID and applies variant chains, 
 
 ---
 
+## Qualified References
+
+A reference is a plain id (`kaiden`) or one qualified with the library set that owns it (`grimwood:magic`). Qualification is optional and needed only where two sets define the same id. A `:` is illegal inside an item id, so the first colon is always the separator.
+
+This exists because a shared library is not always yours. Two settings can both name an item `magic` — one meaning elemental manipulation, the other blood magic — and both authors are right. Renaming your copy of someone else's set is the answer that breaks the [library snapshot](12-snapshot.md); qualifying the reference is the one that does not.
+
+```yaml surface=config
+structure:
+  input:
+    library:
+      core: ../library/core
+      grimwood: ../library/grimwood
+```
+
+Declaring two sets that share an id is **not** an error. Both copies are kept and reachable by their qualified names, and the plain key `magic` is simply left empty. Only a reference that cannot choose between them fails, and it fails at the reference:
+
+| Code | When |
+|---|---|
+| `CL0340` | `magic` is defined in more than one set and the reference did not qualify it. The message names both rivals and the two qualified spellings. |
+| `CL0341` | The qualifier names a set that `structure.input.library` does not declare. |
+| `CL0342` | The set is declared but holds no item with that id. |
+
+### Holding both sides — rename-on-import
+
+An `import:` def may carry its own `id:`, which registers the imported item under the local name. That is how one project holds two items that arrived with the same id:
+
+```yaml surface=item
+- import: core:magic
+
+- id: blood-magic
+  import: grimwood:magic
+```
+
+**Only the id moves.** `name:` stays whatever the imported item called it — `id: dragon` over `import: wyvern` is still named Wyvern until you write `name: Dragon`, which is the line that says what you meant. Inferring a display name from an id would be guessing from a slug.
+
+The same shape is worth using with one library set, and that is really what justifies it: `id: dragon` over `import: wyvern` with local `body:` deltas gives you a library monster plus a near neighbor, without touching the library.
+
+Two import defs renaming to the same local id are a duplicate the registry can no longer see, so that check moves to where renamed imports register (`CL0325`). A renamed item's provenance row reads `project` rather than `library:<set>`, with the library reference it came from in the `Via` column.
+
+`examples/library/` is the worked pair: two sets, `core/` and `grimwood/`, that both define `magic` and nothing else.
+
+---
+
 ## `importVariants:`
 
 Applies named variant chains from the **library item's own variant tree** and folds them into the item in progress. Each entry is a slash-separated variant path, applied in order.

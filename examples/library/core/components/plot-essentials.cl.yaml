@@ -1,0 +1,30 @@
+# A Plot Essentials format the projects share.
+#
+# It lives inside the `core/` set directory, and that is allowed where the field table is
+# not: `loadItemsFromDir` skips a document with top-level `sections:` and no identity
+# silently, because a library entry pointing at a mixed-purpose directory is expected.
+# doc: 09-components.md#sections-and-slots
+#
+# It declares slots and almost no text. A shared format that wrote the genre line for you
+# would be a scenario, not a library.
+
+sections:
+  genre:
+    text: |
+      Genre: {%genre}
+      Setting: {%settingName}
+    render: {position: 1, wrapper: square}
+
+  you:
+    slot: true
+    render: {position: 5, wrapper: curly}
+
+  cast:
+    slot: true
+    heading: Cast
+    render: {position: 6, wrapper: curly, wrap: all}
+
+  world:
+    slot: true
+    heading: World
+    render: {position: 7, wrapper: curly}

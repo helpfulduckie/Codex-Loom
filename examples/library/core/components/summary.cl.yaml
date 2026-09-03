@@ -1,0 +1,15 @@
+# A story-summary format. Mechanically identical to Plot Essentials — `sections:`, slots,
+# `render.position` ordering — and different in what it holds: Plot Essentials states fact
+# that holds throughout, Summary states narrative past. Items route in via `render.summary`.
+# doc: 09-components.md
+
+sections:
+  standing:
+    text: |
+      What has happened so far, newest last. Keep it to events, not interpretation.
+    render: {position: 1}
+
+  openThreads:
+    slot: true
+    heading: Open threads
+    render: {position: 2, wrapper: curly}

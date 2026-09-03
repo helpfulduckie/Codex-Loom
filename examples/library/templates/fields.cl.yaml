@@ -1,0 +1,57 @@
+# The shared field table both library sets are written against.
+# doc: 10-field-declarations.md#declaration-keys
+#
+# It sits beside the set directories rather than inside one, and that placement is
+# load-bearing: `buildCanonRegistry` walks a set directory whole and reads every YAML file
+# in it as an item. A component document (top-level `sections:`, no identity) is skipped
+# silently, so components may live inside a set — but a `fields:` document is not, and one
+# filed under `core/` fails the compile with "missing both id and name fields".
+#
+# A project reads this through `structure.input.templates`, not through
+# `structure.input.library`.
+
+fields:
+  # `join: ""` is what keeps an appended Tagline on one line. `+{x}` against a string value
+  # produces a two-element list, which renders as a bullet pair under the default `list`
+  # rendering — so every Tagline append in these sets writes its own separator inside the
+  # braces (`+{; hedge-trained}`) and the empty join concatenates them.
+  Tagline:     { label: Tagline, join: "" }
+  vibe:        { label: Vibe, join: "; ", wrap: "[]" }
+  appearance:  { label: Appearance,
+                 from: [Physical Traits.gender, Physical Traits.age,
+                        Physical Traits.hair, Physical Traits.other],
+                 join: "; " }
+  personality: { label: Personality, from: Personality.keywords, join: ", " }
+  personalityExpanded: { from: Personality.expanded }
+  Magic:       { label: Magic, from: [Magic.affinity, Magic.effect], join: "; " }
+  Background:  { label: Background, render: list }
+  relationships: { label: Relationships, render: list }
+  secret:      { label: Hidden Info, wrap: "[]", wrapLabel: true }
+
+  # Setting fields. `era` and `technology` are what make the three settings comparable
+  # at a glance, which is the whole point of a settings file in a shared library.
+  era:         { label: Era }
+  technology:  { label: Technology }
+  landmarks:   { label: Landmarks, render: list }
+  factions:    { label: Factions, render: list }
+
+  # Magic-system fields. Both sets' `magic` items are written against these, which is what
+  # lets a project hold `core:magic` and `grimwood:magic` side by side and have them read
+  # as two answers to the same questions.
+  source:      { label: Source }
+  cost:        { label: Cost }
+  limits:      { label: Limits, render: list }
+  practitioners: { label: Practitioners, render: list }
+
+groups:
+  core: [Tagline, vibe, appearance, personality, personalityExpanded]
+
+templates:
+  Character: [core, Magic, Background, relationships, secret]
+
+  # The brief form, for a Plot Essentials cast slot.
+  CharacterBrief: [Tagline, appearance, personality]
+
+  Location: [Tagline, vibe, era, technology, landmarks, factions]
+
+  MagicSystem: [Tagline, source, cost, limits, practitioners]

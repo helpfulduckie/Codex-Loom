@@ -1,0 +1,53 @@
+# The grimwood set is a second author's library, and it is written like one: a few items
+# around a single idea, sharing the field table but not the core set's naming.
+#
+# No id here collides with `core/`. Only `magic` does, and that collision is the point —
+# a set full of collisions would be two authors disagreeing about everything, which is not
+# the case §17 exists for.
+
+- id: Grimwood
+  name: The Grimwood
+  aid:
+    title: The Grimwood
+    type: location
+    triggers: [Grimwood, the wood, the old wood]
+  kind: reference
+  render:
+    template: Location
+  body:
+    Tagline: Old forest on the wrong side of the tithe road
+    vibe: [patient, indifferent, marked]
+    era: Older than whoever is counting
+    technology: None it did not outlast
+    landmarks:
+      - The seven boundary stones
+      - The clearing where nothing has grown back
+    factions:
+      - The seven named lines
+      - Those who pay the wood's toll and do not talk about it
+
+- id: Hollis
+  name: {display: Hollis, full: Hollis Vane}
+  pronouns: female
+  aid:
+    title: Hollis Vane
+    type: character
+    triggers: [Hollis, Vane]
+  render:
+    template: Character
+  body:
+    Tagline: Line-born; keeps the boundary stones
+    vibe: [blunt, unbothered, exact]
+    Physical Traits:
+      gender: female
+      age: 50s
+      hair: grey hair under a scarf
+    Personality:
+      keywords: [blunt, exact]
+      expanded: '{$Hollis} tell[s] people the price first and the reason never.'
+    Magic:
+      affinity: blood
+      effect: a working that holds until the debt is called
+    relationships:
+      - Third of her line to keep the stones, and says so as a warning.
+    secret: Two of the seven stones have been moved, and she moved them.

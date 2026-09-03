@@ -1,0 +1,27 @@
+# `grimwood:magic` — the other half of the colliding pair.
+#
+# Same id as `core:magic`, a different magic system, and both authors are right. A project
+# that wants both writes `import: grimwood:magic` under a local `id:` (§17.4's
+# rename-on-import) so the two sit side by side under names the project chooses.
+# doc: 04-imports-and-includes.md#qualified-references
+
+- id: magic
+  name: Blood Magic
+  aid:
+    title: Blood Magic
+    type: system
+    triggers: [blood magic, the old working, bleeding]
+  kind: reference
+  render:
+    template: MagicSystem
+  body:
+    Tagline: Inherited magic; fast, cheap to start, and owed
+    source: Descent. It runs in a line and cannot be taught to someone outside it.
+    cost: Blood, and afterwards a debt the working keeps track of on its own.
+    limits:
+      - The effect is instant; there is no working slowly for a smaller price.
+      - A debt unpaid at death is inherited along with the talent.
+      - Nothing done with blood magic can be undone with blood magic.
+    practitioners:
+      - The seven named lines.
+      - Whoever a line has married into, whether or not they wanted it.
