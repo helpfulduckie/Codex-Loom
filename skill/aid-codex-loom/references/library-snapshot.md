@@ -1,6 +1,6 @@
 # Library & Snapshot Reference
 
-A **library** is a shared source directory outside the project — a canon character set,
+A **library** is a shared source directory outside the project — a shared character set,
 house-style AI Instructions reused across scenarios. Declared under
 `structure.input.library`, each entry's name becomes a `{%name}` token.
 
@@ -16,7 +16,7 @@ shared library currently holds.
 structure:
   input:
     library:
-      characters:       '{%canon}/_General/Characters'
+      characters:       '{%loom}/_General/Characters'
       sharedComponents: '{%loom}/AI Instructions'
     templates:
       - '{%loom}/templates'      # out-of-base — frozen by --snapshot

@@ -127,7 +127,7 @@ After all items for a branch are compiled, a second pass resolves:
 {$Setting.body.Era}       → Era field from the Setting item
 ```
 
-If the referenced item was excluded from this branch via null dispatch, falls back to the canonical base item. If the item or field is not found, emits a warning and leaves the token as-is.
+If the referenced item was excluded from this branch via null dispatch, falls back to the item's base definition. If the item or field is not found, emits a warning and leaves the token as-is.
 
 ---
 

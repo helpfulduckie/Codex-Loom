@@ -299,7 +299,7 @@ This applies identically to local item definitions, `import:` entries, `include:
 
 ## Full Worked Example
 
-**Canon item:**
+**Library item:**
 ```yaml surface=item
 - id: Felicia
   name: {display: Felicia, full: Felicia Grayls}
@@ -324,19 +324,19 @@ This applies identically to local item definitions, `import:` entries, `include:
 - import: Felicia
   variants:
     felix:
-      importVariants: [Felix]    # apply Felicia's canon Felix variant
+      importVariants: [Felix]    # apply Felicia's library Felix variant
   branches:
     felix: felix                 # for the felix branch, apply the local "felix" variant
 ```
 
 For the `felix` branch leaf:
-1. Load canonical Felicia
+1. Load Felicia from the library
 2. No top-level `importVariants:` on the import
 3. Branch dispatch: `felix` → apply local `felix` variant
-4. Local `felix` variant has `importVariants: [Felix]` → apply `Felix` from canon
+4. Local `felix` variant has `importVariants: [Felix]` → apply `Felix` from the library
 5. Result: Felix Grayls with male pronouns
 
 For any other branch:
-1. Load canonical Felicia
+1. Load Felicia from the library
 2. No variant applied
 3. Result: Felicia Grayls as-is

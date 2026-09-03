@@ -1,15 +1,15 @@
 # Imports & Includes
 
-Project item files can pull in items from the canonical registry in two ways:
+Project item files can pull in items from the shared library in two ways:
 
-- **`include:`** — loads every item from a canon file as-is, with optional per-item overrides
+- **`include:`** — loads every item from a library file as-is, with optional per-item overrides
 - **`import:`** — loads a single named item and applies variant chains, field overrides, and branch dispatch
 
 ---
 
 ## `include:` Directive
 
-Loads all items from a canonical YAML file. Items are compiled exactly as defined in canon, with no modifications unless you attach `importVariants:` or `branches:` to the include directive itself.
+Loads all items from a library YAML file. Items are compiled exactly as defined in the library, with no modifications unless you attach `importVariants:` or `branches:` to the include directive itself.
 
 ```yaml surface=item
 - include: "{%main}/Characters/Felicia.yaml"
@@ -23,7 +23,7 @@ Include and import paths also support `{%variable}` expansion, but — because i
 structure:
   input:
     library:
-      main: ../../_Canon
+      main: ../../_Library
 ```
 
 You can also use a direct relative path, but the `{%name}` form is preferred for portability.
@@ -81,7 +81,7 @@ If an item from an `include:` file is also listed in an explicit `import:` entry
 
 ## `import:` Directive
 
-Imports a single item from the canonical registry by ID and applies variant chains, field overrides, and branch dispatch.
+Imports a single item from the shared library by ID and applies variant chains, field overrides, and branch dispatch.
 
 ```yaml surface=item
 - import: Aness
@@ -98,13 +98,13 @@ Imports a single item from the canonical registry by ID and applies variant chai
 
 ### Import resolution order
 
-1. Load the canonical base item by ID
+1. Load the library base item by ID
 2. Apply the primary import path variant chain (slash-separated ID: `Zephon/human/noble`)
-3. Apply `importVariants:` list entries in order (each is a slash-separated variant path on the canon item)
+3. Apply `importVariants:` list entries in order (each is a slash-separated variant path on the library item)
 4. Apply top-level `body:` field overrides from the import definition
 5. Apply top-level `name:`, `pronouns:`, `aid:`, `render:` overrides (if present)
 6. Resolve `branches:` dispatch → determine which local variant names apply for the active branch
-7. For each dispatched local variant, apply any `importVariants:` declared inside that variant (sourced from the canonical item's variant tree)
+7. For each dispatched local variant, apply any `importVariants:` declared inside that variant (sourced from the library item's variant tree)
 8. Apply each dispatched variant's delta fields
 9. Recurse into sub-branches if the dispatch spec has nested `branches:`
 
@@ -112,29 +112,29 @@ Imports a single item from the canonical registry by ID and applies variant chai
 
 ## `importVariants:`
 
-Applies named variant chains from the **canonical item's own variant tree** and folds them into the item in progress. Each entry is a slash-separated variant path, applied in order.
+Applies named variant chains from the **library item's own variant tree** and folds them into the item in progress. Each entry is a slash-separated variant path, applied in order.
 
 ```yaml surface=item
 - import: Zephon
   importVariants: [human/noble, sci-fi/near-future]
 ```
 
-This applies the `human` variant, then `human/noble`, then `sci-fi`, then `sci-fi/near-future` — each walking the canon item's `variants:` tree.
+This applies the `human` variant, then `human/noble`, then `sci-fi`, then `sci-fi/near-future` — each walking the library item's `variants:` tree.
 
-`importVariants:` can also appear **inside a branch variant** on the import, where it sources from the same canonical item's variant tree:
+`importVariants:` can also appear **inside a branch variant** on the import, where it sources from the same library item's variant tree:
 
 ```yaml surface=item
 - import: Felicia
   variants:
     felix:
-      importVariants: [Felix]    # applies Felix variant from Felicia's canon variants
+      importVariants: [Felix]    # applies Felix variant from Felicia's library variants
       body:
         Tagline: +{; security officer}
   branches:
     felix: felix
 ```
 
-`importVariants:` always sources from the **original canonical item's** variant tree, not the partially resolved item. `variants:` on an import defines local named deltas for branch dispatch — it is never a list of variant chains.
+`importVariants:` always sources from the **original library item's** variant tree, not the partially resolved item. `variants:` on an import defines local named deltas for branch dispatch — it is never a list of variant chains.
 
 ---
 

@@ -190,7 +190,7 @@ my-project/
   items/                         ← project item definitions and imports
     characters.cl.yaml
     locations.cl.yaml
-  canon/                         ← shared item definitions, declared under `library:`
+  library/                       ← shared item definitions, declared under `library:`
     main/
       Aness.cl.yaml
       Felicia.cl.yaml
@@ -207,7 +207,7 @@ my-project/
   output/                        ← compiler writes here (do not edit manually)
 ```
 
-**Paths are declared, not conventional.** Nothing above is a magic directory name — `structure.input.items`, `structure.input.templates`, `structure.input.library` and `structure.output` name them, and the layout here is only what a typical project chooses. `library:` is a *mapping* of names to directories (`main: ./canon/main`), and each name is auto-exposed as a `{%name}` variable, which is how a component or item refers to shared content. See [compile.yaml Reference](02-compile-yaml.md).
+**Paths are declared, not conventional.** Nothing above is a magic directory name — `structure.input.items`, `structure.input.templates`, `structure.input.library` and `structure.output` name them, and the layout here is only what a typical project chooses. `library:` is a *mapping* of names to directories (`main: ./library/main`), and each name is auto-exposed as a `{%name}` variable, which is how a component or item refers to shared content. See [compile.yaml Reference](02-compile-yaml.md).
 
 **`.cl.yaml` is the v4 extension.** Plain `.yaml` still loads; the suffix marks a file as Codex Loom's rather than something else's, and `--migrate --rename-cl` applies it to the config too.
 

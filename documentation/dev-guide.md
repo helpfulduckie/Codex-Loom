@@ -15,12 +15,12 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/cli.js` | CLI entry point: argument parsing, mode dispatch, `--migrate`, `syncLibrary` |
 | `src/compile.js` | `compile()` / `compileRun()` — orchestrates the pipeline; the per-leaf, tree-write and report stages live in the modules below |
 | `src/compileState.js` | The mutable state of one `compileRun`, grouped into the clusters the decomposed stages pass around |
-| `src/config/load.js` | Loads and resolves `compile.cl.yaml`: variables, paths, canon names |
+| `src/config/load.js` | Loads and resolves `compile.cl.yaml`: variables, paths, library names |
 | `src/config/schema.js` | The `compile.cl.yaml` key surface, validated by `src/schema.js` |
 | `src/snapshot.js` | `--snapshot`: the library freeze (copy + hash + manifest write) and the compile-time drift notice (§11) |
 | `src/loader/preparse.js` | Rescues leading `{$…}`/`{%…}` tokens YAML would swallow (§4.1) |
 | `src/loader/yaml.js` | YAML parsing with a source map, so diagnostics carry positions |
-| `src/loader/registry.js` | Item loading, `ItemRegistry`, canon merge, overlays, includes |
+| `src/loader/registry.js` | Item loading, `ItemRegistry`, library merge, overlays, includes |
 | `src/loader/schema.js` | The item key surface (§4.3) |
 | `src/loader/component.js`, `src/loader/component-schema.js` | Component-document loading and its key surface (§7.2) |
 | `src/loader/field-table.js` | Loads `fields.cl.yaml` — the field and template declarations (§13.2) |
@@ -30,7 +30,7 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/model/item.js` | Item resolution through import/variant/branch chains |
 | `src/model/branches.js` | Branch-spec dispatch; `enumerateLeaves`; branch-chain walks |
 | `src/model/fieldops.js` | Value-level field operations (`applyFieldOp` and friends) |
-| `src/model/refs.js` | Item reference resolution, plain and canon-qualified (§17.2) |
+| `src/model/refs.js` | Item reference resolution, plain and library-qualified (§17.2) |
 | `src/model/pronouns.js` | Pronoun and verb conjugation passes; cross-item reference resolution |
 | `src/model/component.js` | Component documents: sections, slots, section variants, branch gating (§7.2) |
 | `src/util.js` | `{%variable}` expansion (`resolveVariables` — the single expander, §5.1); file enumeration, YAML loading, deep clone, case-insensitive object utilities |
@@ -74,12 +74,12 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 loadCompileConfig()
     ↓
 loadTemplates()                  → templates Map, partials Map
-buildCanonRegistry()             → canon ItemRegistry (plain keys + qualified/ambiguous sidecars)
+buildCanonRegistry()             → library ItemRegistry (plain keys + qualified/ambiguous sidecars)
 loadItemsFromDir()               → raw project item defs (array)
-resolveIncludes()                → included canon items stamped with _include_* metadata
+resolveIncludes()                → included library items stamped with _include_* metadata
 buildRegistry(projectItems)      → project registry
-mergeRegistries(canon, project)  → full registry
-enumerateLeaves(branches)        → [[path], [path], ...]
+mergeRegistries(library, project) → full registry
+enumerateLeaves(branches)         → [[path], [path], ...]
     ↓
 FOR EACH LEAF:
   walkBranchChain()             → merged variables/roles/placeholders/components; branchProtagonist
@@ -118,19 +118,19 @@ runProvenanceMode()               → Overview/<root>.provenance.{md,csv}  (alwa
 
 `buildRegistry(items, context)` indexes items by lowercase `id` (falling back to `name` if `id` is absent). Collision within a context is fatal. `include:` defs are skipped, and so are bare `import:` defs — they *are* the item they name, with local deltas. An import def carrying its own `id:` is the exception and registers under that local id, which is rename-on-import (§17.4).
 
-`mergeRegistries(canon, project)` combines two registries. Any ID present in both is also fatal.
+`mergeRegistries(library, project)` combines two registries. Any ID present in both is also fatal.
 
-`ItemRegistry` is a `Map` first — plain lowercase id → item, so every `registry.get(id)` consumer reads it the way it always did. Three sidecars carry what multi-set canon needed (§17.2):
+`ItemRegistry` is a `Map` first — plain lowercase id → item, so every `registry.get(id)` consumer reads it the way it always did. Three sidecars carry what multi-set shared libraries needed (§17.2):
 
 | | |
 |---|---|
-| `qualified` | `set:id` → item, for every canon item, so `grimwood:magic` always resolves |
-| `ambiguous` | plain id → the rival items, for ids more than one canon set defines |
-| `sources` | the declared canon set names, so an unknown qualifier is distinguishable from a known set that lacks the id |
+| `qualified` | `set:id` → item, for every library item, so `grimwood:magic` always resolves |
+| `ambiguous` | plain id → the rival items, for ids more than one library set defines |
+| `sources` | the declared library set names, so an unknown qualifier is distinguishable from a known set that lacks the id |
 
-**A duplicate id across two canon sets is not fatal, and is not resolved by declaration order.** Both copies are kept and the plain key is left empty; only a reference that cannot choose between them fails, and it fails at the reference (§17.3, `resolveItemRef` in `model/refs.js`). The absence of the plain key *is* the mechanism — the unqualified lookup has to miss before the resolver can reach the sidecar and name the alternatives.
+**A duplicate id across two library sets is not fatal, and is not resolved by declaration order.** Both copies are kept and the plain key is left empty; only a reference that cannot choose between them fails, and it fails at the reference (§17.3, `resolveItemRef` in `model/refs.js`). The absence of the plain key *is* the mechanism — the unqualified lookup has to miss before the resolver can reach the sidecar and name the alternatives.
 
-The asymmetry with the two fatal cases above is deliberate. One set owning an id twice is a mistake inside that set, and a project id colliding with a canon id is a clash whose both sides the author owns; a cross-set clash is neither. `.itemCount` counts items rather than plain keys, since an ambiguous id holds none.
+The asymmetry with the two fatal cases above is deliberate. One set owning an id twice is a mistake inside that set, and a project id colliding with a library id is a clash whose both sides the author owns; a cross-set clash is neither. `.itemCount` counts items rather than plain keys, since an ambiguous id holds none.
 
 The final merged registry is passed to every downstream function. It is **read-only** during compilation — no function mutates it.
 
@@ -140,15 +140,15 @@ The final merged registry is passed to every downstream function. It is **read-o
 
 `resolveItem(itemDef, registry, branchPath)` in `model/item.js` applies deltas in this fixed order:
 
-1. Resolve `import:` through `resolveItemRef` (plain or `set:id`), then deep-clone the canonical base item — or the local item def if there is no `import:`
+1. Resolve `import:` through `resolveItemRef` (plain or `set:id`), then deep-clone the library base item — or the local item def if there is no `import:`
 2. Apply the **primary import path** variant chain (slash-separated suffix on the import ID)
-3. Apply each entry in `importVariants:` (slash-separated paths on the canonical item's variant tree)
+3. Apply each entry in `importVariants:` (slash-separated paths on the library item's variant tree)
 4. Apply top-level `body:`, `name:`, `pronouns:`, `aid:`, `render:` overrides from the import def
 5. If the import def carries its own `id:`, overwrite the imported id with it (§17.4). Only the id moves — `name:` is deliberately left as the imported item set it, so a rename that should also change the display name says so rather than having one guessed from a slug
 6. Call `resolveBranchSpec(itemDef.branches, branchPath)` → list of local variant names
 7. For each dispatched local variant name:
    a. Walk `itemDef.variants` tree to collect the variant delta
-   b. If the delta has `importVariants:`, apply those from the **canonical item's** variant tree first
+   b. If the delta has `importVariants:`, apply those from the **library item's** variant tree first
    c. Apply the delta fields
 8. Return `null` if `resolveBranchSpec` returns `null` (item excluded from this branch)
 
@@ -313,7 +313,7 @@ Phase A (`resolveBranchItems`) resolves all items for a branch and applies field
 
 `applyFieldOp` returns the string `'__DELETE__'` to signal that a field should be deleted. Callers (`applyFieldsDelta`, recursive subfield ops) check for this sentinel and call `delete obj[key]` rather than setting the key. Using a sentinel avoids the need for a wrapper type or exception throwing, and works cleanly through the recursive subfield application.
 
-**Canon naming (mapping not string)**
+**Library naming (mapping not string)**
 
 `structure.input.library` is a named mapping (`{main: ./path}`) rather than a plain string or array. Names serve two purposes: they appear in error messages (`library:main` labels each side of a collision) and they are exposed as variables, so `{%main}` resolves in `include:` paths. A plain path string would require path-based display, which is brittle.
 
@@ -321,7 +321,7 @@ Phase A (`resolveBranchItems`) resolves all items for a branch and applies field
 
 All `{%variable}` expansion routes through `resolveVariables()` in `src/util.js` — recursive, cycle-detecting, and reporting undeclared names through a caller-supplied sink. There is no second implementation.
 
-There is no second `{@name}` family (§6.1): canon and library names are exposed as ordinary `{%}` variables, so one expander covers every case. Don't reintroduce a parallel resolver for a new context — add a call site to `resolveVariables` instead.
+There is no second `{@name}` family (§6.1): library names are exposed as ordinary `{%}` variables, so one expander covers every case. Don't reintroduce a parallel resolver for a new context — add a call site to `resolveVariables` instead.
 
 Call sites are thin wrappers: `config.expandPathTokens` (config paths), `compile.resolveComponentSpec`, the `include:`-path block in `loader/registry.resolveIncludes`, and `loader/component.js` for both `imports:` `from:` and a section's `file:`/`from:` sources. When adding a context that needs tokens, call `resolveVariables` rather than re-deriving the regex.
 
@@ -329,7 +329,7 @@ Coverage notes:
 - `{%}` is expanded in item bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and config paths. In `include:`/`import:` paths it uses **root** `config.variables` only, because `resolveIncludes` runs once before branch enumeration — branch-merged variables do not exist yet.
 - The `{$…}` field-reference family (`{$v.field}`, `{$Id.body.field}`) is a separate system (field interpolation + pronoun passes) and is **not** part of `resolveVariables`. It covers `body`/`aid`/`render`/`name` via `walkItemTextFields`, accepts dotted field refs in item data, and reports via `checkUnresolvedFieldTokens` on any token that survives to output; collapsing its four resolvers into one dispatcher is still deferred. See `07-templates.md` "Token Systems at a Glance".
 
-Canon path resolution no longer needs a bespoke two-pass. v3 resolved plain-path canon entries first to build a lookup table, then resolved entries referencing sibling canon names against it. Now that canon names are ordinary variables (§6.1) and variables resolve against each other by topological sort (§6.2), a canon entry naming a sibling is just a variable naming a variable, and `expandPathTokens` handles it like any other. Unresolved tokens pass through unchanged, so the standard missing-path warning fires with the unexpanded token visible in the path string.
+Library path resolution no longer needs a bespoke two-pass. v3 resolved plain-path library entries first to build a lookup table, then resolved entries referencing sibling library names against it. Now that library names are ordinary variables (§6.1) and variables resolve against each other by topological sort (§6.2), a library entry naming a sibling is just a variable naming a variable, and `expandPathTokens` handles it like any other. Unresolved tokens pass through unchanged, so the standard missing-path warning fires with the unexpanded token visible in the path string.
 
 ---
 
@@ -337,11 +337,11 @@ Canon path resolution no longer needs a bespoke two-pass. v3 resolved plain-path
 
 **Answers "where did this item come from" for every item the registry resolved** — its library set (or `project`), its source file, and, for a renamed import, the id it was imported from. Unlike the three reports below, it is not gated behind a flag: `runProvenanceMode` (`provenance.js`) runs unconditionally at the end of `compile()` and writes to `config._resolvedReports` (falling back to `<output>/Overview`, same as every other report).
 
-**`<rootDirName>.provenance.md` + `.provenance.csv`**, one row per registry entry. Columns: `ID`, `Source` (`canon:<set>` or `project`), `File` (`_source`, the absolute path), `Via` (the `import:` value, for rename-on-import — §17.4), `Status` (`resolved` or `ambiguous`).
+**`<rootDirName>.provenance.md` + `.provenance.csv`**, one row per registry entry. Columns: `ID`, `Source` (`library:<set>` or `project`), `File` (`_source`, the absolute path), `Via` (the `import:` value, for rename-on-import — §17.4), `Status` (`resolved` or `ambiguous`).
 
-**Reads the registry, not the compiled tree**, so it needs no leaf loop and costs nothing per branch — one pass over `registry` (the plain, uniquely-resolved keys) and one over `registry.ambiguous` (§17.3's contested ids, one row per rival rather than a single winner, since there isn't one). An id that exists in both canon and project is a load-time ERROR (`mergeRegistries`) and never reaches this report.
+**Reads the registry, not the compiled tree**, so it needs no leaf loop and costs nothing per branch — one pass over `registry` (the plain, uniquely-resolved keys) and one over `registry.ambiguous` (§17.3's contested ids, one row per rival rather than a single winner, since there isn't one). An id that exists in both a library set and the project is a load-time ERROR (`mergeRegistries`) and never reaches this report.
 
-**A rename-on-import item's row is `project`, not `canon:<set>`.** `id: dragon` over `import: wyvern` registers under `dragon` with `_source` pointing at the project file that declared the rename (`buildRegistry` only stamps `_canonSource` on canon-loaded items); `Via` carries `wyvern` so the row still answers "where did this come from" despite the local id having moved. A bare `import:` with no local `id:` never gets its own registry row at all — it resolves at render time to the canon item, whose row already carries its own canon provenance.
+**A rename-on-import item's row is `project`, not `library:<set>`.** `id: dragon` over `import: wyvern` registers under `dragon` with `_source` pointing at the project file that declared the rename (`buildRegistry` only stamps `_canonSource` on library-loaded items); `Via` carries `wyvern` so the row still answers "where did this come from" despite the local id having moved. A bare `import:` with no local `id:` never gets its own registry row at all — it resolves at render time to the library item, whose row already carries its own library provenance.
 
 **Not the same question as `library-dependencies.json`** (`compile.js`, written to `config._resolvedOutput`). That manifest is per-library-*directory*, keyed by library name; this report is per-*item*. The manifest existing does not mean this report is redundant with it.
 
@@ -357,7 +357,7 @@ These reports answer the authoring question "is this wired up the way I intended
 Partition rule (`buildSharedAndDeltas`): for each item id and each component block, collect its rendered text from every leaf. Identical in *all* leaves → `Shared.md`. Otherwise varying → each leaf's own version goes to that leaf's `.delta.md`; leaves where it is absent (`~`-excluded) silently omit it. Each `.delta.md` is therefore self-contained ("everything this branch has that isn't universal"), read against `Shared.md` once. Rendered-block granularity, no annotation.
 
 **`--with-annotate` → `Overview/<leaf>.annotate.md`** (`runAnnotateMode`).
-Per leaf, per item, field-level diff of `resolveItem(itemDef, registry, branchPath)` against the **project base** `resolveItem(itemDef, registry, [])` (empty branch path = project imports/overrides applied, no branch dispatch — *not* canon base). Because both sides share the same source tokens/variables, the only differences are branch-variant effects. Each changed field is attributed to the applied variant(s) whose delta touches that path (`collectDeltaKeyPaths` + prefix match), or flagged `unexplained` (the bleed signal). `~`-nulled items are reported explicitly; items identical to base with no variants are omitted (they live in `Shared.md`).
+Per leaf, per item, field-level diff of `resolveItem(itemDef, registry, branchPath)` against the **project base** `resolveItem(itemDef, registry, [])` (empty branch path = project imports/overrides applied, no branch dispatch — *not* library base). Because both sides share the same source tokens/variables, the only differences are branch-variant effects. Each changed field is attributed to the applied variant(s) whose delta touches that path (`collectDeltaKeyPaths` + prefix match), or flagged `unexplained` (the bleed signal). `~`-nulled items are reported explicitly; items identical to base with no variants are omitted (they live in `Shared.md`).
 
 **`--with-inventory` → `Overview/Inventory.md`** (`runInventoryMode` in `inventory.js`).
 Per leaf, `captureLeafInventory` walks the slot index and the occupant map into `{slot, gated, occupants}` records. Rendering compresses twice: branches are grouped by occupancy so a uniformly-filled slot is one row, and a row's branch set is written as a path pattern when one selects exactly that set. `branchPattern` verifies each candidate against the leaves it matches and returns null on an over-match, because a pattern claiming a placement that never happened would be indistinguishable from a correct one. Occupant order comes from `sortOccupants`, exported from `emit/components.js` so §7.4's `order:`-then-id rule stays stated in one place.

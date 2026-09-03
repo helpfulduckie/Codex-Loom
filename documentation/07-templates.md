@@ -360,7 +360,7 @@ Year: {%year}
 
 `{%key}` is expanded at the start of template rendering (and in item body fields before rendering), so it can appear anywhere in template or item content.
 
-Component key references (`{%name}`) are **not** expanded in templates or item bodies. They are resolved only in path/prose contexts — `compile.yaml` config paths (canon, templates, components), component specs, `include:` paths, opening prose, and description config. Do not use `{%name}` inside an item `body:` or a `.template`; it will be emitted verbatim. See the comparison below.
+Component key references (`{%name}`) are **not** expanded in templates or item bodies. They are resolved only in path/prose contexts — `compile.yaml` config paths (library, templates, components), component specs, `include:` paths, opening prose, and description config. Do not use `{%name}` inside an item `body:` or a `.template`; it will be emitted verbatim. See the comparison below.
 
 ---
 
@@ -373,7 +373,7 @@ Codex Loom has two compile-time token families. `{%}` is the *path/value* family
 | `{%key}` | Compile variable | `compile.yaml` `variables:` (root + per-branch), and every `structure.input.library` name | a string value (recursive, cycle-detected; ERROR if undeclared) | item `id`/`name`/`body`/`aid`/`render` (string values), templates, opening prose, component specs, config paths, `include:` paths, branch `title`/`protagonist` |
 | `{$v.key}` / `{$Id.body.field}` | Field reference | an item's `v:` block / another item's fields | an item field value | templates, and item `body`/`aid`/`render`/`name` fields (the `{$…}` interpolation + cross-item + pronoun passes) |
 
-**Canon and library names are auto-exposed as `{%}` variables**, so `{%characters}/Aness.yaml` resolves against a path declared under `structure.input`. That is the only naming system for these references. A canon or library name colliding with a declared variable is an ERROR (`CL0521`), since the two share a namespace.
+**Library names are auto-exposed as `{%}` variables**, so `{%characters}/Aness.yaml` resolves against a path declared under `structure.input`. That is the only naming system for these references. A library name colliding with a declared variable is an ERROR (`CL0521`), since the two share a namespace.
 
 **Scope caveat:** `{%}` in `include:`/`import:` paths uses **root** `variables:` only — includes resolve once, before branches are enumerated, so per-branch variable overrides are not in scope there. Everywhere else `{%}` uses the full root → branch merge.
 

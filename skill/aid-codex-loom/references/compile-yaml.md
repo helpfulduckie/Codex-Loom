@@ -18,9 +18,9 @@ structure:
   input:
     items:                        # sequence of project item directories
       - ./Codex
-    library:                      # named mapping of shared/canonical directories
-      characters: '{%canon}/_General/Characters'
-      lore: '{%canon}/_General/Lore'
+    library:                      # named mapping of shared library directories
+      characters: '{%shared}/_General/Characters'
+      lore: '{%shared}/_General/Lore'
     templates:                    # sequence; later directories override earlier on name collision
       - '{%loom}/templates'
       - ./templates
@@ -32,7 +32,7 @@ protagonist: Aness                # global default protagonist ID (case-insensit
 
 variables:                        # key-value pairs; used as {%key}
   loom: ../../../_CodexLoom
-  canon: '{%loom}/Canon'
+  shared: '{%loom}/Library'
   setting: The Royal Academy
 
 roles:                            # name → item id; used as {$LI}, merged down the branch chain
@@ -98,7 +98,7 @@ branches:
 Sequence of directories to load project item YAML files from. All `.yaml` files loaded recursively. **Named `items`, not `cards`** — an item is the definition, and a story card is one of the things it can render into.
 
 ### `library`
-Named mapping of shared source directories — canon characters, house-style components — typically outside the project. All item files loaded recursively, names matched case-insensitively.
+Named mapping of shared source directories — library characters, house-style components — typically outside the project. All item files loaded recursively, names matched case-insensitively.
 
 **Each library name is automatically exposed as a `{%name}` variable**, so an entry can be referenced in paths without declaring it twice.
 
@@ -125,7 +125,7 @@ Must be `4`. Required.
 Global default protagonist ID, overridable per branch. Matched case-insensitively against item `id`.
 
 ### `variables`
-Key-value pairs available in templates and field values as `{%key}`. Variables resolve against other variables, so `canon: '{%loom}/Canon'` works. Branch variables merge on top of parent variables.
+Key-value pairs available in templates and field values as `{%key}`. Variables resolve against other variables, so `shared: '{%loom}/Library'` works. Branch variables merge on top of parent variables.
 
 ### `roles`
 Name-to-item-id bindings, referenced in prose as `{$LI}`. Merges down the branch chain key by key; `~` unbinds. `protagonist` is an ordinary entry here rather than a separate mechanism. Full semantics in `references/roles.md`.

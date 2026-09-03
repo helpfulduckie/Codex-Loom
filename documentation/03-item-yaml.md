@@ -59,7 +59,7 @@ Items are the atomic units of content in a Codex Loom project — a character, a
 
 Compiler-internal identifier. Used to look up this item in the registry, in `import:` directives, and in pronoun tokens (`{$Aness}`). Defaults to `name` if absent. Case-insensitive for matching.
 
-Must be unique across all canon and project items — collision is an error.
+Must be unique across all library and project items — collision is an error.
 
 ```yaml surface=item
 id: Aness
@@ -127,7 +127,7 @@ The rule is that soft heuristics skip reference items and hard limits apply to e
 
 **A `reference` item's compiled card carries `kind: reference` in its fence.** Velvet Lattice keeps unrecognized fence keys as metadata and never forwards them to AID, so the key changes nothing about the uploaded card — it is there so the reports, which read the compiled tree rather than your YAML, can tell which cards to treat as reference material.
 
-**`kind:` is a property of the copy, not of the canon item.** Importing a narrative item and declaring `kind: reference` on the import makes that copy reference material and leaves the canon item alone. Variants can change it too.
+**`kind:` is a property of the copy, not of the library item.** Importing a narrative item and declaring `kind: reference` on the import makes that copy reference material and leaves the library item alone. Variants can change it too.
 
 ---
 
@@ -227,7 +227,7 @@ That item needs no `notesTemplate` declaration — the project default renders i
 
 **Opting out needs no syntax.** A template that renders empty suppresses the `notes:` line entirely, so `{if $notes.known}[e]{/if}` writes nothing for an item that never set the flag.
 
-A mapping under `notes:` merges subfield-wise across variants and canon, the same way `aid:` and `render:` do — so canon can define a base marker config that a project appends to, and a variant setting one key leaves the others alone.
+A mapping under `notes:` merges subfield-wise across variants and the shared library, the same way `aid:` and `render:` do — so a library item can define a base marker config that a project appends to, and a variant setting one key leaves the others alone.
 
 ---
 

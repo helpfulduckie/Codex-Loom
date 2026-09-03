@@ -18,8 +18,8 @@ lint:
     stat-tracker:
       source: ./lint/stat-tracker.cl.yaml          # a project-local pack
       level: error
-    canon-mod:
-      source: '{%general}/lint/canon-mod.cl.yaml'  # travels with a library set
+    library-mod:
+      source: '{%general}/lint/library-mod.cl.yaml'  # travels with a library set
 ```
 
 **`lint.packs` is a mapping because packs merge down the branch chain.** A branch inherits

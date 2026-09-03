@@ -12,8 +12,8 @@ currently holds.
 
 **A shared library moves, and a project should not have to move with it every time.**
 `structure.input.library` entries and shared components reached through `imports:` typically
-point outside the project — at a canon directory, or house-style AI Instructions shared
-across several scenarios. Left as ordinary paths, editing one of those files changes the
+point outside the project — at a shared-library directory, or house-style AI Instructions
+shared across several scenarios. Left as ordinary paths, editing one of those files changes the
 compiled output of every project that reaches it, the next time any of them compiles. A
 snapshot lets a project keep working against the library as it was on the day it was frozen,
 while the live library keeps moving for whoever is still editing it.
@@ -32,7 +32,7 @@ content, deliberately, when it is ready to.
 structure:
   input:
     library:
-      characters: '{%canon}/_General/Characters'
+      characters: '{%loom}/_General/Characters'
       sharedComponents: '{%loom}/AI Instructions'
     templates:
       - '{%loom}/templates'      # out-of-base — frozen

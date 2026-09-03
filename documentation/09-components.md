@@ -266,7 +266,7 @@ sections:
 Every component can pull in another with `imports:`, so one document can be written once and used by many projects. This is what `imports:` exists for: a single AI Instructions body currently sits in 67 places across the scenario corpus, reached by copy or by absolute path, and neither of those supports a variant, a branch dispatch, or a one-line override.
 
 ```yaml surface=component
-# shared/ai-instructions.cl.yaml — the canonical document
+# shared/ai-instructions.cl.yaml — the shared document
 sections:
   narrativeTone:
     heading: Narrative Tone
@@ -308,7 +308,7 @@ sections:
 
 **`importVariants:` is a selector, not a declaration.** The name is looked up in each imported section's own `variants:`, and applied to every section that defines it. Sections that do not are silently unaffected — most of them will be, which is the point. A selector matching *no* section at all is `CL0326`, because a misspelling would otherwise apply to nothing and say nothing.
 
-**Paths resolve against the project base**, the same base `include:` and every `components:` entry use, and `{%variables}` expand first — including canon names, which are variables. A `from:` naming no file is `CL0606`; an import chain that loops is `CL0607` and the offending import is skipped rather than followed.
+**Paths resolve against the project base**, the same base `include:` and every `components:` entry use, and `{%variables}` expand first — including library names, which are variables. A `from:` naming no file is `CL0606`; an import chain that loops is `CL0607` and the offending import is skipped rather than followed.
 
 ### Full example
 

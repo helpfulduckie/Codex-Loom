@@ -15,8 +15,8 @@ opt-in: one runs only when a project names it in `lint.packs`.
 author.** A script like World Time Generator reads settings from a card's Notes field —
 allowed values, required keys, mutually exclusive markers. Baking one mod's rules into the
 compiler makes the Codex Loom maintainer a bottleneck for every mod anyone uses. A pack is
-inert data instead: a scenario author ships one alongside the canon it depends on, and
-consuming it is not a trust decision.
+inert data instead: a scenario author ships one alongside the shared library it depends on,
+and consuming it is not a trust decision.
 
 The bundled `wtg` pack is a worked example: its `[e]` / `/]` marker check is a regex over
 rendered markdown, run only for projects that load it. See [The bundled `wtg`
@@ -34,8 +34,8 @@ lint:
     stat-tracker:
       source: ./lint/stat-tracker.cl.yaml   # a project-local pack
       level: error
-    canon-mod:
-      source: '{%general}/lint/canon-mod.cl.yaml'  # travels with a canon set
+    library-mod:
+      source: '{%general}/lint/library-mod.cl.yaml'  # travels with a library set
 ```
 
 **`lint.packs` is a mapping, keyed by pack name, because packs merge down the branch
@@ -56,8 +56,8 @@ be `pack-name: {}`.
 
 **`source:` forms.** An absent `source:` means "bundled, by name" — the loader looks for
 `packs/<name>.cl.yaml` in Codex Loom's own `packs/` directory. A present `source:` is a
-path, resolved relative to the `compile.yaml` directory, with `{%token}` variables expanded. A canon-hosted pack gets
-versioned and frozen alongside the canon that depends on it (see The Library Snapshot).
+path, resolved relative to the `compile.yaml` directory, with `{%token}` variables expanded. A library-hosted pack gets
+versioned and frozen alongside the shared library that depends on it (see The Library Snapshot).
 
 **The config key must match the pack's declared `name:`.** Diagnostic codes are namespaced
 from the pack's own name, so a mismatch would make a hosted pack yield different codes in

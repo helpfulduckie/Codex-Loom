@@ -38,13 +38,14 @@ lookup searched every per-type map in sequence and returned the first name
 match, so `{@pe}` resolved identically no matter which type declared it — no
 project could depend on the grouping, because the grouping never worked.
 
-**Canon and library names are now auto-exposed as `{%variable}` tokens**, so
+**Library names are now auto-exposed as `{%variable}` tokens**, so
 `{%characters}/Aness.yaml` does what `{@characters}/Aness.yaml` used to. That
-leaves one naming system. A canon or library name colliding with a declared
+leaves one naming system. A library name colliding with a declared
 variable is an ERROR (`CL0521`), since the two now share a namespace.
 
-`--migrate` rewrites `{@}` references automatically: a canon name changes
-sigil, and a component alias is replaced by the value it was declared as.
+`--migrate` rewrites `{@}` references automatically: a name declared under the
+old `structure.input.canon` changes sigil, and a component alias is replaced by
+the value it was declared as.
 
 ---
 

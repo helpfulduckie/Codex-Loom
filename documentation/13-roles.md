@@ -9,8 +9,8 @@ another, without editing the prose itself.
 
 ## The motivating problem
 
-A canon card written once and reused across branches often needs to say something like
-"his betrayal cuts deep" — a hardcoded pronoun sitting next to a name that changes per
+A shared library card written once and reused across branches often needs to say something
+like "his betrayal cuts deep" — a hardcoded pronoun sitting next to a name that changes per
 branch. Naming the item directly (`{$Malcolm}`) breaks the moment a different branch casts
 someone else in that part; the pronoun breaks regardless, since nothing ties it to whoever
 is actually bound. `roles:` fixes the first half: a name that means "the current occupant

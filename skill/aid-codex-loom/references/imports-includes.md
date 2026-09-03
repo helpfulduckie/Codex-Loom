@@ -75,9 +75,9 @@ Loads a single item by ID and applies variant chains, overrides, and dispatch.
 
 ### Import resolution order
 
-1. Load canonical base item by ID
+1. Load library base item by ID
 2. Apply primary variant path (if ID has `/` suffix: `Zephon/human/noble`)
-3. Apply `importVariants:` list entries in order (each is a slash-separated variant path on the canon item)
+3. Apply `importVariants:` list entries in order (each is a slash-separated variant path on the library item)
 4. Apply top-level `body:` field overrides
 5. Apply top-level `name:`, `pronouns:`, `aid:`, `render:` overrides (if present)
 6. Resolve `branches:` dispatch → determine local variant names for the active branch
@@ -89,7 +89,7 @@ Loads a single item by ID and applies variant chains, overrides, and dispatch.
 
 ## `importVariants:`
 
-Applies named variant chains from the **canonical item's own variant tree**. Each entry is a slash-separated variant path applied in order.
+Applies named variant chains from the **library item's own variant tree**. Each entry is a slash-separated variant path applied in order.
 
 ```yaml
 - import: Zephon
@@ -97,20 +97,20 @@ Applies named variant chains from the **canonical item's own variant tree**. Eac
   # applies: human → human/noble → sci-fi → sci-fi/near-future
 ```
 
-`importVariants:` can also appear **inside a local branch variant** on the import, where it sources from the same canonical item:
+`importVariants:` can also appear **inside a local branch variant** on the import, where it sources from the same library item:
 
 ```yaml
 - import: Felicia
   variants:
     felix:
-      importVariants: [Felix]    # applies Felix variant from Felicia's canon variants
+      importVariants: [Felix]    # applies Felix variant from Felicia's library variants
       body:
         Tagline: +{; security officer}
   branches:
     felix: felix
 ```
 
-`importVariants:` always sources from the **original canonical item's** variant tree, not the partially resolved item.
+`importVariants:` always sources from the **original library item's** variant tree, not the partially resolved item.
 
 ---
 

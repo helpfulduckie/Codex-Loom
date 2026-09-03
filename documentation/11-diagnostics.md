@@ -761,7 +761,7 @@ fills the rest of the band.
 
 A convention pack codes its findings **outside the numeric bands**:
 `CL-<pack>/<rule-id>`, zero-padded to four digits — `CL-wtg/0001`. The prefix is the
-pack's declared `name:`, not whatever key the project used, so a pack hosted in a canon
+pack's declared `name:`, not whatever key the project used, so a pack hosted in a library
 set yields the same codes in every project that loads it and a suppression stays portable.
 
 Every `CL-` code is opinion-layer by construction — recognized by its `CL-` prefix, not by
@@ -790,21 +790,21 @@ matches no loaded `.template`. Both are matched case-insensitively, so `aid.type
 needs `Character.template`. The other cause is a `templateFor` slot file that does not
 define a list for that type on this branch.
 
-**`CL0324` / `CL0342` "import failed"** — the `import:` id resolves to no canon item. Check
-that the id matches the canon file's `id:` (or `name:` when `id:` is absent), that the file
+**`CL0324` / `CL0342` "import failed"** — the `import:` id resolves to no library item. Check
+that the id matches the library file's `id:` (or `name:` when `id:` is absent), that the file
 sits inside a declared `structure.input.library` directory, and — for a qualified reference
 — that the `set:` prefix names a declared library entry (`CL0341`) rather than a set that
 lacks the id (`CL0342`).
 
 **`CL0321` "variant not found" when the variant looks defined** — variant dispatch reads
 the **item definition's** own `variants:` tree. On an `import:`, `importVariants:` reads the
-**canonical item's** variant tree instead; the import's own `variants:` block holds only
+**library item's** variant tree instead; the import's own `variants:` block holds only
 local deltas for branch dispatch. A name in the wrong one of those two is `CL0321`.
 
 **`CL0330` "cross-item ref not found"** — `{$Id.body.Field}` is resolved after every item
 for the branch compiles, checking the branch's compiled items first and then the referenced
-item's canonical base. An item `~`-excluded from this branch is still reachable through that
-canonical fallback unless it has no canon entry at all; a genuine miss leaves the token
+item's base definition. An item `~`-excluded from this branch is still reachable through that
+base-definition fallback unless it has no definition at all; a genuine miss leaves the token
 as-is and raises `CL0330`.
 
 **`CL0330` covers a missing *item*, not a missing *field*.** If the item resolves but the

@@ -24,7 +24,7 @@ structure:
     items:                        # sequence of project item directories
       - ./Codex
     library:                      # named mapping of shared item/component directories
-      main: ../../_Canon
+      main: ../../_Library
       lore: ../../_Lore
     templates:                    # sequence of template directories (later overrides earlier)
       - ../../_SharedTemplates
@@ -96,14 +96,14 @@ items:
 
 ### `structure.input.library`
 
-A **named mapping** of directories containing shared item and component definitions —
-"canon," in author-facing terms, though the key covers more than characters and lore.
+A **named mapping** of directories containing shared item and component definitions — the
+project's **shared library**, though the key covers more than characters and lore.
 Each name is used in `{%name}` references and when reporting errors. All `.yaml`
 files are loaded recursively.
 
 ```yaml surface=config level=structure.input
 library:
-  main: ../../_Canon
+  main: ../../_Library
   lore: ./lore-items
 ```
 
@@ -122,7 +122,7 @@ This makes it practical to define a root path once as a variable and reference i
 
 ```yaml surface=config
 variables:
-  libraryRoot: C:\Shared\AID\_Canon
+  libraryRoot: C:\Shared\AID\_Library
 
 structure:
   input:
@@ -349,7 +349,7 @@ full severity and can still fail a build.
 for the compiler/lint split and which checks sit in which layer.
 
 `lint.packs` — convention packs — is a mapping keyed by pack name. `{}` names a bundled
-pack, `{ source: <path> }` a project-local or canon-hosted one, and either may carry a
+pack, `{ source: <path> }` a project-local or library-hosted one, and either may carry a
 per-pack `level:` ceiling. It is legal on a branch node and merges down the chain key-wise
 (`<name>: ~` unbinds an inherited pack), because which packs should validate a branch's
 `notes:` depends on which mods that branch ships. See [Convention Packs](14-convention-packs.md).

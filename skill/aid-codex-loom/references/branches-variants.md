@@ -143,22 +143,22 @@ Use `_: ~`, not `'*': ~`, here. A null wildcard is skipped, not honored — `'*'
 
 ## Worked Example
 
-**Canon item Felicia** has a `Felix` variant (male gender swap).
+**Library item Felicia** has a `Felix` variant (male gender swap).
 
 **Project import:**
 ```yaml
 - import: Felicia
   variants:
     felix:
-      importVariants: [Felix]   # apply canon Felix variant for this branch
+      importVariants: [Felix]   # apply library Felix variant for this branch
   branches:
     felix: felix                # dispatch to local "felix" variant
 ```
 
 For branch `felix`:
-1. Load canonical Felicia base
+1. Load Felicia base from the library
 2. Branch dispatch: `felix` → apply local `felix` variant
-3. Local `felix` has `importVariants: [Felix]` → apply `Felix` from canon
+3. Local `felix` has `importVariants: [Felix]` → apply `Felix` from the library
 4. Result: Felix Grayls with male pronouns
 
 For all other branches: Felicia as-is (no variant applied, no dispatch match).
