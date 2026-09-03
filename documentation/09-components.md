@@ -126,7 +126,10 @@ Naming every section is what makes the file overridable: an importing project ca
 
 ### Sections and slots
 
-```yaml surface=component
+A compiling version of this file, with the same four sections against a real project's
+items, is `examples/showcase/components/plot-essentials.cl.yaml`.
+
+```yaml surface=component from=showcase/components/plot-essentials.cl.yaml
 sections:
   genre:
     text: |
@@ -312,7 +315,7 @@ sections:
 
 ### Full example
 
-```yaml surface=component
+```yaml surface=component from=showcase/components/plot-essentials.cl.yaml
 sections:
   genre:
     text: |

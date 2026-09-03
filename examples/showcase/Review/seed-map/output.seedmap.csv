@@ -1,0 +1,20 @@
+Branch,Title,Type,Triggers,Seeded By,Seeded in Opening
+knight,Felix Grayls,character,2,0,FALSE
+knight,Kaiden Ross,character,2,0,FALSE
+knight,Elder Roshan,character,2,0,FALSE
+knight,Ilan Voss,character,2,0,TRUE
+knight,The Alchemists' Guild,faction,2,1,FALSE
+knight,The Royal Academy,location,2,5,FALSE
+knight,The Warrens,location,1,0,FALSE
+lowContext,Felicia Grayls,character,2,0,FALSE
+lowContext,Kaiden Ross,character,2,0,FALSE
+lowContext,Elder Roshan,character,2,0,FALSE
+lowContext,Ilan Voss,character,2,0,FALSE
+lowContext,The Alchemists' Guild,faction,2,1,FALSE
+lowContext,The Royal Academy,location,2,2,FALSE
+mage,Felicia Grayls,character,2,0,FALSE
+mage,Kaiden Ross,character,2,0,FALSE
+mage,Elder Roshan,character,2,0,FALSE
+mage,The Alchemists' Guild,faction,2,1,FALSE
+mage,The Royal Academy,location,2,4,FALSE
+mage,The Warrens,location,1,0,FALSE

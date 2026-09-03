@@ -25,6 +25,35 @@
  * A schema check is a floor: it proves a documented key exists and is well-typed, not that
  * the surrounding prose describes the behavior correctly.
  *
+ * ── 1b. Bound to example source (`from=` / `key=` / `exact`) ───────────────────
+ *
+ * A block may declare which piece of a compiling example project it corresponds to:
+ *
+ *     ```yaml surface=component from=showcase/components/plot-essentials.cl.yaml
+ *     ```yaml surface=item from=showcase/Codex/characters.cl.yaml key=Felicia
+ *     ```yaml surface=config from=showcase/compile.cl.yaml key=roles exact
+ *
+ * `from=` is a path under `examples/`; `key=` selects an item by `id` from a document that
+ * is a list, or a dotted path from one that is a mapping. Omit `key=` to name the whole file.
+ *
+ * **Two strengths, because a chapter snippet and an example are not the same artifact.** A
+ * chapter teaches with the smallest case that shows the construct; an example has to compile
+ * inside a project that exercises much more, so it carries extra fields, project-specific
+ * tokens and its own names. Making them byte-identical degrades both — the chapter picks up
+ * noise it was not trying to teach, and the example loses whatever the chapter's version
+ * omitted. Checked against the corpus (2026-09-02): zero of the documentation's YAML blocks
+ * deep-equal any of the 93 selectable pieces of `examples/`, and the closest three differ
+ * exactly where each side is doing its own job.
+ *
+ * So the default is a *pointer*: the file and key must exist. That is what catches an example
+ * renamed, moved or deleted out from under a chapter that cites it, and it is cheap enough to
+ * apply everywhere. Adding `exact` upgrades to deep equality, for a block whose prose claims
+ * it is quoting the example verbatim — there the drift the comparison catches is real, because
+ * the doc promised the two were the same.
+ *
+ * The other direction — every chapter having a worked example that points back at it — is
+ * `doc-refs.test.js`.
+ *
  * ── 2. Render-and-compare (a `transform=` / `expect=` fence pair) ──────────────
  *
  * For a chapter that shows an input and the output it produces, the two fences are tagged
@@ -339,6 +368,89 @@ describe('documentation YAML validates against its declared surface', () => {
         + '\nEither the doc names a key the compiler removed, or the annotation is wrong.',
       );
     }
+  });
+});
+
+describe('documentation blocks bound to example source match it', () => {
+  const EXAMPLES = path.join(__dirname, '../../examples');
+
+  /**
+   * Select the part of an example document a `key=` names.
+   *
+   * A list is an item file, so the key matches an `id` — case-insensitively, because item
+   * ids are matched that way everywhere else. A mapping is a config or component file, so
+   * the key is a dotted path walked down it. Returning `undefined` is what the test reports
+   * as "the doc names something the example no longer has", which is the interesting
+   * failure: it is how a snippet outlives the source it was copied from.
+   */
+  function select(doc, key) {
+    if (key === undefined) return doc;
+    if (Array.isArray(doc)) {
+      return doc.find((entry) => entry && typeof entry === 'object'
+        && String(entry.id || '').toLowerCase() === key.toLowerCase());
+    }
+    let node = doc;
+    for (const seg of key.split('.')) {
+      if (!node || typeof node !== 'object') return undefined;
+      node = node[seg];
+    }
+    return node;
+  }
+
+  /** A single-item list and the item itself are the same snippet shown two ways. */
+  function unwrap(value) {
+    return Array.isArray(value) && value.length === 1 ? value[0] : value;
+  }
+
+  const bound = yamlBlocks.filter((b) => parseInfo(b.info).from);
+
+  test('the binding annotation is in use', () => {
+    // A convention nobody writes rots silently. This is the floor, not the target — the
+    // per-chapter completeness check is doc-refs.test.js's job.
+    expect(bound.length).toBeGreaterThan(0);
+  });
+
+  test.each(bound.map((b) => [`${b.file}:${b.line}`, b]))('%s', (_label, b) => {
+    const ann = parseInfo(b.info);
+    const sourcePath = path.join(EXAMPLES, ...ann.from.split('/'));
+
+    if (!fs.existsSync(sourcePath)) {
+      throw new Error(
+        `${b.file}:${b.line} binds to examples/${ann.from}, which does not exist.\n`
+        + 'Either the example moved and the annotation needs following, or the binding is stale.',
+      );
+    }
+
+    const source = parseYaml(fs.readFileSync(sourcePath, 'utf8'), ann.from).value;
+    const selected = select(source, ann.key);
+    if (selected === undefined) {
+      throw new Error(
+        `${b.file}:${b.line} binds to key "${ann.key}" in examples/${ann.from}, which has no such entry.\n`
+        + 'The example was probably edited without following the doc snippet that quotes it.',
+      );
+    }
+
+    // A pointer binding stops here: the example it cites exists and still has the key.
+    if (!ann.exact) return;
+
+    const documented = unwrap(parseYaml(b.body, `${b.file}:${b.line}`).value);
+    if (!isDeepStrictEqual(documented, unwrap(selected))) {
+      throw new Error(
+        `${b.file}:${b.line} is annotated \`exact\` but no longer matches examples/${ann.from}`
+        + `${ann.key ? ` (key ${ann.key})` : ''}.\n`
+        + `--- doc shows ---\n${JSON.stringify(documented, null, 2)}\n`
+        + `--- example has ---\n${JSON.stringify(unwrap(selected), null, 2)}\n`
+        + '\nAdjudicate three ways: the doc may be stale, the example may have drifted, or the '
+        + 'two may have legitimately diverged — in which case drop `exact` and keep the pointer, '
+        + 'but fix any prose claiming the block is quoted verbatim.',
+      );
+    }
+  });
+
+  test('at least one binding is exact', () => {
+    // The pointer form is cheap enough to over-apply, and a set of bindings that are all
+    // pointers would prove the paths resolve while checking no content at all.
+    expect(bound.filter((b) => parseInfo(b.info).exact).length).toBeGreaterThan(0);
   });
 });
 

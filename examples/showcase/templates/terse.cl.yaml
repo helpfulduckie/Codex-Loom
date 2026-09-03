@@ -1,4 +1,5 @@
-# A context tier's slot file (documentation/15-context-tiering.md).
+# A context tier's slot file.
+# doc: 10-field-declarations.md#tiering--a-shorter-rendering-per-branch
 #
 # Project-local on purpose: a shared slot file would re-baseline every project that loads
 # the library. Only `templates:` is read here — a slot file's `fields:` block is ignored.

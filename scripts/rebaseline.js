@@ -2,19 +2,23 @@
 'use strict';
 
 /**
- * Regenerate the golden fixture baselines (v4 spec §14.3).
+ * Regenerate a baseline fixture set (v4 spec §14.3).
  *
- * A phase that changes output deliberately has to replace `v3/` and `v3-reports/` under
- * each fixture with what the new compiler produces. §14.3 calls the result "a reviewed,
- * committed artifact", and the review is the part a script can protect: it classifies
- * every changed line before writing anything and refuses outright when a change lands
- * outside the shape the phase declared.
+ * A change that moves output deliberately has to replace the committed baseline with what
+ * the new compiler produces. §14.3 calls the result "a reviewed, committed artifact", and
+ * the review is the part a script can protect: it classifies every changed line before
+ * writing anything and refuses outright when a change lands outside the declared shape.
  *
  *   node scripts/rebaseline.js                 report only, writes nothing
  *   node scripts/rebaseline.js --write         write the baseline, if the shape allows
  *   node scripts/rebaseline.js --allow body    widen the allowed shape for this run
  *   node scripts/rebaseline.js --only "Plot Essentials.md"  restrict which files may move
- *   node scripts/rebaseline.js "The Institute" one project rather than all three
+ *   node scripts/rebaseline.js --set golden    the private fixtures rather than examples/
+ *   node scripts/rebaseline.js showcase        one project rather than the whole set
+ *
+ * `--set` picks which fixture set to regenerate and defaults to `examples`, the committed
+ * one. The two sets differ only in their manifests; see `examples/projects.js` for what
+ * each field means and `__tests__/helpers/baselineHarness.js` for the reading half.
  *
  * The default allowed shape is `fence`, matching `EXPECTED_DIFF_CLASSES` in
  * `golden.test.js`. `--allow` exists because a later phase legitimately changes body text;
@@ -51,54 +55,84 @@ const { compile } = require('../src/compile');
 const { loadCompileConfig } = require('../src/config/load');
 const { classifyDiff, OPAQUE } = require('../__tests__/helpers/diffShape');
 
-const GOLDEN_DIR = path.resolve(__dirname, '..', 'goldenFixtures');
+const { DEFAULT_REPORT_MODES } = require('../__tests__/helpers/baselineHarness');
 
-// The fixtures are a separate private repo cloned into the gitignored goldenFixtures/ (see
-// .gitignore). Say so plainly rather than letting the require below throw MODULE_NOT_FOUND,
-// which names a file the reader has no reason to expect is missing.
-if (!fs.existsSync(path.join(GOLDEN_DIR, 'projects.js'))) {
-  console.error('rebaseline: goldenFixtures/ is not present, so there is no baseline to regenerate.');
-  console.error('The fixtures are a separate private repo. Clone it into goldenFixtures/ first:');
-  console.error('  git clone https://github.com/helpfulduckie/Codex-Loom-Fixtures.git goldenFixtures');
-  process.exit(1);
-}
+/**
+ * The two baseline fixture sets, keyed by `--set`. Each names a tree and the manifest
+ * inside it; the manifest's own fields say how that set is laid out. `examples` is the
+ * default because it is committed and therefore always regenerable — asking for `golden`
+ * on a checkout with no fixtures clone is an error worth stating plainly, but making it
+ * the default would mean the common case fails for most people.
+ */
+const SETS = {
+  examples: { dir: path.resolve(__dirname, '..', 'examples'), manifest: 'projects.js' },
+  golden: { dir: path.resolve(__dirname, '..', 'goldenFixtures'), manifest: 'projects.js' },
+};
 
-const {
-  PROJECTS, OUTPUT_SUBDIR, BASELINE_SUBDIR, SOURCE_SUBDIR, REPORTS_SUBDIR, REPORT_MODES,
-  COMPILE_REPORT_LAYOUT,
-} = require('../goldenFixtures/projects');
+function loadSet(name) {
+  const set = SETS[name];
+  if (!set) throw new Error(`Unknown --set "${name}". Known: ${Object.keys(SETS).join(', ')}`);
 
-/** Every report mode a project freezes, whichever of the two mechanisms produces it. */
-function allReportModes(project) {
-  return [...project.reports, ...(project.compileReports || [])];
+  // The goldens are a separate private repo cloned into the gitignored goldenFixtures/ (see
+  // .gitignore). Say so plainly rather than letting the require throw MODULE_NOT_FOUND,
+  // which names a file the reader has no reason to expect is missing.
+  if (!fs.existsSync(path.join(set.dir, set.manifest))) {
+    if (name === 'golden') {
+      console.error('rebaseline: goldenFixtures/ is not present, so there is no baseline to regenerate.');
+      console.error('The fixtures are a separate private repo. Clone it into goldenFixtures/ first:');
+      console.error('  git clone https://github.com/helpfulduckie/Codex-Loom-Fixtures.git goldenFixtures');
+      process.exit(1);
+    }
+    throw new Error(`rebaseline: ${name} set has no manifest at ${path.join(set.dir, set.manifest)}`);
+  }
+
+  // eslint-disable-next-line global-require, import/no-dynamic-require
+  const manifest = require(path.join(set.dir, set.manifest));
+  return {
+    root: set.dir,
+    PROJECTS: manifest.PROJECTS,
+    OUTPUT_SUBDIR: manifest.OUTPUT_SUBDIR,
+    BASELINE_SUBDIR: manifest.BASELINE_SUBDIR,
+    REPORTS_SUBDIR: manifest.REPORTS_SUBDIR,
+    SOURCE_SUBDIR: manifest.SOURCE_SUBDIR || '',
+    CONFIG_NAME: manifest.CONFIG_NAME || 'compile.yaml',
+    REPORT_MODES: manifest.REPORT_MODES || DEFAULT_REPORT_MODES,
+    REPORTS_IN_PLACE: manifest.REPORTS_IN_PLACE || false,
+    COMPILE_REPORT_LAYOUT: manifest.COMPILE_REPORT_LAYOUT || {},
+  };
 }
 
 // ── arguments ────────────────────────────────────────────────────────────────
 
-function parseArgs(argv) {
+function parseArgs(argv, loader = loadSet) {
   const allowed = new Set(['fence']);
   const only = [];
   const names = [];
   let write = false;
+  let setName = 'examples';
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--write') write = true;
     else if (arg === '--allow') allowed.add(argv[++i]);
     else if (arg === '--only') only.push(argv[++i]);
+    else if (arg === '--set') setName = argv[++i];
     else if (arg.startsWith('--')) throw new Error(`Unknown flag ${arg}`);
     else names.push(arg);
   }
 
+  const set = loader(setName);
   const projects = names.length === 0
-    ? PROJECTS
+    ? set.PROJECTS
     : names.map((name) => {
-      const found = PROJECTS.find((p) => p.name.toLowerCase() === name.toLowerCase());
-      if (!found) throw new Error(`Unknown fixture "${name}". Known: ${PROJECTS.map((p) => p.name).join(', ')}`);
+      const found = set.PROJECTS.find((p) => p.name.toLowerCase() === name.toLowerCase());
+      if (!found) throw new Error(`Unknown fixture "${name}". Known: ${set.PROJECTS.map((p) => p.name).join(', ')}`);
       return found;
     });
 
-  return { write, allowed, only, projects };
+  return {
+    write, allowed, only, projects, set, setName,
+  };
 }
 
 // ── file walking ─────────────────────────────────────────────────────────────
@@ -125,9 +159,13 @@ function copyFile(from, to) {
 // ── compile ──────────────────────────────────────────────────────────────────
 
 /** Compile every project into a temp copy of the fixture tree and run its frozen reports. */
-function buildTempTree(projects) {
+function buildTempTree(projects, set) {
+  const {
+    root, OUTPUT_SUBDIR, BASELINE_SUBDIR, REPORTS_SUBDIR, SOURCE_SUBDIR, CONFIG_NAME,
+    REPORT_MODES, REPORTS_IN_PLACE,
+  } = set;
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-rebaseline-'));
-  fs.cpSync(GOLDEN_DIR, tmpDir, {
+  fs.cpSync(root, tmpDir, {
     recursive: true,
     // Both committed baselines are the comparison target, not an input — and the report
     // baseline shares its path with where fresh reports are about to be written.
@@ -138,7 +176,7 @@ function buildTempTree(projects) {
     // "emits exactly the baseline file set" assertion. Phase 12 Session D hit this with
     // the Scripts/ lift and deleted the local dirs by hand; excluding it here is the fix.
     filter: (src) => {
-      const segments = path.relative(GOLDEN_DIR, src).split(path.sep);
+      const segments = path.relative(root, src).split(path.sep);
       return !segments.includes(BASELINE_SUBDIR) && !segments.includes(REPORTS_SUBDIR)
         && !segments.includes(OUTPUT_SUBDIR);
     },
@@ -147,19 +185,26 @@ function buildTempTree(projects) {
   for (const project of projects) {
     process.stdout.write(`compiling ${project.name}… `);
     quietly(() => {
-      const configPath = path.join(tmpDir, project.dir, SOURCE_SUBDIR, 'compile.yaml');
+      const configPath = path.join(tmpDir, project.dir, SOURCE_SUBDIR, CONFIG_NAME);
       const compileOptions = {};
       for (const mode of project.compileReports || []) compileOptions[mode] = true;
       compile(configPath, compileOptions);
 
+      // When reports are frozen in place, every mode writes under wherever
+      // `structure.reports` resolved and nothing is collected afterward — see
+      // `REPORTS_IN_PLACE` in examples/projects.js.
+      const reportBase = REPORTS_IN_PLACE
+        ? resolvedReportsDir(configPath)
+        : path.join(tmpDir, project.dir, REPORTS_SUBDIR);
+
       const scenarioRoot = path.join(tmpDir, project.dir, OUTPUT_SUBDIR);
       for (const mode of project.reports) {
-        const dir = path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
+        const dir = path.join(reportBase, mode);
         fs.mkdirSync(dir, { recursive: true });
         REPORT_MODES[mode]()(scenarioRoot, dir, false);
       }
 
-      collectCompileReports(project, configPath, tmpDir);
+      if (!REPORTS_IN_PLACE) collectCompileReports(project, configPath, tmpDir, set);
     });
     process.stdout.write('done\n');
   }
@@ -168,16 +213,27 @@ function buildTempTree(projects) {
 }
 
 /**
+ * Where `structure.reports` resolves for a config, read back via `loadCompileConfig` — a
+ * second, side-effect-free parse of the same file. `compile()` writes reports there and
+ * returns nothing that names the path.
+ */
+function resolvedReportsDir(configPath) {
+  const config = loadCompileConfig(configPath);
+  return config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
+}
+
+/**
  * Copy `diff`/`annotate`/`inventory` output into `v3-reports/<mode>/`. Mirrors
  * `golden.test.js`'s helper of the same job — `compile()` writes those three wherever
  * `structure.reports` resolves and returns nothing that names that path, so it is read
  * back via `loadCompileConfig`, a second side-effect-free parse of the same `compile.yaml`.
  */
-function collectCompileReports(project, configPath, tmpDir) {
-  const config = loadCompileConfig(configPath);
-  const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
+function collectCompileReports(project, configPath, tmpDir, set) {
+  const { REPORTS_SUBDIR, COMPILE_REPORT_LAYOUT } = set;
+  const reportBase = resolvedReportsDir(configPath);
   for (const mode of project.compileReports || []) {
     const layout = COMPILE_REPORT_LAYOUT[mode];
+    if (!layout) continue;
     const dir = path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
     fs.mkdirSync(dir, { recursive: true });
     if (layout.files) {
@@ -323,12 +379,37 @@ function printReport(label, report, { verbose }) {
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
+/**
+ * The report comparisons for one project, as `{ label, from, to }` triples.
+ *
+ * A collected set has one per mode, each in its own directory. A set frozen in place has
+ * exactly one covering the whole reports directory — nothing was collected, so there is no
+ * per-mode split to key on, and files no mode key names are inside it by construction.
+ */
+function reportUnits(project, set, tmpDir) {
+  const {
+    root, REPORTS_SUBDIR, REPORTS_IN_PLACE,
+  } = set;
+  const actual = path.join(tmpDir, project.dir, REPORTS_SUBDIR);
+  const expected = path.join(root, project.dir, REPORTS_SUBDIR);
+  if (REPORTS_IN_PLACE) return [{ label: 'reports', from: actual, to: expected }];
+  return [...project.reports, ...(project.compileReports || [])].map((mode) => ({
+    label: mode,
+    from: path.join(actual, mode),
+    to: path.join(expected, mode),
+  }));
+}
+
 function main() {
-  const { write, allowed, only, projects } = parseArgs(process.argv.slice(2));
+  const {
+    write, allowed, only, projects, set, setName,
+  } = parseArgs(process.argv.slice(2));
+  const { root, OUTPUT_SUBDIR, BASELINE_SUBDIR } = set;
+  console.log(`set: ${setName}`);
   console.log(`allowed diff shape: ${[...allowed].join(', ')}`);
   if (only.length > 0) console.log(`allowed only in: ${only.join(', ')}`);
 
-  const tmpDir = buildTempTree(projects);
+  const tmpDir = buildTempTree(projects, set);
   try {
     const results = [];
     let blocked = false;
@@ -336,7 +417,7 @@ function main() {
     for (const project of projects) {
       const output = diffTree(
         path.join(tmpDir, project.dir, OUTPUT_SUBDIR),
-        path.join(GOLDEN_DIR, project.dir, BASELINE_SUBDIR),
+        path.join(root, project.dir, BASELINE_SUBDIR),
         { markdownOnly: true },
       );
       printReport(`${project.name} — output`, output, { verbose: false });
@@ -358,15 +439,11 @@ function main() {
         }
       }
 
-      const reports = {};
-      for (const mode of allReportModes(project)) {
-        reports[mode] = diffTree(
-          path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode),
-          path.join(GOLDEN_DIR, project.dir, REPORTS_SUBDIR, mode),
-          { markdownOnly: false },
-        );
-        printReport(`${project.name} — report: ${mode}`, reports[mode], { verbose: false });
-      }
+      const reports = reportUnits(project, set, tmpDir).map((unit) => {
+        const diff = diffTree(unit.from, unit.to, { markdownOnly: false });
+        printReport(`${project.name} — report: ${unit.label}`, diff, { verbose: false });
+        return { ...unit, diff };
+      });
 
       results.push({ project, output, reports });
     }
@@ -383,7 +460,7 @@ function main() {
 
     for (const { project, output, reports } of results) {
       const from = path.join(tmpDir, project.dir, OUTPUT_SUBDIR);
-      const to = path.join(GOLDEN_DIR, project.dir, BASELINE_SUBDIR);
+      const to = path.join(root, project.dir, BASELINE_SUBDIR);
       let written = 0;
       for (const change of [...output.changed, ...output.added.map((rel) => ({ rel }))]) {
         if (!change.rel.endsWith('.md')) continue;
@@ -404,16 +481,13 @@ function main() {
         written += 1 + move.from.length;
       }
 
-      for (const mode of allReportModes(project)) {
-        const reportFrom = path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
-        const reportTo = path.join(GOLDEN_DIR, project.dir, REPORTS_SUBDIR, mode);
-        const report = reports[mode];
-        for (const change of [...report.changed, ...report.added.map((rel) => ({ rel }))]) {
-          copyFile(path.join(reportFrom, ...change.rel.split('/')), path.join(reportTo, ...change.rel.split('/')));
+      for (const unit of reports) {
+        for (const change of [...unit.diff.changed, ...unit.diff.added.map((rel) => ({ rel }))]) {
+          copyFile(path.join(unit.from, ...change.rel.split('/')), path.join(unit.to, ...change.rel.split('/')));
           written++;
         }
-        for (const rel of report.removed) {
-          fs.rmSync(path.join(reportTo, ...rel.split('/')), { force: true });
+        for (const rel of unit.diff.removed) {
+          fs.rmSync(path.join(unit.to, ...rel.split('/')), { force: true });
           written++;
         }
       }

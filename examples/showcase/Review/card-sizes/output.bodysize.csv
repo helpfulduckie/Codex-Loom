@@ -1,0 +1,29 @@
+Branch,Target,Title,Kind,Compiled,On Upload,Limit,Remaining,Status
+knight,Card,Elder Roshan,story,368,368,2000,1632,OK
+mage,Card,Elder Roshan,story,368,368,2000,1632,OK
+knight,Card,Ilan Voss,story,325,325,2000,1675,OK
+lowContext,Card,Ilan Voss,story,325,325,2000,1675,OK
+knight,Card,The Royal Academy,story,259,259,2000,1741,OK
+mage,Card,The Royal Academy,story,259,259,2000,1741,OK
+knight,Card,Kaiden Ross,story,215,215,2000,1785,OK
+mage,Card,Kaiden Ross,story,215,215,2000,1785,OK
+knight,Card,The Alchemists' Guild,reference,200,200,2000,1800,OK
+mage,Card,The Alchemists' Guild,reference,200,200,2000,1800,OK
+knight,Card,Felix Grayls,story,167,167,2000,1833,OK
+mage,Card,Felicia Grayls,story,165,165,2000,1835,OK
+lowContext,Card,Felicia Grayls,story,131,131,2000,1869,OK
+lowContext,Card,Elder Roshan,story,117,117,2000,1883,OK
+lowContext,Card,The Royal Academy,story,114,114,2000,1886,OK
+lowContext,Card,Kaiden Ross,story,113,113,2000,1887,OK
+knight,Card,AI Instructions — Scenario Rules Only,reference,110,110,2000,1890,OK
+lowContext,Card,AI Instructions — Scenario Rules Only,reference,110,110,2000,1890,OK
+mage,Card,AI Instructions — Scenario Rules Only,reference,110,110,2000,1890,OK
+knight,Card,The Warrens,story,103,103,2000,1897,OK
+mage,Card,The Warrens,story,103,103,2000,1897,OK
+lowContext,Card,The Alchemists' Guild,reference,97,97,2000,1903,OK
+knight,Card,AI Instructions — Full,reference,95,95,2000,1905,OK
+lowContext,Card,AI Instructions — Full,reference,95,95,2000,1905,OK
+mage,Card,AI Instructions — Full,reference,95,95,2000,1905,OK
+knight,Opening,Opening.md,leaf,65,104,4000,3896,OK
+mage,Opening,Opening.md,leaf,43,60,4000,3940,OK
+lowContext,Opening,Opening.md,leaf,16,33,4000,3967,OK

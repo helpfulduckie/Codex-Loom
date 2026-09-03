@@ -44,6 +44,18 @@ rather than resolving to the literal word `null`.
 to `"you"` when `Aness` is bound as `protagonist` on the active branch; it otherwise
 behaves like any other role.
 
+**The showcase project's `mage` branch is exactly this pair of moves, and it compiles.**
+Quoted verbatim from `examples/showcase/compile.cl.yaml`, where the project root binds
+`rival: Voss` and this branch rebinds one role while unbinding the other:
+
+```yaml surface=config level=branches.*.roles from=showcase/compile.cl.yaml key=branches.mage.roles exact
+LI: Felicia
+rival: ~                  # this branch has no rival
+```
+
+Read the rest of that file for how the two interact with `placeholders:` and `templateFor:`
+on the same branches.
+
 ---
 
 ## Using a role in prose

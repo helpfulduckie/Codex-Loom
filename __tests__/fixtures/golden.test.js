@@ -1,439 +1,62 @@
 'use strict';
 
 /**
- * Golden fixture harness (v4 spec §14.3).
+ * The golden fixture set (v4 spec §14.3).
  *
- * Compiles each frozen fixture project from its `Loom/` source into a temp copy of the
- * whole `goldenFixtures/` tree, then asserts the result is byte-for-byte identical to the
- * committed `v3/` output.
+ * Three real scenario projects, frozen on v3 before any v4 code was written, compiled from
+ * their migrated v4 sources and asserted byte-for-byte against the committed v3 output. The
+ * harness itself is `__tests__/helpers/baselineHarness.js`, shared with the example projects
+ * (`examples.test.js`); this file supplies the set and the one assertion that is specific to
+ * these fixtures.
  *
- * Phase 1 of the v4 rework is declared output-preserving with an EMPTY WHITELIST: any diff
- * this harness reports is a bug, not a re-baseline. Later phases change output deliberately
- * and re-baseline under review — see §14.3's expected-diff table before touching a fixture.
+ * **The goldens are a separate private repo cloned into the gitignored `goldenFixtures/`**,
+ * because the projects contain unpublished writing. Absent, this file has nothing to compile
+ * and the manifest require would throw at load time, failing the run for a reason that says
+ * nothing about the compiler — so the whole set registers as skipped instead, against a
+ * placeholder project whose name says why.
  *
- * "Under review" is enforced rather than trusted. Every differing file is classified by
- * `helpers/diffShape.js` into the line classes it touched, and the two assertions below
- * separate the questions §14.3 keeps distinct: *is this diff the shape we intended* (a
- * bug if not) and *has the baseline been regenerated yet* (a re-baseline if not). Setting
- * `EXPECTED_DIFF_CLASSES` for a phase is the deliberate act that declares the shape.
+ * **A skipped golden suite is silent in a green run**, which is the failure mode to watch
+ * for: `npm test` passing does not mean the goldens passed unless they ran. The example
+ * projects are committed and always run, which is why they now carry the standing obligation
+ * — see `examples/projects.js`.
  *
- * The tree is copied because each project's `compile.yaml` writes to `../Velvet Lattice/`
- * and reaches up three levels for shared canon and templates (`{%loom}: ../../../_CodexLoom`),
- * so neither the output nor the inputs can be redirected without breaking the relative paths.
+ * ── The re-baselining protocol ────────────────────────────────────────────────
+ *
+ * `expectedDiffClasses` and `expectedDiffFiles` below are §14.3's declaration of what the
+ * phase in progress is allowed to change. Empty and null mean "byte-for-byte, any diff is a
+ * bug" — the standing obligation. A phase that changes output deliberately widens them to
+ * exactly the classes and files its expected diff covers, never further, and re-baselines
+ * under review via `scripts/rebaseline.js`. A widened allowance is reset by the next phase
+ * rather than inherited: carrying one forward is the accumulation these constants exist to
+ * prevent. The history of which phase set what is in the session records, not here.
+ *
+ * The corpus has been byte-for-byte since Phase 10 Step 4.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { compile } = require('../../src/compile');
-const { loadCompileConfig } = require('../../src/config/load');
-const { classifyDiff, OPAQUE } = require('../helpers/diffShape');
+
+const { describeBaselineSet } = require('../helpers/baselineHarness');
 
 const GOLDEN_DIR = path.resolve(__dirname, '../../goldenFixtures');
-
-/**
- * The fixtures are three real scenario projects, so they are a separate private repo cloned
- * into this gitignored directory rather than files in this tree — see `.gitignore` for the
- * clone command.
- *
- * Absent, this file has nothing to compile, and the manifest require below would throw at
- * load time and fail the run for a reason that says nothing about the compiler. So the whole
- * suite is registered as skipped instead, against a placeholder project whose name says why.
- * Nothing else in the suite depends on these fixtures — the pathological fixture
- * (`__tests__/fixtures/pathological/`) is committed here and still covers the diagnostics.
- *
- * A skipped golden suite is silent in a green run, which is exactly the failure mode to
- * watch for: `npm test` passing does not mean the goldens passed unless they ran.
- */
 const HAVE_FIXTURES = fs.existsSync(path.join(GOLDEN_DIR, 'projects.js'));
 
 /**
- * `describe.each` rejects an empty array, so the absent case supplies one placeholder rather
- * than an empty project list. `reports` and `compileReports` are non-empty for the same
- * reason — the nested `describe.each(project.reports)` and
- * `describe.each(project.compileReports || [])` are still evaluated to collect test names even
- * when the enclosing describe is skipped. None of the three values is ever read: no hook body
- * runs.
+ * The set manifest lives beside the fixtures, because `scripts/rebaseline.js` regenerates
+ * what this file checks and the two must not drift apart. It predates the harness split and
+ * needs no edit for it: every field the harness added since — `CONFIG_NAME`, `SOURCE_SUBDIR`
+ * as a project-relative path, `REPORTS_IN_PLACE` — defaults to what this set already does.
  */
-const ABSENT = {
-  PROJECTS: [{
-    name: 'goldenFixtures/ is not cloned — see .gitignore', dir: '', reports: ['none'], compileReports: ['none'],
-  }],
-  OUTPUT_SUBDIR: '',
-  BASELINE_SUBDIR: '',
-  SOURCE_SUBDIR: '',
-  REPORTS_SUBDIR: '',
-  REPORT_MODES: {},
-};
+// eslint-disable-next-line global-require, import/no-dynamic-require
+const manifest = HAVE_FIXTURES ? require('../../goldenFixtures/projects') : null;
 
-/**
- * The line classes the phase in progress is allowed to change (v4 spec §14.3).
- *
- * Empty means "byte-for-byte, any diff is a bug" — the obligation for Phases 1, 4, 5, 7
- * and 9. An output-changing phase widens it to exactly the classes its expected diff
- * covers, and never further:
- *
- *   Phase 2 (emitter)     ['fence']        the envelope moves into emit/vl.js
- *   Phase 3 (item/slot)   ['body']         scoped by EXPECTED_DIFF_FILES, below
- *   Phase 6 (components)  ['body', 'title']  scoped by EXPECTED_DIFF_FILES, below
- *
- * Phase 2 is set to `fence` alone rather than `fence, title`, even though the heading is
- * half of what moved. The emitter's title ladder was checked against the corpus before it
- * was written: of 294 items carrying a title or a name, `aid.title` and `name.full` never
- * disagree, so no heading should change. Allowing `title` would buy nothing and would wave
- * through the one regression this move could plausibly cause — a card quietly renamed,
- * which in AID means a card the player sees under a different name.
- *
- * Phase 6's `title` is a different fact about a different file: AI Instructions.md's own
- * `## Heading` lines classify as `title` under `classifyDiff` (any `##`-prefixed line
- * does, not only a card's), and every one of them moves here — not because the heading
- * text changed, but because the file's source uses CRLF and the sections grammar always
- * renders LF (§7.6's `imports:` conversion, Step 5). `classifyDiff` splits on `\n` alone
- * specifically so a line-ending change surfaces rather than being normalized away, and this
- * is that check doing its job: every line of the file, headings included, differs by one
- * trailing `\r`. The content itself is unchanged — confirmed by rendering the converted
- * `sections:` document against the CRLF source with only its line endings normalized.
- *
- * Phase 10 Step 4 (the roles gap, §9.2/§9.3) resets this to `['body']` alone rather than
- * inheriting Phase 6's `title` — nothing here touches a heading, and carrying an unused
- * allowance forward is exactly the accumulation this constant exists to prevent. Scoped
- * to two files by `EXPECTED_DIFF_FILES` below, both hand-edited to carry a `{$role}`
- * reference that resolves once `writeFramingRecursive` and the root Description render
- * receive a roles table (`compile.js`) — everything else in both projects is untouched
- * source, so a diff anywhere else is the regression this scoping exists to catch.
- *
- * Phase 14 Step 0 resets both to the byte-identical obligation (`[]` / `null`). The corpus
- * has been byte-for-byte since Phase 10 Step 4 landed — every phase since (11, 12, 13) was
- * output-preserving and neither constant was consulted — so carrying the Phase 10 allowance
- * forward is the same stale accumulation those resets exist to stop. Step 0's own change
- * (the `renderPlacementBody` ladder guard) is output-preserving: no golden tiers a
- * component, so its rung 2 is empty and rung 1 still resolves `aid.type` unchanged.
- */
-const EXPECTED_DIFF_CLASSES = [];
-
-/**
- * The files the phase in progress is allowed to change, when the class alone cannot say.
- *
- * The classes name parts of an envelope, so they only discriminate on files that have
- * one. `Plot Essentials.md` carries no `##` heading and no `~~~` fence, so every line in
- * it is `body`, and `body` on its own would wave through a rewritten story card as readily
- * as a restructured component. That was noted as a limit of the classes when Phase 2 set
- * them, with the observation that a phase landing in a component file would need a
- * per-file expectation instead. Phase 3 is that phase, and this is that expectation.
- *
- * `AI Instructions.md` is the same idea for Phase 6, and needs `title` as well as `body`
- * in its allowance because, unlike Plot Essentials, its prose is itself written with `##`
- * headings — `## Narration`, `## Character` — which `classifyLines` reads exactly like a
- * card's `## Title` line. Restricting the file list is what keeps that allowance from
- * reaching a story card, where a `title`-class change is the regression the classes exist
- * to catch.
- *
- * `null` means "no file restriction" and is the setting for a phase whose classes already
- * discriminate. Widening this is the same deliberate act as widening the classes: it says
- * which files a reviewer looked at, and nothing outside them may move.
- *
- * Phase 10 Step 4 replaces Phase 6's list rather than adding to it — `Components/Plot
- * Essentials.md` and `Components/AI Instructions.md` carry no role reference in either
- * project and are not part of this step's diff. The two paths below are exactly the two
- * files hand-edited to prove the fix: Baseline's root `Description.md`, and The
- * Institute's one converted interior framing at `Free Form/Aness` — every other of that
- * project's 31 other `Who owns you?`/`Do they love or hate you?` occurrences stays a
- * literal string outside `renderSectionedComponent` entirely, so this pattern is the
- * whole of what should move.
- *
- * Phase 14 Step 0 sets this back to `null` alongside emptying `EXPECTED_DIFF_CLASSES` —
- * with no allowed classes there is no file scoping to do, and the Phase 10 pattern has
- * been unconsulted for three phases.
- */
-const EXPECTED_DIFF_FILES = null;
-
-// The fixture set itself lives beside the fixtures, because `scripts/rebaseline.js`
-// regenerates what this file checks and the two must not drift apart.
-const {
-  PROJECTS, OUTPUT_SUBDIR, BASELINE_SUBDIR, SOURCE_SUBDIR, REPORTS_SUBDIR, REPORT_MODES,
-  COMPILE_REPORT_LAYOUT,
-// eslint-disable-next-line global-require
-} = HAVE_FIXTURES ? require('../../goldenFixtures/projects') : { ...ABSENT, COMPILE_REPORT_LAYOUT: {} };
-
-/**
- * Two things about that list are worth knowing here.
- *
- * The migrator runs at re-baseline time only, never in this harness: if the test migrated
- * on every run, a migrator bug and a compiler bug would produce the same red and there
- * would be no way to tell them apart. `SOURCE_SUBDIR` is the committed migrated source;
- * `Loom/` keeps the original v3 sources for comparison.
- *
- * Reports are frozen separately (§8.6) because `compile()` writes none — seed map, card
- * sizes and lint are post-hoc CLI modes that read the compiled tree back. So the whole
- * class of consumers that re-parses the VL format sat outside this harness, which is
- * exactly the code Phase 2 Step 2 retargeted onto `emit/vl.js:parseCards`. Retargeting a
- * parser with no output under test would be a refactor with nothing to refactor against:
- * the subtle behaviors — cards with no trigger list being skipped, quote characters
- * surviving into trigger values — are precisely what a rewrite normalizes away while
- * every unit test stays green.
- */
-
-let tmpDir;
-
-/** Collect every file under `dir` as a sorted list of paths relative to it. */
-function listFiles(dir) {
-  const out = [];
-  const walk = (current, prefix) => {
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const abs = path.join(current, entry.name);
-      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) walk(abs, rel);
-      else out.push(rel);
-    }
-  };
-  if (fs.existsSync(dir)) walk(dir, '');
-  return out.sort();
-}
-
-/**
- * The canon manifest is the one output that cannot match byte-for-byte: it stamps a fresh
- * `generatedAt` and embeds absolute paths, which differ between the temp compile and the
- * committed baseline. Normalizing keeps it under comparison rather than whitelisted — the
- * canon file lists themselves are exactly the sort of thing a loader refactor could break.
- */
-function normalizeManifest(raw, rootDir) {
-  const parsed = JSON.parse(raw);
-  delete parsed.generatedAt;
-  const root = rootDir.replace(/\\/g, '/').toLowerCase();
-  const scrub = (value) => {
-    if (typeof value === 'string') {
-      const unified = value.replace(/\\/g, '/')
-        // The manifest records which compile.yaml produced the output. The v4 sources
-        // live in v4/ and the v3 baseline was compiled from Loom/, so that segment
-        // differs by fixture scaffolding rather than by anything about the scenario.
-        .replace(/\/(v4|Loom)\/compile\.(cl\.)?ya?ml$/, '/<SOURCE>/compile.yaml');
-      return unified.toLowerCase().startsWith(root)
-        ? `<ROOT>${unified.slice(root.length)}`
-        : unified;
-    }
-    if (Array.isArray(value)) return value.map(scrub);
-    if (value && typeof value === 'object') {
-      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, scrub(v)]));
-    }
-    return value;
-  };
-  return scrub(parsed);
-}
-
-/**
- * Copy `diff`/`annotate`/`inventory` output into `v3-reports/<mode>/`, the same relative
- * path `REPORT_MODES` entries write to directly. `compile()` writes those three into
- * whatever `structure.reports` resolves to for the project, and returns nothing that names
- * that path, so it is read back the same way `compile.js` computed it — via
- * `loadCompileConfig`, which is a second, side-effect-free parse of the same `compile.yaml`.
- */
-function collectCompileReports(project, configPath) {
-  const config = loadCompileConfig(configPath);
-  const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
-  for (const mode of project.compileReports || []) {
-    const layout = COMPILE_REPORT_LAYOUT[mode];
-    const dir = path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
-    fs.mkdirSync(dir, { recursive: true });
-    if (layout.files) {
-      for (const f of layout.files) {
-        const src = path.join(reportBase, f);
-        if (fs.existsSync(src)) fs.copyFileSync(src, path.join(dir, f));
-      }
-    } else if (layout.subdir) {
-      const src = path.join(reportBase, layout.subdir);
-      if (fs.existsSync(src)) fs.cpSync(src, dir, { recursive: true });
-    }
-  }
-}
-
-beforeAll(() => {
-  // Jest runs a file's root hooks even when every describe in it is skipped, so this guard
-  // is what actually stops the absent case from compiling a fixture tree that is not there.
-  if (!HAVE_FIXTURES) return;
-
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-golden-'));
-
-  // Copy the fixture tree, skipping both committed baselines — they are the comparison
-  // target, not an input, and The Institute's output baseline alone is ~890 files. The
-  // report baseline must be excluded for a second reason: the harness writes fresh
-  // reports to that same relative path inside the temp tree, and a copied baseline would
-  // survive there as a stale file the file-set assertion could not tell from a real one.
-  // OUTPUT_SUBDIR ("Velvet Lattice/") is excluded for a third: it is gitignored compiler
-  // output, absent on a clean clone, but a checkout where the CLI was run against a
-  // fixture directly keeps a stale copy — and this harness does not pass --clean, so an
-  // orphan per-leaf dir the current compiler no longer writes would break the
-  // "emits exactly the baseline file set" assertion.
-  fs.cpSync(GOLDEN_DIR, tmpDir, {
-    recursive: true,
-    filter: (src) => {
-      const segments = path.relative(GOLDEN_DIR, src).split(path.sep);
-      return !segments.includes(BASELINE_SUBDIR) && !segments.includes(REPORTS_SUBDIR)
-        && !segments.includes(OUTPUT_SUBDIR);
-    },
-  });
-
-  // compile() is chatty; a fixture run would otherwise bury the actual assertions.
-  const quiet = ['log', 'warn', 'error'].map((level) => jest.spyOn(console, level).mockImplementation(() => {}));
-  try {
-    for (const project of PROJECTS) {
-      const configPath = path.join(tmpDir, project.dir, SOURCE_SUBDIR, 'compile.yaml');
-      const compileOptions = {};
-      for (const mode of project.compileReports || []) compileOptions[mode] = true;
-      compile(configPath, compileOptions);
-
-      // Reports run post-hoc against the tree that compile just wrote, which is how the
-      // CLI invokes them — so what is frozen is what a user would get.
-      const scenarioRoot = path.join(tmpDir, project.dir, OUTPUT_SUBDIR);
-      for (const mode of project.reports) {
-        const dir = path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
-        fs.mkdirSync(dir, { recursive: true });
-        REPORT_MODES[mode]()(scenarioRoot, dir, false);
-      }
-
-      // `diff`/`annotate`/`inventory` already wrote during the compile() call above,
-      // gated on the flags just set — this only collects what landed into place.
-      collectCompileReports(project, configPath);
-    }
-  } finally {
-    quiet.forEach((spy) => spy.mockRestore());
-  }
-}, 600000);
-
-afterAll(() => {
-  if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
-});
-
-(HAVE_FIXTURES ? describe : describe.skip).each(PROJECTS)('$name', (project) => {
-  let actualDir;
-  let expectedDir;
-
-  beforeAll(() => {
-    actualDir = path.join(tmpDir, project.dir, OUTPUT_SUBDIR);
-    expectedDir = path.join(GOLDEN_DIR, project.dir, BASELINE_SUBDIR);
-  });
-
-  test('emits exactly the baseline file set', () => {
-    expect(listFiles(actualDir)).toEqual(listFiles(expectedDir));
-  });
-
-  /**
-   * Every file that differs from the baseline, with the line classes its diff touched.
-   *
-   * Only `.md` output is classifiable — it is the format the emitter owns. Anything else
-   * that differs is reported as `opaque`, which no phase's expected shape may contain, so
-   * a changed script or manifest can never pass as an intended fence-only diff.
-   */
-  function collectDifferences() {
-    const differences = [];
-    for (const rel of listFiles(expectedDir)) {
-      const actualPath = path.join(actualDir, ...rel.split('/'));
-      const expectedPath = path.join(expectedDir, ...rel.split('/'));
-      if (!fs.existsSync(actualPath)) continue; // reported by the file-set test
-
-      if (path.basename(rel) === 'library-dependencies.json') {
-        const actual = normalizeManifest(fs.readFileSync(actualPath, 'utf8'), path.join(tmpDir));
-        const expected = normalizeManifest(fs.readFileSync(expectedPath, 'utf8'), GOLDEN_DIR);
-        if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-          differences.push({ rel, classes: [OPAQUE], summary: `${rel} — manifest contents differ` });
-        }
-        continue;
-      }
-
-      if (fs.readFileSync(actualPath).equals(fs.readFileSync(expectedPath))) continue;
-
-      if (!rel.endsWith('.md')) {
-        differences.push({ rel, classes: [OPAQUE], summary: `${rel} — non-markdown output differs` });
-        continue;
-      }
-
-      const diff = classifyDiff(
-        fs.readFileSync(expectedPath, 'utf8'),
-        fs.readFileSync(actualPath, 'utf8'),
-      );
-      differences.push({
-        rel,
-        classes: diff.classes,
-        summary: `${rel} — ${diff.classes.join('+')} (${diff.changedLines} lines) ${diff.samples.join(' | ')}`,
-      });
-    }
-    return differences;
-  }
-
-  /**
-   * The bug assertion. A diff outside the phase's declared shape is a regression whatever
-   * the phase is doing — during Phase 2 this is what stays green while the re-baseline
-   * assertion below goes red.
-   */
-  test('no file differs outside the phase\'s expected diff shape', () => {
-    const outside = collectDifferences()
-      .filter((d) => d.classes.some((c) => !EXPECTED_DIFF_CLASSES.includes(c))
-        || (EXPECTED_DIFF_FILES && !EXPECTED_DIFF_FILES.test(d.rel)))
-      .map((d) => d.summary);
-    expect(outside).toEqual([]);
-  });
-
-  /**
-   * The re-baseline assertion. Passes only against a regenerated baseline, so an intended
-   * output change cannot be left uncommitted — §14.3's "reviewed, committed artifact".
-   */
-  test('every emitted file is byte-identical to the baseline', () => {
-    const differing = collectDifferences().map((d) => d.summary);
-    expect(differing).toEqual([]);
-  });
-
-  /**
-   * Reports are byte-for-byte in every phase. They are derived views of output that is
-   * already under test, so a report diff means the derivation changed — which is a bug
-   * whether or not the phase is output-changing. Phase 5 reworks `--card-sizes` (§8.5)
-   * and re-baselines this deliberately; nothing before it should touch a byte.
-   */
-  describe.each(project.reports)(
-    'report: %s',
-    (mode) => {
-      const actual = () => path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
-      const expected = () => path.join(GOLDEN_DIR, project.dir, REPORTS_SUBDIR, mode);
-
-      test('emits exactly the baseline file set', () => {
-        expect(listFiles(actual())).toEqual(listFiles(expected()));
-      });
-
-      test('every file is byte-identical to the baseline', () => {
-        const differing = listFiles(expected()).filter((rel) => {
-          const a = path.join(actual(), ...rel.split('/'));
-          const b = path.join(expected(), ...rel.split('/'));
-          return !fs.existsSync(a) || !fs.readFileSync(a).equals(fs.readFileSync(b));
-        });
-        expect(differing).toEqual([]);
-      });
-    },
-  );
-
-  /**
-   * Same two assertions as the post-hoc reports above, against `diff`/`annotate`/`inventory`
-   * once `collectCompileReports` has copied their output into the same `v3-reports/<mode>/`
-   * shape — they differ only in how the harness produces the files under test, not in what
-   * "frozen" means once the files are in place.
-   */
-  describe.each(project.compileReports || [])(
-    'compile report: %s',
-    (mode) => {
-      const actual = () => path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
-      const expected = () => path.join(GOLDEN_DIR, project.dir, REPORTS_SUBDIR, mode);
-
-      test('emits exactly the baseline file set', () => {
-        expect(listFiles(actual())).toEqual(listFiles(expected()));
-      });
-
-      test('every file is byte-identical to the baseline', () => {
-        const differing = listFiles(expected()).filter((rel) => {
-          const a = path.join(actual(), ...rel.split('/'));
-          const b = path.join(expected(), ...rel.split('/'));
-          return !fs.existsSync(a) || !fs.readFileSync(a).equals(fs.readFileSync(b));
-        });
-        expect(differing).toEqual([]);
-      });
-    },
-  );
+const { getTmpDir } = describeBaselineSet({
+  root: GOLDEN_DIR,
+  manifest,
+  present: HAVE_FIXTURES,
+  absentReason: 'goldenFixtures/ is not cloned — see .gitignore',
+  expectedDiffClasses: [],
+  expectedDiffFiles: null,
 });
 
 /**
@@ -457,7 +80,7 @@ const { parseCards, isSubsequence } = require('../helpers/tier-wellformed');
   const read = (branch) => {
     const rel = CARD.map((s) => (s === '%b' ? branch : s));
     return fs.readFileSync(
-      path.join(tmpDir, 'Eldemyr', 'Coinflip Company', OUTPUT_SUBDIR, ...rel), 'utf8',
+      path.join(getTmpDir(), 'Eldemyr', 'Coinflip Company', manifest.OUTPUT_SUBDIR, ...rel), 'utf8',
     );
   };
 

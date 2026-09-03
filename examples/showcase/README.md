@@ -11,14 +11,27 @@ node src/cli.js ./examples/showcase --clean
 A clean run prints three branch rows, no `ERROR` and no `WARN`. Anything else is a
 regression — either in the compiler or in a documentation snippet this project copies.
 
-Every report mode also runs against it:
+Every report mode also runs against it. Each post-hoc mode needs its own flag, and
+`--clean` clears `output/` but never `Review/` — so a partial invocation leaves stale
+report directories behind rather than removing them:
 
 ```bash
 node src/cli.js --lint ./examples/showcase
 node src/cli.js ./examples/showcase --with-inventory --schema-tables
+node src/cli.js ./examples/showcase -l -o -s -b
 ```
 
-`output/` and `Review/` are generated and gitignored.
+**`output/` and `Review/` are committed, not generated-and-ignored.** They are the
+baseline `__tests__/fixtures/examples.test.js` asserts against byte-for-byte, and the
+worked output to read beside the source that produced it. Regenerate both through the
+re-baseliner, which classifies the diff before it will write anything:
+
+```bash
+node scripts/rebaseline.js
+```
+
+That is a dry run. Add `--write` once the reported diff is the one you intended, widening
+the allowed shape explicitly (`--allow body`) rather than by default — v4 spec §14.3.
 
 ---
 

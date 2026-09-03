@@ -1,5 +1,5 @@
-# The shared field table. Exercises every declaration key documented in
-# documentation/10-field-declarations.md § Declaration keys.
+# The shared field table. Exercises every declaration key in the chapter below.
+# doc: 10-field-declarations.md#declaration-keys
 
 fields:
   Tagline:     { label: Tagline }

@@ -299,9 +299,11 @@ This applies identically to local item definitions, `import:` entries, `include:
 
 ## Full Worked Example
 
+The same character, carrying more fields so it exercises both field operations and a branch
+dispatch, is `Felicia` in `examples/showcase/Codex/characters.cl.yaml`.
+
 **Library item:**
-```yaml surface=item
-- id: Felicia
+```yaml surface=item from=showcase/Codex/characters.cl.yaml key=Felicia
   name: {display: Felicia, full: Felicia Grayls}
   pronouns: female
   aid: {title: Felicia Grayls, type: Character, triggers: [Felicia, Grayls]}

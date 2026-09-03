@@ -20,9 +20,10 @@
 # Regenerate it before uploading; the unpacked tree is the thing to edit.
 /skill/*.skill
 
-# The showcase example is source; what it compiles to is not. Run it to regenerate.
-/examples/*/output/
-/examples/*/Review/
+# The example projects' compiled output is committed on purpose — it is the baseline
+# `__tests__/fixtures/examples.test.js` asserts against, and the worked output a reader
+# browses beside the source that produced it. Regenerate through `scripts/rebaseline.js`,
+# which classifies the diff before it will write; see v4 spec §14.3.
 
 
 # Ignore .clinerules while still figuring out cline

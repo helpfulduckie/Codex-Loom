@@ -1,4 +1,5 @@
-# Imports and includes (documentation/04-imports-and-includes.md).
+# Imports and includes.
+# doc: 04-imports-and-includes.md
 
 # Whole-file include, filtered by branch dispatch.
 - include: "{%main}/places.cl.yaml"

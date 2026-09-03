@@ -1,5 +1,6 @@
-# The sectioned grammar (documentation/09-components.md). A section carries `text:` or is
-# marked `slot: true`. A slot owns the wrapping of everything placed in it.
+# The sectioned grammar. A section carries `text:` or is marked `slot: true`. A slot owns
+# the wrapping of everything placed in it.
+# doc: 09-components.md#sections-and-slots
 
 sections:
   genre:

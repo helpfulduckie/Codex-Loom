@@ -1,4 +1,7 @@
 # Project items. A file is a YAML sequence and may mix definitions, imports and includes.
+# doc: 03-item-yaml.md
+# Felicia's Felix variant and its branch dispatch are the worked pair in:
+# doc: 05-branches-and-variants.md
 
 # The protagonist: no story card, one Plot Essentials "you" block.
 - id: Aria

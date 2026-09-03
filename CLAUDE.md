@@ -41,7 +41,15 @@ hatch for what a field list cannot express.
 Run: `npm test` (Jest — `test:unit`, `test:integration`, `test:coverage` also
 available). `npm run compile` compiles `test/compile.yaml` as a smoke check.
 
-## Fixtures — two kinds, and they fail differently
+## Fixtures — three kinds, and they fail differently
+
+**`examples/` freezes compiled output and is committed here.** The example projects are
+double-duty: worked examples `documentation/` points at, and the baseline
+`__tests__/fixtures/examples.test.js` asserts byte-for-byte. Because they are committed they
+always run, which is why they carry the standing output obligation. `examples/projects.js` is
+the set manifest; `__tests__/helpers/baselineHarness.js` is the harness it shares with the
+goldens; `scripts/rebaseline.js` regenerates a baseline, classifying the diff before it will
+write (`--set examples` is the default).
 
 **`__tests__/fixtures/pathological/` freezes the diagnostic stream.** Four projects that are
 wrong on purpose, with a committed snapshot of every code, severity, file and message they
@@ -57,14 +65,17 @@ writing, so they live in a separate private repo cloned into the gitignored `gol
 **If that directory is absent, this is all working as intended.** `golden.test.js` and
 `migrate.integration.test.js` register their suites as skipped, one `describe` in
 `emit-vl.test.js` skips, and everything else runs. The full suite with the goldens present is
-**2,179 across 82 suites** (as of Phase 17); without them the passing count is lower and the
-four fixture-dependent `describe`s register as skipped. **Do not try to repair this.** There is no missing dependency
-to install and no path to fix; the tests are skipping because the data they compare against is
-private. Treat that as green.
+**2,572 across 85 suites** (2026-09-02, examples harness session); without them the passing
+count is lower and the four fixture-dependent `describe`s register as skipped. **Do not try to
+repair this.** There is no missing dependency to install and no path to fix; the tests are
+skipping because the data they compare against is private. Treat that as green.
 
 **What this costs, and it is worth stating plainly:** a passing suite is no longer proof the
 goldens passed, because a skipped suite and a satisfied one both look green. If you have the
-fixtures, confirm they actually ran before calling an output-affecting change done.
+fixtures, confirm they actually ran before calling an output-affecting change done. **The
+`examples/` set narrows this but does not close it** — some baseline is now always checked, so
+a green run is no longer compatible with *nothing* having been compared, but the goldens cover
+scale and messiness the examples do not yet reach.
 
 ## Where a file gets written — the Phase 11 rule
 

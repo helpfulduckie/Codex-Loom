@@ -63,8 +63,13 @@ function runReports({
   const reportSummary = [];
 
   // Provenance report — always emitted from registry data, independent of leaf loop.
+  // Source paths are reported relative to the project directory (the one holding the
+  // compile config), so a shared report carries no machine-specific path and a committed
+  // baseline compares equal to one compiled anywhere else.
   const { runProvenanceMode } = require('./provenance');
-  const provenanceWritten = runProvenanceMode(registry, reportBase, rootDirName);
+  const provenanceWritten = runProvenanceMode(
+    registry, reportBase, rootDirName, path.dirname(configPath),
+  );
   reportSummary.push(`${provenanceWritten.length} provenance file(s)`);
 
   // The generated field reference, opt-in. Derived from the merged field table, not the
