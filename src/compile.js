@@ -286,9 +286,10 @@ function reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics) {
     groups.get(key).push(def);
   }
 
+  const branch = branchPath.join('/') || '(root)';
   for (const [source, items] of groups) {
     const names = resolveBranchSpec(
-      items[0]._include_branch_spec, branchPath, busWarner(diagnostics, { file: source }),
+      items[0]._include_branch_spec, branchPath, busWarner(diagnostics, { file: source, branch }),
     );
     if (names === null) continue; // the whole include is excluded from this branch
     for (const name of names) {
@@ -339,16 +340,17 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagno
 
   reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics);
 
+  const branch = branchPath.join('/') || '(root)';
   for (const itemDef of allItemDefs) {
     let item;
     try {
-      item = resolveItem(itemDef, registry, branchPath, busWarner(diagnostics, { file: itemDef._source }));
+      item = resolveItem(itemDef, registry, branchPath, busWarner(diagnostics, { file: itemDef._source, branch }));
     } catch (err) {
       const label = itemDef.id || itemDef.import || itemDef.name || '?';
       diagnostics.error(
         DIAG_CODES.ITEM_RESOLUTION_FAILED,
         `item "${label}" could not be resolved: ${err.message}`,
-        { file: itemDef._source },
+        { file: itemDef._source, branch },
       );
       continue;
     }
@@ -535,7 +537,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, branchP
   // when the branch declares no roles.
   applyRolePass(resolvedItems, { registry, roles, resolvedById, onRoleUsed });
 
-  applyCrossItemRefs(resolvedItems, registry, busWarner(diagnostics), resolvedById);
+  applyCrossItemRefs(resolvedItems, registry, busWarner(diagnostics, { branch: branchLabel }), resolvedById);
 
   // Expand render functions in body field values now that cross-item refs are resolved.
   // Dependency-ordered: a scan-build-sort-evaluate sequence over the same graph a chain
@@ -562,7 +564,8 @@ function renderBranchItems(resolvedItems, registry, templates, partials, branchP
 
   for (const item of resolvedItems) {
     applyPronounPasses(
-      item, registry, branchProtagonist, resolvedById, roles, busWarner(diagnostics), onRoleUsed,
+      item, registry, branchProtagonist, resolvedById, roles,
+      busWarner(diagnostics, { branch: branchLabel }), onRoleUsed,
     );
 
     // The item says where it goes. Read once, here, and used for both outputs.

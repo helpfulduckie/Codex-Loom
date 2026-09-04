@@ -48,6 +48,19 @@ describe('Diagnostic.format', () => {
     expect(d.format()).toBe('WARN CL0101\n  one\n  two');
   });
 
+  test('appends the branch to the header when the diagnostic carries one', () => {
+    const d = new Diagnostic({
+      code: 'CL0542', severity: SEVERITY.ERROR, message: 'role "LI" does not resolve on this branch.',
+      file: 'compile.cl.yaml', branch: 'felix/hard',
+    });
+    expect(d.format().split('\n')[0]).toBe('ERROR CL0542 compile.cl.yaml (branch felix/hard)');
+  });
+
+  test('renders the branch after a bare code when there is no location', () => {
+    const d = new Diagnostic({ code: 'CL0542', severity: SEVERITY.ERROR, message: 'x', branch: '(root)' });
+    expect(d.format().split('\n')[0]).toBe('ERROR CL0542 (branch (root))');
+  });
+
   test('appends an indented hint when present', () => {
     const d = new Diagnostic({
       code: 'CL0210',
@@ -159,6 +172,20 @@ describe('busWarner', () => {
     const onWarn = busWarner(bus, { file: 'x.cl.yaml', line: 4 });
     onWarn('CL0321', 'variant not found');
     expect(bus.all[0].location).toBe('x.cl.yaml:4');
+  });
+
+  test('carries a supplied branch onto the diagnostic — the model layer cannot name it', () => {
+    const bus = new Diagnostics();
+    const onWarn = busWarner(bus, { file: 'x.cl.yaml', branch: 'a/b' });
+    onWarn('CL0542', 'role "LI" does not resolve on this branch.');
+    expect(bus.all[0].branch).toBe('a/b');
+    expect(bus.all[0].format()).toMatch(/^ERROR CL0542 x\.cl\.yaml \(branch a\/b\)\n/);
+  });
+
+  test('leaves branch null when the location names none', () => {
+    const bus = new Diagnostics();
+    busWarner(bus, { file: 'x.cl.yaml' })('CL0321', 'variant not found');
+    expect(bus.all[0].branch).toBeNull();
   });
 });
 

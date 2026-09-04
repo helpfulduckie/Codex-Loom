@@ -48,9 +48,9 @@ ERROR CL0201 compile.cl.yaml
 exports[`pathological fixture placement invariants and latent placeholder content 1`] = `
 "WARN CL0326 Codex/items.cl.yaml
   importVariants selector "wrm" matched none of the 3 items included from lore.cl.yaml. A selector aimed at every item in a file is silent where an item does not define the name (§7.6.2a), so a misspelling applies to nothing and changes nothing — this is the only report it produces.
-WARN CL0327 Codex/items.cl.yaml
+WARN CL0327 Codex/items.cl.yaml (branch open)
   branch spec maps '*' to ~ (a null wildcard). Read literally that excludes the item from every branch, which is never what anyone means, so the walker skips it and the item stays included everywhere — the opposite of how it reads. Use '_: ~' as the catch-all to drop the branches you did not name.
-WARN CL0328 Codex/items.cl.yaml
+WARN CL0328 Codex/items.cl.yaml (branch open)
   field "DriftedOp.Tagline" operation "-{in a controlled bun}" targets "in a controlled bun", which the current value does not contain — it removes and replaces nothing. A \`-{}\` or \`/{}/{}\` that matches nothing is always a mistake: usually the text it was written against has drifted. Check the value, or drop the op.
 ERROR CL0325 Codex/items.cl.yaml
   two item definitions resolve to id "anchor" on this branch.
@@ -93,17 +93,17 @@ ERROR CL0415 templates/Unclosed.template
   Unclosed {if $body.Tagline} block.
 ERROR CL0433 Codex/items.cl.yaml
   leaked template tag {if $body.Tagline} in item "UnclosedBlock" (character)
-ERROR CL0541
+ERROR CL0541 (branch open)
   "Anchor" is both a declared role and an item id, which is ambiguous — rename one (§9.3).
-ERROR CL0542
+ERROR CL0542 (branch open)
   role "Missing" is bound to "NoSuchItem", which does not resolve on this branch.
-ERROR CL0540
+ERROR CL0540 (branch open)
   "{$Missing}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
-ERROR CL0543
+ERROR CL0543 (branch open)
   role "Loop" is bound to "LI", which is itself a role — a role must resolve directly to an item id, one level of indirection always (§9.3).
-ERROR CL0540
+ERROR CL0540 (branch open)
   "{$Loop}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
-ERROR CL0540
+ERROR CL0540 (branch open)
   "{$Undeclared}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
   unresolved token {$Missing} in item "RoleTester" (character)
@@ -159,17 +159,17 @@ ERROR CL0415 templates/Unclosed.template
   Unclosed {if $body.Tagline} block.
 ERROR CL0433 Codex/items.cl.yaml
   leaked template tag {if $body.Tagline} in item "UnclosedBlock" (character)
-ERROR CL0541
+ERROR CL0541 (branch gated)
   "Anchor" is both a declared role and an item id, which is ambiguous — rename one (§9.3).
-ERROR CL0542
+ERROR CL0542 (branch gated)
   role "Missing" is bound to "NoSuchItem", which does not resolve on this branch.
-ERROR CL0540
+ERROR CL0540 (branch gated)
   "{$Missing}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
-ERROR CL0543
+ERROR CL0543 (branch gated)
   role "Loop" is bound to "LI", which is itself a role — a role must resolve directly to an item id, one level of indirection always (§9.3).
-ERROR CL0540
+ERROR CL0540 (branch gated)
   "{$Loop}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
-ERROR CL0540
+ERROR CL0540 (branch gated)
   "{$Undeclared}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
   unresolved token {$Missing} in item "RoleTester" (character)
@@ -228,17 +228,17 @@ ERROR CL0415 templates/Unclosed.template
   Unclosed {if $body.Tagline} block.
 ERROR CL0433 Codex/items.cl.yaml
   leaked template tag {if $body.Tagline} in item "UnclosedBlock" (character)
-ERROR CL0541
+ERROR CL0541 (branch silent)
   "Anchor" is both a declared role and an item id, which is ambiguous — rename one (§9.3).
-ERROR CL0542
+ERROR CL0542 (branch silent)
   role "Missing" is bound to "NoSuchItem", which does not resolve on this branch.
-ERROR CL0540
+ERROR CL0540 (branch silent)
   "{$Missing}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
-ERROR CL0543
+ERROR CL0543 (branch silent)
   role "Loop" is bound to "LI", which is itself a role — a role must resolve directly to an item id, one level of indirection always (§9.3).
-ERROR CL0540
+ERROR CL0540 (branch silent)
   "{$Loop}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
-ERROR CL0540
+ERROR CL0540 (branch silent)
   "{$Undeclared}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
   unresolved token {$Missing} in item "RoleTester" (character)

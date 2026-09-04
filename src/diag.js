@@ -301,9 +301,16 @@ function busWarner(diagnostics, loc) {
  * One diagnostic. `file`/`line`/`col` are optional throughout: a diagnostic about a
  * whole project has no span, and template-level errors keep imprecise positions until
  * the render rewrite (§13). A missing span degrades the rendering, never the code.
+ *
+ * `branch` is the leaf a per-branch check was running for, as the `a/b` label or
+ * `(root)`. The model layer raises through `onWarn(code, message)` and cannot name the
+ * branch itself — `CL0542` says a role "does not resolve on this branch" — so the same
+ * error on six leaves used to be six identical lines, told apart only by the `Branch:`
+ * headers `--verbose` printed between them. Carried on the diagnostic, it reaches the
+ * author on every run.
  */
 class Diagnostic {
-  constructor({ code, severity, message, file, line, col, hint }) {
+  constructor({ code, severity, message, file, line, col, hint, branch }) {
     this.code = code;
     this.severity = severity;
     this.message = message;
@@ -311,6 +318,7 @@ class Diagnostic {
     this.line = typeof line === 'number' ? line : null;
     this.col = typeof col === 'number' ? col : null;
     this.hint = hint || null;
+    this.branch = branch || null;
   }
 
   /** `file:line:col`, degrading gracefully as position information runs out. */
@@ -322,16 +330,17 @@ class Diagnostic {
   }
 
   /**
-   * The §4.4 shape:
+   * The §4.4 shape, with the branch appended to the header when the diagnostic has one:
    *
-   *   ERROR CL0310 codex/npcs.cl.yaml:112:9
+   *   ERROR CL0310 codex/npcs.cl.yaml:112:9 (branch felix/hard)
    *     Item "Kaiden" dispatches branch "felix" to variant "Felix", which is not
    *     defined on this item or on library item "Kaiden" (library:main).
    */
   format() {
-    const head = [SEVERITY_LABEL[this.severity] || this.severity, this.code, this.location]
-      .filter(Boolean)
-      .join(' ');
+    const head = [
+      SEVERITY_LABEL[this.severity] || this.severity, this.code, this.location,
+      this.branch ? `(branch ${this.branch})` : '',
+    ].filter(Boolean).join(' ');
     const indent = (text) => String(text).split('\n').map((l) => `  ${l}`).join('\n');
     const parts = [head, indent(this.message)];
     if (this.hint) parts.push(indent(this.hint));
@@ -379,6 +388,7 @@ class Diagnostics {
       file: loc.file,
       line: loc.line,
       col: loc.col,
+      branch: loc.branch,
       hint: opts.hint,
     });
     this._items.push(diag);
@@ -439,6 +449,6 @@ class Diagnostics {
 }
 
 module.exports = {
-  Diagnostic, Diagnostics, SEVERITY, REGISTRY, CODES, severityOf, busWarner,
+  Diagnostic, Diagnostics, SEVERITY, SEVERITY_LABEL, REGISTRY, CODES, severityOf, busWarner,
   isOpinion, LINT_LEVELS, applyLintLevel,
 };

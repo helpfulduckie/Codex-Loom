@@ -71,9 +71,12 @@ function diagnoseProject(name) {
     return rel.startsWith('..') ? path.basename(file) : rel.split(path.sep).join('/');
   };
 
+  // The branch is rendered so the snapshot pins which leaf a per-branch row came from —
+  // the sequence assertion above says rows arrive per leaf, and this says which one.
   return diagnostics.all.map((d) => {
     const loc = relative(d.file);
-    const head = [d.severity.toUpperCase(), d.code, loc].filter(Boolean).join(' ');
+    const head = [d.severity.toUpperCase(), d.code, loc, d.branch ? `(branch ${d.branch})` : '']
+      .filter(Boolean).join(' ');
     const body = d.message.replace(/\r?\n\s*/g, ' ').trim();
     return d.hint ? `${head}\n  ${body}\n  hint: ${d.hint}` : `${head}\n  ${body}`;
   }).join('\n');

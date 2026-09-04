@@ -23,6 +23,16 @@ Severity is one of `ERROR`, `WARN`, `INFO`. The location degrades gracefully as
 information runs out — `file:line:col`, then `file:line`, then `file`, then nothing — so a
 diagnostic about a whole project still renders correctly.
 
+A check that runs once per branch leaf appends the leaf to the header, as `(branch a/b)`
+or `(branch (root))`, after the location. This is how a role or cross-item error that
+fires on several leaves is told apart: the message is the same on each, and the branch is
+what differs.
+
+```
+ERROR CL0542 compile.cl.yaml (branch felix/hard)
+  role "LI" is bound to "Liesel", which does not resolve on this branch.
+```
+
 **Template-level positions are imprecise until the render rewrite.** A malformed
 `{join(...)}` can be attributed to its template file but not to a span within it. This is
 a known, bounded limitation of the current render pipeline rather than a defect: precise
