@@ -210,38 +210,35 @@ function describeBaselineSet(options) {
       },
     });
 
-    // compile() is chatty; a fixture run would otherwise bury the actual assertions.
-    const quiet = ['log', 'warn', 'error'].map((level) => jest.spyOn(console, level).mockImplementation(() => {}));
-    try {
-      for (const project of PROJECTS) {
-        const configPath = path.join(tmpDir, project.dir, SOURCE_SUBDIR, CONFIG_NAME);
-        // `live: true` on every baseline compile, so a set's committed sources are the
-        // sources it is checked against. A project that declares `structure.input.snapshot`
-        // otherwise reads its frozen copy for every library entry and every out-of-base
-        // template dir, and an edit to the shared tree those were taken from compiles
-        // clean, changes nothing, and passes — the drift notice that would have said so is
-        // a bare console.log, swallowed by the mock two lines above. The snapshot
-        // redirection path keeps its own coverage in
-        // `__tests__/integration/snapshot.integration.test.js`; what a baseline set owes is
-        // corpus-scale evidence about the compiler, which is worthless read off a copy.
-        // Inert for a set that declares no snapshot, which is why it is unconditional.
-        const compileOptions = { live: true };
-        for (const mode of project.compileReports || []) compileOptions[mode] = true;
-        compile(configPath, compileOptions);
+    // compile() prints nothing; progress goes to an `options.log` the harness does not pass,
+    // and the drift notice goes to that same log, so the snapshot check that follows is
+    // still the only thing standing between a stale freeze and nothing.
+    for (const project of PROJECTS) {
+      const configPath = path.join(tmpDir, project.dir, SOURCE_SUBDIR, CONFIG_NAME);
+      // `live: true` on every baseline compile, so a set's committed sources are the
+      // sources it is checked against. A project that declares `structure.input.snapshot`
+      // otherwise reads its frozen copy for every library entry and every out-of-base
+      // template dir, and an edit to the shared tree those were taken from compiles
+      // clean, changes nothing, and passes — the drift notice that would have said so is
+      // a progress-log line the harness never passes a sink for, so it goes nowhere. The
+      // snapshot redirection path keeps its own coverage in
+      // `__tests__/integration/snapshot.integration.test.js`; what a baseline set owes is
+      // corpus-scale evidence about the compiler, which is worthless read off a copy.
+      // Inert for a set that declares no snapshot, which is why it is unconditional.
+      const compileOptions = { live: true };
+      for (const mode of project.compileReports || []) compileOptions[mode] = true;
+      compile(configPath, compileOptions);
 
-        // Reports run post-hoc against the tree compile just wrote, which is how the CLI
-        // invokes them — so what is frozen is what a user would get.
-        const scenarioRoot = path.join(tmpDir, project.dir, OUTPUT_SUBDIR);
-        for (const mode of project.reports) {
-          const dir = reportsDirFor(project, configPath, mode);
-          fs.mkdirSync(dir, { recursive: true });
-          REPORT_MODES[mode]()(scenarioRoot, dir);
-        }
-
-        if (!REPORTS_IN_PLACE) collectCompileReports(project, configPath);
+      // Reports run post-hoc against the tree compile just wrote, which is how the CLI
+      // invokes them — so what is frozen is what a user would get.
+      const scenarioRoot = path.join(tmpDir, project.dir, OUTPUT_SUBDIR);
+      for (const mode of project.reports) {
+        const dir = reportsDirFor(project, configPath, mode);
+        fs.mkdirSync(dir, { recursive: true });
+        REPORT_MODES[mode]()(scenarioRoot, dir);
       }
-    } finally {
-      quiet.forEach((spy) => spy.mockRestore());
+
+      if (!REPORTS_IN_PLACE) collectCompileReports(project, configPath);
     }
   }, 600000);
 
@@ -269,7 +266,7 @@ function describeBaselineSet(options) {
      * one free to rot — at which point someone editing the frozen copy to fix something has
      * exactly the old failure back, pointed the other way. This asserts the two stay the
      * same tree, and it is the only place that does: `checkDrift`'s live-drift report is a
-     * `console.log`, not a diagnostic, and CL0113 compares the frozen copy against its own
+     * progress-log line, not a diagnostic, and CL0113 compares the frozen copy against its own
      * manifest rather than against the source it was taken from.
      *
      * Reads the committed tree, not the temp copy, because the fixture on disk is what a

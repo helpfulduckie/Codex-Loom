@@ -193,32 +193,30 @@ function buildTempTree(projects, set) {
 
   for (const project of projects) {
     process.stdout.write(`compiling ${project.name}… `);
-    quietly(() => {
-      const configPath = path.join(tmpDir, project.dir, SOURCE_SUBDIR, CONFIG_NAME);
-      // `live: true` to match `baselineHarness.js` exactly — a baseline regenerated through
-      // a project's frozen snapshot while the harness checks it against the live sources is
-      // a baseline that passes for the wrong reason, which is the failure this whole file
-      // exists to avoid.
-      const compileOptions = { live: true };
-      for (const mode of project.compileReports || []) compileOptions[mode] = true;
-      compile(configPath, compileOptions);
+    const configPath = path.join(tmpDir, project.dir, SOURCE_SUBDIR, CONFIG_NAME);
+    // `live: true` to match `baselineHarness.js` exactly — a baseline regenerated through
+    // a project's frozen snapshot while the harness checks it against the live sources is
+    // a baseline that passes for the wrong reason, which is the failure this whole file
+    // exists to avoid.
+    const compileOptions = { live: true };
+    for (const mode of project.compileReports || []) compileOptions[mode] = true;
+    compile(configPath, compileOptions);
 
-      // When reports are frozen in place, every mode writes under wherever
-      // `structure.reports` resolved and nothing is collected afterward — see
-      // `REPORTS_IN_PLACE` in examples/projects.js.
-      const reportBase = REPORTS_IN_PLACE
-        ? resolvedReportsDir(configPath)
-        : path.join(tmpDir, project.dir, REPORTS_SUBDIR);
+    // When reports are frozen in place, every mode writes under wherever
+    // `structure.reports` resolved and nothing is collected afterward — see
+    // `REPORTS_IN_PLACE` in examples/projects.js.
+    const reportBase = REPORTS_IN_PLACE
+      ? resolvedReportsDir(configPath)
+      : path.join(tmpDir, project.dir, REPORTS_SUBDIR);
 
-      const scenarioRoot = path.join(tmpDir, project.dir, OUTPUT_SUBDIR);
-      for (const mode of project.reports) {
-        const dir = path.join(reportBase, mode);
-        fs.mkdirSync(dir, { recursive: true });
-        REPORT_MODES[mode]()(scenarioRoot, dir, false);
-      }
+    const scenarioRoot = path.join(tmpDir, project.dir, OUTPUT_SUBDIR);
+    for (const mode of project.reports) {
+      const dir = path.join(reportBase, mode);
+      fs.mkdirSync(dir, { recursive: true });
+      REPORT_MODES[mode]()(scenarioRoot, dir, false);
+    }
 
-      if (!REPORTS_IN_PLACE) collectCompileReports(project, configPath, tmpDir, set);
-    });
+    if (!REPORTS_IN_PLACE) collectCompileReports(project, configPath, tmpDir, set);
     process.stdout.write('done\n');
   }
 
@@ -258,22 +256,6 @@ function collectCompileReports(project, configPath, tmpDir, set) {
       const src = path.join(reportBase, layout.subdir);
       if (fs.existsSync(src)) fs.cpSync(src, dir, { recursive: true });
     }
-  }
-}
-
-/**
- * compile() and the report modes are chatty — The Institute alone prints a line per lint
- * finding across 829 files — and the diff report is the output that matters here.
- */
-function quietly(fn) {
-  const saved = { log: console.log, warn: console.warn, error: console.error };
-  console.log = () => {};
-  console.warn = () => {};
-  console.error = () => {};
-  try {
-    fn();
-  } finally {
-    Object.assign(console, saved);
   }
 }
 

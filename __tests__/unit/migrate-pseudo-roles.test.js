@@ -270,10 +270,7 @@ describe('composing with renameProtagonist (carried from the Session A handoff\'
     });
     const configPath = path.join(tmpDir, 'compile.yaml');
 
-    const saved = { log: console.log, warn: console.warn };
-    console.log = () => {}; console.warn = () => {};
     migrateProjectFully(configPath);
-    Object.assign(console, saved);
 
     const config = YAML.parse(fs.readFileSync(configPath, 'utf8'));
     expect(config.roles).toEqual({ protagonist: 'Aness', LI: 'Malcolm' });

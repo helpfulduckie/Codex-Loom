@@ -24,12 +24,7 @@ let dir;
 
 beforeAll(() => {
   dir = writeComponentTierProject();
-  const quiet = ['log', 'warn'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
-  try {
-    compile(`${dir}/compile.cl.yaml`);
-  } finally {
-    quiet.forEach((s) => s.mockRestore());
-  }
+  compile(`${dir}/compile.cl.yaml`);
 });
 
 afterAll(() => { fs.rmSync(dir, { recursive: true, force: true }); });

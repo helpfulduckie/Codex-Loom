@@ -106,12 +106,7 @@ beforeAll(() => {
     '  hidden: {}',
   ].join('\n'));
 
-  const quiet = ['log', 'warn'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
-  try {
-    compile(path.join(tmpDir, 'compile.yaml'));
-  } finally {
-    quiet.forEach((s) => s.mockRestore());
-  }
+  compile(path.join(tmpDir, 'compile.yaml'));
 });
 
 afterAll(() => {

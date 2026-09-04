@@ -40,12 +40,7 @@ function compileProject(files) {
     fs.writeFileSync(full, content, 'utf8');
   }
   const diagnostics = new Diagnostics();
-  const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
-  try {
-    compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
-  } finally {
-    spies.forEach((s) => s.mockRestore());
-  }
+  compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
   return { tmpDir, diagnostics };
 }
 

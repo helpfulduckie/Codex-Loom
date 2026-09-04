@@ -166,8 +166,7 @@ describe('opening paths resolve against branch variables', () => {
       `  output: ${tmpDir.split(String.fromCharCode(92)).join('/')}/output`,
       ...lines,
     ].join(NL), 'utf8');
-    const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
-    try { compile(path.join(tmpDir, 'compile.yaml')); } finally { spies.forEach((x) => x.mockRestore()); }
+    compile(path.join(tmpDir, 'compile.yaml'));
   };
 
   const opening = (...segments) => {
@@ -599,12 +598,7 @@ describe('config errors abort before filesystem work', () => {
     const configPath = path.join(tmpDir, 'compile.yaml');
     fs.writeFileSync(configPath, 'version: 4\nstructure:\n  input:\n    items: [./Codex]\n', 'utf8');
 
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      expect(() => compile(configPath)).toThrow(/error/i);
-    } finally {
-      errorSpy.mockRestore();
-    }
+    expect(() => compile(configPath)).toThrow(/error/i);
 
     // The fallback default the config loader computes when output: is absent.
     expect(fs.existsSync(path.join(tmpDir, 'output'))).toBe(false);
@@ -615,17 +609,14 @@ describe('config errors abort before filesystem work', () => {
 
 describe('compile writes the VL envelope through emit/vl.js', () => {
   let tmpDir;
-  let quiet;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-emit-'));
     fs.mkdirSync(path.join(tmpDir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
-    quiet = ['log', 'warn', 'error'].map((level) => jest.spyOn(console, level).mockImplementation(() => {}));
   });
 
   afterEach(() => {
-    quiet.forEach((spy) => spy.mockRestore());
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -718,17 +709,14 @@ describe('compile writes the VL envelope through emit/vl.js', () => {
 
 describe('CL0622 card-name collision', () => {
   let tmpDir;
-  let quiet;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-collision-'));
     fs.mkdirSync(path.join(tmpDir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
-    quiet = ['log', 'warn', 'error'].map((level) => jest.spyOn(console, level).mockImplementation(() => {}));
   });
 
   afterEach(() => {
-    quiet.forEach((spy) => spy.mockRestore());
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -802,17 +790,14 @@ describe('CL0622 card-name collision', () => {
 
 describe('the notes ladder end to end', () => {
   let tmpDir;
-  let quiet;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-notes-'));
     fs.mkdirSync(path.join(tmpDir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
-    quiet = ['log', 'warn', 'error'].map((level) => jest.spyOn(console, level).mockImplementation(() => {}));
   });
 
   afterEach(() => {
-    quiet.forEach((spy) => spy.mockRestore());
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -1040,9 +1025,7 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
   const config = (branches) => ({ _resolvedOutput: outDir, branches });
   const TIER = { tier: { branches: { alpha: {}, beta: {} } } };
 
-  beforeEach(() => { jest.spyOn(console, 'log').mockImplementation(() => {}); });
   afterEach(() => {
-    console.log.mockRestore();
     fs.rmSync(outDir, { recursive: true, force: true });
   });
 

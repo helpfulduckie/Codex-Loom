@@ -40,10 +40,9 @@ afterAll(() => {
 /**
  * Compile one sub-project and return its diagnostics as stable text.
  *
- * `compile` signals failure by throwing a *count* and reports the diagnostics themselves
- * to the console, interleaved with progress lines and temp paths — which is right for an
- * author at a terminal and useless as a baseline. `options.diagnostics` hands back the
- * bus instead, on every exit path including the throw.
+ * `compile` signals failure by throwing a *count* and prints nothing itself.
+ * `options.diagnostics` hands back the bus on every exit path including the throw, which
+ * is what this reads instead of scraping console output.
  *
  * Order is preserved rather than sorted. The sequence is itself an assertion: diagnostics
  * arrive per branch, in leaf order, so a check that starts firing once for the project
@@ -55,14 +54,11 @@ function diagnoseProject(name) {
   fs.cpSync(path.join(FIXTURE_DIR, name), tmpDir, { recursive: true });
 
   const diagnostics = new Diagnostics();
-  const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
   try {
     compile(path.join(tmpDir, 'compile.cl.yaml'), { diagnostics });
   } catch (err) {
     // Expected: each project raises ERRORs by construction. What the ERROR *is* lives in
     // the diagnostics, so the throw itself carries nothing worth asserting.
-  } finally {
-    spies.forEach((s) => s.mockRestore());
   }
 
   const relative = (file) => {
@@ -111,8 +107,8 @@ describe('pathological fixture', () => {
    * WARNs fire in the same compile. `alpha` has no section in the committed manifest at
    * all (CL0113); `beta`'s recorded file matches what's frozen, but the frozen copy also
    * carries a file the manifest never recorded (CL0114). A "stale manifest" project was
-   * tried first and dropped — drift is console-only and never reaches the diagnostics bus,
-   * so it would have contributed nothing here. See ../README.md.
+   * tried first and dropped — drift is a progress-log line and never reaches the diagnostics
+   * bus, so it would have contributed nothing here. See ../README.md.
    */
   test('a committed manifest that disagrees with the config and the disk', () => {
     expect(diagnoseProject('snapshot-mismatch')).toMatchSnapshot();

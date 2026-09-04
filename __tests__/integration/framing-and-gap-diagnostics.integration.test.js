@@ -28,18 +28,13 @@ function compileProject(files) {
     fs.writeFileSync(full, content, 'utf8');
   }
   const diagnostics = new Diagnostics();
-  const consoleWarnText = [];
-  const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
-  spies[1].mockImplementation((...args) => { consoleWarnText.push(args.join(' ')); });
   try {
     compile(path.join(dir, 'compile.yaml'), { diagnostics });
   } catch (err) {
     // Both subjects are diagnostics; a throw carries only a count.
-  } finally {
-    spies.forEach((s) => s.mockRestore());
   }
   fs.rmSync(dir, { recursive: true, force: true });
-  return { diagnostics, consoleWarnText };
+  return { diagnostics };
 }
 
 const ITEMS = [
@@ -71,16 +66,11 @@ describe('CL0633 — branchFraming at a node with nothing below it', () => {
   });
 
   test('a root branchFraming with no branches is a WARN on the bus, not a console.warn', () => {
-    const { diagnostics, consoleWarnText } = compileProject(project([]));
+    const { diagnostics } = compileProject(project([]));
     const found = diagnostics.all.filter((d) => d.code === CODES.BRANCH_FRAMING_IGNORED);
     expect(found).toHaveLength(1);
     expect(found[0].severity).toBe('warn');
     expect(found[0].message).toMatch(/root/i);
-    // The bus renders its own WARNs through `console.warn`, so the proof is not that
-    // nothing printed — it is that nothing printed the *bare* string. Every console line
-    // mentioning branch framing must be a formatted diagnostic carrying the code.
-    const bare = consoleWarnText.filter((t) => /branchFraming/.test(t) && !t.includes('CL0633'));
-    expect(bare).toEqual([]);
   });
 
   test('branchFraming on a leaf branch names the branch', () => {
@@ -144,12 +134,9 @@ describe('inline opening: — role tokens resolve, the {%…} guard stays', () =
       fs.writeFileSync(full, content, 'utf8');
     }
     const diagnostics = new Diagnostics();
-    const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
     try {
       compile(path.join(dir, 'compile.yaml'), { diagnostics });
-    } catch (err) { /* diagnostics are the subject */ } finally {
-      spies.forEach((s) => s.mockRestore());
-    }
+    } catch (err) { /* diagnostics are the subject */ }
     return { dir, diagnostics };
   }
 

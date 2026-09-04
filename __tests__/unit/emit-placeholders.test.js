@@ -180,7 +180,6 @@ describe('writeNodePlaceholders', () => {
     // {%var} sweep, so an undeclared name reached Placeholders.yaml with only a console
     // warning. `resolveVariables` now raises CL0510 at expansion, and the emitted-output
     // sweep raises CL0431 as the backstop every other surface already has.
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
     const dir = tmp();
     const diagnostics = new Diagnostics();
     writeNodePlaceholders(
@@ -194,7 +193,6 @@ describe('writeNodePlaceholders', () => {
     expect(codes).toContain(CODES.VARIABLE_UNDECLARED);
     expect(codes).toContain(CODES.LEAKED_VARIABLE);
     expect(diagnostics.all.every((d) => d.severity === 'error')).toBe(true);
-    warn.mockRestore();
   });
 });
 

@@ -5,8 +5,8 @@
 # project's mistakes live in `snapshot/manifest.json`, not in items or in the config
 # itself, and compile-clean the way placement/ does — checkDrift's WARNs don't abort a
 # compile. A "stale manifest" project was tried first and dropped: drift (a live library
-# file changed since the last sync) is console-only and never reaches the diagnostics bus
-# (src/snapshot.js), so a pathological project built around it would contribute zero rows
+# file changed since the last sync) is a progress-log line and never reaches the
+# diagnostics bus (src/snapshot.js), so a pathological project built around it would contribute zero rows
 # to this snapshot. CL0113 and CL0114 are real diagnostics about a manifest that disagrees
 # with the config or the disk, and both are exercised here instead.
 #

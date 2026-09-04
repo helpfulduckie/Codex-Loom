@@ -136,12 +136,7 @@ beforeAll(() => {
   ].join('\n'));
 
   diagnostics = new Diagnostics();
-  const quiet = ['log', 'warn', 'error'].map((level) => jest.spyOn(console, level).mockImplementation(() => {}));
-  try {
-    compile(configPath, { diagnostics });
-  } finally {
-    quiet.forEach((spy) => spy.mockRestore());
-  }
+  compile(configPath, { diagnostics });
 }, 120000);
 
 afterAll(() => {

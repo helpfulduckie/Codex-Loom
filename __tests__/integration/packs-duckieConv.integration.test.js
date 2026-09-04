@@ -32,14 +32,11 @@ function compileProject(files) {
     fs.writeFileSync(full, content.replace(/%TMP%/g, slash(tmpDir)), 'utf8');
   }
   const diagnostics = new Diagnostics();
-  const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
   try {
     compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
   } catch (err) {
     // A pack ERROR fails the build by design (§12.5); duckieConv is all WARN, so this
     // should not fire — but keep the shape parallel to packs-wtg.
-  } finally {
-    spies.forEach((s) => s.mockRestore());
   }
   return diagnostics;
 }

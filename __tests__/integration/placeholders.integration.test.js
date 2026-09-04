@@ -54,12 +54,9 @@ function run(files) {
   }
 
   const diagnostics = new Diagnostics();
-  const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
   try {
     compile(path.join(dir, 'compile.cl.yaml'), { diagnostics });
-  } catch (err) { /* ERRORs are the subject; the throw carries only a count */ } finally {
-    spies.forEach((s) => s.mockRestore());
-  }
+  } catch (err) { /* ERRORs are the subject; the throw carries only a count */ }
   return diagnostics.all;
 }
 

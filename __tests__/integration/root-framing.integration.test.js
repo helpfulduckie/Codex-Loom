@@ -97,12 +97,9 @@ beforeAll(() => {
   fs.mkdirSync(path.join(tmpDir, 'canon'), { recursive: true });
 
   diagnostics = new Diagnostics();
-  const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
   try {
     compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
-  } catch (err) { /* ERRORs are the subject; the throw carries only a count */ } finally {
-    spies.forEach((s) => s.mockRestore());
-  }
+  } catch (err) { /* ERRORs are the subject; the throw carries only a count */ }
 });
 
 afterAll(() => {
@@ -183,12 +180,9 @@ describe('root branchFraming — inline sentence arm', () => {
     ].join('\n'));
 
     diag = new Diagnostics();
-    const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
     try {
       compile(path.join(dir, 'compile.yaml'), { diagnostics: diag });
-    } catch (err) { /* none expected */ } finally {
-      spies.forEach((s) => s.mockRestore());
-    }
+    } catch (err) { /* none expected */ }
   });
 
   afterAll(() => {
@@ -251,12 +245,9 @@ describe('root branchFraming — undeclared variable in the inline arm', () => {
     ].join('\n'));
 
     diag = new Diagnostics();
-    const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
     try {
       compile(path.join(dir, 'compile.yaml'), { diagnostics: diag });
-    } catch (err) { /* the ERROR is the subject */ } finally {
-      spies.forEach((s) => s.mockRestore());
-    }
+    } catch (err) { /* the ERROR is the subject */ }
   });
 
   afterAll(() => {

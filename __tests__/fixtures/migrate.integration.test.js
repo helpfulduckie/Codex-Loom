@@ -62,24 +62,14 @@ function listMarkdown(dir) {
   return out.sort();
 }
 
-function quietly(fn) {
-  const saved = { log: console.log, warn: console.warn, error: console.error };
-  console.log = () => {}; console.warn = () => {}; console.error = () => {};
-  try { return fn(); } finally { Object.assign(console, saved); }
-}
-
 /** Migrate one project's `Loom/` tree in place and compile it. Returns the output dir. */
 function migrateAndCompile(tmpDir, project) {
   const configPath = path.join(tmpDir, project.dir, LOOM_SUBDIR, 'compile.yaml');
 
-  let notes = [];
-  let reviewQueue = [];
-  quietly(() => {
-    const result = migrateProjectFully(configPath);
-    notes = result.notes;
-    reviewQueue = result.reviewQueue;
-    compile(configPath);
-  });
+  const result = migrateProjectFully(configPath);
+  const notes = result.notes;
+  const reviewQueue = result.reviewQueue;
+  compile(configPath);
 
   return { outputDir: path.join(tmpDir, project.dir, OUTPUT_SUBDIR), notes, reviewQueue, configPath };
 }

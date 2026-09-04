@@ -90,12 +90,7 @@ beforeAll(() => {
     '  duo: {}',
   ].join('\n'));
 
-  const quiet = ['log', 'warn'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
-  try {
-    compile(path.join(tmpDir, 'compile.yaml'), { inventory: true });
-  } finally {
-    quiet.forEach((s) => s.mockRestore());
-  }
+  compile(path.join(tmpDir, 'compile.yaml'), { inventory: true });
 });
 
 afterAll(() => {

@@ -41,13 +41,10 @@ function compileProject(files) {
   }
 
   const diagnostics = new Diagnostics();
-  const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
   try {
     compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
   } catch (err) {
     // Several of these raise ERRORs by construction.
-  } finally {
-    spies.forEach((s) => s.mockRestore());
   }
   return { diagnostics, tmpDir };
 }

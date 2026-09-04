@@ -81,12 +81,7 @@ beforeAll(() => {
     '  flashback: {}',
   ].join('\n'));
 
-  const quiet = ['log', 'warn'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
-  try {
-    compile(path.join(tmpDir, 'compile.yaml'), { diff: true });
-  } finally {
-    quiet.forEach((s) => s.mockRestore());
-  }
+  compile(path.join(tmpDir, 'compile.yaml'), { diff: true });
 });
 
 afterAll(() => {
