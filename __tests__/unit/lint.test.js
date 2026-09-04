@@ -329,11 +329,13 @@ describe('findLintableFiles', () => {
 // ── runLintMode ───────────────────────────────────────────────────────────────
 
 describe('runLintMode', () => {
-  test('returns null when there is nothing to lint', () => {
+  test('returns written: [] when there is nothing to lint', () => {
     const tmp = makeTmp();
     const outDir = makeTmp();
     const result = runLintMode(tmp, outDir);
-    expect(result).toBeNull();
+    expect(result).toEqual({
+      written: [], reportPath: null, errorCount: 0, warnCount: 0, fileCount: 0, findings: [],
+    });
     fs.rmSync(tmp, { recursive: true });
     fs.rmSync(outDir, { recursive: true });
   });
@@ -345,7 +347,7 @@ describe('runLintMode', () => {
     write(path.join(tmp, 'Components', 'Opening.md'), 'Hello {$her~}, welcome.');
 
     const result = runLintMode(tmp, outDir);
-    expect(result).not.toBeNull();
+    expect(result.written.length).toBeGreaterThan(0);
     expect(result.errorCount).toBeGreaterThan(0);
     expect(fs.existsSync(result.reportPath)).toBe(true);
     const reportText = fs.readFileSync(result.reportPath, 'utf8');
@@ -364,7 +366,7 @@ describe('runLintMode', () => {
     write(path.join(tmp, 'Story Cards', 'Character', 'bare.md'), ['~~~', 'She walks in.', '~~~', ''].join('\n'));
 
     const result = runLintMode(tmp, outDir);
-    expect(result).not.toBeNull();
+    expect(result.written.length).toBeGreaterThan(0);
     const untitled = result.findings.find((f) => f.category === 'empty-triggers');
     expect(untitled).toMatchObject({ card: '(untitled)', relPath: path.join('Story Cards', 'Character', 'bare.md') });
     expect(fs.readFileSync(result.reportPath, 'utf8')).toContain('card "(untitled)"');

@@ -3,9 +3,10 @@
 const fs   = require('fs');
 const path = require('path');
 
-const { discoverLeaves, sanitizeFilename } = require('./overview');
+const { discoverLeaves } = require('./overview');
 const { resolveAt } = require('./compiledTree');
 const { NULL_LOG } = require('./log');
+const { csvCell, sanitizeFilename, branchLabel } = require('./report');
 
 // ── parsing ──────────────────────────────────────────────────────────────────
 
@@ -81,8 +82,7 @@ function formatSeedMap(rootDirName, leafResults) {
 
   for (const { branchNames, cards, relations, seededInOpening } of leafResults) {
     if (!singleLeaf) {
-      const branchLabel = branchNames.length > 0 ? branchNames.join(' - ') : rootDirName;
-      parts.push(`## Branch: ${branchLabel}`);
+      parts.push(`## Branch: ${branchLabel(branchNames, rootDirName)}`);
     }
 
     if (cards.length === 0) {
@@ -125,13 +125,6 @@ function formatSeedMap(rootDirName, leafResults) {
   return parts.join('\n\n');
 }
 
-function csvCell(value) {
-  const s = String(value);
-  return s.includes(',') || s.includes('"') || s.includes('\n')
-    ? `"${s.replace(/"/g, '""')}"`
-    : s;
-}
-
 function formatSeedMapCsv(rootDirName, leafResults) {
   const singleLeaf = leafResults.length === 1 && leafResults[0].branchNames.length === 0;
   const rows = [];
@@ -143,7 +136,7 @@ function formatSeedMapCsv(rootDirName, leafResults) {
   }
 
   for (const { branchNames, cards, relations, seededInOpening } of leafResults) {
-    const branchLabel = branchNames.length > 0 ? branchNames.join(' - ') : rootDirName;
+    const label = branchLabel(branchNames, rootDirName);
 
     // Count distinct seeders (cards + PE) per seeded title
     const seederSets = new Map(); // seeded title → Set of seeder labels
@@ -158,7 +151,7 @@ function formatSeedMapCsv(rootDirName, leafResults) {
       if (singleLeaf) {
         rows.push([csvCell(card.title), csvCell(card.type || ''), card.triggers.length, seededBy, inOpening].join(','));
       } else {
-        rows.push([csvCell(branchLabel), csvCell(card.title), csvCell(card.type || ''), card.triggers.length, seededBy, inOpening].join(','));
+        rows.push([csvCell(label), csvCell(card.title), csvCell(card.type || ''), card.triggers.length, seededBy, inOpening].join(','));
       }
     }
   }
@@ -173,8 +166,8 @@ function formatSeedMapCsv(rootDirName, leafResults) {
  * Discovers all leaf branches, collects their compiled cards, builds seed
  * relations, and writes a .seedmap.md and .seedmap.csv to outputDir, plus one
  * per-branch pair when there is more than one leaf.
- * Returns `{ written, mdPath, csvPath }`, or `null` when no branch leaves were found.
- * Prints nothing; the caller decides what to show.
+ * Returns `{ written, mdPath, csvPath }`, with `written: []` when no branch leaves were
+ * found. Prints nothing; the caller decides what to show.
  */
 function runSeedMapMode(scenarioRoot, outputDir, options = {}) {
   const { log = NULL_LOG } = options;
@@ -182,7 +175,7 @@ function runSeedMapMode(scenarioRoot, outputDir, options = {}) {
   const rootDirName = path.basename(rootAbs);
   const leaves      = discoverLeaves(rootAbs);
 
-  if (leaves.length === 0) return null;
+  if (leaves.length === 0) return { written: [] };
 
   const leafResults = [];
   for (const leaf of leaves) {
@@ -194,7 +187,7 @@ function runSeedMapMode(scenarioRoot, outputDir, options = {}) {
     const relations                = buildSeedRelations(cards, peText);
     const seededInOpening          = buildOpeningFlags(cards, openingText);
     leafResults.push({ branchNames: leaf.branchNames, cards, relations, seededInOpening });
-    const label = leaf.branchNames.join(' - ') || rootDirName;
+    const label = branchLabel(leaf.branchNames, rootDirName);
     log.verbose(`  mapped: ${label} (${cards.length} cards, ${relations.length} seeds)`);
   }
 
@@ -209,7 +202,7 @@ function runSeedMapMode(scenarioRoot, outputDir, options = {}) {
   const singleLeaf = leafResults.length === 1 && leafResults[0].branchNames.length === 0;
   if (!singleLeaf) {
     for (const leafResult of leafResults) {
-      const fileBase   = leafResult.branchNames.join(' - ') || rootDirName;
+      const fileBase   = branchLabel(leafResult.branchNames, rootDirName);
       const stem       = sanitizeFilename(fileBase);
       const leafMd     = path.join(outputDir, `${stem}.seedmap.md`);
       const leafCsv    = path.join(outputDir, `${stem}.seedmap.csv`);

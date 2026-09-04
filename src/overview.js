@@ -4,8 +4,8 @@ const fs   = require('fs');
 const path = require('path');
 
 const { buildTree, flattenNodes, leafNodes } = require('./compiledTree');
-const { PATH_UNSAFE_CHARS } = require('./util');
 const { NULL_LOG } = require('./log');
+const { sanitizeFilename, shiftHeadings, leafFileName } = require('./report');
 
 // ── private helpers ──────────────────────────────────────────────────────────
 
@@ -34,20 +34,6 @@ function collectMarkdownFiles(dir) {
   }
   walk(dir);
   return results;
-}
-
-const UNSAFE_FILENAME_CHARS = new RegExp('[' + PATH_UNSAFE_CHARS + ']', 'g');
-
-function sanitizeFilename(name) {
-  return name.replace(UNSAFE_FILENAME_CHARS, '_').trim();
-}
-
-function shiftHeadings(content, shift) {
-  if (shift <= 0) return content;
-  return content.replace(/^(#{1,6})(?= )/gm, (_, hashes) => {
-    const newLevel = Math.min(hashes.length + shift, 6);
-    return '#'.repeat(newLevel);
-  });
 }
 
 // ── exported building blocks ─────────────────────────────────────────────────
@@ -224,11 +210,7 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log = NULL_LOG)
     ? `${rootDirName}: ${branchNames.join(' - ')}`
     : rootDirName;
 
-  const fileBase = isSingleLeaf && branchNames.length === 0
-    ? rootDirName
-    : branchNames.join(' - ');
-
-  const filename = sanitizeFilename(fileBase || rootDirName) + '.leaf.md';
+  const filename = leafFileName(branchNames, rootDirName, isSingleLeaf);
   const outPath  = path.join(outputDir, filename);
 
   const parts = [];
@@ -247,7 +229,7 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log = NULL_LOG)
 
 /**
  * Run leaves mode on a scenario root: discover all leaves, compile each one.
- * Returns `{ written }` — the list of output file paths written — or `null` when no
+ * Returns `{ written }` — the list of output file paths written, `written: []` when no
  * branch leaves were found. Prints nothing; the caller decides what to show.
  */
 function runLeafReviewMode(scenarioRoot, outputDir, options = {}) {
@@ -256,17 +238,14 @@ function runLeafReviewMode(scenarioRoot, outputDir, options = {}) {
   const rootDirName = path.basename(rootAbs);
   const leaves      = discoverLeaves(rootAbs);
 
-  if (leaves.length === 0) return null;
+  if (leaves.length === 0) return { written: [] };
 
   const isSingleLeaf = leaves.length === 1;
   const written      = [];
 
   for (const leaf of leaves) {
     const { branchNames } = leaf;
-    const fileBase  = isSingleLeaf && branchNames.length === 0
-      ? rootDirName
-      : branchNames.join(' - ');
-    const filename  = sanitizeFilename(fileBase || rootDirName) + '.leaf.md';
+    const filename  = leafFileName(branchNames, rootDirName, isSingleLeaf);
     written.push(path.join(outputDir, filename));
 
     compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log);
@@ -300,5 +279,4 @@ module.exports = {
   compileLeaf,
   runLeafReviewMode,
   runOverviewMode,
-  sanitizeFilename,
 };

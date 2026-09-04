@@ -417,8 +417,9 @@ function formatReport(rootDirName, fileResults) {
  * Story Cards/Components .md file for unresolved template artifacts and
  * VL structural errors. Writes a `<root>.lint.md` report to outputDir and returns what it
  * wrote plus the findings, so the caller can echo them. Prints nothing.
- * Returns { written, reportPath, errorCount, warnCount, fileCount, findings }
- * or null if no lintable files were found.
+ * Returns { written, reportPath, errorCount, warnCount, fileCount, findings }, with
+ * `written: []`, `reportPath: null`, and the counts/findings zeroed when no lintable files
+ * were found.
  */
 function runLintMode(scenarioRoot, outputDir, options = {}) {
   const { log = NULL_LOG } = options;
@@ -427,7 +428,11 @@ function runLintMode(scenarioRoot, outputDir, options = {}) {
   const rootDirName = path.basename(rootAbs);
   const files        = findLintableFiles(rootAbs);
 
-  if (files.length === 0) return null;
+  if (files.length === 0) {
+    return {
+      written: [], reportPath: null, errorCount: 0, warnCount: 0, fileCount: 0, findings: [],
+    };
+  }
 
   // §8.2.2 — project-root convention packs, loaded once. A malformed pack raises a
   // `CL0117` here; it lands on the bus, not swallowed.

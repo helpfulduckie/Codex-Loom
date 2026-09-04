@@ -47,10 +47,10 @@ const run = (root) => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-bodysize-out-'));
   dirs.push(out);
   const result = runBodySizeMode(root, out);
-  return result && {
+  return result.written.length > 0 ? {
     csv: fs.readFileSync(result.csvPath, 'utf8'),
     md:  fs.readFileSync(result.mdPath, 'utf8'),
-  };
+  } : result;
 };
 
 describe('the collector is the report\'s own, not the seed map\'s', () => {
@@ -319,8 +319,8 @@ describe('the markdown report — the summary, and what needs acting on', () => 
 });
 
 describe('an empty tree', () => {
-  test('writes nothing and returns null rather than an empty CSV', () => {
-    expect(run(tree({}))).toBeNull();
+  test('writes nothing and returns written: [] rather than an empty CSV', () => {
+    expect(run(tree({}))).toEqual({ written: [] });
   });
 });
 

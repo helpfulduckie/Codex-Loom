@@ -387,7 +387,7 @@ if (require.main === module) {
         const dir = path.join(outputDir, 'leaf-review');
         fs.mkdirSync(dir, { recursive: true });
         const result = runLeafReviewMode(scenarioRoot, dir, { log });
-        if (result) summaryParts.push(files(result.written.length, 'leaf review'));
+        if (result.written.length > 0) summaryParts.push(files(result.written.length, 'leaf review'));
         else console.warn('No branch leaves found — nothing to review.');
       }
 
@@ -396,7 +396,7 @@ if (require.main === module) {
         const dir = path.join(outputDir, 'seed-map');
         fs.mkdirSync(dir, { recursive: true });
         const result = runSeedMapMode(scenarioRoot, dir, { log });
-        if (result) summaryParts.push(files(result.written.length, 'seed map'));
+        if (result.written.length > 0) summaryParts.push(files(result.written.length, 'seed map'));
         else console.warn('No branch leaves found — nothing to map.');
       }
 
@@ -405,7 +405,7 @@ if (require.main === module) {
         const dir = path.join(outputDir, 'overview');
         fs.mkdirSync(dir, { recursive: true });
         const result = runOverviewMode(scenarioRoot, dir, { log });
-        summaryParts.push(files(result.written.length, 'overview'));
+        if (result.written.length > 0) summaryParts.push(files(result.written.length, 'overview'));
       }
 
       if (doCardSizes) {
@@ -413,7 +413,7 @@ if (require.main === module) {
         const dir = path.join(outputDir, 'card-sizes');
         fs.mkdirSync(dir, { recursive: true });
         const result = runBodySizeMode(scenarioRoot, dir, { log });
-        if (result) summaryParts.push(files(result.written.length, 'card size'));
+        if (result.written.length > 0) summaryParts.push(files(result.written.length, 'card size'));
         else console.warn('No cards or Openings found — nothing to size.');
       }
 
@@ -443,7 +443,7 @@ if (require.main === module) {
           diagnostics: lintDiagnostics,
         });
         printDiagnostics(lintDiagnostics);
-        if (result) {
+        if (result.written.length > 0) {
           lintErrors = result.errorCount;
           summaryParts.push(`a lint report (${result.errorCount} error(s), ${result.warnCount} warning(s))`);
           for (const f of result.findings) {

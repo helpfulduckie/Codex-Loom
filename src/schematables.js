@@ -191,14 +191,14 @@ function generateSchemaTables(fieldTable, { title, tierTemplates } = {}) {
 }
 
 /**
- * Write `schema-tables.md` into `outputDir`. Returns the written paths (matching the
- * other report modes).
+ * Write `schema-tables.md` into `outputDir`. Returns `{ written }` (matching the other
+ * report modes).
  */
 function runSchemaTablesMode(fieldTable, outputDir, { title, tierTemplates } = {}) {
   fs.mkdirSync(outputDir, { recursive: true });
   const file = path.join(outputDir, 'schema-tables.md');
   fs.writeFileSync(file, generateSchemaTables(fieldTable, { title, tierTemplates }), 'utf8');
-  return [file];
+  return { written: [file] };
 }
 
 module.exports = { generateSchemaTables, runSchemaTablesMode };

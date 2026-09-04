@@ -66,10 +66,10 @@ function runReports({
   // compile config), so a shared report carries no machine-specific path and a committed
   // baseline compares equal to one compiled anywhere else.
   const { runProvenanceMode } = require('./provenance');
-  const provenanceWritten = runProvenanceMode(
+  const provenanceResult = runProvenanceMode(
     registry, reportBase, rootDirName, path.dirname(configPath),
   );
-  reportSummary.push(`${provenanceWritten.length} provenance file(s)`);
+  reportSummary.push(`${provenanceResult.written.length} provenance file(s)`);
 
   // The generated field reference, opt-in. Derived from the merged field table, not the
   // leaf loop, and written in a form meant to be pasted into a hand-maintained schema doc.
@@ -80,7 +80,7 @@ function runReports({
     // once beside the field audit (`gatherTierTemplates`), which needs the same set.
     const w = runSchemaTablesMode(fieldTable, path.join(reportBase, 'schema-tables'),
       { title: config.title || rootDirName, tierTemplates });
-    reportSummary.push(`${w.length} schema-tables file(s)`);
+    reportSummary.push(`${w.written.length} schema-tables file(s)`);
   }
 
   if ((captureReports && leafData.length > 0) || (options.inventory && inventoryData.length > 0)) {
@@ -88,19 +88,19 @@ function runReports({
     if (options.inventory) {
       fs.mkdirSync(reportBase, { recursive: true });
       const w = require('./inventory').runInventoryMode(inventoryData, reportBase);
-      reportSummary.push(`${w.length} inventory file(s)`);
+      reportSummary.push(`${w.written.length} inventory file(s)`);
     }
     if (options.diff) {
       const diffDir = path.join(reportBase, 'diff');
       fs.mkdirSync(diffDir, { recursive: true });
       const w = runDiffMode(leafData, diffDir);
-      reportSummary.push(`${w.length} diff file(s) (Shared + deltas)`);
+      reportSummary.push(`${w.written.length} diff file(s) (Shared + deltas)`);
     }
     if (options.annotate) {
       const annotateDir = path.join(reportBase, 'annotate');
       fs.mkdirSync(annotateDir, { recursive: true });
       const w = runAnnotateMode(leafData, allItemDefs, registry, annotateDir);
-      reportSummary.push(`${w.length} annotation file(s)`);
+      reportSummary.push(`${w.written.length} annotation file(s)`);
     }
   }
   if (reportSummary.length > 0) {

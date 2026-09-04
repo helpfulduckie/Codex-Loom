@@ -87,7 +87,7 @@ describe('runProvenanceMode', () => {
     const registry = new ItemRegistry();
     registry.set('x', { id: 'x', _source: 'x.yaml' });
 
-    const written = runProvenanceMode(registry, tmpDir, 'MyProject');
+    const { written } = runProvenanceMode(registry, tmpDir, 'MyProject');
     expect(written).toHaveLength(2);
     expect(written.every((p) => fs.existsSync(p))).toBe(true);
     expect(written[0]).toBe(path.join(tmpDir, 'MyProject.provenance.md'));

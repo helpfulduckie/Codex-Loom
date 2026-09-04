@@ -22,21 +22,9 @@ const { resolveItem, collectVariantDeltas } = require('./model/item');
 const { resolveBranchSpec } = require('./model/branches');
 const { resolveItemRef } = require('./model/refs');
 const { SLOTTED_COMPONENTS } = require('./emit/components');
+const { sanitizeFilename, shiftHeadings } = require('./report');
 
 // ── shared helpers ────────────────────────────────────────────────────────────
-
-function sanitizeFilename(name) {
-  return name.replace(/[<>:"/\\|?*]/g, '_').trim();
-}
-
-/** Shift markdown heading levels down by `shift` (capped at level 6), matching overview/leaf reports. */
-function shiftHeadings(content, shift) {
-  if (shift <= 0) return content;
-  return content.replace(/^(#{1,6})(?= )/gm, (_, hashes) => {
-    const newLevel = Math.min(hashes.length + shift, 6);
-    return '#'.repeat(newLevel);
-  });
-}
 
 /**
  * Component families captured per leaf, in `SLOTTED_COMPONENTS` display order.
@@ -197,12 +185,12 @@ function writeDeltaDoc(fileBase, delta, outputDir) {
   return outPath;
 }
 
-/** Emit Shared.md and one <leaf>.delta.md per leaf. Returns written paths. */
+/** Emit Shared.md and one <leaf>.delta.md per leaf. Returns `{ written }`. */
 function runDiffMode(leafData, outputDir) {
   const { shared, deltas } = buildSharedAndDeltas(leafData);
   const written = [writeSharedDoc(shared, outputDir)];
   for (const [fileBase, delta] of deltas) written.push(writeDeltaDoc(fileBase, delta, outputDir));
-  return written;
+  return { written };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -377,7 +365,7 @@ function buildLeafAnnotation(leaf, allItemDefs, registry) {
   return sections.join('\n\n');
 }
 
-/** Emit one <leaf>.annotate.md per leaf. Returns written paths. */
+/** Emit one <leaf>.annotate.md per leaf. Returns `{ written }`. */
 function runAnnotateMode(leafData, allItemDefs, registry, outputDir) {
   const written = [];
   for (const leaf of leafData) {
@@ -387,7 +375,7 @@ function runAnnotateMode(leafData, allItemDefs, registry, outputDir) {
     fs.writeFileSync(outPath, doc + '\n', 'utf8');
     written.push(outPath);
   }
-  return written;
+  return { written };
 }
 
 module.exports = {

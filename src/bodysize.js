@@ -52,6 +52,7 @@ const path = require('path');
 const { buildTree, flattenNodes, resolveAt } = require('./compiledTree');
 const { LIMITS, measure }                    = require('./limits');
 const { NULL_LOG }                           = require('./log');
+const { csvCell, branchLabel }               = require('./report');
 
 // ── collection ────────────────────────────────────────────────────────────────
 
@@ -154,7 +155,7 @@ function collectRows(rootAbs, rootDirName, { log = NULL_LOG } = {}) {
   const nodes = discoverNodes(rootAbs);
 
   for (const node of nodes) {
-    const label     = node.branchNames.length > 0 ? node.branchNames.join(' - ') : rootDirName;
+    const label     = branchLabel(node.branchNames, rootDirName);
     const questions = mergedPlaceholders(node.nodeDir);
 
     const openingPath = path.join(node.nodeDir, 'Components', 'Opening.md');
@@ -196,13 +197,6 @@ function collectRows(rootAbs, rootDirName, { log = NULL_LOG } = {}) {
 }
 
 // ── formatting ────────────────────────────────────────────────────────────────
-
-function csvCell(value) {
-  const s = String(value);
-  return s.includes(',') || s.includes('"') || s.includes('\n')
-    ? `"${s.replace(/"/g, '""')}"`
-    : s;
-}
 
 /** Thousands separators in prose, raw integers in the CSV — one is read, one is sorted. */
 const n = (value) => Number(value).toLocaleString('en-US');
@@ -327,8 +321,8 @@ function formatBodySizeMd(rootDirName, leafless, rows) {
  *
  * Writes `{name}.bodysize.csv` (every measured string) and `{name}.bodysize.md` (the
  * summary, and everything at NEAR or OVER) to outputDir. Returns `{ written, csvPath,
- * mdPath }`, or `null` when no cards or Openings were found. Prints nothing; the caller
- * decides what to show.
+ * mdPath }`, with `written: []` when no cards or Openings were found. Prints nothing; the
+ * caller decides what to show.
  */
 function runBodySizeMode(scenarioRoot, outputDir, options = {}) {
   const { log = NULL_LOG } = options;
@@ -337,7 +331,7 @@ function runBodySizeMode(scenarioRoot, outputDir, options = {}) {
 
   const { rows, nodes } = collectRows(rootAbs, rootDirName, { log });
 
-  if (rows.length === 0) return null;
+  if (rows.length === 0) return { written: [] };
 
   // The Branch column earns its place only when there is more than one node to name.
   const leafless = nodes.length === 1 && nodes[0].branchNames.length === 0;

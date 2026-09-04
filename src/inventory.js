@@ -277,7 +277,7 @@ function renderHeader(leaves) {
   ];
 }
 
-/** Write `Inventory.md`. Returns the written paths, matching the other report modes. */
+/** Write `Inventory.md`. Returns `{ written }`, matching the other report modes. */
 function runInventoryMode(leaves, outputDir) {
   const parts = renderHeader(leaves);
   if (leaves.length === 0 || collectSlots(leaves).size === 0) {
@@ -289,7 +289,7 @@ function runInventoryMode(leaves, outputDir) {
 
   const outPath = path.join(outputDir, 'Inventory.md');
   fs.writeFileSync(outPath, `${parts.join('\n\n')}\n`, 'utf8');
-  return [outPath];
+  return { written: [outPath] };
 }
 
 module.exports = {

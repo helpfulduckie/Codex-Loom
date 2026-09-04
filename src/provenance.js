@@ -18,13 +18,7 @@
 
 const fs = require('fs');
 const path = require('path');
-
-function csvCell(value) {
-  const s = String(value === undefined || value === null ? '' : value);
-  return s.includes(',') || s.includes('"') || s.includes('\n')
-    ? `"${s.replace(/"/g, '""')}"`
-    : s;
-}
+const { csvCell } = require('./report');
 
 function sourceLabel(item) {
   if (item._canonSource) return `library:${item._canonSource}`;
@@ -132,7 +126,7 @@ function formatProvenanceCsv(rows) {
  * `sourceFile`. Omitting it passes the absolute stamps through, which is what the unit
  * tests do when the path is not what they are asserting on.
  *
- * Returns an array of written file paths.
+ * Returns `{ written }`.
  */
 function runProvenanceMode(registry, reportBase, rootDirName, baseDir) {
   fs.mkdirSync(reportBase, { recursive: true });
@@ -144,7 +138,7 @@ function runProvenanceMode(registry, reportBase, rootDirName, baseDir) {
   fs.writeFileSync(mdPath, formatProvenanceMd(rootDirName, rows) + '\n', 'utf8');
   fs.writeFileSync(csvPath, formatProvenanceCsv(rows) + '\n', 'utf8');
 
-  return [mdPath, csvPath];
+  return { written: [mdPath, csvPath] };
 }
 
 module.exports = {
