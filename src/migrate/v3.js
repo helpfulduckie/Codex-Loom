@@ -214,51 +214,6 @@ function migrateConfigDocument(doc) {
   return { changes, unresolved };
 }
 
-// ── Templates (§8.3) ─────────────────────────────────────────────────────────
-
-/**
- * Strip a v3 template's story-card envelope: everything up to and including the last
- * `~~~` line.
- *
- * The last fence rather than the second, because a v3 template was free to put the
- * heading, the fence and its keys wherever it liked — `{if}` blocks around `notes:` mean
- * the closing fence is not reliably the fourth line, and a template with no fence at all
- * is already body-only and must be left untouched.
- *
- * A code fence inside body prose is spelled ``` in every template in the corpus, so it is
- * not at risk here; a body that genuinely opened with `~~~` would be, which is why this
- * runs once under review rather than on every compile.
- */
-function stripTemplateHeader(text) {
-  const lines = String(text).split('\n');
-  let last = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].trim() === '~~~') last = i;
-  }
-  if (last === -1) return text;
-  return lines.slice(last + 1).join('\n');
-}
-
-/** Strip the envelope from every `.template`/`.partial` under `rootDir`. */
-function migrateTemplateFiles(rootDir, options = {}) {
-  const touched = [];
-  const walk = (dir) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) { walk(full); continue; }
-      if (!/\.(template|partial)$/i.test(entry.name)) continue;
-      const source = fs.readFileSync(full, 'utf8');
-      const output = stripTemplateHeader(source);
-      if (output !== source) {
-        if (!options.dryRun) fs.writeFileSync(full, output, 'utf8');
-        touched.push(full);
-      }
-    }
-  };
-  walk(rootDir);
-  return { touched };
-}
-
 // ── Item YAML (§4.2, §4.5, §8.4) ─────────────────────────────────────────────
 
 /**
@@ -524,11 +479,8 @@ module.exports = {
   migrateConfigDocument,
   migrateItemDocument,
   migrateItemFiles,
-  migrateTemplateFiles,
-  stripTemplateHeader,
   encodeTriggerPadding,
   collectComponentAliases,
   collectCanonNames,
   rewriteAtTokens,
-  V3_COMPONENT_TYPES,
 };

@@ -65,14 +65,14 @@ const AID_BUILTIN_TYPES = new Set(['character', 'class', 'race', 'location', 'fa
  * asks what should actually be written. Trailing space and period never reach here; they
  * are fatal above, since Windows strips them and the type would silently become another.
  *
- * @returns {{ type: string, folded: boolean, trimmed: boolean }}
+ * @returns {{ type: string, trimmed: boolean }}
  */
 function normalizeCardType(raw) {
-  if (typeof raw !== 'string' || raw === '') return { type: raw, folded: false, trimmed: false };
+  if (typeof raw !== 'string' || raw === '') return { type: raw, trimmed: false };
   const trimmedText = raw.replace(/^\s+/, '');
   const lower = trimmedText.toLowerCase();
   const folded = AID_BUILTIN_TYPES.has(lower) && trimmedText !== lower;
-  return { type: folded ? lower : trimmedText, folded, trimmed: trimmedText !== raw };
+  return { type: folded ? lower : trimmedText, trimmed: trimmedText !== raw };
 }
 
 /**
@@ -149,7 +149,6 @@ function buildCardTypeAudit() {
 }
 
 module.exports = {
-  INVALID_TYPE_CHARS,
   validateCardType,
   normalizeCardType,
   buildCardTypeAudit,

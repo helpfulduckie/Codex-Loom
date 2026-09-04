@@ -66,6 +66,7 @@ function writeScenarioBlurb({
   } else if (descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec)) {
     let combined = null;
     let descMetadata = null;
+    const rootRolesDeclared = !!(config.roles && Object.keys(config.roles).length);
 
     if (isPassthrough(descSpec)) {
       // A prose `.md`/`.txt` blurb still resolves role and pronoun tokens, matching the
@@ -77,7 +78,6 @@ function writeScenarioBlurb({
       if (raw === null) {
         combined = null;
       } else {
-        const rootRolesDeclared = !!(config.roles && Object.keys(config.roles).length);
         combined = applyTokenPass(raw, {
           item: {}, registry, branchProtagonist: null,
           roles: rootRolesDeclared ? config.roles : null, onRoleUsed: roleState.onUsed,
@@ -94,7 +94,6 @@ function writeScenarioBlurb({
         // some node declared `roles:`), so a `{$role}` token in the root description
         // resolves instead of reading as an undeclared placeholder, and `onRoleUsed` marks
         // it used so `CL0545` agrees.
-        const rootRolesDeclared = !!(config.roles && Object.keys(config.roles).length);
         ({ text: combined } = renderSectionedComponent(
           descComponent, [], new Map(),
           {

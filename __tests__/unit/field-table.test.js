@@ -202,14 +202,6 @@ describe('loadFieldTable', () => {
     });
   });
 
-  test('CL0422–CL0425 form a contiguous band in the render decade', () => {
-    expect([
-      CODES.FIELD_TABLE_MALFORMED,
-      CODES.FIELD_TABLE_UNKNOWN_KEY,
-      CODES.FIELD_TABLE_BAD_REF,
-      CODES.FIELD_TABLE_STRAY_FILE,
-    ]).toEqual(['CL0422', 'CL0423', 'CL0424', 'CL0425']);
-  });
 });
 
 describe('FIELD_TABLE_SCHEMA stays in step with the procedural loader', () => {

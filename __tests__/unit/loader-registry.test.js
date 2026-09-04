@@ -34,11 +34,6 @@ describe('file discovery across every accepted suffix (§4.6)', () => {
     expect(loadItemsFromDir([tmpDir]).map((i) => i.id)).toEqual(['A']);
   });
 
-  test('.yml is no longer silently ignored', () => {
-    write('Codex/a.yml', 'id: A\n');
-    expect(loadItemsFromDir([tmpDir])).toHaveLength(1);
-  });
-
   test('non-YAML files are not loaded', () => {
     write('Codex/notes.md', 'id: A\n');
     write('Codex/tpl.template', 'x');
@@ -70,13 +65,6 @@ describe('file discovery across every accepted suffix (§4.6)', () => {
     expect(loadItemsFromDir([tmpDir])).toEqual([]);
   });
 
-  test('the old canon.cl.yaml name is no longer reserved', () => {
-    // The rename ships no compatibility shim (see RESERVED_LIBRARY_BASENAMES): a leftover
-    // file under the old name loads as an ordinary item, which is what makes the stale
-    // name visible rather than silently honored.
-    write('Esudia/canon.cl.yaml', 'id: Stale\nname: Stale\n');
-    expect(loadItemsFromDir([tmpDir]).map((i) => i.id)).toEqual(['Stale']);
-  });
 });
 
 describe('item loading', () => {

@@ -33,12 +33,6 @@ function splitRef(ref) {
   };
 }
 
-/** The canonical spelling of a reference — what overlay keys and dedupe sets are keyed by. */
-function normalizeRef(ref) {
-  const { source, id } = splitRef(ref);
-  return source === null ? id : `${source}:${id}`;
-}
-
 /**
  * Resolve a reference against a registry.
  *
@@ -104,4 +98,4 @@ function describeRefFailure(result) {
   return result.hint ? `${result.message}\n${result.hint}` : result.message;
 }
 
-module.exports = { splitRef, normalizeRef, resolveItemRef, describeRefFailure, CODES };
+module.exports = { splitRef, resolveItemRef, describeRefFailure, CODES };

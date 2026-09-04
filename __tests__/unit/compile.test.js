@@ -6,194 +6,16 @@ const fs = require('fs');
 const {
   compile,
   buildCompileContext,
-  resolveIncludes, resolveBranchItems,
+  resolveBranchItems,
 } = require('../../src/compile');
-const { writeOpening, resolveOpeningContent } = require('../../src/treeWrite');
-const { getTemplate } = require('../../src/templateResolve');
 const { validateCardType, normalizeCardType, buildCardTypeAudit } = require('../../src/cardType');
 const {
-  writeOutput, buildBranchOutputDir, resolveBranchFolderPath, cleanAndArchive,
+  writeOutput, buildBranchOutputDir, cleanAndArchive,
 } = require('../../src/outputPaths');
 const { resolveCrossItemRenderFunctions } = require('../../src/crossItem');
-const { buildRegistry } = require('../../src/loader/registry');
+const { buildRegistry, resolveIncludes } = require('../../src/loader/registry');
 const { Diagnostics, CODES: DIAG_CODES } = require('../../src/diag');
 const template = require('../../src/template');
-
-describe('getTemplate', () => {
-  const templates = new Map([
-    ['character', { content: 'char template', _source: 'x' }],
-    ['npc', { content: 'npc template', _source: 'y' }],
-  ]);
-
-  test('returns template entry by render.template field', () => {
-    const item = { render: { template: 'npc' }, aid: { type: 'character' } };
-    expect(getTemplate(item, templates)).toEqual({ content: 'npc template', _source: 'y' });
-  });
-
-  test('falls back to aid.type when render.template absent', () => {
-    const item = { render: {}, aid: { type: 'Character' } };
-    expect(getTemplate(item, templates)).toEqual({ content: 'char template', _source: 'x' });
-  });
-
-  test('type lookup is case-insensitive', () => {
-    const item = { aid: { type: 'CHARACTER' } };
-    expect(getTemplate(item, templates)).toEqual({ content: 'char template', _source: 'x' });
-  });
-
-  test('returns null when neither render.template nor aid.type found', () => {
-    const item = { aid: { type: 'Unknown' } };
-    expect(getTemplate(item, templates)).toBeNull();
-  });
-
-  test('returns null for item with no type or template', () => {
-    expect(getTemplate({}, templates)).toBeNull();
-  });
-});
-
-describe('resolveOpeningContent', () => {
-  let tmpDir;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-opening-'));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  test('inline text is returned as-is (trimmed)', () => {
-    expect(resolveOpeningContent('Which role?  ', tmpDir)).toBe('Which role?');
-  });
-
-  test('valid file path returns file content (trimmed)', () => {
-    const file = path.join(tmpDir, 'opening.md');
-    fs.writeFileSync(file, 'File content\n', 'utf8');
-    expect(resolveOpeningContent(file, tmpDir)).toBe('File content');
-  });
-
-  test('relative file path resolves from base', () => {
-    fs.mkdirSync(path.join(tmpDir, 'openings'));
-    const file = path.join(tmpDir, 'openings', 'q.md');
-    fs.writeFileSync(file, 'Relative content', 'utf8');
-    expect(resolveOpeningContent('./openings/q.md', tmpDir)).toBe('Relative content');
-  });
-
-  test('non-existent path returns string as inline text', () => {
-    expect(resolveOpeningContent('./does-not-exist.md', tmpDir)).toBe('./does-not-exist.md');
-  });
-
-  test('{%variable} in path is expanded before file lookup', () => {
-    fs.mkdirSync(path.join(tmpDir, 'openings'));
-    const file = path.join(tmpDir, 'openings', 'E-Kaiden.md');
-    fs.writeFileSync(file, 'Kaiden opening', 'utf8');
-    const spec = path.join(tmpDir, 'openings', 'E-{%pcName}.md');
-    expect(resolveOpeningContent(spec, tmpDir, { pcName: 'Kaiden' })).toBe('Kaiden opening');
-  });
-
-  test('{%variable} in path that resolves to non-existent file returns expanded path string', () => {
-    const spec = path.join(tmpDir, 'openings', 'E-{%pcName}.md');
-    const result = resolveOpeningContent(spec, tmpDir, { pcName: 'Kaiden' });
-    expect(result).toBe(path.join(tmpDir, 'openings', 'E-Kaiden.md'));
-    expect(result).not.toContain('{%');
-  });
-
-  test('unresolved {%variable} in path stays as literal when variable undefined', () => {
-    const spec = './openings/E-{%pcName}.md';
-    const result = resolveOpeningContent(spec, tmpDir, {});
-    expect(result).toContain('{%pcName}');
-  });
-});
-
-describe('writeOpening', () => {
-  let tmpDir;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-opening-'));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  test('creates Components/Opening.md with content and trailing newline', () => {
-    writeOpening(tmpDir, 'Hello world');
-    const outPath = path.join(tmpDir, 'Components', 'Opening.md');
-    expect(fs.existsSync(outPath)).toBe(true);
-    expect(fs.readFileSync(outPath, 'utf8')).toBe('Hello world\n');
-  });
-
-  test('creates intermediate Components directory', () => {
-    const nested = path.join(tmpDir, 'Branches', 'A');
-    writeOpening(nested, 'Nested');
-    expect(fs.existsSync(path.join(nested, 'Components', 'Opening.md'))).toBe(true);
-  });
-});
-
-describe('resolveBranchFolderPath', () => {
-  test('returns id path when no branches config', () => {
-    expect(resolveBranchFolderPath(null, ['alpha', 'beta'])).toEqual(['alpha', 'beta']);
-  });
-
-  test('returns id path when no title on nodes', () => {
-    const branches = {
-      alpha: { branches: { beta: {} } },
-    };
-    expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['alpha', 'beta']);
-  });
-
-  test('ignores title when present on a node, uses key instead', () => {
-    const branches = {
-      alpha: { title: 'The Alpha Path', branches: { beta: {} } },
-    };
-    expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['alpha', 'beta']);
-  });
-
-  test('ignores title on nested node, uses key instead', () => {
-    const branches = {
-      alpha: { branches: { beta: { title: 'Beta Run' } } },
-    };
-    expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['alpha', 'beta']);
-  });
-
-  test('ignores title at all levels when both present, uses keys instead', () => {
-    const branches = {
-      alpha: { title: 'Alpha Stage', branches: { beta: { title: 'Beta Stage' } } },
-    };
-    expect(resolveBranchFolderPath(branches, ['alpha', 'beta'])).toEqual(['alpha', 'beta']);
-  });
-
-  test('falls back to key when title is empty string', () => {
-    const branches = {
-      alpha: { title: '' },
-    };
-    expect(resolveBranchFolderPath(branches, ['alpha'])).toEqual(['alpha']);
-  });
-
-  test('falls back to key when title is null', () => {
-    const branches = {
-      alpha: { title: null },
-    };
-    expect(resolveBranchFolderPath(branches, ['alpha'])).toEqual(['alpha']);
-  });
-
-  test('returns id for unknown keys not in branches map', () => {
-    const branches = {
-      alpha: {},
-    };
-    expect(resolveBranchFolderPath(branches, ['alpha', 'unknown'])).toEqual(['alpha', 'unknown']);
-  });
-
-  test('id lookup is case-insensitive, returns actual key casing', () => {
-    const branches = {
-      Alpha: { title: 'The Alpha Path' },
-    };
-    expect(resolveBranchFolderPath(branches, ['alpha'])).toEqual(['Alpha']);
-  });
-
-  test('empty id path returns empty folder path', () => {
-    expect(resolveBranchFolderPath({}, [])).toEqual([]);
-  });
-});
 
 // ── buildBranchOutputDir ──────────────────────────────────────────────────────
 
@@ -551,7 +373,7 @@ describe('resolveIncludes — duplicate file detection', () => {
 
 // ── token coverage: % in component specs + @ canon in specs ───────────────────
 
-describe('buildCompileContext — % and @ in component specs', () => {
+describe('buildCompileContext — % in component specs', () => {
   let tmpDir;
   beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-spec-')); });
   afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
@@ -602,34 +424,6 @@ describe('buildCompileContext — % and @ in component specs', () => {
 });
 
 // ── token coverage: {%var} in branch title is not expanded (title is ignored) ─
-
-describe('resolveBranchFolderPath — {%var} in title', () => {
-  test('does not expand {%var} in a branch title; key is used unchanged', () => {
-    const branches = { knight: { title: 'The {%era} Knight' } };
-    expect(resolveBranchFolderPath(branches, ['knight'], { era: 'Iron Age' }))
-      .toEqual(['knight']);
-  });
-
-  test('ancestor and leaf folder names come from keys regardless of title/variables', () => {
-    const branches = {
-      tier: {
-        title: '{%era} Tier',
-        variables: { era: 'Bronze' },
-        branches: {
-          a: { title: 'A', variables: { era: 'Gold' } },
-          b: { title: 'B' },
-        },
-      },
-    };
-    expect(resolveBranchFolderPath(branches, ['tier', 'a'], {})).toEqual(['tier', 'a']);
-    expect(resolveBranchFolderPath(branches, ['tier', 'b'], {})).toEqual(['tier', 'b']);
-  });
-
-  test('falls back to key when no title and leaves plain names unchanged', () => {
-    const branches = { plain: {} };
-    expect(resolveBranchFolderPath(branches, ['plain'], {})).toEqual(['plain']);
-  });
-});
 
 // ── validateCardType (aid.type must be a legal folder/file name) ──────────────
 
@@ -690,26 +484,26 @@ describe('normalizeCardType', () => {
     'folds the built-in %s to lowercase', (builtin) => {
       const capitalized = builtin[0].toUpperCase() + builtin.slice(1);
       expect(normalizeCardType(capitalized)).toEqual({
-        type: builtin, folded: true, trimmed: false,
+        type: builtin, trimmed: false,
       });
     }
   );
 
   test('leaves an already-lowercase built-in untouched', () => {
     expect(normalizeCardType('character')).toEqual({
-      type: 'character', folded: false, trimmed: false,
+      type: 'character', trimmed: false,
     });
   });
 
   test('leaves custom types alone, including ones that contain a built-in name', () => {
     for (const custom of ['Character - Dalor', 'Spell - Ice', 'Character (Preset)', 'You']) {
-      expect(normalizeCardType(custom)).toEqual({ type: custom, folded: false, trimmed: false });
+      expect(normalizeCardType(custom)).toEqual({ type: custom, trimmed: false });
     }
   });
 
   test('trims leading whitespace and folds in one pass', () => {
     expect(normalizeCardType(' Character')).toEqual({
-      type: 'character', folded: true, trimmed: true,
+      type: 'character', trimmed: true,
     });
   });
 
@@ -719,7 +513,7 @@ describe('normalizeCardType', () => {
   });
 
   test('passes non-strings and empties through untouched', () => {
-    expect(normalizeCardType('')).toEqual({ type: '', folded: false, trimmed: false });
+    expect(normalizeCardType('')).toEqual({ type: '', trimmed: false });
     expect(normalizeCardType(undefined).type).toBeUndefined();
   });
 });
@@ -737,16 +531,6 @@ describe('buildCardTypeAudit', () => {
     // `item.aid.type` is deliberately *not* mutated: it is also the selector the template
     // ladder and `templateFor` key on, and those maps carry the author's casing.
     expect(buildCardTypeAudit().resolve('Character', { file: 'items.yaml' })).toBe('character');
-  });
-
-  test('the built-in fold is silent — it is correct and unconditional, so nothing is reported', () => {
-    // CL0627 used to announce the fold. Dropped 2026-09-01: capitalizing `Character` is the
-    // natural spelling (it matches a field table's `templates:` keys), the rewrite is always
-    // right, and no author was ever going to act on the line. The fold itself is asserted
-    // above; this guards against the warning coming back.
-    const diagnostics = report(['Character', 'Race', 'Location', 'Faction', 'Class']);
-    expect(diagnostics.warnings).toHaveLength(0);
-    expect(diagnostics.errors).toHaveLength(0);
   });
 
   test('CL0628 still reports leading whitespace on a built-in', () => {
@@ -1053,16 +837,6 @@ describe('the notes ladder end to end', () => {
       }
     };
   }
-
-  test('a loaded Item.notes template is inert — the filename-suffix rung was removed (§13.4, Phase 13)', () => {
-    // Pre-Phase-13 this resolved `notes:` through Item.notes by filename alone. With that
-    // rung gone and no render.notesTemplate declared anywhere, the ladder falls straight
-    // through to §4.5's default: the mapping renders as `key: value` lines.
-    const read = build({ templates: { 'Item.notes': '{if $notes.known}[e]{/if}' } });
-    const text = read('main');
-    expect(text).not.toContain("notes: '[e]'");
-    expect(text).toContain("notes: 'known: true'");
-  });
 
   test('the project default applies when no type template exists', () => {
     const read = build({

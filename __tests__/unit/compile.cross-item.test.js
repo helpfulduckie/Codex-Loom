@@ -1,8 +1,5 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-
 // Isolated in its own file (rather than folded into compile.test.js) because the pass-count
 // proof below needs `applyFieldRenderFunctions` spied on *before* `crossItem.js` is required —
 // crossItem.js destructures the function into a local binding at its own module load time
@@ -111,12 +108,4 @@ describe('resolveCrossItemRenderFunctions — dependency-ordered evaluation (Pha
     expect(z.body.summary).toBe('{join(" ", $Y.body.b)}');
   });
 
-  test('no fixpoint bound remains in the source', () => {
-    // `maxPasses` and the `JSON.stringify`-before-and-after convergence check were the
-    // fixpoint loop's own mechanism; their absence is direct evidence the loop is gone,
-    // not just that its replacement happens to produce the same answer.
-    const source = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'compile.js'), 'utf8');
-    expect(source).not.toMatch(/maxPasses/);
-    expect(source).not.toMatch(/circular dependencies/);
-  });
 });

@@ -1,6 +1,6 @@
 'use strict';
 
-const { splitRef, normalizeRef, resolveItemRef, describeRefFailure, CODES } = require('../../src/model/refs');
+const { splitRef, resolveItemRef, describeRefFailure, CODES } = require('../../src/model/refs');
 const { ItemRegistry } = require('../../src/loader/registry');
 
 describe('splitRef', () => {
@@ -18,16 +18,6 @@ describe('splitRef', () => {
 
   test('whitespace around the colon is tolerated', () => {
     expect(splitRef(' Grimwood : Magic ')).toEqual({ source: 'grimwood', id: 'magic' });
-  });
-});
-
-describe('normalizeRef', () => {
-  test('a plain ref round-trips to its lowercased id', () => {
-    expect(normalizeRef('Kaiden')).toBe('kaiden');
-  });
-
-  test('a qualified ref round-trips to "source:id"', () => {
-    expect(normalizeRef('Grimwood:Magic')).toBe('grimwood:magic');
   });
 });
 

@@ -317,6 +317,5 @@ module.exports = {
   evaluateKeys,
   FUNCTIONS,
   renderProgram,
-  renderNode,
   applyWrapper,
 };

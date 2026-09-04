@@ -176,4 +176,4 @@ for (const alias of ['var', 'vars', 'variable', 'variables']) {
   ITEM_SCHEMA.keys[alias] = ANY;
 }
 
-module.exports = { ITEM_SCHEMA, AID, NAME, RENDER };
+module.exports = { ITEM_SCHEMA };

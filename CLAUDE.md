@@ -3,12 +3,14 @@
 Codex Loom compiles YAML item definitions into Velvet Lattice story card format
 for AI Dungeon scenarios. The released compiler is v3.3.2 (see `package.json`);
 active work is the v4 rebuild on the `v4-phase1` branch — a clean break from v3.
-**Phases 1 through 13 are complete.** Phase 13 added context tiering (a tier is
-a branch carrying `templateFor: { base: terse.cl.yaml }`; a label-membership
-guard replaces byte-identity for tier output), the `render.storyCards` emit path
-with `card:` removed, a `syncLibrary` prune, and the notes-ladder collapse to
-three rungs. Coinflip carries the one worked `lowContext` tier. Phase 14 is
-convention packs.
+**Phases 1 through 17 are complete; there is no Phase 18.** What remains is a
+queue of independent items in the vault note `Codex Loom v4 Backlog`, worked one
+at a time. Phase 13 added context tiering (a tier is a branch carrying
+`templateFor: { base: terse.cl.yaml }`; a label-membership guard replaces
+byte-identity for tier output), the `render.storyCards` emit path with `card:`
+removed, a `syncLibrary` prune, and the notes-ladder collapse to three rungs.
+Coinflip carries the one worked `lowContext` tier. Phase 14 added convention
+packs (`lint.packs`, `src/lint/packs.js`).
 
 The phases a change today is most likely to touch. **Phase 8** migrates v3
 projects in place (`--migrate`, `--rename-cl`) and writes a `migration-report.md`
@@ -84,7 +86,7 @@ left behind there is invisible to `git status` and is inherited by
 **If that directory is absent, this is all working as intended.** `golden.test.js` and
 `migrate.integration.test.js` register their suites as skipped, one `describe` in
 `emit-vl.test.js` skips, and everything else runs. The full suite with the goldens present is
-**2,704 across 86 suites** (2026-09-03, live-baseline session); without them the passing
+**2,754 across 86 suites** (2026-09-03, slop-audit session); without them the passing
 count is lower and the four fixture-dependent `describe`s register as skipped. **Do not try to
 repair this.** There is no missing dependency to install and no path to fix; the tests are
 skipping because the data they compare against is private. Treat that as green.

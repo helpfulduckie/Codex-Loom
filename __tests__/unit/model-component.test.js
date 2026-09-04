@@ -3,8 +3,7 @@
 /**
  * The component model (§7.2, §7.3) — the grammar the flip commit routes items into.
  *
- * Nothing calls this module yet: steps 3–5 wire it in, and until then it is tested on its
- * own. That is deliberate rather than a gap. The grammar is the piece the whole phase
+ * That is deliberate rather than a gap. The grammar is the piece the whole phase
  * depends on, and settling its behavior before any output moves is what keeps the flip
  * commit reviewable — a defect found here is one line, the same defect found there is
  * hidden inside a re-baselined Plot Essentials diff.

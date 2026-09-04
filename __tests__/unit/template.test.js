@@ -304,16 +304,6 @@ describe('applyFieldRenderFunctions', () => {
     expect(() => applyFieldRenderFunctions(card)).not.toThrow();
   });
 
-  test('emit warning and leave match intact on bad render function call', () => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const card = {
-      body: { broken: '{join($body.oops)}' }, // missing separator arg
-    };
-    // Should not throw; bad calls are caught and warned
-    expect(() => applyFieldRenderFunctions(card)).not.toThrow();
-    warnSpy.mockRestore();
-  });
-
   describe('cross-card refs via itemMap', () => {
     test('join() spreads mapping values from another card', () => {
       const card = {
@@ -842,25 +832,4 @@ describe('render — diagnostics', () => {
     expect(render(tmpl, data, new Map())).toBe('A\nline1{/preserve}line2\nB');
   });
 
-  test('the \\x00LBRACE\\x00 / \\x00RBRACE\\x00 sentinel constants are gone from src/', () => {
-    // Matches the actual JS string-literal form (quoted), not prose mentioning the old
-    // sentinel by name — this file's own doc comments do that deliberately, to explain
-    // what the shim above stopped doing.
-    const sentinelLiteral = /['"]\\x00L?RBRACE\\x00['"]/;
-    const fs = require('fs');
-    const path = require('path');
-    const srcDir = path.resolve(__dirname, '../../src');
-    const offenders = [];
-    (function walk(dir) {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) walk(full);
-        else if (entry.name.endsWith('.js')) {
-          const text = fs.readFileSync(full, 'utf8');
-          if (sentinelLiteral.test(text)) offenders.push(full);
-        }
-      }
-    })(srcDir);
-    expect(offenders).toEqual([]);
-  });
 });

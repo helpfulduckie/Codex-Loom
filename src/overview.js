@@ -52,25 +52,6 @@ function shiftHeadings(content, shift) {
 // ── exported building blocks ─────────────────────────────────────────────────
 
 /**
- * Read all .md files from a Components/ directory.
- * Returns a map of basename-without-ext → trimmed content.
- */
-function readComponents(branchDir) {
-  const compDir = path.join(branchDir, 'Components');
-  const result  = {};
-  if (!fs.existsSync(compDir)) return result;
-
-  const entries = fs.readdirSync(compDir, { withFileTypes: true });
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    if (entry.isFile() && entry.name.endsWith('.md')) {
-      const content = readFile(path.join(compDir, entry.name));
-      if (content) result[path.basename(entry.name, '.md')] = content;
-    }
-  }
-  return result;
-}
-
-/**
  * Build a concatenated story-cards block from a Story Cards/ directory.
  * Groups files by their immediate sub-folder (card type).
  * headingLevel controls the markdown heading depth for group names.
@@ -312,10 +293,8 @@ function runOverviewMode(scenarioRoot, outputDir, verbose = false) {
 }
 
 module.exports = {
-  readComponents,
   buildStoryCardsBlock,
   discoverLeaves,
-  collectOverviewSections,
   compileLeaf,
   runLeafReviewMode,
   runOverviewMode,

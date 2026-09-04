@@ -6,7 +6,7 @@ const path = require('path');
 const YAML = require('yaml');
 const {
   migrateConfigFile, collectComponentAliases, collectCanonNames,
-  rewriteAtTokens, migrateItemDocument, migrateItemFiles, stripTemplateHeader,
+  rewriteAtTokens, migrateItemDocument, migrateItemFiles,
   encodeTriggerPadding,
 } = require('../../src/migrate/v3');
 const { renameConfigToCl, migrateProjectFully } = require('../../src/migrate');
@@ -268,32 +268,6 @@ describe('migrateItemFiles — {@} references across the whole tree, not just co
 });
 
 // ── Phase 2: the item and template rules (§4.2, §8.3, §8.4) ──────────────────
-
-describe('stripTemplateHeader', () => {
-  test('removes everything up to and including the last fence', () => {
-    const template = [
-      '## {$name.full}',
-      '~~~',
-      'triggers: [{join(", ", $aid.triggers)}]',
-      '{if $aid.known}',
-      "notes: '[e]'",
-      '{/if}',
-      '~~~',
-      '{wrapper}',
-      '{$body.tagline}',
-    ].join('\n');
-    expect(stripTemplateHeader(template)).toBe('{wrapper}\n{$body.tagline}');
-  });
-
-  test('the LAST fence, not the second — a conditional notes: block moves the closing one', () => {
-    expect(stripTemplateHeader('## A\n~~~\nx\n~~~\nbody\n~~~\ntail')).toBe('tail');
-  });
-
-  test('a template with no fence is already body-only and is left alone', () => {
-    const body = '{wrapper}\n{$body.tagline}\n{/wrapper}';
-    expect(stripTemplateHeader(body)).toBe(body);
-  });
-});
 
 describe('encodeTriggerPadding', () => {
   test('a plainly padded value becomes the _ form', () => {

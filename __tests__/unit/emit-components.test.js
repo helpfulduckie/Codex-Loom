@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
-  SLOTTED_COMPONENTS, DESCRIPTION_DESCRIPTOR, FRAMING_DESCRIPTOR,
+  SLOTTED_COMPONENTS,
   isPassthrough, readPassthrough,
   renderSectionedComponent, writeSectionedComponent, renderFrontmatter,
 } = require('../../src/emit/components');
@@ -21,96 +21,6 @@ function write(name, content) {
   fs.writeFileSync(full, content, 'utf8');
   return full;
 }
-
-describe('the descriptor table', () => {
-  test('all six sectioned components are rows, not bespoke blocks', () => {
-    // AI Instructions and Author's Note arrived here by having their document layer
-    // deleted rather than ported — it was a second branch walker and a second delta
-    // vocabulary for what a section's own branches: and variants: already do. The
-    // adventure description arrived by having its two-field file format deleted (§7.7), and
-    // the opening by having the fourth and last of §7.1's four syntaxes deleted.
-    expect(SLOTTED_COMPONENTS.map((d) => d.key))
-      .toEqual(['plotEssential', 'summary', 'aiInstructions', 'authorsNote',
-        'adventureDescription', 'opening']);
-  });
-
-  test('every row declares the fields the emitter needs', () => {
-    for (const descriptor of SLOTTED_COMPONENTS) {
-      expect(descriptor.file).toEqual(expect.any(String));
-      expect(descriptor.label).toEqual(expect.any(String));
-      expect(descriptor.verboseLabel).toEqual(expect.any(String));
-      expect(typeof descriptor.defaultHeadingLevel).toBe('number');
-    }
-  });
-
-  test("each row writes to its own filename, in VL's spelling", () => {
-    const byKey = Object.fromEntries(SLOTTED_COMPONENTS.map((d) => [d.key, d.file]));
-    expect(byKey).toEqual({
-      plotEssential: 'Plot Essentials.md',
-      summary: 'Summary.md',
-      aiInstructions: 'AI Instructions.md',
-      // Deliberately not "Author's Note.md" — Velvet Lattice requires this spelling.
-      authorsNote: 'Author Notes.md',
-      // Shares its filename with the scenario blurb, at a different level and from a
-      // different key — the arrangement opening: and branchFraming: already have.
-      adventureDescription: 'Description.md',
-      opening: 'Opening.md',
-    });
-  });
-
-  test('opening and branch framing share Opening.md at two levels', () => {
-    const opening = SLOTTED_COMPONENTS.find((d) => d.key === 'opening');
-    expect([opening.file, FRAMING_DESCRIPTOR.file]).toEqual(['Opening.md', 'Opening.md']);
-  });
-
-  test('the caps are a column, so a new one is a row rather than a call site', () => {
-    const capped = [...SLOTTED_COMPONENTS, FRAMING_DESCRIPTOR]
-      .filter((d) => d.limitKey).map((d) => [d.key, d.limitKey]);
-    expect(capped).toEqual([['opening', 'opening'], ['branchFraming', 'opening']]);
-  });
-
-  test('inline prose is a column, and only the two Opening.md rows take it', () => {
-    // `opening: "Who are you?"` is a sentence, not a path. For every other component a spec
-    // naming no file is a broken path, and reading it as content would write the path out.
-    const inline = [...SLOTTED_COMPONENTS, DESCRIPTION_DESCRIPTOR, FRAMING_DESCRIPTOR]
-      .filter((d) => d.inlineProse).map((d) => d.key);
-    expect(inline).toEqual(['opening', 'branchFraming']);
-  });
-
-  test('the description keys are two rows sharing one filename at two levels', () => {
-    const adventure = SLOTTED_COMPONENTS.find((d) => d.key === 'adventureDescription');
-    expect([adventure.file, DESCRIPTION_DESCRIPTOR.file]).toEqual(['Description.md', 'Description.md']);
-    // `dir: null` is the node root; every other sectioned row writes into Components/.
-    expect([adventure.dir, DESCRIPTION_DESCRIPTOR.dir]).toEqual([null, null]);
-  });
-
-  test('frontmatter is a column, and only the two description rows carry it', () => {
-    const withFrontmatter = [...SLOTTED_COMPONENTS, DESCRIPTION_DESCRIPTOR]
-      .filter((d) => d.frontmatter).map((d) => d.key);
-    expect(withFrontmatter).toEqual(['adventureDescription', 'description']);
-  });
-
-  test('the two heading defaults survive the merge, because v3 formats disagree', () => {
-    // Plot Essentials reads a bare heading: as level 0, AI Instructions as level 2. Both
-    // are right for their own output, which is why this is a column and not a constant.
-    const level = (key) => SLOTTED_COMPONENTS.find((d) => d.key === key).defaultHeadingLevel;
-    expect([level('plotEssential'), level('summary')]).toEqual([0, 0]);
-    expect([level('aiInstructions'), level('authorsNote')]).toEqual([2, 2]);
-  });
-
-  test('the sectioned rows are the §7.3 routable component set', () => {
-    const covered = SLOTTED_COMPONENTS.map((d) => d.key).sort();
-    expect(covered).toEqual([
-      'adventureDescription', 'aiInstructions', 'authorsNote',
-      'opening', 'plotEssential', 'summary',
-    ]);
-    // The two non-routable sectioned components have their own descriptors; scripts is a
-    // file copy, not a rendered document (§6.3).
-    expect(DESCRIPTION_DESCRIPTOR.key).toBe('description');
-    expect(FRAMING_DESCRIPTOR.key).toBe('branchFraming');
-  });
-});
-
 
 describe('passthrough components', () => {
   test('.md is prose to copy, not a document to compile', () => {

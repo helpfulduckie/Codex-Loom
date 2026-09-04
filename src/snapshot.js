@@ -236,8 +236,7 @@ function syncLibrary(config, options = {}) {
   // treats it as a role.
   const collected = entries.map((entry) => {
     const files = listAllFiles(entry.sourcePath);
-    const fileHashes = {};
-    for (const rel of files) fileHashes[rel] = hashFile(path.join(entry.sourcePath, rel));
+    const fileHashes = hashTree(entry.sourcePath);
     return { entry, files, fileHashes };
   });
   const fileHashesByName = new Map(collected.map((c) => [c.entry.name, c.fileHashes]));
@@ -386,5 +385,5 @@ function checkDrift(config, diagnostics) {
 }
 
 module.exports = {
-  syncLibrary, checkDrift, listAllFiles, hashFile, hashTree, collectEntries, entryLabel, CODES,
+  syncLibrary, checkDrift, listAllFiles, hashTree, collectEntries, entryLabel, CODES,
 };

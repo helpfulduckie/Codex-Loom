@@ -263,4 +263,4 @@ function finalizeDiagnostics({
   flushDiagnostics();
 }
 
-module.exports = { runReports, finalizeDiagnostics };
+module.exports = { finalizeDiagnostics };

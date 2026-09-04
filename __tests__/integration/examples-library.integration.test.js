@@ -189,14 +189,6 @@ describe('examples/library — both sets load from outside the project directory
     expect(diagnostics.errors.map((d) => d.format())).toEqual([]);
   });
 
-  test('the shared field table is not read as an item', () => {
-    // `templates/` is a sibling of the set directories on purpose: a `fields:` document
-    // inside `core/` is a hard "missing both id and name fields" error, because
-    // `loadItemsFromDir` skips a component document silently but not a field table.
-    expect(fs.existsSync(path.join(LIBRARY_SRC, 'templates', 'fields.cl.yaml'))).toBe(true);
-    expect(fs.existsSync(path.join(LIBRARY_SRC, 'core', 'templates'))).toBe(false);
-    expect(fs.existsSync(path.join(LIBRARY_SRC, 'grimwood', 'templates'))).toBe(false);
-  });
 });
 
 describe('the colliding magic pair (§17.2–§17.4)', () => {

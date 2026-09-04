@@ -481,5 +481,4 @@ module.exports = {
   parseNotesBlock,
   parseSettingsBlock,
   writeScalar,
-  FENCE,
 };

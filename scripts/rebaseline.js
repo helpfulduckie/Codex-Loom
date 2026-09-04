@@ -112,7 +112,7 @@ function loadSet(name) {
 
 // ── arguments ────────────────────────────────────────────────────────────────
 
-function parseArgs(argv, loader = loadSet) {
+function parseArgs(argv) {
   const allowed = new Set(['fence']);
   const only = [];
   const names = [];
@@ -129,7 +129,7 @@ function parseArgs(argv, loader = loadSet) {
     else names.push(arg);
   }
 
-  const set = loader(setName);
+  const set = loadSet(setName);
   const projects = names.length === 0
     ? set.PROJECTS
     : names.map((name) => {
@@ -579,4 +579,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { diffTree, parseArgs };
+module.exports = { diffTree };

@@ -97,7 +97,7 @@ const PRONOUN_TOKEN_MAP = {
  * Resolve a pronoun token keyword against a pronoun set name.
  * Preserves leading case of the original token.
  */
-function resolveProunounToken(token, setName) {
+function resolvePronounToken(token, setName) {
   const lower = token.toLowerCase();
   const role = PRONOUN_TOKEN_MAP[lower];
   const normalizedSet = (setName || '').toLowerCase();
@@ -350,7 +350,7 @@ function applyTokenPass(str, opts) {
         if (PRONOUN_TOKEN_MAP[restLower] !== undefined) {
           // Scoped pronoun: {$Id.she} — sets scope
           currentScope = refPronounSet || 'nonbinary';
-          return resolveProunounToken(rest, refPronounSet);
+          return resolvePronounToken(rest, refPronounSet);
         }
 
         // Check for {$Id.full} or {$Id.display}
@@ -409,7 +409,7 @@ function applyTokenPass(str, opts) {
     // Is it an unscoped pronoun token? → resolve against item's own pronouns
     if (PRONOUN_TOKEN_MAP[innerLower] !== undefined) {
       // Does NOT set scope
-      return resolveProunounToken(inner, itemPronounSet);
+      return resolvePronounToken(inner, itemPronounSet);
     }
 
     // Unknown — leave as-is (see the dotted branch above for why CL0540 is gated the
@@ -497,11 +497,8 @@ module.exports = {
   applyPronounPasses,
   applyTokenPass,
   applyCrossItemRefs,
-  resolveProunounToken,
+  resolvePronounToken,
   getDisplayName,
   getFullName,
-  matchCase,
   PRONOUN_SETS,
-  PRONOUN_TOKEN_MAP,
-  PLURAL_SETS,
 };

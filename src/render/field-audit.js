@@ -292,8 +292,7 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
   }
 
   // list reference → refRoot → { content, ack, allowExtra }. Keyed on both, in case the
-  // same list object is ever read under two roots (not true of today's two call sites,
-  // which are both `body`, but nothing here should assume it stays that way).
+  // same list object is ever read under two roots.
   const readableCache = new Map();
   const readable = (list, refRoot) => {
     let byRoot = readableCache.get(list);
@@ -328,12 +327,10 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
   //     bodies:[{ body, file, projectAuthored:Set|null }], seenBodies:Set }
   const perItem = new Map();
 
-  // `templateName` is kept in the signature for call-site symmetry with the render paths
-  // that pass it; the per-item check names no single template, so it is not read here.
   // `opts.refRoot` is the root a bare path in `list` qualifies to — `body` for a
   // story-card/component render, `notes` for a `templateFor.notes` list; defaults to
   // `body` since every call site today is a body render.
-  function collectForItem(item, list, templateName, opts = {}) {
+  function collectForItem(item, list, opts = {}) {
     if (!list) return;
     const body = item && item.body;
     if (!isPlainObject(body)) return;

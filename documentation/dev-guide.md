@@ -24,7 +24,7 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/loader/schema.js` | The item key surface (§4.3) |
 | `src/loader/component.js`, `src/loader/component-schema.js` | Component-document loading and its key surface (§7.2) |
 | `src/loader/field-table.js` | Loads `fields.cl.yaml` — the field and template declarations (§13.2) |
-| `src/loader.js` | Template and partial loading; re-exports the registry functions |
+| `src/loader.js` | Template and partial loading; holds `loadNamedFiles`, `loadTemplates` and `loadFieldTable` |
 | `src/schema.js` | The shared validation engine both key surfaces run through |
 | `src/diag.js` | The diagnostic bus: codes, severities, source spans (§4.4) |
 | `src/model/item.js` | Item resolution through import/variant/branch chains |
@@ -323,13 +323,13 @@ All `{%variable}` expansion routes through `resolveVariables()` in `src/util.js`
 
 There is no second `{@name}` family (§6.1): library names are exposed as ordinary `{%}` variables, so one expander covers every case. Don't reintroduce a parallel resolver for a new context — add a call site to `resolveVariables` instead.
 
-Call sites are thin wrappers: `config.expandPathTokens` (config paths), `compile.resolveComponentSpec`, the `include:`-path block in `loader/registry.resolveIncludes`, and `loader/component.js` for both `imports:` `from:` and a section's `file:`/`from:` sources. When adding a context that needs tokens, call `resolveVariables` rather than re-deriving the regex.
+Call sites are thin wrappers: `config/load.js`'s `expandVariables` (config paths), `treeWrite.resolveComponentSpec`, the `include:`-path block in `loader/registry.resolveIncludes`, and `loader/component.js` for both `imports:` `from:` and a section's `file:`/`from:` sources. When adding a context that needs tokens, call `resolveVariables` rather than re-deriving the regex.
 
 Coverage notes:
 - `{%}` is expanded in item bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and config paths. In `include:`/`import:` paths it uses **root** `config.variables` only, because `resolveIncludes` runs once before branch enumeration — branch-merged variables do not exist yet.
 - The `{$…}` field-reference family (`{$v.field}`, `{$Id.body.field}`) is a separate system (field interpolation + pronoun passes) and is **not** part of `resolveVariables`. It covers `body`/`aid`/`render`/`name` via `walkItemTextFields`, accepts dotted field refs in item data, and reports via `checkUnresolvedFieldTokens` on any token that survives to output; collapsing its four resolvers into one dispatcher is still deferred. See `07-templates.md` "Token Systems at a Glance".
 
-Library path resolution no longer needs a bespoke two-pass. v3 resolved plain-path library entries first to build a lookup table, then resolved entries referencing sibling library names against it. Now that library names are ordinary variables (§6.1) and variables resolve against each other by topological sort (§6.2), a library entry naming a sibling is just a variable naming a variable, and `expandPathTokens` handles it like any other. Unresolved tokens pass through unchanged, so the standard missing-path warning fires with the unexpanded token visible in the path string.
+Library path resolution no longer needs a bespoke two-pass. v3 resolved plain-path library entries first to build a lookup table, then resolved entries referencing sibling library names against it. Now that library names are ordinary variables (§6.1) and variables resolve against each other by topological sort (§6.2), a library entry naming a sibling is just a variable naming a variable, and `expandVariables` handles it like any other. Unresolved tokens pass through unchanged, so the standard missing-path warning fires with the unexpanded token visible in the path string.
 
 ---
 

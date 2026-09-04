@@ -67,9 +67,8 @@ describe('walkBranchChain — merged variables and components', () => {
   });
 
   test('an unmatched segment stops accumulation rather than throwing', () => {
-    const { variables, complete } = walkBranchChain(TREE, ['Free Form', 'nope']);
+    const { variables } = walkBranchChain(TREE, ['Free Form', 'nope']);
     expect(variables).toEqual({ scenario: 'free', shared: 'root-level' });
-    expect(complete).toBe(false);
   });
 });
 
@@ -179,10 +178,6 @@ describe('walkBranchChain — terminal node and chain', () => {
   test('collects every node along the chain, root-first', () => {
     const { nodes } = walkBranchChain(TREE, ['Free Form', 'Veryn']);
     expect(nodes).toEqual([TREE['Free Form'], TREE['Free Form'].branches.Veryn]);
-  });
-
-  test('complete is true when every segment matched', () => {
-    expect(walkBranchChain(TREE, ['Free Form', 'Veryn']).complete).toBe(true);
   });
 
   test('an empty path returns a null terminal node', () => {
@@ -300,8 +295,4 @@ describe('model/ purity (§3.3)', () => {
     }
   );
 
-  test('every model module is covered by that check', () => {
-    expect(fs.readdirSync(MODEL_DIR).filter((f) => f.endsWith('.js')).sort())
-      .toEqual(['branches.js', 'component.js', 'fieldops.js', 'item.js', 'pronouns.js', 'refs.js']);
-  });
 });

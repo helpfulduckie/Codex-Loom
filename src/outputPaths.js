@@ -170,10 +170,6 @@ function resolveBranchFolderPath(branches, idPath) {
 
 module.exports = {
   writeOutput,
-  cleanBranchOutputDir,
-  findNodeDirsOnDisk,
-  nodeDirsUpTo,
-  isDirEmpty,
   cleanAndArchive,
   buildBranchOutputDir,
   resolveBranchFolderPath,

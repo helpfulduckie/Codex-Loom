@@ -16,25 +16,6 @@ const {
 const { LIMITS, checkLimit } = require('./limits');
 
 /**
- * Resolve opening content: file path → read file; otherwise use as inline text.
- *
- * `sink` (`{ diagnostics, file }`), when passed, routes an undeclared `{%var}` or a cycle
- * onto the bus — the literal arm of this function is one of the surfaces where such a token
- * would otherwise only reach `console.warn`.
- */
-function resolveOpeningContent(opening, base, variables, sink) {
-  const expandedSpec = variables ? resolveVariables(String(opening), variables, sink) : String(opening);
-  const resolved = path.resolve(base, expandedSpec);
-  let content;
-  if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
-    content = fs.readFileSync(resolved, 'utf8').trimEnd();
-  } else {
-    content = expandedSpec.trimEnd();
-  }
-  return variables ? resolveVariables(content, variables, sink) : content;
-}
-
-/**
  * Resolve a component spec (a file path, or literal text) against branch-merged variables.
  *
  * Returns null for an absent spec, an absolute path when the spec names a file that
@@ -151,7 +132,12 @@ function writeFramingRecursive(rootNode, outputBase, configBase, configPath, var
     // `branchFraming:` works like it does in a `sections:` document. Interior nodes and the
     // project root alike: the root visit reaches here with the project's own roles table
     // and protagonist already merged in, exactly as it does for a sectioned root framing.
-    const literal = resolveOpeningContent(spec, configBase, vars, framingSink);
+    // `resolvedSpec` already carries the expanded literal, so only a prose file's content
+    // still needs its variables resolved. Expanding the literal a second time would report
+    // the same undeclared token once per pass — the bus does not dedupe.
+    const literal = isFile
+      ? resolveVariables(fs.readFileSync(resolvedSpec, 'utf8').trimEnd(), vars, framingSink)
+      : String(resolvedSpec).trimEnd();
     return applyTokenPass(literal, {
       item: {}, registry, branchProtagonist, roles, onRoleUsed,
       onWarn: busWarner(diagnostics, { file: configPath }),
@@ -203,8 +189,8 @@ function writeFramingRecursive(rootNode, outputBase, configBase, configPath, var
         );
       } else {
         // Phase 11 Step 1: the root renders through the same sectioned path an interior
-        // node uses, rather than the literal/`{%variable}`-only `resolveOpeningContent`
-        // the old hand-rolled rung called. That gains `sections:`, roles, `_variables`
+        // node uses, rather than the literal/`{%variable}`-only path the old root rung
+        // used. That gains `sections:`, roles, `_variables`
         // (library names folded in, since `branchVars` descends from the seed the root
         // visit merged) and the undeclared-placeholder check, none of which the root ever
         // had before.
@@ -383,22 +369,11 @@ function writePlaceholdersRecursive(rootNode, outputBase, variables, configPath,
   }, { outputBase, variables, table: {} });
 }
 
-/**
- * Write content to Components/Opening.md inside outputDir.
- * Exposed for unit testing.
- */
-function writeOpening(outputDir, content) {
-  return writeComponentFile(outputDir, 'Opening.md', content);
-}
-
 module.exports = {
-  resolveOpeningContent,
   resolveComponentSpec,
   questionsForMeasurement,
   copyScripts,
-  writeComponentFile,
   writeFramingRecursive,
   writeLabelsRecursive,
   writePlaceholdersRecursive,
-  writeOpening,
 };

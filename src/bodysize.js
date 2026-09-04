@@ -28,7 +28,7 @@
  * report that exists to find it. Both collectors share the same walk and the same merge now
  * (`compiledTree.js`, Phase 10 Step 1); what this one declines is the trigger filter.
  *
- * `hasFence` is still required, matching `lint.js:241`. That is not a seedability judgment
+ * `hasFence` is still required, matching `lint.js`'s `scanStoryCardStructure`. That is not a seedability judgment
  * but the definition of a card: a headed section with no fence is prose in a Story Cards
  * file, and Codex Loom fences every card it emits.
  *
@@ -86,7 +86,7 @@ function mergedPlaceholders(nodeDir) {
  * Keyed by name, matching VL's own merge (Decision 3): a leaf that overrides one card of
  * a name measures that one card, not the ancestor's copy as well — two names collide the
  * same way they collide for AID, and only the winner is sized. `hasFence` is still
- * required here, matching `lint.js:241` — a headed section with no fence is prose, not a
+ * required here, matching `lint.js`'s `scanStoryCardStructure` — a headed section with no fence is prose, not a
  * card — and is this report's own filter over `compiledTree.js`'s `resolved.cards`, not a
  * merge rule.
  */
@@ -356,6 +356,4 @@ module.exports = {
   mergedPlaceholders,
   collectLeafCardsForSizing,
   collectRows,
-  formatBodySizeCsv,
-  formatBodySizeMd,
 };

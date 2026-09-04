@@ -117,18 +117,18 @@ function wireNotesTemplate(configPath, options = {}) {
  * (per the Session B handoff). `verb_is`/`verb_was` are excluded: "is" and "was" are
  * shared with every other pronoun set and would flag nearly every sentence.
  */
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const GENDERED_PRONOUN_FIELDS = ['subject', 'object', 'possessive', 'reflexive', 'contraction'];
 const GENDERED_PRONOUN_WORDS = [...new Set(
   ['female', 'male'].flatMap((set) => GENDERED_PRONOUN_FIELDS.map((field) => PRONOUN_SETS[set][field])),
 )];
 const GENDERED_PRONOUN_RE = new RegExp(
-  `\\b(?:${GENDERED_PRONOUN_WORDS.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
+  `\\b(?:${GENDERED_PRONOUN_WORDS.map((w) => escapeRegExp(w)).join('|')})\\b`,
   'i',
 );
-
-function escapeRegExp(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 /**
  * Rewrite `{%name}` to `{$ROLE}` in a string, moving a trailing `'s` inside the brace.
@@ -340,44 +340,6 @@ function migratePseudoRoles(configPath, options = {}) {
 }
 
 /**
- * Phase 4's migration step, which converts nothing — and says so out loud (§15).
- *
- * `placeholders:` is a new `compile.cl.yaml` key with no v3 spelling to rename from, and no
- * v3 project holds the data in another form (no `Placeholders.yaml`, no `%key%` anywhere in
- * a project the migrator sees). The two hand-authored VL trees that do carry a
- * `Placeholders.yaml` have no config, so the migrator never reaches them.
- *
- * **This exists because a no-op that is merely true is indistinguishable from one that was
- * forgotten** — §15's rule is that a phase changing syntax must name its migration step, and
- * a note-returning stage is checkable where an absence is not.
- */
-function migratePlaceholders() {
-  return {
-    changed: false,
-    notes: [],
-  };
-}
-
-/**
- * `lint.conventions` (a list) → `lint.packs` (a mapping) — §8.2.2 / §14.2.
- *
- * v4 replaced v3's `lint.conventions:` list with a `lint.packs:` mapping so packs can be
- * overridden and unbound per branch by name (§8.2.2). §14.2's table carries the migration
- * row as "High — no v3 projects use it yet."
- *
- * **Deliberately empty, and checkable rather than absent — see migratePlaceholders.** `lint:`
- * never shipped in the v3 compiler's config surface, so no v3 project has a
- * `lint.conventions:` list to fold into a mapping. If one is ever found in the wild, the
- * conversion is mechanical — each entry becomes a `<name>: {}` mapping entry — and belongs here.
- */
-function migrateLintConventions() {
-  return {
-    changed: false,
-    notes: [],
-  };
-}
-
-/**
  * Rename the entry point to `compile.cl.yaml` (§4.6), when asked and only when asked.
  *
  * §4.6 settles the default: plain `.yaml` is not deprecated, every loader accepts both
@@ -475,14 +437,6 @@ function migrateProjectFully(configPath, options = {}) {
   notes.push(...opening.notes);
   touched.push(...opening.touched);
 
-  // Phase 4. Deliberately last and deliberately empty — see migratePlaceholders.
-  const placeholders = migratePlaceholders();
-  notes.push(...placeholders.notes);
-
-  // Phase 14 / §8.2.2. Deliberately empty — see migrateLintConventions.
-  const lintConventions = migrateLintConventions();
-  notes.push(...lintConventions.notes);
-
   // §4.6, opt-in. After every stage that reads the project back through configPath.
   let finalConfigPath = configPath;
   if (options.renameToCl) {
@@ -499,6 +453,6 @@ function migrateProjectFully(configPath, options = {}) {
 }
 
 module.exports = {
-  migrateProjectFully, wireNotesTemplate, migratePlaceholders, migrateLintConventions, renameConfigToCl,
+  migrateProjectFully, wireNotesTemplate, renameConfigToCl,
   migratePseudoRoles, rewritePseudoRoleTokens, GENDERED_PRONOUN_RE, GENDERED_PRONOUN_WORDS,
 };

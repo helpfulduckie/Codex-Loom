@@ -10,8 +10,8 @@
  * directory list is read off disk, `ancestorDirs` is the single upward walk, and
  * `resolveAt`/`buildTree` are two views of the same per-node merge — computed fresh from
  * a single directory for `resolveAt`, computed incrementally on the way down for
- * `buildTree`. Both call the same `mergeDict`/`mergeCardsByName` functions, so nothing
- * about what "resolved" means can drift between them.
+ * `buildTree`. Both use the same spread-merge and `mergeCardsByName`, so nothing about
+ * what "resolved" means can drift between them.
  *
  * Every node carries what it declares itself (`own`) and what Velvet Lattice resolves
  * there by folding every ancestor down to it (`resolved`). `--overview` prints `own`;
@@ -147,11 +147,6 @@ function readOwn(nodeDir) {
 
 // ── resolved (VL's merge down the ancestor chain) ────────────────────────────
 
-/** VL's `{...parent, ...local}` merge, keyed by filename (`scenario.py:30`). */
-function mergeDict(parentDict, ownDict) {
-  return { ...parentDict, ...ownDict };
-}
-
 /**
  * VL's own `_merge_story_cards` rule (Decision 3): a `{card.name: card}` map built from
  * the parent's resolved cards, with local cards written over it — keyed on `name` alone,
@@ -176,9 +171,9 @@ const EMPTY_RESOLVED = { components: {}, cards: [], placeholders: {} };
 
 function foldResolved(parentResolved, own) {
   return {
-    components: mergeDict(parentResolved.components, own.components),
+    components: { ...parentResolved.components, ...own.components },
     cards: mergeCardsByName(parentResolved.cards, own.cards),
-    placeholders: mergeDict(parentResolved.placeholders, own.placeholders),
+    placeholders: { ...parentResolved.placeholders, ...own.placeholders },
   };
 }
 
@@ -243,6 +238,5 @@ module.exports = {
   ancestorDirs,
   childBranches,
   collectMdFiles,
-  mergeDict,
   mergeCardsByName,
 };

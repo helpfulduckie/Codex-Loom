@@ -20,9 +20,8 @@ function loadNamedFiles(dirs, ext) {
     for (const file of findFiles(dir, ext)) {
       const name = path.basename(file, ext).toLowerCase();
       if (dirEntries.has(name)) {
-        // Fatal, not a bus diagnostic: this runs before any `diagnostics` is in scope
-        // (two of the three `loadTemplates` callers pass none), and two files claiming one
-        // name leave the name→file map with no defensible winner.
+        // Fatal, not a bus diagnostic: this runs before any `diagnostics` is in scope,
+        // and two files claiming one name leave the name→file map with no defensible winner.
         const err = new Error(
           `${CODES.DUPLICATE_NAMED_FILE}: Duplicate ${ext} name "${name}" found in ${dir}:`
           + `\n  ${dirEntries.get(name)._source}\n  ${file}`
@@ -90,5 +89,4 @@ module.exports = {
   CODES,
   loadNamedFiles,
   loadTemplates,
-  checkNoFences,
 };

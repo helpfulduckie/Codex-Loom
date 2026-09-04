@@ -234,9 +234,7 @@ function walkBranchChain(branches, branchPath, options = {}) {
     // declares its own `lint.level` sets it here, last-wins, so a per-branch ceiling can
     // name the branch that raised the finding.
     lint: { packs: Object.assign({}, (rootLint && rootLint.packs) || {}), level: null },
-    scripts: undefined,
     node: null,
-    complete: true,
   };
 
   let currentMap = branches;
@@ -248,7 +246,6 @@ function walkBranchChain(branches, branchPath, options = {}) {
     if (!actualKey) {
       // No match: the folder name falls back to the id as written, and everything
       // downstream of here is unknown.
-      result.complete = false;
       result.folderPath.push(String(segment));
       currentMap = null;
       continue;

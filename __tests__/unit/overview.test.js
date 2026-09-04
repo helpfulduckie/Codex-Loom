@@ -5,7 +5,6 @@ const os   = require('os');
 const path = require('path');
 
 const {
-  readComponents,
   buildStoryCardsBlock,
   discoverLeaves,
   compileLeaf,
@@ -22,34 +21,6 @@ function write(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, 'utf8');
 }
-
-// ── readComponents ────────────────────────────────────────────────────────────
-
-describe('readComponents', () => {
-  test('returns {} for missing Components dir', () => {
-    const tmp = makeTmp();
-    expect(readComponents(tmp)).toEqual({});
-    fs.rmSync(tmp, { recursive: true });
-  });
-
-  test('returns map of basename → content for .md files', () => {
-    const tmp = makeTmp();
-    write(path.join(tmp, 'Components', 'Opening.md'), 'Hello world');
-    write(path.join(tmp, 'Components', 'Plot Essentials.md'), 'Some essentials');
-    const result = readComponents(tmp);
-    expect(result['Opening']).toBe('Hello world');
-    expect(result['Plot Essentials']).toBe('Some essentials');
-    fs.rmSync(tmp, { recursive: true });
-  });
-
-  test('skips empty files', () => {
-    const tmp = makeTmp();
-    write(path.join(tmp, 'Components', 'Empty.md'), '   ');
-    const result = readComponents(tmp);
-    expect(result).toEqual({});
-    fs.rmSync(tmp, { recursive: true });
-  });
-});
 
 // ── buildStoryCardsBlock ──────────────────────────────────────────────────────
 

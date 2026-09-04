@@ -184,16 +184,6 @@ function checkVariableGraph(config, diagnostics, sourceMap, names) {
   for (const lower of lowerToName.keys()) visit(lower, []);
 }
 
-/**
- * Expand tokens in a path string.
- *
- * There is one family left: `{%variable}`. Library names are exposed as variables (§6.1),
- * so a library reference resolves through exactly the same lookup as anything else.
- */
-function expandPathTokens(str, variables, diagnostics, location, branchOnly) {
-  return expandVariables(String(str), variables, { diagnostics, location, branchOnly });
-}
-
 /** Same normalization `golden.test.js`'s `normalizeManifest` uses, for consistency. */
 function normalize(p) {
   return String(p).replace(/\\/g, '/').toLowerCase();
@@ -341,15 +331,15 @@ function loadCompileConfig(configPath, options = {}) {
   // author's intent differs between a structure.* path that happens to contain a token
   // and one that does not (§6.1 audit). Both resolve against root variables, like the
   // rest of `structure:`, since they are read before branches are enumerated.
-  const resolvedOutput = path.resolve(base, expandPathTokens(
-    String(structure.output || 'output'), variables, diagnostics,
-    at('structure', 'output'), variableNames.branchOnly
+  const resolvedOutput = path.resolve(base, expandVariables(
+    String(structure.output || 'output'), variables,
+    { diagnostics, location: at('structure', 'output'), branchOnly: variableNames.branchOnly }
   ));
 
   const resolvedReports = structure.reports
-    ? path.resolve(base, expandPathTokens(
-        String(structure.reports), variables, diagnostics,
-        at('structure', 'reports'), variableNames.branchOnly
+    ? path.resolve(base, expandVariables(
+        String(structure.reports), variables,
+        { diagnostics, location: at('structure', 'reports'), branchOnly: variableNames.branchOnly }
       ))
     : null;
 
@@ -358,9 +348,9 @@ function loadCompileConfig(configPath, options = {}) {
   // normal, not an error. (Missing-when-required is CL0111, raised by whatever actually
   // needs the directory populated, not here.)
   const resolvedSnapshot = input.snapshot
-    ? path.resolve(base, expandPathTokens(
-        String(input.snapshot), variables, diagnostics,
-        at('structure', 'input', 'snapshot'), variableNames.branchOnly
+    ? path.resolve(base, expandVariables(
+        String(input.snapshot), variables,
+        { diagnostics, location: at('structure', 'input', 'snapshot'), branchOnly: variableNames.branchOnly }
       ))
     : null;
 
@@ -372,9 +362,9 @@ function loadCompileConfig(configPath, options = {}) {
   // `--live` (Phase 7 Session B).
   const resolvedLibrarySource = new Map();
   for (const [name, spec] of Object.entries(libraryRaw)) {
-    const expanded = expandPathTokens(
-      String(spec), variables, diagnostics,
-      at('structure', 'input', 'library', name), variableNames.branchOnly
+    const expanded = expandVariables(
+      String(spec), variables,
+      { diagnostics, location: at('structure', 'input', 'library', name), branchOnly: variableNames.branchOnly }
     );
     resolvedLibrarySource.set(name, path.resolve(base, expanded));
   }
@@ -383,7 +373,7 @@ function loadCompileConfig(configPath, options = {}) {
     const list = raw ? (Array.isArray(raw) ? raw : [raw]) : [];
     return list.map((spec, i) => {
       const location = at('structure', 'input', key, String(i));
-      return path.resolve(base, expandPathTokens(String(spec), variables, diagnostics, location, variableNames.branchOnly));
+      return path.resolve(base, expandVariables(String(spec), variables, { diagnostics, location, branchOnly: variableNames.branchOnly }));
     });
   };
 
@@ -463,7 +453,6 @@ function loadCompileConfig(configPath, options = {}) {
     // on that discarded object rather than on what this function actually returns, so
     // `config._libraryRaw` was always undefined downstream — found in Phase 7 Session C.
     _libraryRaw: libraryRaw,
-    _sourceMap: sourceMap,
     title: config.title || null,
     components: config.components || null,
     // The built-in `protagonist` role lives here as an ordinary `roles:` entry (§9.2) —
@@ -506,11 +495,10 @@ function loadCompileConfig(configPath, options = {}) {
     // placeholders only on branches would emit correctly while the root's went nowhere.
     placeholders: config.placeholders || null,
     branches: config.branches || null,
-    _structure: structure,
   };
 }
 
 module.exports = {
-  loadCompileConfig, expandVariables, expandPathTokens, collectVariableNames, CODES,
+  loadCompileConfig, expandVariables, collectVariableNames, CODES,
   loadManifest, isOutOfBase, normalize,
 };

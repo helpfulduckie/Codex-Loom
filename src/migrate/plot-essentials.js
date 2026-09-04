@@ -31,8 +31,7 @@
  * that is printed beats a safe guess that must be edited everywhere.
  */
 
-/** v3's default block position, matching `render.position`'s own default. */
-const DEFAULT_POSITION = 5;
+const { DEFAULT_POSITION } = require('../model/component');
 
 // ── block reading ────────────────────────────────────────────────────────────
 
@@ -325,13 +324,11 @@ function convertPlotEssentials(blocks, registry, templateNames) {
 
 module.exports = {
   DEFAULT_POSITION,
-  readBlock,
   readUnits,
   effectiveWrapper,
   baseTemplate,
   targetTemplate,
   buildItemLookup,
-  signature,
   groupIntoRuns,
   deriveSectionName,
   convertPlotEssentials,

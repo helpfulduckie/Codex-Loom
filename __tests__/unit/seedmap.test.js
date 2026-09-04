@@ -10,7 +10,7 @@
  */
 
 const {
-  buildSeedRelations, buildOpeningFlags, parseCardsFromMd,
+  buildSeedRelations, buildOpeningFlags,
 } = require('../../src/seedmap');
 
 const card = (title, triggers, body = '') => ({ title, triggers, body, type: 'Character' });
@@ -82,25 +82,5 @@ describe('matching is stateless across candidates', () => {
   test('opening flags are unaffected by an earlier trigger match', () => {
     const cards = [card('Cat', ['dog', 'cat']), card('Other', ['cat'])];
     expect([...buildOpeningFlags(cards, 'a cat in the opening')].sort()).toEqual(['Cat', 'Other']);
-  });
-});
-
-describe('parseCardsFromMd', () => {
-  const file = [
-    '## Seedable', '~~~', 'triggers: [Aness]', '~~~', 'body one', '',
-    '## NoTriggers', '~~~', 'triggers: []', '~~~', 'body two', '',
-  ].join('\n');
-
-  test('excludes cards with no triggers — they cannot be seeded', () => {
-    expect(parseCardsFromMd(file).map((c) => c.title)).toEqual(['Seedable']);
-  });
-
-  test('carries the card type through', () => {
-    expect(parseCardsFromMd(file, 'Character')[0].type).toBe('Character');
-  });
-
-  test('trigger values arrive YAML-parsed, without their quote characters', () => {
-    const padded = '## A\n~~~\ntriggers: [" tea ", \'  meal \']\n~~~\nbody';
-    expect(parseCardsFromMd(padded)[0].triggers).toEqual([' tea ', '  meal ']);
   });
 });

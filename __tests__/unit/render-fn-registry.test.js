@@ -7,27 +7,12 @@
 
 const { FUNCTION_NAMES } = require('../../src/render/parse');
 const { FUNCTIONS } = require('../../src/render/eval');
-const { RENDER_FN_DISPATCH } = require('../../src/template');
-const { RENDER_FN_PREFIXES } = require('../../src/crossItem');
 const { TEMPLATE_FN_RE } = require('../../src/util');
 
 const canonical = [...FUNCTION_NAMES].sort();
 
 test('FUNCTIONS (render/eval.js) keys are exactly FUNCTION_NAMES', () => {
   expect(Object.keys(FUNCTIONS).sort()).toEqual(canonical);
-});
-
-test('RENDER_FN_DISPATCH (template.js) covers exactly FUNCTION_NAMES', () => {
-  const names = RENDER_FN_DISPATCH.map(([prefix]) => prefix.replace(/\($/, '')).sort();
-  expect(names).toEqual(canonical);
-  for (const [prefix, fn] of RENDER_FN_DISPATCH) {
-    expect(fn).toBe(FUNCTIONS[prefix.replace(/\($/, '')]);
-  }
-});
-
-test('RENDER_FN_PREFIXES (crossItem.js) covers exactly FUNCTION_NAMES', () => {
-  const names = RENDER_FN_PREFIXES.map((p) => p.replace(/\($/, '')).sort();
-  expect(names).toEqual(canonical);
 });
 
 test('TEMPLATE_FN_RE (util.js) matches exactly FUNCTION_NAMES', () => {

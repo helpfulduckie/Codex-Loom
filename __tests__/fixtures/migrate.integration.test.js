@@ -30,7 +30,7 @@ const path = require('path');
 const YAML = require('yaml');
 
 const { compile } = require('../../src/compile');
-const { migrateProjectFully, migratePlaceholders, migrateLintConventions } = require('../../src/migrate');
+const { migrateProjectFully } = require('../../src/migrate');
 
 const GOLDEN_DIR = path.resolve(__dirname, '..', '..', 'goldenFixtures');
 
@@ -183,10 +183,6 @@ function migrateAndCompile(tmpDir, project) {
     // silently lacked the one phase that changed structure for months. A no-op that is
     // merely true is indistinguishable from one that was forgotten.
 
-    test('the stage exists and reports no change', () => {
-      expect(migratePlaceholders()).toEqual({ changed: false, notes: [] });
-    });
-
     test('no migrated config acquires a placeholders: key', () => {
       // Read as `compile.yaml`, not `compile.cl.yaml`: `migrateAndCompile` passes no
       // options, and §4.6 makes the rename opt-in — plain `.yaml` is not deprecated and
@@ -258,10 +254,6 @@ function migrateAndCompile(tmpDir, project) {
     // mapping. The migration row is "no v3 projects use it yet" — `lint:` never shipped in
     // the v3 config surface, so there is nothing to fold. Same discipline as Phase 4 and
     // Phase 7: a note-returning stage rather than a silent gap, and the corpus checked.
-
-    test('the stage exists and reports no change', () => {
-      expect(migrateLintConventions()).toEqual({ changed: false, notes: [] });
-    });
 
     test('no v3 project declares lint.conventions, and no migrated config grows lint.packs', () => {
       for (const project of PROJECTS) {

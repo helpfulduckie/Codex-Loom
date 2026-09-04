@@ -4,53 +4,12 @@ const fs   = require('fs');
 const path = require('path');
 
 const { discoverLeaves, sanitizeFilename } = require('./overview');
-const { parseCards } = require('./emit/vl');
-const { resolveAt, ancestorDirs, collectMdFiles } = require('./compiledTree');
+const { resolveAt } = require('./compiledTree');
 
 // ── parsing ──────────────────────────────────────────────────────────────────
 
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
- * Parse a compiled Story Cards .md file into the cards the seed map reasons about.
- *
- * The parsing is `emit/vl.js`'s (§8.6); what stays here is the seed map's own rule —
- * **a card with no triggers is not seedable**, so it is excluded rather than listed as
- * permanently unseeded. Under v4 that judgment moves to `kind: reference` (§4.8), which
- * says the same thing deliberately instead of as a side effect of having no triggers.
- *
- * Retiring the local parser changes one thing on purpose: trigger values arrive
- * YAML-parsed rather than split out of the raw line, so a padded trigger is ` tea `
- * rather than `' tea '` with its quote characters still attached. Matching those
- * against body text could never have succeeded.
- */
-function parseCardsFromMd(content, type = null) {
-  return parseCards(content, { type }).filter((card) => card.triggers.length > 0);
-}
-
-/**
- * Collect all parsed cards visible to a leaf node: `compiledTree.js:resolveAt` folds the
- * ancestor chain into `resolved.cards`; this applies the seed map's own trigger filter
- * over that, which is a report rule rather than a merge rule and so stays here.
- */
-function collectLeafCards(leafDir) {
-  return resolveAt(leafDir).resolved.cards
-    .filter((card) => card.triggers.length > 0);
-}
-
-/**
- * Collect the text of Plot Essentials.md and Opening.md visible to a leaf node — VL's own
- * `{...parent, ...local}` merge, keyed by filename, already folded into `resolved.components`.
- * Returns { peText, openingText } — empty string when not found.
- */
-function collectLeafComponents(leafDir) {
-  const { components } = resolveAt(leafDir).resolved;
-  return {
-    peText: components['Plot Essentials'] || '',
-    openingText: components['Opening'] || '',
-  };
 }
 
 // ── analysis ─────────────────────────────────────────────────────────────────
@@ -226,8 +185,11 @@ function runSeedMapMode(scenarioRoot, outputDir, verbose = false) {
 
   const leafResults = [];
   for (const leaf of leaves) {
-    const cards                    = collectLeafCards(leaf.leafDir);
-    const { peText, openingText }  = collectLeafComponents(leaf.leafDir);
+    const cards                    = resolveAt(leaf.leafDir).resolved.cards
+      .filter((card) => card.triggers.length > 0);
+    const components                = resolveAt(leaf.leafDir).resolved.components;
+    const peText                    = components['Plot Essentials'] || '';
+    const openingText               = components['Opening'] || '';
     const relations                = buildSeedRelations(cards, peText);
     const seededInOpening          = buildOpeningFlags(cards, openingText);
     leafResults.push({ branchNames: leaf.branchNames, cards, relations, seededInOpening });
@@ -262,6 +224,6 @@ function runSeedMapMode(scenarioRoot, outputDir, verbose = false) {
 }
 
 module.exports = {
-  runSeedMapMode, parseCardsFromMd, collectLeafCards, collectMdFiles, ancestorDirs,
+  runSeedMapMode,
   buildSeedRelations, buildOpeningFlags,
 };

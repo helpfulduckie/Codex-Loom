@@ -397,4 +397,4 @@ function findSwallowedTokens(value) {
   return found;
 }
 
-module.exports = { preparse, findSwallowedTokens, SWALLOWED_SIGILS };
+module.exports = { preparse, findSwallowedTokens };

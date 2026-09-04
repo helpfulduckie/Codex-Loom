@@ -121,11 +121,6 @@ describe('SourceMap positions', () => {
     expect(sourceMap.at('nope', 'missing')).toEqual({ file: 'compile.cl.yaml' });
   });
 
-  test('has() reports whether an exact path was recorded', () => {
-    expect(sourceMap.has('structure', 'input')).toBe(true);
-    expect(sourceMap.has('structure', 'absent')).toBe(false);
-  });
-
   test('nearest() falls back to the closest recorded ancestor', () => {
     // `reports` was never written, but the block that should hold it was.
     expect(sourceMap.nearest('structure', 'reports')).toEqual(sourceMap.at('structure'));

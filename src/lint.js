@@ -505,5 +505,5 @@ function runLintMode(scenarioRoot, outputDir, verbose = false, options = {}) {
 
 module.exports = {
   runLintMode, findLintableFiles, scanText, scanStoryCardStructure,
-  scanNativePlaceholders, scanPacks, loadDeclaredPacks, applyLevel, CHECKS, LINT_LEVELS,
+  scanNativePlaceholders, applyLevel,
 };

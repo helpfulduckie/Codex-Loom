@@ -84,36 +84,6 @@ function renderNotesText(item, context, templates, partials, variables, projectN
   });
 }
 
-/**
- * The name of the template that renders this item's body: render.template, then aid.type.
- *
- * Returns the name rather than the content because `resolveBodyRender` and the notes
- * ladder need the name that actually resolved the body — the same answer `getTemplate`
- * reached — rather than a second guess.
- */
-function getTemplateName(item, templates) {
-  const keys = [
-    item.render && item.render.template,
-    item.aid && item.aid.type,
-  ].filter(Boolean);
-  for (const key of keys) {
-    if (templates.has(key.toLowerCase())) return key;
-  }
-  return null;
-}
-
-/**
- * Get the template entry for an item. Checks render.template first, then aid.type.
- *
- * Returns the `{content, _source}` entry rather than the content string alone (Phase 9
- * Step 0) — `_source` is what lets a render-time diagnostic name the template file instead
- * of reporting a parse or eval failure with nowhere to point.
- */
-function getTemplate(item, templates) {
-  const name = getTemplateName(item, templates);
-  return name ? templates.get(name.toLowerCase()) : null;
-}
-
 // ── templateFor: rendering roles, branch-addressable (§13.4) ───────────────────
 
 /**
@@ -269,8 +239,8 @@ function isTemplateChoice(name, type) {
  * `aid.type` → `aid.type` as a template name → verbatim (null).
  *
  * Returns `{ kind: 'text', entry, name } | { kind: 'fieldList', list, name } | null`. With
- * no field table and no `templateFor`, this is `getTemplate` exactly — the two extra rungs
- * only ever fire once a project declares one or the other.
+ * no field table and no `templateFor`, only the first and last rungs can fire — the two
+ * extra rungs only ever fire once a project declares one or the other.
  *
  * **A `render.template` equal to `aid.type` is not a choice** — see `isTemplateChoice`. It is
  * treated as absent, so rung 3 renders the type's default and a tiered branch's rung 2 takes
@@ -330,9 +300,6 @@ function resolveNotesRender(item, templates, fieldTable, projectNotesTemplate, t
 module.exports = {
   checkConfigNotesTemplates,
   renderNotesText,
-  getTemplateName,
-  getTemplate,
-  findTemplateForFile,
   resolveTemplateForMaps,
   gatherTierTemplates,
   lookupSlotList,

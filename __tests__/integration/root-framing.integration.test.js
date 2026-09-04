@@ -206,3 +206,65 @@ describe('root branchFraming — inline sentence arm', () => {
     expect(diag.all.filter((d) => d.code === CODES.LEAKED_FIELD_TOKEN)).toEqual([]);
   });
 });
+
+/**
+ * An undeclared `{%var}` in a literal framing sentence is reported once. The literal arm
+ * resolves the spec to decide whether it names a file, then resolves the content; both
+ * steps run `resolveVariables` over the same string, and the bus does not dedupe, so the
+ * count is what guards against the same token being reported per expansion pass.
+ */
+describe('root branchFraming — undeclared variable in the inline arm', () => {
+  let dir;
+  let diag;
+
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-root-framing-undeclared-'));
+    const write = (rel, content) => {
+      const full = path.join(dir, rel);
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, content, 'utf8');
+    };
+    write('templates/Character.template', '{$name}\n');
+    write('Codex/items.yaml', [
+      '- id: Aness',
+      '  name: Aness',
+      '  pronouns: female',
+      '  aid: {type: Character, triggers: [Aness]}',
+      '  render: {template: Character, wrapper: none}',
+      '',
+    ].join('\n'));
+    write('compile.yaml', [
+      'version: 4',
+      'title: Undeclared Framing Variable Probe',
+      'structure:',
+      '  input:',
+      "    items: ['./Codex']",
+      "    templates: ['./templates']",
+      "  output: './out'",
+      'roles:',
+      '  protagonist: Aness',
+      'components:',
+      '  branchFraming: "The road to {%nowhere} is open."',
+      'branches:',
+      '  subject: {}',
+      '',
+    ].join('\n'));
+
+    diag = new Diagnostics();
+    const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(() => {}));
+    try {
+      compile(path.join(dir, 'compile.yaml'), { diagnostics: diag });
+    } catch (err) { /* the ERROR is the subject */ } finally {
+      spies.forEach((s) => s.mockRestore());
+    }
+  });
+
+  afterAll(() => {
+    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('CL0510 is raised exactly once for the one undeclared token', () => {
+    const undeclared = diag.all.filter((d) => d.code === CODES.VARIABLE_UNDECLARED);
+    expect(undeclared.map((d) => d.message)).toHaveLength(1);
+  });
+});

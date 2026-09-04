@@ -396,4 +396,4 @@ function renderFieldList(list, table, context, options = {}) {
   });
 }
 
-module.exports = { renderFieldList, expandList, stanzaSource, buildParts, declBody };
+module.exports = { renderFieldList, expandList, stanzaSource };

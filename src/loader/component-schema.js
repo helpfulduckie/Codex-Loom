@@ -201,4 +201,4 @@ const COMPONENT_SCHEMA = {
   },
 };
 
-module.exports = { COMPONENT_SCHEMA, SECTION, SECTION_RENDER, SECTION_FROM };
+module.exports = { COMPONENT_SCHEMA };

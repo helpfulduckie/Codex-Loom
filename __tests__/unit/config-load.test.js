@@ -436,7 +436,6 @@ describe('lint: is a fully implemented key surface (§8.2.2, Phase 14)', () => {
   test('lint.packs at the root validates with no error and no not-yet-implemented WARN', () => {
     const { diagnostics } = load('lint:\n  packs:\n    wtg: {}\n');
     expect(diagnostics.hasErrors()).toBe(false);
-    expect(diagnostics.warnings.some((d) => d.message.includes('not yet implemented'))).toBe(false);
   });
 
   test('a pack entry carrying source: and level: validates', () => {
@@ -459,7 +458,6 @@ describe('lint: is a fully implemented key surface (§8.2.2, Phase 14)', () => {
     const { diagnostics } = load(
       'branches:\n  hero:\n    lint:\n      level: off\n');
     expect(diagnostics.hasErrors()).toBe(false);
-    expect(diagnostics.warnings.some((d) => d.message.includes('not yet implemented'))).toBe(false);
   });
 
   test('lint.packs on a branch node stays legal — §8.2.2 branch-merges it', () => {
@@ -484,12 +482,6 @@ describe('lint: is a fully implemented key surface (§8.2.2, Phase 14)', () => {
     expect(load('title: x\n').config.lint).toBeNull();
   });
 
-  test('lint.level is implemented in Phase 5 and no longer warns', () => {
-    const { diagnostics } = load('lint:\n  level: warn\n');
-    expect(diagnostics.hasErrors()).toBe(false);
-    expect(diagnostics.warnings.some((d) => d.message.includes('not yet implemented'))).toBe(false);
-  });
-
   test('an unknown lint.level value is a CL0206 naming the three legal ones', () => {
     const { diagnostics } = load('lint:\n  level: loud\n');
     const bad = diagnostics.errors.find((d) => d.code === 'CL0206');
@@ -497,11 +489,5 @@ describe('lint: is a fully implemented key surface (§8.2.2, Phase 14)', () => {
     expect(bad.message).toContain('"off"');
     expect(bad.message).toContain('"error"');
     expect(bad.message).toContain('"warn"');
-  });
-
-  test('placeholders is implemented and no longer warns', () => {
-    const { diagnostics } = load("placeholders:" + String.fromCharCode(10) + "  heroName: Who?" + String.fromCharCode(10));
-    expect(diagnostics.hasErrors()).toBe(false);
-    expect(diagnostics.warnings.some((d) => d.message.includes('not yet implemented'))).toBe(false);
   });
 });

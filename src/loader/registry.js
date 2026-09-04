@@ -20,7 +20,7 @@ const { loadYamlDocument } = require('./yaml');
 const { validate } = require('../schema');
 const { ITEM_SCHEMA } = require('./schema');
 const { CODES } = require('../diag');
-const { splitRef, normalizeRef } = require('../model/refs');
+const { splitRef } = require('../model/refs');
 const { collectVariantDeltas, parseVariantsList } = require('../model/item');
 
 /**
@@ -414,7 +414,6 @@ function findConfigEntry(dir, basenames) {
 module.exports = {
   ItemRegistry,
   loadItemsFromDir,
-  normalizeItemVarField,
   buildRegistry,
   mergeRegistries,
   buildCanonRegistry,

@@ -132,7 +132,7 @@ describe('readablePathsFor', () => {
       const a = buildFieldAudit({ fieldTable: partsTable, partials: new Map() });
       a.collectForItem(
         mk('L', 'Line', { tagline: 'hi', notes: { extra: 'more' } }),
-        partsTable.templates.Line, 'Line',
+        partsTable.templates.Line,
       );
       a.finish(d);
       expect(d.codes()).not.toContain('CL0426');
@@ -163,7 +163,7 @@ describe('readablePathsFor', () => {
       const a = buildFieldAudit({ fieldTable: tryTable, partials: new Map() });
       a.collectForItem(
         mk('D', 'Directory', { content: 'c1', entries: 'c2' }),
-        tryTable.templates.Directory, 'Directory',
+        tryTable.templates.Directory,
       );
       a.finish(d);
       expect(d.codes()).not.toContain('CL0426');
@@ -195,7 +195,7 @@ describe('buildFieldAudit — classification', () => {
   test('an undeclared body key is CL0426', () => {
     const d = sink();
     const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS });
-    a.collectForItem(mk('Alba', 'Person', { name: 'A', vibe: 'v', strength: 'uncanny' }), TABLE.templates.Person, 'Person');
+    a.collectForItem(mk('Alba', 'Person', { name: 'A', vibe: 'v', strength: 'uncanny' }), TABLE.templates.Person);
     a.finish(d);
     expect(d.codes()).toContain('CL0426');
     expect(d.calls.find((c) => c.code === 'CL0426').message).toMatch(/strength/);
@@ -204,7 +204,7 @@ describe('buildFieldAudit — classification', () => {
   test('a declared field the template routes elsewhere is CL0427, naming the group', () => {
     const d = sink();
     const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS });
-    a.collectForItem(mk('Cairn', 'Person', { name: 'C', homeland: 'the flats' }), TABLE.templates.Person, 'Person');
+    a.collectForItem(mk('Cairn', 'Person', { name: 'C', homeland: 'the flats' }), TABLE.templates.Person);
     a.finish(d);
     const hit = d.calls.find((c) => c.code === 'CL0427');
     expect(hit).toBeTruthy();
@@ -218,7 +218,7 @@ describe('buildFieldAudit — classification', () => {
     // Person reads personality.keywords / .expanded; .mood is neither.
     a.collectForItem(
       mk('Mim', 'Person', { name: 'M', personality: { keywords: ['dry'], mood: 'sour' } }),
-      TABLE.templates.Person, 'Person',
+      TABLE.templates.Person,
     );
     a.finish(d);
     const hit = d.calls.find((c) => c.message.includes('personality.mood'));
@@ -237,7 +237,7 @@ describe('buildFieldAudit — classification', () => {
   test('{ allowExtra: true } suppresses every unknown-key finding for that template', () => {
     const d = sink();
     const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS });
-    a.collectForItem(mk('Nook', 'Open', { name: 'N', colour: 'grey', texture: 'rough' }), TABLE.templates.Open, 'Open');
+    a.collectForItem(mk('Nook', 'Open', { name: 'N', colour: 'grey', texture: 'rough' }), TABLE.templates.Open);
     a.finish(d);
     expect(d.codes().filter((c) => c === 'CL0426')).toEqual([]);
   });
@@ -245,7 +245,7 @@ describe('buildFieldAudit — classification', () => {
   test('a bare field covering a map is fully read — its sub-keys are not flagged', () => {
     const d = sink();
     const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS });
-    a.collectForItem(mk('Home', 'Bare', { name: 'H', loose: { one: '1', two: '2' } }), TABLE.templates.Bare, 'Bare');
+    a.collectForItem(mk('Home', 'Bare', { name: 'H', loose: { one: '1', two: '2' } }), TABLE.templates.Bare);
     a.finish(d);
     expect(d.codes().filter((c) => c === 'CL0426' || c === 'CL0427')).toEqual([]);
   });
@@ -258,8 +258,8 @@ describe('buildFieldAudit — Fix 2: union of every list the item renders throug
     const item = mk('Ash', 'Card', { name: 'A', vibe: 'v', secret: 'buried', homeland: 'the flats' });
     // The card reads secret; the roster (via its partial) reads homeland. Neither alone
     // covers both, but together they do.
-    a.collectForItem(item, TABLE.templates.Card, 'Card');
-    a.collectForItem(item, TABLE.templates.Roster, 'Roster');
+    a.collectForItem(item, TABLE.templates.Card);
+    a.collectForItem(item, TABLE.templates.Roster);
     a.finish(d);
     expect(d.codes().filter((c) => c === 'CL0426' || c === 'CL0427')).toEqual([]);
   });
@@ -268,8 +268,8 @@ describe('buildFieldAudit — Fix 2: union of every list the item renders throug
     const d = sink();
     const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS });
     const item = mk('Ble', 'Card', { name: 'B', vibe: 'v', strength: 'uncanny' });
-    a.collectForItem(item, TABLE.templates.Card, 'Card');
-    a.collectForItem(item, TABLE.templates.Roster, 'Roster');
+    a.collectForItem(item, TABLE.templates.Card);
+    a.collectForItem(item, TABLE.templates.Roster);
     a.finish(d);
     const hits = d.calls.filter((c) => c.code === 'CL0426');
     expect(hits).toHaveLength(1);
@@ -279,7 +279,7 @@ describe('buildFieldAudit — Fix 2: union of every list the item renders throug
   test('the CL0427 message is item-scoped, not template-scoped', () => {
     const d = sink();
     const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS });
-    a.collectForItem(mk('Cwm', 'Card', { name: 'C', vibe: 'v', quirk: 'humming' }), TABLE.templates.Card, 'Card');
+    a.collectForItem(mk('Cwm', 'Card', { name: 'C', vibe: 'v', quirk: 'humming' }), TABLE.templates.Card);
     a.finish(d);
     const hit = d.calls.find((c) => c.code === 'CL0427');
     expect(hit.message).toMatch(/no template this item renders through/);
@@ -294,7 +294,7 @@ describe('buildFieldAudit — Fix 1: only project-authored keys on an imported i
     // `strength` is undeclared and unread, but it came from the library — not in the stamp.
     a.collectForItem(
       mkImported('Dov', 'Person', { name: 'D', vibe: 'v', strength: 'inherited' }, ['vibe']),
-      TABLE.templates.Person, 'Person',
+      TABLE.templates.Person,
     );
     a.finish(d);
     expect(d.codes().filter((c) => c === 'CL0426' || c === 'CL0427')).toEqual([]);
@@ -305,7 +305,7 @@ describe('buildFieldAudit — Fix 1: only project-authored keys on an imported i
     const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS });
     a.collectForItem(
       mkImported('Eos', 'Person', { name: 'E', vibe: 'v', strength: 'added here' }, ['strength']),
-      TABLE.templates.Person, 'Person',
+      TABLE.templates.Person,
     );
     a.finish(d);
     expect(d.codes()).toContain('CL0426');
@@ -317,7 +317,7 @@ describe('buildFieldAudit — Fix 1: only project-authored keys on an imported i
     const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS });
     a.collectForItem(
       mkImported('Fen', 'Person', { name: 'F', vibe: 'v', homeland: 'overridden' }, ['homeland']),
-      TABLE.templates.Person, 'Person',
+      TABLE.templates.Person,
     );
     a.finish(d);
     expect(d.codes()).toContain('CL0427');
@@ -328,7 +328,7 @@ describe('buildFieldAudit — Fix 1: only project-authored keys on an imported i
     const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS });
     a.collectForItem(
       mkImported('Gul', 'Person', { name: 'G', vibe: 'v', homeland: 'x', strength: 'y' }, []),
-      TABLE.templates.Person, 'Person',
+      TABLE.templates.Person,
     );
     a.finish(d);
     expect(d.codes().filter((c) => c === 'CL0426' || c === 'CL0427')).toEqual([]);
@@ -337,7 +337,7 @@ describe('buildFieldAudit — Fix 1: only project-authored keys on an imported i
   test('a pure local item (no stamp) audits every key — unchanged behavior', () => {
     const d = sink();
     const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS });
-    a.collectForItem(mk('Hod', 'Person', { name: 'H', vibe: 'v', strength: 'uncanny' }), TABLE.templates.Person, 'Person');
+    a.collectForItem(mk('Hod', 'Person', { name: 'H', vibe: 'v', strength: 'uncanny' }), TABLE.templates.Person);
     a.finish(d);
     expect(d.codes()).toContain('CL0426');
   });
@@ -396,7 +396,7 @@ describe('buildFieldAudit — templateFor slot files (§13.4, Phase 14 Step 1)',
     const d = sink();
     const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS, tierTemplates });
     a.collectForItem(
-      mk('Aness', 'Person', { name: 'A', vibe: 'v' }), terseList, 'Person', { templateFor },
+      mk('Aness', 'Person', { name: 'A', vibe: 'v' }), terseList, { templateFor },
     );
     a.finish(d);
     expect(d.codes().filter((c) => c === 'CL0427')).toEqual([]);
@@ -406,8 +406,8 @@ describe('buildFieldAudit — templateFor slot files (§13.4, Phase 14 Step 1)',
     const d = sink();
     const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS, tierTemplates });
     const item = mk('Aness', 'Person', { name: 'A', quirk: 'humming' });
-    a.collectForItem(item, terseList, 'Person', { templateFor });
-    a.collectForItem(item, TABLE.templates.Person, 'Person'); // a real template — quirk still unread
+    a.collectForItem(item, terseList, { templateFor });
+    a.collectForItem(item, TABLE.templates.Person); // a real template — quirk still unread
     a.finish(d);
     expect(d.codes()).toContain('CL0427');
   });
@@ -416,7 +416,7 @@ describe('buildFieldAudit — templateFor slot files (§13.4, Phase 14 Step 1)',
     const d = sink();
     const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS, tierTemplates });
     a.collectForItem(
-      mk('Aness', 'Person', { name: 'A', strength: 'uncanny' }), terseList, 'Person', { templateFor },
+      mk('Aness', 'Person', { name: 'A', strength: 'uncanny' }), terseList, { templateFor },
     );
     a.finish(d);
     expect(d.codes()).toContain('CL0426');
@@ -444,7 +444,7 @@ describe('buildFieldAudit — case-insensitive matching (renderer parity)', () =
   test('a lowercase declaration reading a capitalized body key raises no CL0426', () => {
     const d = sink();
     const a = buildFieldAudit({ fieldTable: CI_TABLE, partials: PARTIALS });
-    a.collectForItem(mk('Ren', 'CaseTest', { Background: 'a windswept coast' }), CI_TABLE.templates.CaseTest, 'CaseTest');
+    a.collectForItem(mk('Ren', 'CaseTest', { Background: 'a windswept coast' }), CI_TABLE.templates.CaseTest);
     a.finish(d);
     expect(d.codes().filter((c) => c === 'CL0426')).toEqual([]);
   });
@@ -454,7 +454,7 @@ describe('buildFieldAudit — case-insensitive matching (renderer parity)', () =
     const a = buildFieldAudit({ fieldTable: CI_TABLE, partials: PARTIALS });
     a.collectForItem(
       mk('Sel', 'CaseTest', { Magic: { affinity: 'fire', effect: 'burn' } }),
-      CI_TABLE.templates.CaseTest, 'CaseTest',
+      CI_TABLE.templates.CaseTest,
     );
     a.finish(d);
     expect(d.codes().filter((c) => c === 'CL0426')).toEqual([]);
@@ -465,7 +465,7 @@ describe('buildFieldAudit — case-insensitive matching (renderer parity)', () =
     const a = buildFieldAudit({ fieldTable: CI_TABLE, partials: PARTIALS });
     a.collectForItem(
       mk('Tam', 'CaseTest', { magic2: { affinity: 'ice', effect: 'freeze' } }),
-      CI_TABLE.templates.CaseTest, 'CaseTest',
+      CI_TABLE.templates.CaseTest,
     );
     a.finish(d);
     expect(d.codes().filter((c) => c === 'CL0426')).toEqual([]);
@@ -479,7 +479,7 @@ describe('buildFieldAudit — case-insensitive matching (renderer parity)', () =
   test('a genuinely undeclared body key still raises CL0426 — no over-suppression', () => {
     const d = sink();
     const a = buildFieldAudit({ fieldTable: CI_TABLE, partials: PARTIALS });
-    a.collectForItem(mk('Wren', 'CaseTest', { Background: 'a coast', strength: 'uncanny' }), CI_TABLE.templates.CaseTest, 'CaseTest');
+    a.collectForItem(mk('Wren', 'CaseTest', { Background: 'a coast', strength: 'uncanny' }), CI_TABLE.templates.CaseTest);
     a.finish(d);
     expect(d.codes()).toContain('CL0426');
     expect(d.calls.find((c) => c.code === 'CL0426').message).toMatch(/strength/);
@@ -494,7 +494,7 @@ describe('buildFieldAudit — case-insensitive matching (renderer parity)', () =
       _sources: ['fields.cl.yaml'],
     };
     const a = buildFieldAudit({ fieldTable: noBgTable, partials: PARTIALS });
-    a.collectForItem(mk('Iona', 'Empty', { Background: 'a coast' }), noBgTable.templates.Empty, 'Empty');
+    a.collectForItem(mk('Iona', 'Empty', { Background: 'a coast' }), noBgTable.templates.Empty);
     a.finish(d);
     const hit = d.calls.find((c) => c.code === 'CL0426');
     expect(hit.message).toContain('"Background"');
@@ -507,7 +507,7 @@ describe('buildFieldAudit — dedupe on (item id, field path)', () => {
     const d = sink();
     const a = buildFieldAudit({ fieldTable: TABLE, partials: PARTIALS });
     const item = mk('Alba', 'Person', { name: 'A', vibe: 'v', strength: 'uncanny', bravado: 'loud' });
-    for (let i = 0; i < 32; i += 1) a.collectForItem(item, TABLE.templates.Person, 'Person');
+    for (let i = 0; i < 32; i += 1) a.collectForItem(item, TABLE.templates.Person);
     a.finish(d);
     const perItem = d.calls.filter((c) => c.code === 'CL0426');
     expect(perItem).toHaveLength(2); // strength, bravado — not 64

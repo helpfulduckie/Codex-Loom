@@ -9,7 +9,7 @@
  * to — is exactly what a wrong first snapshot would freeze in place unchallenged.
  */
 
-const { resolvePlacements, DEFAULT_ORDER, PLACEABLE_COMPONENTS } = require('../../src/model/item');
+const { resolvePlacements, DEFAULT_ORDER } = require('../../src/model/item');
 
 const pe = (item) => resolvePlacements(item).targets.find((t) => t.component === 'plotEssential');
 
@@ -38,16 +38,6 @@ describe('storyCard', () => {
 });
 
 describe('targets', () => {
-  test('every §7.3 component that takes sections is placeable', () => {
-    // Two components are deliberately not here, for one reason: routing needs a branch with
-    // items resolved on it. The scenario blurb is written once at the root, and branch
-    // framing sits at an interior node — neither has a cast to place.
-    expect([...PLACEABLE_COMPONENTS]).toEqual([
-      'plotEssential', 'summary', 'aiInstructions', 'authorsNote', 'adventureDescription',
-      'opening',
-    ]);
-  });
-
   test('an item may name several components at once', () => {
     const { targets } = resolvePlacements({
       render: { plotEssential: { slot: 'cast' }, summary: { slot: 'history' } },

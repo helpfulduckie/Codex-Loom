@@ -162,23 +162,6 @@ const LINT = {
 };
 
 /**
- * The branch-node spelling of `lint:`, and it differs from the root one in exactly one key.
- *
- * **Both `packs:` and `level:` are live on a branch as of Phase 14 (§8.2.2).** `lint.packs.*`
- * branch-merges key-wise — which packs validate a branch's `notes:` depends on which mods
- * that branch ships — and a branch-declared `level:` is a per-branch ceiling that names the
- * branch in any finding it clamps. The project-level `lint.level` still governs the whole
- * compile on top of both.
- */
-const BRANCH_LINT = {
-  type: TYPES.MAP,
-  keys: {
-    level: LINT_LEVEL,
-    packs: LINT_PACKS,
-  },
-};
-
-/**
  * A branch node. Recursive: `branches` holds more of the same.
  *
  * Everything here merges down the chain key-wise, which is why each is a mapping rather
@@ -195,7 +178,7 @@ const BRANCH_NODE = {
     roles: { type: TYPES.RECORD, of: STRING },
     placeholders: STRING_RECORD,
     scripts: SCRIPTS,
-    lint: BRANCH_LINT,
+    lint: LINT,
     components: COMPONENTS,
     render: RENDER,
     templateFor: TEMPLATE_FOR,
@@ -248,5 +231,5 @@ const CONFIG_SCHEMA = {
 };
 
 module.exports = {
-  CONFIG_SCHEMA, BRANCH_NODE, COMPONENTS, SCRIPTS, RENDER, TEMPLATE_FOR, STORY_CARD_TYPE,
+  CONFIG_SCHEMA, COMPONENTS, SCRIPTS, RENDER,
 };

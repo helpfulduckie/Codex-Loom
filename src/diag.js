@@ -393,10 +393,6 @@ class Diagnostics {
     return this.add(SEVERITY.WARN, code, message, loc, opts);
   }
 
-  info(code, message, loc, opts) {
-    return this.add(SEVERITY.INFO, code, message, loc, opts);
-  }
-
   /** Absorb another collector's diagnostics — for folding a sub-compile's results up. */
   merge(other) {
     if (!other) return this;
@@ -433,11 +429,6 @@ class Diagnostics {
     return this._items.length === 0;
   }
 
-  clear() {
-    this._items = [];
-    return this;
-  }
-
   format() {
     return this._items.map((d) => d.format()).join('\n\n');
   }
@@ -448,6 +439,6 @@ class Diagnostics {
 }
 
 module.exports = {
-  Diagnostic, Diagnostics, SEVERITY, SEVERITY_LABEL, REGISTRY, CODES, severityOf, busWarner,
+  Diagnostic, Diagnostics, SEVERITY, REGISTRY, CODES, severityOf, busWarner,
   isOpinion, LINT_LEVELS, applyLintLevel,
 };

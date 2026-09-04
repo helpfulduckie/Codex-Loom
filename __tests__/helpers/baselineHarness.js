@@ -418,5 +418,5 @@ function describeBaselineSet(options) {
 }
 
 module.exports = {
-  describeBaselineSet, listFiles, normalizeManifest, DEFAULT_REPORT_MODES,
+  describeBaselineSet, DEFAULT_REPORT_MODES,
 };

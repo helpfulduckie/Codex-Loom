@@ -31,11 +31,6 @@ function sourceLabel(item) {
   return 'project';
 }
 
-function viaLabel(item) {
-  if (!item.import) return '';
-  return typeof item.import === 'string' ? item.import : '';
-}
-
 /**
  * The source file as the report should show it: relative to the project directory, with
  * forward slashes.
@@ -69,7 +64,7 @@ function collectRows(registry, baseDir) {
       id,
       source: sourceLabel(item),
       file: sourceFile(item, baseDir),
-      via: viaLabel(item),
+      via: typeof item.import === 'string' ? item.import : '',
       status: 'resolved',
     });
   }
@@ -80,7 +75,7 @@ function collectRows(registry, baseDir) {
         id,
         source: sourceLabel(item),
         file: sourceFile(item, baseDir),
-        via: viaLabel(item),
+        via: typeof item.import === 'string' ? item.import : '',
         status: 'ambiguous',
       });
     }

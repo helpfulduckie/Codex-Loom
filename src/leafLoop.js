@@ -97,9 +97,9 @@ function compileLeaf(branchPath, ctx) {
   // cards and the component occupants together — see renderBranchItems.
   const renderedById = captureReports ? new Map() : null;
   const { grouped: leafCardGroups, occupants, placeholderNoise } = renderBranchItems(
-    resolvedItems, registry, templates, partials, outputDir, branchProtagonist, cctx.variables,
+    resolvedItems, registry, templates, partials, branchProtagonist, cctx.variables,
     {
-      verbose, renderedById,
+      renderedById,
       projectNotesTemplate: (compileContext.render && compileContext.render.notesTemplate) || null,
       diagnostics, slotIndex, branchLabel: label, placeholders: cctx.placeholders,
       usage: placeholderState.usage, usagePath: branchPath.join('/'),
@@ -325,4 +325,4 @@ function runLeafLoop(ctx) {
   return filesWritten;
 }
 
-module.exports = { runLeafLoop, compileLeaf, LIFT_EXCLUDED_COMPONENTS };
+module.exports = { runLeafLoop };

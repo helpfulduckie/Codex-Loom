@@ -249,4 +249,4 @@ function loadFieldTable(dirs, options = {}) {
   return acc;
 }
 
-module.exports = { CODES, FIELD_TABLE_BASENAMES, FIELD_KEYS, loadFieldTable };
+module.exports = { CODES, FIELD_KEYS, loadFieldTable };

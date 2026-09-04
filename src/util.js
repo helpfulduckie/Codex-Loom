@@ -46,11 +46,10 @@ const RESERVED_LIBRARY_BASENAMES = Object.freeze(['library.cl.yaml']);
 
 /**
  * Characters illegal in a Windows/Unix path segment, as a character-class source
- * fragment rather than a finished `RegExp` — the one definition `overview.js`'s
- * `sanitizeFilename` and `compile.js`'s `aid.type` check both build on, since they need
- * different flags (`g` for a global replace, none for a single test) and one extends the
- * class with control characters. Callers wrap it in `[...]` and add whatever flags they
- * need: `new RegExp('[' + PATH_UNSAFE_CHARS + ']', 'g')`.
+ * fragment rather than a finished `RegExp` — shared by `overview.js`'s `sanitizeFilename`
+ * and `cardType.js`, since they need different flags (`g` for a global replace, none for a
+ * single test) and one extends the class with control characters. Callers wrap it in
+ * `[...]` and add whatever flags they need: `new RegExp('[' + PATH_UNSAFE_CHARS + ']', 'g')`.
  */
 const PATH_UNSAFE_CHARS = '<>:"/\\\\|?*';
 
@@ -90,7 +89,7 @@ function findFiles(dir, ext) {
 
 // `loadYaml` now lives in loader/yaml.js, which parses with position tracking so
 // diagnostics can name a line and column (§4.4). It is re-exported here unchanged so
-// the existing call sites — and loader.js's own re-export — keep working.
+// the existing call sites keep working.
 
 function deepClone(obj) {
   if (obj === null || typeof obj !== 'object') return obj;

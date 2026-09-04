@@ -1,38 +1,15 @@
 # Codex Loom — Cline Working Rules
 
-## Project Identity
-
-Codex Loom compiles YAML item definitions into Velvet Lattice story card format for AI Dungeon scenarios.
-
-## Branch / Version Context
-
-- Active work is the **v4 rebuild on `v4-phase1`**. Phases 1–11 are complete; Phase 12 is next.
-- **`sections:` is the only component grammar.** v3 syntaxes (`src/pe.js`, `src/description.js`, `src/opening.js`) no longer exist.
-- A component is a named mapping of sections, and every component type — Plot Essentials, AI Instructions, Author's Note, Opening, Description — reads the same way.
-- **Phase 11 changed where files are written.** A component, placeholder or story card lands at the node that owns it, not at every leaf — Velvet Lattice inherits them down the branch tree. `Label.md` and `Description.md` are the exceptions and still land per node. Story-card placement keys on `(type, name)`, never on item id.
-
-## Testing
-
-- Run: `npm test` (Jest). Targets `test:unit`, `test:integration`, `test:coverage` also available.
-- `npm run compile` compiles `test/compile.yaml` as a smoke check.
-- **A passing suite is "done" for code changes.**
-
-##  Pathological Fixtures
-
-- `__tests__/fixtures/pathological/` freezes diagnostic output (code, severity, file, message).
-- It is authored from the spec. If the compiler disagrees, the fixture pins the disagreement rather than being edited to match.
-
-## Line Endings Are Load-Bearing
-
-- `.gitattributes` pins `__tests__/fixtures/**` and `test/**` to `eol=lf`.
-- CRLF conversion adds bytes per line and breaks character-count assertions in the pathological snapshot (CL0710 / CL0711 compare opening lengths against the 4,000-character cap).
-- If fixture assertions fail by a handful of characters on a fresh clone, check this before suspecting the compiler.
+Read `CLAUDE.md` in this directory first. It is the single source for project identity,
+phase status, test commands, the fixture rules, and the line-ending warning; nothing here
+restates it.
 
 ## Working Norms
 
 - Confirm scope before touching files. List every file you will modify and flag anything out of scope or in live/published folders; wait for approval.
 - If disagreeing with an approach, make the case once concretely, then yield if the preference is restated. A second round is for factual errors or real risk only.
 - Stay on the ask; no unsolicited analysis of the user.
+- "Done" is the definition in `C:\Users\blues\Git\CLAUDE.md`: a green suite plus a scope check against what was agreed, not a green suite alone.
 
 ## Session Recaps
 

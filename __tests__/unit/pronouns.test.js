@@ -1,88 +1,88 @@
 'use strict';
 
 const {
-  resolveProunounToken, applyTokenPass,
+  resolvePronounToken, applyTokenPass,
   getDisplayName, getFullName, applyRolePass, applyCrossItemRefs, applyPronounPasses,
 } = require('../../src/model/pronouns');
 
-// ── resolveProunounToken ────────────────────────────────────────────────────
+// ── resolvePronounToken ────────────────────────────────────────────────────
 
-describe('resolveProunounToken', () => {
+describe('resolvePronounToken', () => {
   describe('female set', () => {
-    test('she → she', () => expect(resolveProunounToken('she', 'female')).toBe('she'));
-    test('her → her', () => expect(resolveProunounToken('her', 'female')).toBe('her'));
-    test('her~ → her', () => expect(resolveProunounToken('her~', 'female')).toBe('her'));
-    test('herself → herself', () => expect(resolveProunounToken('herself', 'female')).toBe('herself'));
-    test("she's → she's", () => expect(resolveProunounToken("she's", 'female')).toBe("she's"));
+    test('she → she', () => expect(resolvePronounToken('she', 'female')).toBe('she'));
+    test('her → her', () => expect(resolvePronounToken('her', 'female')).toBe('her'));
+    test('her~ → her', () => expect(resolvePronounToken('her~', 'female')).toBe('her'));
+    test('herself → herself', () => expect(resolvePronounToken('herself', 'female')).toBe('herself'));
+    test("she's → she's", () => expect(resolvePronounToken("she's", 'female')).toBe("she's"));
   });
 
   describe('male set', () => {
-    test('she → he', () => expect(resolveProunounToken('she', 'male')).toBe('he'));
-    test('her → him', () => expect(resolveProunounToken('her', 'male')).toBe('him'));
-    test('her~ → his', () => expect(resolveProunounToken('her~', 'male')).toBe('his'));
-    test('herself → himself', () => expect(resolveProunounToken('herself', 'male')).toBe('himself'));
-    test("she's → he's", () => expect(resolveProunounToken("she's", 'male')).toBe("he's"));
+    test('she → he', () => expect(resolvePronounToken('she', 'male')).toBe('he'));
+    test('her → him', () => expect(resolvePronounToken('her', 'male')).toBe('him'));
+    test('her~ → his', () => expect(resolvePronounToken('her~', 'male')).toBe('his'));
+    test('herself → himself', () => expect(resolvePronounToken('herself', 'male')).toBe('himself'));
+    test("she's → he's", () => expect(resolvePronounToken("she's", 'male')).toBe("he's"));
   });
 
   describe('they set (alias for nonbinary)', () => {
-    test('she → they', () => expect(resolveProunounToken('she', 'they')).toBe('they'));
-    test('her → them', () => expect(resolveProunounToken('her', 'they')).toBe('them'));
-    test('her~ → their', () => expect(resolveProunounToken('her~', 'they')).toBe('their'));
-    test('herself → themselves', () => expect(resolveProunounToken('herself', 'they')).toBe('themselves'));
-    test("she's → they're", () => expect(resolveProunounToken("she's", 'they')).toBe("they're"));
+    test('she → they', () => expect(resolvePronounToken('she', 'they')).toBe('they'));
+    test('her → them', () => expect(resolvePronounToken('her', 'they')).toBe('them'));
+    test('her~ → their', () => expect(resolvePronounToken('her~', 'they')).toBe('their'));
+    test('herself → themselves', () => expect(resolvePronounToken('herself', 'they')).toBe('themselves'));
+    test("she's → they're", () => expect(resolvePronounToken("she's", 'they')).toBe("they're"));
   });
 
   describe('nonbinary set', () => {
-    test('she → they', () => expect(resolveProunounToken('she', 'nonbinary')).toBe('they'));
-    test('her → them', () => expect(resolveProunounToken('her', 'nonbinary')).toBe('them'));
-    test('her~ → their', () => expect(resolveProunounToken('her~', 'nonbinary')).toBe('their'));
-    test('herself → themselves', () => expect(resolveProunounToken('herself', 'nonbinary')).toBe('themselves'));
+    test('she → they', () => expect(resolvePronounToken('she', 'nonbinary')).toBe('they'));
+    test('her → them', () => expect(resolvePronounToken('her', 'nonbinary')).toBe('them'));
+    test('her~ → their', () => expect(resolvePronounToken('her~', 'nonbinary')).toBe('their'));
+    test('herself → themselves', () => expect(resolvePronounToken('herself', 'nonbinary')).toBe('themselves'));
   });
 
   describe('you set', () => {
-    test('she → you', () => expect(resolveProunounToken('she', 'you')).toBe('you'));
-    test('her~ → your', () => expect(resolveProunounToken('her~', 'you')).toBe('your'));
-    test('herself → yourself', () => expect(resolveProunounToken('herself', 'you')).toBe('yourself'));
-    test("she's → you're", () => expect(resolveProunounToken("she's", 'you')).toBe("you're"));
+    test('she → you', () => expect(resolvePronounToken('she', 'you')).toBe('you'));
+    test('her~ → your', () => expect(resolvePronounToken('her~', 'you')).toBe('your'));
+    test('herself → yourself', () => expect(resolvePronounToken('herself', 'you')).toBe('yourself'));
+    test("she's → you're", () => expect(resolvePronounToken("she's", 'you')).toBe("you're"));
   });
 
   describe('case preservation', () => {
-    test('She (capital) with male → He', () => expect(resolveProunounToken('She', 'male')).toBe('He'));
-    test('Her~ (capital) with they → Their', () => expect(resolveProunounToken('Her~', 'they')).toBe('Their'));
+    test('She (capital) with male → He', () => expect(resolvePronounToken('She', 'male')).toBe('He'));
+    test('Her~ (capital) with they → Their', () => expect(resolvePronounToken('Her~', 'they')).toBe('Their'));
     test('SHE is not all-caps preserving, just first-char', () => {
-      const result = resolveProunounToken('SHE', 'male');
+      const result = resolvePronounToken('SHE', 'male');
       expect(result[0]).toBe(result[0].toUpperCase());
     });
   });
 
   describe('verb_is role', () => {
-    test('is → is for female', () => expect(resolveProunounToken('is', 'female')).toBe('is'));
-    test('is → is for male', () => expect(resolveProunounToken('is', 'male')).toBe('is'));
-    test('is → are for they', () => expect(resolveProunounToken('is', 'they')).toBe('are'));
-    test('is → are for you', () => expect(resolveProunounToken('is', 'you')).toBe('are'));
-    test('are → are for they', () => expect(resolveProunounToken('are', 'they')).toBe('are'));
-    test('are → is for female', () => expect(resolveProunounToken('are', 'female')).toBe('is'));
-    test('Is (capital) → Is for female', () => expect(resolveProunounToken('Is', 'female')).toBe('Is'));
-    test('Is (capital) → Are for you', () => expect(resolveProunounToken('Is', 'you')).toBe('Are'));
+    test('is → is for female', () => expect(resolvePronounToken('is', 'female')).toBe('is'));
+    test('is → is for male', () => expect(resolvePronounToken('is', 'male')).toBe('is'));
+    test('is → are for they', () => expect(resolvePronounToken('is', 'they')).toBe('are'));
+    test('is → are for you', () => expect(resolvePronounToken('is', 'you')).toBe('are'));
+    test('are → are for they', () => expect(resolvePronounToken('are', 'they')).toBe('are'));
+    test('are → is for female', () => expect(resolvePronounToken('are', 'female')).toBe('is'));
+    test('Is (capital) → Is for female', () => expect(resolvePronounToken('Is', 'female')).toBe('Is'));
+    test('Is (capital) → Are for you', () => expect(resolvePronounToken('Is', 'you')).toBe('Are'));
   });
 
   describe('verb_was role', () => {
-    test('was → was for female', () => expect(resolveProunounToken('was', 'female')).toBe('was'));
-    test('was → was for male', () => expect(resolveProunounToken('was', 'male')).toBe('was'));
-    test('was → were for they', () => expect(resolveProunounToken('was', 'they')).toBe('were'));
-    test('was → were for you', () => expect(resolveProunounToken('was', 'you')).toBe('were'));
-    test('were → were for they', () => expect(resolveProunounToken('were', 'they')).toBe('were'));
-    test('were → was for female', () => expect(resolveProunounToken('were', 'female')).toBe('was'));
-    test('Was (capital) → Was for female', () => expect(resolveProunounToken('Was', 'female')).toBe('Was'));
-    test('Was (capital) → Were for you', () => expect(resolveProunounToken('Was', 'you')).toBe('Were'));
+    test('was → was for female', () => expect(resolvePronounToken('was', 'female')).toBe('was'));
+    test('was → was for male', () => expect(resolvePronounToken('was', 'male')).toBe('was'));
+    test('was → were for they', () => expect(resolvePronounToken('was', 'they')).toBe('were'));
+    test('was → were for you', () => expect(resolvePronounToken('was', 'you')).toBe('were'));
+    test('were → were for they', () => expect(resolvePronounToken('were', 'they')).toBe('were'));
+    test('were → was for female', () => expect(resolvePronounToken('were', 'female')).toBe('was'));
+    test('Was (capital) → Was for female', () => expect(resolvePronounToken('Was', 'female')).toBe('Was'));
+    test('Was (capital) → Were for you', () => expect(resolvePronounToken('Was', 'you')).toBe('Were'));
   });
 
   describe('unknown set fallback', () => {
     test('returns bare word for unknown set', () => {
-      expect(resolveProunounToken('she', 'unknown')).toBe('she');
+      expect(resolvePronounToken('she', 'unknown')).toBe('she');
     });
     test('strips ~ for unknown set', () => {
-      expect(resolveProunounToken('her~', null)).toBe('her');
+      expect(resolvePronounToken('her~', null)).toBe('her');
     });
   });
 });

@@ -14,8 +14,6 @@
  * naming the roster rather than a source that silently produces nothing.
  */
 
-const fs = require('fs');
-
 /**
  * The leading comment block of a JavaScript file, cleaned up for prose.
  *
@@ -104,9 +102,4 @@ function runExtractor(name, source) {
   return { text: fn(source) };
 }
 
-/** Read a file for an extractor. Separate so the extractors themselves stay pure. */
-function readSource(filePath) {
-  return fs.readFileSync(filePath, 'utf8');
-}
-
-module.exports = { EXTRACTORS, runExtractor, readSource, scriptBanner };
+module.exports = { EXTRACTORS, runExtractor, scriptBanner };

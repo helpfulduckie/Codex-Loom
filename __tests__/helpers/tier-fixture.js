@@ -264,5 +264,4 @@ function readComponent(dir, branchSegments, filename = 'Plot Essentials.md') {
 
 module.exports = {
   writeTierProject, readCards, cardWrittenAt, readComponent, writeComponentTierProject,
-  DEFAULT_FIELDS, DEFAULT_TERSE, DEFAULT_ITEMS,
 };

@@ -59,12 +59,6 @@ class SourceMap {
     return { file: this.file, line: hit.line, col: hit.col };
   }
 
-  /** True when the exact path was recorded — useful for falling back to a parent path. */
-  has(...parts) {
-    const pathParts = (parts.length === 1 && Array.isArray(parts[0]) ? parts[0] : parts).map(String);
-    return this._positions.has(pathParts.join(PATH_SEP));
-  }
-
   /**
    * The nearest recorded ancestor of a path, including the path itself. Diagnostics
    * about a value that the document does not contain — a missing required key, say —
@@ -78,10 +72,6 @@ class SourceMap {
       if (hit) return { file: this.file, line: hit.line, col: hit.col };
     }
     return { file: this.file };
-  }
-
-  get size() {
-    return this._positions.size;
   }
 }
 
@@ -130,10 +120,9 @@ function buildPositions(doc, lineCounter) {
  * on the document rather than throwing, so they are raised explicitly here — and on a
  * token the parser swallowed as a mapping key, which is an ERROR per §4.1.
  *
- * `raw: true` skips the preparse, for callers that need the document exactly as written.
  */
-function parseYaml(raw, filePath, options = {}) {
-  const source = options.raw ? raw : preparse(raw);
+function parseYaml(raw, filePath) {
+  const source = preparse(raw);
   const lineCounter = new YAML.LineCounter();
   const doc = YAML.parseDocument(source, { lineCounter, keepSourceTokens: false });
 
@@ -156,7 +145,7 @@ function parseYaml(raw, filePath, options = {}) {
     );
   }
 
-  return { value, sourceMap, doc };
+  return { value, sourceMap };
 }
 
 /**

@@ -45,26 +45,6 @@ const {
  */
 
 /**
- * Render a value as a string for inline output, following the same {$field} object/array
- * rendering rules the AST walk uses.
- */
-function renderResolved(val) {
-  if (val === null) return '';
-  if (Array.isArray(val)) {
-    if (val.length === 1) return String(val[0]);
-    return '\n' + val.map(item => '- ' + item).join('\n');
-  }
-  if (typeof val === 'object') {
-    if (val.full != null) return String(val.full);
-    const entries = Object.values(val).filter(v => v != null);
-    if (entries.length === 0) return '';
-    if (entries.length === 1) return String(entries[0]);
-    return '\n' + entries.map(v => '- ' + v).join('\n');
-  }
-  return renderScalar(val);
-}
-
-/**
  * Normalize whitespace in rendered output.
  *
  * Steps (in order):
@@ -163,29 +143,21 @@ function applyFieldRenderFunctions(card, itemMap, options) {
 
   const context = itemContext(card, itemMap ? { itemMap } : undefined);
 
-  applyRenderFunctionsRecursive(card.body, context, options || {});
+  walkTextRecursive(card.body, (s) => processFieldRenderFunctions(s, context, options || {}));
 }
 
 function applyVariableInterpolation(card, variables, sink) {
   if (!variables) return;
   // card.name is normalized to {display, full, ...} by resolveItem before this runs
   if (card.name && typeof card.name === 'object' && !Array.isArray(card.name)) {
-    applyVariableInterpolationRecursive(card.name, variables, sink);
+    walkTextRecursive(card.name, (s) => resolveVariables(s, variables, sink));
   } else if (typeof card.name === 'string') {
     card.name = resolveVariables(card.name, variables, sink);
   }
   if (typeof card.id === 'string') card.id = resolveVariables(card.id, variables, sink);
-  if (card.body)   applyVariableInterpolationRecursive(card.body, variables, sink);
-  if (card.aid)    applyVariableInterpolationRecursive(card.aid, variables, sink);
-  if (card.render) applyVariableInterpolationRecursive(card.render, variables, sink);
-}
-
-function applyVariableInterpolationRecursive(obj, variables, sink) {
-  walkTextRecursive(obj, (s) => resolveVariables(s, variables, sink));
-}
-
-function applyRenderFunctionsRecursive(obj, context, options) {
-  walkTextRecursive(obj, (s) => processFieldRenderFunctions(s, context, options));
+  if (card.body)   walkTextRecursive(card.body, (s) => resolveVariables(s, variables, sink));
+  if (card.aid)    walkTextRecursive(card.aid, (s) => resolveVariables(s, variables, sink));
+  if (card.render) walkTextRecursive(card.render, (s) => resolveVariables(s, variables, sink));
 }
 
 // `[prefix, implementation]` pairs, derived from the canonical `FUNCTION_NAMES`
@@ -314,5 +286,4 @@ module.exports = {
   normalizeWhitespace,
   applyWrapper,
   isTruthy,
-  RENDER_FN_DISPATCH,
 };

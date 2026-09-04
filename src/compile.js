@@ -385,7 +385,7 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
         if (extra.fieldAudit) {
           // This is a story-card/component body render, so a bare `from:`/implied-source
           // path in `hit.list` qualifies against `body` (§ Decision 8).
-          extra.fieldAudit.collectForItem(item, hit.list, hit.name, { templateFor, refRoot: 'body' });
+          extra.fieldAudit.collectForItem(item, hit.list, { templateFor, refRoot: 'body' });
         }
         return renderFieldList(hit.list, fieldTable, context, {
           diagnostics, file: null, name: hit.name, partials, variables,
@@ -427,9 +427,8 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
  * together, with nothing to reconcile afterward.
  */
 
-function renderBranchItems(resolvedItems, registry, templates, partials, outputDir, branchProtagonist, variables = {}, options = {}) {
+function renderBranchItems(resolvedItems, registry, templates, partials, branchProtagonist, variables = {}, options = {}) {
   const {
-    verbose = false,
     renderedById = null,
     projectNotesTemplate = null,
     diagnostics = new Diagnostics(),
@@ -637,7 +636,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, outputD
     // carries? Runs on the field-list body only — a `.template` text body names nothing to
     // check against. Findings are deduped compile-wide and emitted once, after every leaf.
     if (fieldAudit && bodyRender.kind === 'fieldList') {
-      fieldAudit.collectForItem(item, bodyRender.list, bodyRender.name, { templateFor, refRoot: 'body' });
+      fieldAudit.collectForItem(item, bodyRender.list, { templateFor, refRoot: 'body' });
     }
 
     // Build render context: top-level item fields + body for {$body.X} access
@@ -1086,9 +1085,6 @@ function compileRun(configPath, options, buses) {
 module.exports = {
   compile,
   resolveBranchItems,
-  renderBranchItems,
   renderPlacementBody,
-  resolveIncludes,
   buildCompileContext,
-  resolveVariables,
 };

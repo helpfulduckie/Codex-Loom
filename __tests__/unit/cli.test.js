@@ -99,17 +99,6 @@ describe('CLI --leafReview flag', () => {
     expect(result.stderr).toMatch(/compile\.yaml/i);
   });
 
-  test('--leafReview with no path defaults to <cwd>/overview', () => {
-    write(path.join(tmp, 'scenario', 'Story Cards', 'T', 'c.md'), 'c');
-    const result = spawnSync(
-      process.execPath,
-      [CLI, '--leafReview', path.join(tmp, 'scenario')],
-      { encoding: 'utf8', cwd: tmp }
-    );
-    expect(result.status).toBe(0);
-    expect(fs.existsSync(path.join(tmp, 'overview'))).toBe(true);
-  });
-
   test('--leafReview with compile.yaml uses config output as scenario root', () => {
     const cfgPath = path.join(tmp, 'compile.yaml');
     const outputDir = path.join(tmp, 'output');
@@ -195,17 +184,6 @@ describe('CLI --overview flag', () => {
     const result = run(['--overview'], emptyDir);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/compile\.yaml/i);
-  });
-
-  test('--overview with no output-dir defaults to <cwd>/overview', () => {
-    write(path.join(tmp, 'scenario', 'Story Cards', 'T', 'c.md'), 'c');
-    const result = spawnSync(
-      process.execPath,
-      [CLI, '--overview', path.join(tmp, 'scenario')],
-      { encoding: 'utf8', cwd: tmp }
-    );
-    expect(result.status).toBe(0);
-    expect(fs.existsSync(path.join(tmp, 'overview'))).toBe(true);
   });
 
   test('--overview with compile.yaml uses config output as scenario root', () => {

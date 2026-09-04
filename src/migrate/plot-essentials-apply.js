@@ -347,7 +347,5 @@ module.exports = {
   entryId,
   includedPaths,
   addVariantAt,
-  graftPlacement,
-  applyImportPlacements,
   buildInlineItems,
 };

@@ -26,7 +26,7 @@ const { validate } = require('../schema');
 const { COMPONENT_SCHEMA } = require('./component-schema');
 const { normalizeComponent, mergeSectionRecords, applySectionSelector } = require('../model/component');
 const { resolveVariables } = require('../util');
-const { runExtractor, readSource } = require('../extract');
+const { runExtractor } = require('../extract');
 const { CODES, busWarner } = require('../diag');
 
 /**
@@ -340,7 +340,7 @@ function resolveOneSource(def, label, options) {
     return result;
   }
 
-  const source = readSource(resolved);
+  const source = fs.readFileSync(resolved, 'utf8');
 
   if (hasFile) {
     result.text = source.trimEnd();

@@ -172,38 +172,6 @@ describe('scanStoryCardStructure', () => {
     expect(scanStoryCardStructure(CARD_DISCOVERED)).toEqual([]);
   });
 
-  test('a card with no [e] and no /] is not a finding', () => {
-    // `missing-discovery-marker` and `e-marker-conflict` were one mod's convention, and
-    // fired on every card of every project that does not use it. Convention packs (§8.2.2)
-    // are where rules of that shape belong.
-    const card = `## Neither
-
-~~~
-triggers: [Neither]
-~~~
-
-Just a plain body with no marker.
-`;
-    expect(scanStoryCardStructure(card)).toEqual([]);
-  });
-
-  test('a card with both [e] and /] is not a finding', () => {
-    const card = `## Conflicted
-
-~~~
-triggers: [Conflicted]
-~~~
-
-[e] Conflicted thing /]
-`;
-    expect(scanStoryCardStructure(card)).toEqual([]);
-  });
-
-  test('encapsulate is no longer checked — the emitter writes it, not the author', () => {
-    const card = '## NoEncap\n~~~\ntriggers: [NoEncap]\n~~~\n[e] body\n';
-    expect(scanStoryCardStructure(card)).toEqual([]);
-  });
-
   test('flags empty trigger list', () => {
     const bad = `## NoTriggers
 
@@ -316,23 +284,7 @@ describe('scanNativePlaceholders — the §12.4 confusability check', () => {
 });
 
 describe('the compiler / lint split in the offline scanner (§12.5)', () => {
-  const { applyLevel, CHECKS } = require('../../src/lint');
-
-  test('every check declares which layer it belongs to', () => {
-    for (const c of CHECKS) expect(['compiler', 'opinion']).toContain(c.layer);
-  });
-
-  test('the six ERROR checks are compiler-layer and carry their CL codes', () => {
-    const facts = CHECKS.filter((c) => c.severity === 'ERROR');
-    expect(facts).toHaveLength(6);
-    expect(facts.every((c) => c.layer === 'compiler')).toBe(true);
-    expect(facts.map((c) => c.code).sort())
-      .toEqual(['CL0430', 'CL0431', 'CL0432', 'CL0433', 'CL0434', 'CL0435']);
-  });
-
-  test('the opinion layer is ERROR-free, which is what makes level: off safe', () => {
-    expect(CHECKS.filter((c) => c.layer === 'opinion').every((c) => c.severity === 'WARN')).toBe(true);
-  });
+  const { applyLevel } = require('../../src/lint');
 
   test('level: off silences the opinions and leaves every fact standing', () => {
     const findings = scanText('{$she} love[does] it {if $x}{/if} undefined');

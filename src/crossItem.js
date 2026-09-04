@@ -220,11 +220,6 @@ function resolveCrossItemRenderFunctions(resolvedItems, resolvedById, diagnostic
 }
 
 module.exports = {
-  ITEM_CONTEXT_KEY_SET,
-  RENDER_FN_PREFIXES,
-  scanCrossItemRefs,
   findCycles,
-  topoOrder,
-  reportCycle,
   resolveCrossItemRenderFunctions,
 };

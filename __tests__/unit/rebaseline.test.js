@@ -18,12 +18,9 @@ const path = require('path');
 const fs = require('fs');
 const { OPAQUE } = require('../helpers/diffShape');
 
-// `scripts/rebaseline.js` `process.exit(1)`s at module load when `goldenFixtures/` is
-// absent — it is a CLI over that private repo. `diffTree` itself needs no fixture, but the
-// require does, so this suite gates on the fixtures exactly as `golden.test.js` does: it
-// runs with them cloned and registers as skipped without.
-const HAVE_FIXTURES = fs.existsSync(path.resolve(__dirname, '../../goldenFixtures/projects.js'));
-const { diffTree } = HAVE_FIXTURES ? require('../../scripts/rebaseline') : {};
+// `diffTree` needs no fixture, and requiring the script has no side effects: the set is
+// loaded only under `require.main === module`, so this suite runs on every checkout.
+const { diffTree } = require('../../scripts/rebaseline');
 
 const dirs = [];
 afterAll(() => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }); });
@@ -42,7 +39,7 @@ function tree(files) {
 
 const LIB = 'exports.shared = 1;\n// a fairly long line to make a byte flip unambiguous\n';
 
-(HAVE_FIXTURES ? describe : describe.skip)('diffTree — the Scripts/ relocation guard', () => {
+describe('diffTree — the Scripts/ relocation guard', () => {
   test('a per-leaf script lifted to the root is reported as relocated, not changed', () => {
     const expected = tree({
       'Label.md': '# Root\n',
@@ -118,7 +115,7 @@ const LIB = 'exports.shared = 1;\n// a fairly long line to make a byte flip unam
  */
 const PH = 'heroName: What should we call you?\n';
 
-(HAVE_FIXTURES ? describe : describe.skip)('diffTree — Placeholders.yaml is derived output', () => {
+describe('diffTree — Placeholders.yaml is derived output', () => {
   test('a first-seed Placeholders.yaml is routed to derived, not left in added', () => {
     const expected = tree({ 'Label.md': '# Root\n' });
     const actual = tree({ 'Label.md': '# Root\n', 'Placeholders.yaml': PH });

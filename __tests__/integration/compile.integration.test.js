@@ -14,7 +14,7 @@ let patchedConfigPath;
 beforeAll(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-test-'));
 
-  // Write a patched compile.yaml (v3 structure: format) that redirects output
+  // Write a patched compile.yaml (based on the test/ smoke project) that redirects output
   // to a temp dir but uses the real test fixtures for everything else.
   const patchedConfig = [
     'version: 4',
@@ -235,7 +235,7 @@ describe('Opening.md generation', () => {
     // File-based opening content
     fs.writeFileSync(path.join(openingTmpDir, 'openings', 'b-opening.md'), 'Leaf B from file\n', 'utf8');
 
-    // v3 format compile.yaml — opening under components: at root and branch levels
+    // the test/ smoke project's shape — opening under components: at root and branch levels
     // opening: inherits to leaves; branchFraming: writes to branch node directly
     fs.writeFileSync(path.join(openingTmpDir, 'compile.yaml'), [
       'version: 4',
@@ -405,7 +405,7 @@ describe('cross-item refs inside body field render functions', () => {
     // Bishop's familyMembers use join() on Alice/Carol's physicalTraits (new cross-item render fn).
     // Store's employees use join() on Bishop's familyMembers (chained, order-dependent without multi-pass).
     // Items are deliberately ordered Store → Bishop → Carol → Alice (deepest-dependent first)
-    // to exercise the multi-pass convergence loop.
+    // so that cross-item references resolve in topological order (crossItem.js).
     fs.writeFileSync(path.join(xrefTmpDir, 'items', 'items.yaml'), [
       '- id: Store',
       '  name: Store',
@@ -484,25 +484,25 @@ describe('cross-item refs inside body field render functions', () => {
     fs.rmSync(xrefTmpDir, { recursive: true, force: true });
   });
 
-  function xrefItem(name) {
+  function xrefItem() {
     return fs.readFileSync(
       path.join(xrefTmpDir, 'output', 'Branches', 'main', 'Story Cards', 'Item', 'Item.md'), 'utf8'
     );
   }
 
   test('Bishop familyMembers: join() on cross-item mapping resolves hair+eyes', () => {
-    const content = xrefItem('Item');
+    const content = xrefItem();
     expect(content).toContain('Alice (blond; blue)');
     expect(content).toContain('Carol (blond; green)');
   });
 
   test('Store employees: chained cross-item join() resolves fully despite deepest-first ordering', () => {
-    const content = xrefItem('Item');
+    const content = xrefItem();
     expect(content).toContain('Alice (blond; blue); Carol (blond; green)');
   });
 
   test('Alice physicalTraits.hair: plain cross-item token resolved to Bishop hair', () => {
-    const content = xrefItem('Item');
+    const content = xrefItem();
     // Carol's physicalTraits are referenced in Bishop's familyMembers and appear resolved
     expect(content).toContain('Carol (blond; green)');
   });
@@ -695,10 +695,7 @@ describe('v3 block opening, migrated to sections and compiled', () => {
 
   function opening(branchPath) {
     const segments = branchPath.split('/');
-    let p = path.join(blkTmpDir, 'output', 'Branches');
-    for (const s of segments) p = path.join(p, s, segments.indexOf(s) < segments.length - 1 ? 'Branches' : '');
-    // rebuild cleanly
-    p = path.join(blkTmpDir, 'output');
+    let p = path.join(blkTmpDir, 'output');
     for (const s of segments) p = path.join(p, 'Branches', s);
     return fs.readFileSync(path.join(p, 'Components', 'Opening.md'), 'utf8');
   }
