@@ -142,7 +142,7 @@ describe('renderCard', () => {
       notes: '[e]',
     };
     const body = '{\nFelicia Grayls - Academy Researcher; minor nobility\n}';
-    const { text } = renderCard({ item, bodyText: body });
+    const { text } = renderCard({ item, bodyText: body, diagnostics: new Diagnostics() });
     expect(text).toBe([
       '## Felicia Grayls',
       '~~~',
@@ -155,29 +155,29 @@ describe('renderCard', () => {
   });
 
   test('writes encapsulate: false even with nothing else to say', () => {
-    const { text } = renderCard({ item: { id: 'Bare' }, bodyText: 'x' });
+    const { text } = renderCard({ item: { id: 'Bare' }, bodyText: 'x', diagnostics: new Diagnostics() });
     expect(text).toBe('## Bare\n~~~\nencapsulate: false\n~~~\nx');
   });
 
   test('omits triggers entirely rather than writing an empty list', () => {
-    const { text } = renderCard({ item: { id: 'Config', aid: { triggers: [] } }, bodyText: 'x' });
+    const { text } = renderCard({ item: { id: 'Config', aid: { triggers: [] } }, bodyText: 'x', diagnostics: new Diagnostics() });
     expect(text).not.toMatch(/triggers/);
   });
 
   test('omits notes when the rendered text is empty — the known: false case', () => {
-    const { text } = renderCard({ item: aness(), bodyText: 'x', notesText: '' });
+    const { text } = renderCard({ item: aness(), bodyText: 'x', notesText: '', diagnostics: new Diagnostics() });
     expect(text).not.toMatch(/notes/);
   });
 
   test('a pre-rendered notesTemplate result wins over the item field', () => {
     const item = { ...aness(), notes: 'ignored' };
-    const { text } = renderCard({ item, bodyText: 'x', notesText: 'marker: [e]' });
+    const { text } = renderCard({ item, bodyText: 'x', notesText: 'marker: [e]', diagnostics: new Diagnostics() });
     expect(text).toMatch(/notes: 'marker: \[e\]'/);
   });
 
   test('multi-line notes become a literal block scalar, never nested keys', () => {
     const item = { ...aness(), notes: { marker: '[e]', mood: 'clinical' } };
-    const { text } = renderCard({ item, bodyText: 'x' });
+    const { text } = renderCard({ item, bodyText: 'x', diagnostics: new Diagnostics() });
     expect(text).toContain('notes: |-\n  marker: [e]\n  mood: clinical');
     // VL types notes as str; a nested mapping would reach AID as a Python dict.
     expect(parseCards(text)[0].notes).toBe('marker: [e]\nmood: clinical');
@@ -187,12 +187,12 @@ describe('renderCard', () => {
     // model/item.js collapses `description:` into `notes:` at resolution (§4.5), so an
     // un-normalized item reaching here is a bug in the caller, not something to absorb.
     const item = { id: 'A', description: '[e]' };
-    expect(renderCard({ item, bodyText: 'x' }).text).not.toMatch(/notes/);
+    expect(renderCard({ item, bodyText: 'x', diagnostics: new Diagnostics() }).text).not.toMatch(/notes/);
   });
 
   test('decodes padded triggers and quotes them so the padding survives VL', () => {
     const item = { id: 'Ruin', aid: { triggers: ['_Ruin_', 'ruins'] } };
-    expect(renderCard({ item, bodyText: 'x' }).text)
+    expect(renderCard({ item, bodyText: 'x', diagnostics: new Diagnostics() }).text)
       .toContain("triggers: [' Ruin ', ruins]");
   });
 
@@ -209,7 +209,8 @@ describe('renderCard', () => {
   });
 
   test('a clean card produces no diagnostics', () => {
-    const { diagnostics } = renderCard({ item: aness(), bodyText: 'x' });
+    const diagnostics = new Diagnostics();
+    renderCard({ item: aness(), bodyText: 'x', diagnostics });
     expect(diagnostics.all).toEqual([]);
   });
 
@@ -225,23 +226,23 @@ describe('renderCard', () => {
     const reference = () => ({ id: 'WTG Time Config', kind: 'reference', aid: { type: 'System', triggers: [] } });
 
     test('a reference item writes the key', () => {
-      const { text } = renderCard({ item: reference(), bodyText: 'x' });
+      const { text } = renderCard({ item: reference(), bodyText: 'x', diagnostics: new Diagnostics() });
       expect(text).toContain('\nkind: reference\n');
     });
 
     test('a story item writes nothing, and neither does an item with no kind', () => {
-      expect(renderCard({ item: { ...reference(), kind: 'story' }, bodyText: 'x' }).text)
+      expect(renderCard({ item: { ...reference(), kind: 'story' }, bodyText: 'x', diagnostics: new Diagnostics() }).text)
         .not.toContain('kind:');
-      expect(renderCard({ item: aness(), bodyText: 'x' }).text).not.toContain('kind:');
+      expect(renderCard({ item: aness(), bodyText: 'x', diagnostics: new Diagnostics() }).text).not.toContain('kind:');
     });
 
     test('it round-trips through parseCards', () => {
-      const { text } = renderCard({ item: reference(), bodyText: 'x' });
+      const { text } = renderCard({ item: reference(), bodyText: 'x', diagnostics: new Diagnostics() });
       expect(parseCards(text)[0].kind).toBe('reference');
     });
 
     test('the key sits after encapsulate, where VL reads it as ordinary fence YAML', () => {
-      const { text } = renderCard({ item: reference(), bodyText: 'x' });
+      const { text } = renderCard({ item: reference(), bodyText: 'x', diagnostics: new Diagnostics() });
       expect(text).toMatch(/encapsulate: false\nkind: reference/);
     });
   });
@@ -254,16 +255,16 @@ describe('renderCard', () => {
   describe('meta: in the fence', () => {
     test('a nested meta: object round-trips through parseCards', () => {
       const item = { ...aness(), meta: { duckieConv: { role: 'anchor' } } };
-      const { text } = renderCard({ item, bodyText: 'x' });
+      const { text } = renderCard({ item, bodyText: 'x', diagnostics: new Diagnostics() });
       expect(text).toContain('\nmeta:\n  duckieConv:\n    role: anchor\n');
       // parseCards returns the whole fence as `.meta`; the channel is its `meta:` key.
       expect(parseCards(text)[0].meta.meta.duckieConv.role).toBe('anchor');
     });
 
     test('no meta:, an empty object, and a non-object all emit nothing', () => {
-      expect(renderCard({ item: aness(), bodyText: 'x' }).text).not.toContain('meta:');
-      expect(renderCard({ item: { ...aness(), meta: {} }, bodyText: 'x' }).text).not.toContain('meta:');
-      expect(renderCard({ item: { ...aness(), meta: ['a'] }, bodyText: 'x' }).text).not.toContain('meta:');
+      expect(renderCard({ item: aness(), bodyText: 'x', diagnostics: new Diagnostics() }).text).not.toContain('meta:');
+      expect(renderCard({ item: { ...aness(), meta: {} }, bodyText: 'x', diagnostics: new Diagnostics() }).text).not.toContain('meta:');
+      expect(renderCard({ item: { ...aness(), meta: ['a'] }, bodyText: 'x', diagnostics: new Diagnostics() }).text).not.toContain('meta:');
     });
 
     test('it sits after kind: reference, before notes:', () => {
@@ -271,7 +272,7 @@ describe('renderCard', () => {
         id: 'R', kind: 'reference', aid: { type: 'System', triggers: [] },
         notes: '[e]', meta: { duckieConv: { role: 'minor' } },
       };
-      const { text } = renderCard({ item, bodyText: 'x' });
+      const { text } = renderCard({ item, bodyText: 'x', diagnostics: new Diagnostics() });
       expect(text).toMatch(/kind: reference\nmeta:\n {2}duckieConv:\n {4}role: minor\nnotes: '\[e\]'/);
     });
   });
@@ -373,7 +374,7 @@ describe('parseCards', () => {
       aid: { triggers: ['_Aria_', "King's Land", '142 Cohort'] },
       notes: '[e]',
     };
-    const { text } = renderCard({ item, bodyText: '{\nbody\n}' });
+    const { text } = renderCard({ item, bodyText: '{\nbody\n}', diagnostics: new Diagnostics() });
     const [card] = parseCards(text);
     expect(card.title).toBe('Aria');
     expect(card.triggers).toEqual([' Aria ', "King's Land", '142 Cohort']);
@@ -441,6 +442,7 @@ const FIXTURE = path.resolve(
         item: { id: card.title, name: { full: card.title }, aid: { triggers: card.triggers } },
         bodyText: card.body,
         notesText: card.notes,
+        diagnostics: new Diagnostics(),
       });
       // The exact bytes the file already contains, for content that was never broken.
       expect(source).toContain(text);

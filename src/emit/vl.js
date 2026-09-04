@@ -46,7 +46,7 @@
  */
 
 const YAML = require('yaml');
-const { CODES, Diagnostics } = require('../diag');
+const { CODES } = require('../diag');
 const { LIMITS, checkLimit } = require('../limits');
 
 /** The fence delimiter. VL matches it anchored at line start (`loader.py:7`). */
@@ -308,13 +308,13 @@ function triggerLine(item, diagnostics, loc) {
  * @param {object}      args.item          the resolved item
  * @param {string}      args.bodyText      rendered, wrapped body
  * @param {string}      [args.notesText]   pre-rendered notes; defaults to §4.5's rule
- * @param {Diagnostics} [args.diagnostics] collector; one is created if omitted
+ * @param {Diagnostics} args.diagnostics   collector
  * @param {object}      [args.loc]         `{ file, line, col }` for diagnostics
  * @param {object}      [args.questions]   merged, expanded placeholder table (§8.5)
  * @returns {{ text: string, diagnostics: Diagnostics }}
  */
 function renderCard({ item, bodyText = '', notesText, diagnostics, loc = {}, questions = null }) {
-  const diags = diagnostics || new Diagnostics();
+  const diags = diagnostics;
   const lines = [`## ${cardTitle(item)}`, FENCE];
 
   const triggers = triggerLine(item, diags, loc);
