@@ -201,42 +201,64 @@ function normalizeVarKey(key) {
 /**
  * Expand `{%key}` variable references in a string, recursively and cycle-safe.
  *
- * The compiler's only variable expander for item, component and placeholder content;
- * `config/load.js:expandVariables` is its config-time twin, and the two raise the same
- * codes — `CL0510` for an undeclared name, `CL0511` for a cycle. Canon and library names
+ * The compiler's one variable expander, for `compile.yaml` values as well as item,
+ * component and placeholder content. It raises `CL0510` for an undeclared name, `CL0511`
+ * for a cycle, and `CL0520` when the caller supplies `branchOnly`. Canon and library names
  * are exposed as `{%}` variables (§6.1), so `{%characters}/Aness.yaml` in an `include:`
  * path resolves through here like any other reference. v3's separate `{@name}` system is
  * gone (§6.1); a stray `{@...}` is left untouched, since the migrator rewrites them before
  * v4 sees the file.
  *
- * Pass `sink` (`{ diagnostics, file }`) to route an undeclared name or a cycle onto the
- * bus as an ERROR. The sink's `diagnostics` bus is required.
+ * `sink` routes problems onto the bus as ERRORs, and its `diagnostics` is required:
+ *   `file`        the file to name when there is no finer position
+ *   `location`    a source-map `{file, line, col}`; preferred over `file` when present
+ *   `branchOnly`  names declared only under a branch, enabling the §5.1 check below
  */
 function resolveVariables(text, variables, sink = {}) {
-  if (!variables || typeof text !== 'string') return text;
-  const { diagnostics, file } = sink;
+  if (typeof text !== 'string') return text;
+  const { diagnostics, file, location, branchOnly = null } = sink;
 
-  const report = (message, code) => {
-    diagnostics.error(code, message, { file });
-  };
+  // An absent variables map is an empty one, not a reason to skip checking. A config with
+  // no `variables:` block that nevertheless references `{%role}` has exactly the problem
+  // this reports, and returning early here would hide it.
+  const declared = isPlainObject(variables) ? variables : {};
+  const loc = location || { file };
 
-  const expand = (str, chain) => str.replace(/\{%([^}]+)\}/g, (match, key) => {
-    const lower = key.trim().toLowerCase();
+  const expand = (str, chain) => str.replace(/\{%([^}]+)\}/g, (match, rawKey) => {
+    const key = rawKey.trim();
+    const lower = key.toLowerCase();
+
     const cycleAt = chain.indexOf(lower);
     if (cycleAt >= 0) {
       const loop = [...chain.slice(cycleAt), lower].join('" → "');
-      report(`variable cycle: "${loop}"`, DIAG_CODES.VARIABLE_CYCLE);
+      diagnostics.error(DIAG_CODES.VARIABLE_CYCLE, `variable cycle: "${loop}"`, loc);
       return match;
     }
-    const actualKey = Object.keys(variables).find((k) => k.toLowerCase() === lower);
+
+    const actualKey = Object.keys(declared).find((k) => k.toLowerCase() === lower);
     // A present-but-null key (`~`, or a bare `key:` with nothing after it) is unbound, not
-    // declared — treating it as declared would render the literal string "null" (Decision
-    // 1's measured bug: `Object.keys().find()` finds the key regardless of its value).
-    if (actualKey === undefined || variables[actualKey] === null || variables[actualKey] === undefined) {
-      report(`variable "{%${key}}" is not declared`, DIAG_CODES.VARIABLE_UNDECLARED);
+    // declared — treating it as declared renders the literal string "null" into compiled
+    // prose, which Phase 8 measured and fixed here. The config-time expander kept the old
+    // behavior until the two merged, so `~` now unbinds the same way in both.
+    if (actualKey === undefined || declared[actualKey] === null || declared[actualKey] === undefined) {
+      // §5.1's distinction, and the reason it needs its own code: a name declared only
+      // under a branch is not a typo, it is a scoping mistake. Reporting it as undeclared
+      // would send the author hunting for a declaration that exists.
+      if (branchOnly && branchOnly.has(lower)) {
+        diagnostics.error(
+          DIAG_CODES.VARIABLE_PRE_BRANCH,
+          `"{%${key}}" is declared only under a branch, but this value resolves before `
+          + 'branches are enumerated.',
+          loc,
+          { hint: 'Only root-level variables are available in include/import paths and under structure:.' },
+        );
+      } else {
+        diagnostics.error(DIAG_CODES.VARIABLE_UNDECLARED, `variable "{%${key}}" is not declared`, loc);
+      }
       return match;
     }
-    return expand(String(variables[actualKey]), [...chain, lower]);
+
+    return expand(String(declared[actualKey]), [...chain, lower]);
   });
 
   return expand(text, []);

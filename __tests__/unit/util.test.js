@@ -200,13 +200,31 @@ describe('resolveVariables', () => {
     expect(diagnostics.errors[0].message).toContain('"a" → "b" → "a"');
   });
 
+  // §5.1: a name only a branch declares, used where the value resolves before branches are
+  // enumerated, is a scoping mistake rather than a typo — so it gets CL0520 and says so,
+  // instead of sending the author looking for a declaration that exists.
+  test('branchOnly turns an undeclared name into CL0520', () => {
+    const diagnostics = new Diagnostics();
+    const sink = { diagnostics, file: 'compile.cl.yaml', branchOnly: new Set(['protag']) };
+    expect(resolveVariables('{%protag}/opening.yaml', {}, sink)).toBe('{%protag}/opening.yaml');
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0].code).toBe('CL0520');
+  });
+
   test('non-string text passes through unchanged', () => {
     expect(resolveVariables(42, { name: 'x' })).toBe(42);
     expect(resolveVariables(null, { name: 'x' })).toBeNull();
   });
 
-  test('null variables argument passes text through unchanged', () => {
-    expect(resolveVariables('{%key}', null)).toBe('{%key}');
+  // An absent variables map is an empty one, not a reason to skip checking — the config
+  // expander's rule, kept when the two merged. A file with no `variables:` block that
+  // still writes `{%key}` has exactly the problem CL0510 reports, and the old passthrough
+  // hid it.
+  test('an absent variables map is checked as an empty one, not skipped', () => {
+    const diagnostics = new Diagnostics();
+    expect(resolveVariables('{%key}', null, { diagnostics, file: 'compile.cl.yaml' })).toBe('{%key}');
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0]).toMatchObject({ code: 'CL0510', file: 'compile.cl.yaml' });
   });
 
   test('string with no tokens passes through unchanged', () => {

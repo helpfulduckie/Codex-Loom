@@ -24,62 +24,7 @@ const { validate } = require('../schema');
 const { loadYamlDocument, YamlLoadError } = require('../loader/yaml');
 const { CONFIG_SCHEMA } = require('./schema');
 const { walkBranchTree } = require('../model/branches');
-
-/**
- * Expand `{%variable}` references, collecting diagnostics instead of warning.
- *
- * §6.2 proposed building a dependency graph and topologically sorting it, on the premise
- * that v3 resolved variables in declaration order. That premise is not correct: v3
- * already resolves recursively by key lookup, so ordering is already irrelevant and the
- * golden fixtures depend on it (`library: '{%loom}/Canon'` with `loom` declared above).
- * What was genuinely missing is the diagnostic quality §6.2 asks for — naming every key
- * in a cycle rather than only the one where it was detected — so that is what changed.
- */
-function expandVariables(text, variables, options = {}) {
-  const { diagnostics, location, chain = [], branchOnly = null } = options;
-  if (typeof text !== 'string') return text;
-
-  // An absent `variables:` block is an empty one, not a reason to skip checking. A
-  // config with no variables that nevertheless references `{%role}` has exactly the
-  // problem this reports, and returning early here would hide it.
-  const declared = (variables && typeof variables === 'object') ? variables : {};
-
-  return text.replace(/\{%([^}]+)\}/g, (match, rawKey) => {
-    const key = rawKey.trim();
-    const lower = key.toLowerCase();
-
-    const cycleAt = chain.findIndex((k) => k === lower);
-    if (cycleAt >= 0) {
-      const loop = [...chain.slice(cycleAt), lower].join('" → "');
-      diagnostics.error(CODES.VARIABLE_CYCLE, `Variable cycle: "${loop}".`, location);
-      return match;
-    }
-
-    const actualKey = Object.keys(declared).find((k) => k.toLowerCase() === lower);
-    if (actualKey === undefined) {
-      // §5.1's distinction, and the reason it needs its own code: a name declared only
-      // under a branch is not a typo, it is a scoping mistake. Reporting it as
-      // undeclared would send the author hunting for a declaration that exists.
-      if (branchOnly && branchOnly.has(lower)) {
-        diagnostics.error(
-          CODES.VARIABLE_PRE_BRANCH,
-          `"{%${key}}" is declared only under a branch, but this value resolves before `
-          + 'branches are enumerated.',
-          location,
-          { hint: 'Only root-level variables are available in include/import paths and under structure:.' }
-        );
-      } else {
-        diagnostics.error(CODES.VARIABLE_UNDECLARED, `Variable "{%${key}}" is not declared.`, location);
-      }
-      return match;
-    }
-
-    return expandVariables(String(declared[actualKey]), declared, {
-      ...options,
-      chain: [...chain, lower],
-    });
-  });
-}
+const { resolveVariables } = require('../util');
 
 /**
  * Collect declared variable names: those at root, and those only a branch declares.
@@ -316,13 +261,13 @@ function loadCompileConfig(configPath, options = {}) {
   // author's intent differs between a structure.* path that happens to contain a token
   // and one that does not (§6.1 audit). Both resolve against root variables, like the
   // rest of `structure:`, since they are read before branches are enumerated.
-  const resolvedOutput = path.resolve(base, expandVariables(
+  const resolvedOutput = path.resolve(base, resolveVariables(
     String(structure.output || 'output'), variables,
     { diagnostics, location: at('structure', 'output'), branchOnly: variableNames.branchOnly }
   ));
 
   const resolvedReports = structure.reports
-    ? path.resolve(base, expandVariables(
+    ? path.resolve(base, resolveVariables(
         String(structure.reports), variables,
         { diagnostics, location: at('structure', 'reports'), branchOnly: variableNames.branchOnly }
       ))
@@ -333,7 +278,7 @@ function loadCompileConfig(configPath, options = {}) {
   // normal, not an error. (Missing-when-required is CL0111, raised by whatever actually
   // needs the directory populated, not here.)
   const resolvedSnapshot = input.snapshot
-    ? path.resolve(base, expandVariables(
+    ? path.resolve(base, resolveVariables(
         String(input.snapshot), variables,
         { diagnostics, location: at('structure', 'input', 'snapshot'), branchOnly: variableNames.branchOnly }
       ))
@@ -347,7 +292,7 @@ function loadCompileConfig(configPath, options = {}) {
   // `--live` (Phase 7 Session B).
   const resolvedLibrarySource = new Map();
   for (const [name, spec] of Object.entries(libraryRaw)) {
-    const expanded = expandVariables(
+    const expanded = resolveVariables(
       String(spec), variables,
       { diagnostics, location: at('structure', 'input', 'library', name), branchOnly: variableNames.branchOnly }
     );
@@ -358,7 +303,7 @@ function loadCompileConfig(configPath, options = {}) {
     const list = raw ? (Array.isArray(raw) ? raw : [raw]) : [];
     return list.map((spec, i) => {
       const location = at('structure', 'input', key, String(i));
-      return path.resolve(base, expandVariables(String(spec), variables, { diagnostics, location, branchOnly: variableNames.branchOnly }));
+      return path.resolve(base, resolveVariables(String(spec), variables, { diagnostics, location, branchOnly: variableNames.branchOnly }));
     });
   };
 
@@ -486,6 +431,6 @@ function loadCompileConfig(configPath, options = {}) {
 }
 
 module.exports = {
-  loadCompileConfig, expandVariables, collectVariableNames,
+  loadCompileConfig, collectVariableNames,
   loadManifest, isOutOfBase, normalize,
 };

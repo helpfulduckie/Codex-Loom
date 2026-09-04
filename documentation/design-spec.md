@@ -317,8 +317,8 @@ live scenario rather than as a build failure.
 `src/util.js`, recursive, cycle-detecting (`CL0511` names every key in the loop), and
 reporting undeclared names through a caller-supplied sink. There is no second
 implementation and no second `{@}` family. Call sites are thin wrappers
-(`config/load.js`'s `expandVariables`, `resolveComponentSpec`, the `include:`-path block in
-`loader/registry`, `loader/component.js`). Adding a context that needs tokens is a new
+(`config/load.js`'s `structure:` paths, `resolveComponentSpec`, the `include:`-path block
+in `loader/registry`, `loader/component.js`). Adding a context that needs tokens is a new
 call site, never a new regex.
 
 **Some values resolve once, before branch enumeration** — `include:` / `import:` paths

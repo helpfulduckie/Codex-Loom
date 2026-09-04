@@ -336,13 +336,15 @@ All `{%variable}` expansion routes through `resolveVariables()` in `src/util.js`
 
 There is no second `{@name}` family (§6.1): library names are exposed as ordinary `{%}` variables, so one expander covers every case. Don't reintroduce a parallel resolver for a new context — add a call site to `resolveVariables` instead.
 
-Call sites are thin wrappers: `config/load.js`'s `expandVariables` (config paths), `treeWrite.resolveComponentSpec`, the `include:`-path block in `loader/registry.resolveIncludes`, and `loader/component.js` for both `imports:` `from:` and a section's `file:`/`from:` sources. When adding a context that needs tokens, call `resolveVariables` rather than re-deriving the regex.
+Call sites are thin wrappers: `config/load.js`'s `structure:` and `library:` path resolution, `treeWrite.resolveComponentSpec`, the `include:`-path block in `loader/registry.resolveIncludes`, and `loader/component.js` for both `imports:` `from:` and a section's `file:`/`from:` sources. When adding a context that needs tokens, call `resolveVariables` rather than re-deriving the regex.
+
+Config paths pass two sink keys the content call sites do not: `location`, a source-map position preferred over `file`, and `branchOnly`, the set of names only a branch declares, which turns an undeclared name into `CL0520` rather than `CL0510`.
 
 Coverage notes:
 - `{%}` is expanded in item bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and config paths. In `include:`/`import:` paths it uses **root** `config.variables` only, because `resolveIncludes` runs once before branch enumeration — branch-merged variables do not exist yet.
 - The `{$…}` field-reference family (`{$v.field}`, `{$Id.body.field}`) is a separate system (field interpolation + pronoun passes) and is **not** part of `resolveVariables`. It covers `body`/`aid`/`render`/`name` via `walkItemTextFields`, accepts dotted field refs in item data, and reports via `checkUnresolvedFieldTokens` on any token that survives to output; collapsing its four resolvers into one dispatcher is still deferred. See `07-templates.md` "Token Systems at a Glance".
 
-Library path resolution no longer needs a bespoke two-pass. v3 resolved plain-path library entries first to build a lookup table, then resolved entries referencing sibling library names against it. Now that library names are ordinary variables (§6.1) and variables resolve against each other by topological sort (§6.2), a library entry naming a sibling is just a variable naming a variable, and `expandVariables` handles it like any other. Unresolved tokens pass through unchanged, so the standard missing-path warning fires with the unexpanded token visible in the path string.
+Library path resolution no longer needs a bespoke two-pass. v3 resolved plain-path library entries first to build a lookup table, then resolved entries referencing sibling library names against it. Now that library names are ordinary variables (§6.1), a library entry naming a sibling is just a variable naming a variable, and `resolveVariables` handles it like any other — recursively, by key lookup, so declaration order is irrelevant. (§6.2 proposed a dependency graph and a topological sort on the premise that v3 resolved in declaration order. It did not, and neither does v4; the sort was never needed and never built.) Unresolved tokens pass through unchanged, so the standard missing-path warning fires with the unexpanded token visible in the path string.
 
 ---
 
