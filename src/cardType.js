@@ -21,12 +21,11 @@ const INVALID_TYPE_CHARS = new RegExp('[' + PATH_UNSAFE_CHARS + '\\x00-\\x1f]');
  * as Story Cards/{type}/{type}.md, so it must be a legal path segment. No-op when the
  * item has no aid.type (that case is already warned about during item resolution).
  *
- * Without `options.diagnostics`, throws (aborts the compile) on an invalid type — the
- * behavior every caller outside the leaf loop still wants. With `options.diagnostics`,
- * raises `CARD_TYPE_INVALID` on the bus and returns instead, so the leaf loop that calls
- * it can continue to the next item and report every bad type in one run.
+ * `options.diagnostics` is required: raises `CARD_TYPE_INVALID` on the bus and returns,
+ * so the leaf loop that calls it can continue to the next item and report every bad type
+ * in one run.
  */
-function validateCardType(item, { diagnostics } = {}) {
+function validateCardType(item, { diagnostics }) {
   const type = item.aid && item.aid.type;
   if (typeof type !== 'string' || type === '') return;
   const trimmed = type.trim();
@@ -39,11 +38,7 @@ function validateCardType(item, { diagnostics } = {}) {
   else if (/[ .]$/.test(type)) reason = 'ends with a space or period';
   if (!reason) return;
   const message = `Invalid aid.type "${type}" for item "${name}"${src}: ${reason}. aid.type becomes a folder/file name and must be a legal path segment.`;
-  if (diagnostics) {
-    diagnostics.error(DIAG_CODES.CARD_TYPE_INVALID, message, { file: item._source });
-    return;
-  }
-  throw new Error(message);
+  diagnostics.error(DIAG_CODES.CARD_TYPE_INVALID, message, { file: item._source });
 }
 
 /**
@@ -100,8 +95,6 @@ function buildCardTypeAudit() {
   }
 
   function finish(diagnostics) {
-    if (!diagnostics) return;
-
     for (const [authored, { to, file }] of trimmedValues) {
       diagnostics.warn(
         DIAG_CODES.CARD_TYPE_LEADING_SPACE,

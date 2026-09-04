@@ -431,36 +431,47 @@ describe('validateCardType', () => {
   const item = (type) => ({ id: 'X', _source: 'items.yaml', aid: { type } });
 
   test('accepts a normal type', () => {
-    expect(() => validateCardType(item('Character'))).not.toThrow();
+    const diagnostics = new Diagnostics();
+    validateCardType(item('Character'), { diagnostics });
+    expect(diagnostics.errors).toHaveLength(0);
   });
 
   test('accepts a type containing spaces', () => {
-    expect(() => validateCardType(item('Story Card'))).not.toThrow();
+    const diagnostics = new Diagnostics();
+    validateCardType(item('Story Card'), { diagnostics });
+    expect(diagnostics.errors).toHaveLength(0);
   });
 
   test('no-op when aid.type is absent', () => {
-    expect(() => validateCardType({ id: 'X', aid: {} })).not.toThrow();
-    expect(() => validateCardType({ id: 'X' })).not.toThrow();
+    const diagnostics = new Diagnostics();
+    validateCardType({ id: 'X', aid: {} }, { diagnostics });
+    validateCardType({ id: 'X' }, { diagnostics });
+    expect(diagnostics.errors).toHaveLength(0);
   });
 
   test.each(['a/b', 'a\\b', 'con:', 'a*b', 'a?b', 'a|b', '<x>', '"q"'])(
-    'throws on illegal path character: %s', (bad) => {
-      expect(() => validateCardType(item(bad))).toThrow(/Invalid aid\.type/);
+    'raises CL0632 on illegal path character: %s', (bad) => {
+      const diagnostics = new Diagnostics();
+      validateCardType(item(bad), { diagnostics });
+      expect(diagnostics.errors).toHaveLength(1);
+      expect(diagnostics.errors[0].message).toMatch(/Invalid aid\.type/);
     }
   );
 
-  test('throws on "." and ".."', () => {
-    expect(() => validateCardType(item('.'))).toThrow(/Invalid aid\.type/);
-    expect(() => validateCardType(item('..'))).toThrow(/Invalid aid\.type/);
+  test('raises CL0632 on "." and ".."', () => {
+    const diagnostics = new Diagnostics();
+    validateCardType(item('.'), { diagnostics });
+    validateCardType(item('..'), { diagnostics });
+    expect(diagnostics.errors).toHaveLength(2);
+    expect(diagnostics.errors.every((d) => /Invalid aid\.type/.test(d.message))).toBe(true);
   });
 
-  test('throws on trailing space or period (Windows-hostile)', () => {
-    expect(() => validateCardType(item('Character '))).toThrow(/Invalid aid\.type/);
-    expect(() => validateCardType(item('Character.'))).toThrow(/Invalid aid\.type/);
-  });
-
-  test('error names the offending type and the item', () => {
-    expect(() => validateCardType(item('a/b'))).toThrow(/"a\/b".*"X"/);
+  test('raises CL0632 on trailing space or period (Windows-hostile)', () => {
+    const diagnostics = new Diagnostics();
+    validateCardType(item('Character '), { diagnostics });
+    validateCardType(item('Character.'), { diagnostics });
+    expect(diagnostics.errors).toHaveLength(2);
+    expect(diagnostics.errors.every((d) => /Invalid aid\.type/.test(d.message))).toBe(true);
   });
 
   test('with diagnostics, raises CL0632 and does not throw', () => {
@@ -982,10 +993,12 @@ describe('a bare import def carries no id of its own', () => {
   });
 
   test('the same collision through explicit ids is still caught earlier, at load', () => {
-    expect(() => buildRegistry([
+    const diagnostics = new Diagnostics();
+    buildRegistry([
       { id: 'aness', name: 'Aness', _source: 'a.cl.yaml' },
       { id: 'aness', name: 'Aness', _source: 'b.cl.yaml' },
-    ], 'project')).toThrow(/Duplicate item ID/i);
+    ], 'project', { diagnostics });
+    expect(diagnostics.errors.some((d) => /Duplicate item ID/i.test(d.message))).toBe(true);
   });
 });
 

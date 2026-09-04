@@ -75,18 +75,16 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
   }
 
   const fail = (why) => {
-    if (diagnostics) {
-      diagnostics.error(
-        CODES.PACK_MALFORMED,
-        `Convention pack "${name}" ${why}.`,
-        { file: filePath, ...loc },
-        {
-          hint: source
-            ? `Declared as lint.packs.${name} with source: ${source}`
-            : `A bundled pack is resolved by name against ${BUNDLED_DIR}.`,
-        },
-      );
-    }
+    diagnostics.error(
+      CODES.PACK_MALFORMED,
+      `Convention pack "${name}" ${why}.`,
+      { file: filePath, ...loc },
+      {
+        hint: source
+          ? `Declared as lint.packs.${name} with source: ${source}`
+          : `A bundled pack is resolved by name against ${BUNDLED_DIR}.`,
+      },
+    );
     return null;
   };
 
@@ -108,15 +106,13 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
     return fail('is not a mapping of pack keys');
   }
   if (doc.name !== undefined && String(doc.name) !== name) {
-    if (diagnostics) {
-      diagnostics.error(
-        CODES.PACK_NAME_MISMATCH,
-        `Convention pack loaded as "${name}" declares name: "${doc.name}". `
-        + 'The config key must match the pack\'s own name so diagnostic codes and '
-        + 'suppressions stay portable (§8.2.2).',
-        { file: filePath, ...loc },
-      );
-    }
+    diagnostics.error(
+      CODES.PACK_NAME_MISMATCH,
+      `Convention pack loaded as "${name}" declares name: "${doc.name}". `
+      + 'The config key must match the pack\'s own name so diagnostic codes and '
+      + 'suppressions stay portable (§8.2.2).',
+      { file: filePath, ...loc },
+    );
     return null;
   }
   const rules = Array.isArray(doc.rules) ? doc.rules : null;

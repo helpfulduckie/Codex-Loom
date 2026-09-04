@@ -39,6 +39,7 @@ const fs = require('fs');
 const { compile } = require('../../src/compile');
 const { loadCompileConfig, loadManifest } = require('../../src/config/load');
 const { collectEntries, entryLabel, hashTree } = require('../../src/snapshot');
+const { Diagnostics } = require('../../src/diag');
 const { classifyDiff, OPAQUE } = require('./diffShape');
 
 /**
@@ -154,7 +155,7 @@ function describeBaselineSet(options) {
    */
   function reportsDirFor(project, configPath, mode) {
     if (!REPORTS_IN_PLACE) return path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
-    const config = loadCompileConfig(configPath);
+    const config = loadCompileConfig(configPath, { diagnostics: new Diagnostics() });
     const base = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
     return path.join(base, mode);
   }
@@ -167,7 +168,7 @@ function describeBaselineSet(options) {
    * are already where the baseline expects them.
    */
   function collectCompileReports(project, configPath) {
-    const config = loadCompileConfig(configPath);
+    const config = loadCompileConfig(configPath, { diagnostics: new Diagnostics() });
     const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
     for (const mode of project.compileReports || []) {
       const layout = COMPILE_REPORT_LAYOUT[mode];
@@ -276,13 +277,13 @@ function describeBaselineSet(options) {
      */
     test('every snapshot entry matches the live source it was frozen from', () => {
       const configPath = path.join(root, project.dir, SOURCE_SUBDIR, CONFIG_NAME);
-      const config = loadCompileConfig(configPath, { live: true });
+      const config = loadCompileConfig(configPath, { diagnostics: new Diagnostics(), live: true });
       const snapshotDir = config._resolvedSnapshot;
       const manifestPath = snapshotDir && path.join(snapshotDir, 'manifest.json');
 
       const stale = [];
       if (manifestPath && fs.existsSync(manifestPath)) {
-        const manifest = loadManifest(manifestPath, null) || {};
+        const manifest = loadManifest(manifestPath, new Diagnostics()) || {};
         for (const entry of collectEntries(config)) {
           const section = entry.kind === 'library'
             ? (manifest.library || {})[entry.name]

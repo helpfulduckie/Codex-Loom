@@ -183,16 +183,14 @@ function normalizeVarKey(key) {
  * v4 sees the file.
  *
  * Pass `sink` (`{ diagnostics, file }`) to route an undeclared name or a cycle onto the
- * bus as an ERROR. Without it the two fall back to `console.warn`, and the leftover token
- * is caught downstream by the `CL0431` output sweep instead.
+ * bus as an ERROR. The sink's `diagnostics` bus is required.
  */
 function resolveVariables(text, variables, sink = {}) {
   if (!variables || typeof text !== 'string') return text;
   const { diagnostics, file } = sink;
 
   const report = (message, code) => {
-    if (diagnostics) diagnostics.error(code, message, { file });
-    else console.warn(`  WARN: ${message}`);
+    diagnostics.error(code, message, { file });
   };
 
   const expand = (str, chain) => str.replace(/\{%([^}]+)\}/g, (match, key) => {
@@ -345,8 +343,8 @@ function maskFencedRegions(text) {
  * settles it in favour of the compiler: a leak is a fact about the output, so it is an
  * ERROR on the bus and it fails the run.
  *
- * `sink.diagnostics` is optional so the detectors stay usable as predicates, which is what
- * their boolean return is for. Every production call site passes one.
+ * `sink.diagnostics` is required; a caller that only wants the boolean return must still
+ * pass a bus to catch the findings.
  */
 function reportPattern(text, label, re, code, describe, sink = {}) {
   if (typeof text !== 'string') return false;
@@ -357,9 +355,7 @@ function reportPattern(text, label, re, code, describe, sink = {}) {
   while ((m = re.exec(text)) !== null) {
     if (!seen.has(m[0])) {
       seen.add(m[0]);
-      if (diagnostics) {
-        diagnostics.add(severityOf(code), code, `${describe(m[0])} in ${label}`, { file });
-      }
+      diagnostics.add(severityOf(code), code, `${describe(m[0])} in ${label}`, { file });
     }
     if (m[0].length === 0) re.lastIndex++;
   }

@@ -133,14 +133,21 @@ function buildCompileContext(config, branchPath, options = {}) {
   // declared at an interior node reaches the leaves beneath it here. `description` is
   // resolved here too — it is read at the root rather than per branch, but the migrator
   // and the root write both want the same expansion the other components get.
+  //
+  // `branchFraming` is deliberately absent. Framing belongs to interior nodes, not leaves:
+  // `writeFramingRecursive`'s own tree walk reads `node.components.branchFraming` at every
+  // node and resolves it there, with the bus, once. Nothing reads a leaf-context ref for it
+  // (`SLOTTED_COMPONENTS` does not carry the framing descriptor), and resolving it here as
+  // well would raise the same undeclared `{%var}` a second time, once per leaf.
   const componentTypes = [
-    'aiInstructions', 'opening', 'branchFraming', 'plotEssential', 'summary', 'authorsNote',
+    'aiInstructions', 'opening', 'plotEssential', 'summary', 'authorsNote',
     'description', 'adventureDescription', 'scripts',
   ];
   const componentRefs = {};
+  const componentSpecSink = { diagnostics: options.diagnostics, file: options.configPath || null };
   for (const type of componentTypes) {
     const spec = components[type] !== undefined ? components[type] : null;
-    componentRefs[type] = resolveComponentSpec(spec, config._base, variables);
+    componentRefs[type] = resolveComponentSpec(spec, config._base, variables, componentSpecSink);
   }
 
   // Branch-addressable `templateFor`. What merges down the chain is the type→field-list
@@ -157,7 +164,7 @@ function buildCompileContext(config, branchPath, options = {}) {
       config._resolvedTemplates || [],
       config._base || '.',
       variables,
-      options.diagnostics || null,
+      options.diagnostics,
       options.configPath || null,
     );
     for (const [role, typeMap] of Object.entries(resolved)) {
@@ -326,7 +333,7 @@ function reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics) {
  * mutually exclusive versions of an item. Asking once over the def list would report
  * that legitimate pattern as an error.
  */
-function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagnostics = new Diagnostics()) {
+function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagnostics) {
   const resolvedItems = [];
   const claimedBy = new Map(); // lowercased resolved id → the source file that claimed it
 
@@ -480,7 +487,7 @@ function renderBranchItems(resolvedItems, registry, templates, partials, branchP
   const {
     renderedById = null,
     projectNotesTemplate = null,
-    diagnostics = new Diagnostics(),
+    diagnostics,
     slotIndex = new Map(),
     branchLabel = '(root)',
     placeholders = {},

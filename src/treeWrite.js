@@ -100,7 +100,7 @@ function writeComponentFile(outputDir, filename, content, sink) {
  * `onRoleUsed` arrives as a parameter rather than a closure because this is a top-level
  * function with no closure over `compile()`'s scope.
  */
-function writeFramingRecursive(rootNode, outputBase, configBase, configPath, variables, verbose = false, diagnostics = null, usage = null, loadSectioned = null, registry = null, onRoleUsed = null, protagonistByPath = null) {
+function writeFramingRecursive(rootNode, outputBase, configBase, configPath, variables, verbose = false, diagnostics, usage = null, loadSectioned = null, registry = null, onRoleUsed = null, protagonistByPath = null) {
   // The walker visits the project root as a node (Phase 11 Step 0), so an unbranched
   // project still receives its root visit — that is where the "no branches" warn lands.
   if (!rootNode || typeof rootNode !== 'object') return;
@@ -237,7 +237,7 @@ function writeFramingRecursive(rootNode, outputBase, configBase, configPath, var
  * Node-level, not leaf-level, which is why it uses the tree visitor rather than the
  * leaf loop: a branch label belongs to the node the player is choosing.
  */
-function writeLabelsRecursive(rootNode, outputBase, variables, rootVariables, verbose = false, diagnostics = null, configPath = null, usage = null) {
+function writeLabelsRecursive(rootNode, outputBase, variables, rootVariables, verbose = false, diagnostics, configPath = null, usage = null) {
   walkBranchTree(rootNode, ({ name, node, path: path_, isRoot, state }) => {
     const nodeOutput = isRoot ? state.outputBase : path.join(state.outputBase, 'Branches', name);
     const branchVars = (node && node.variables)

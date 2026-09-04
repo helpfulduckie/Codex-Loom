@@ -91,9 +91,7 @@ function normalizeItemVarField(entry, onWarn) {
 /**
  * Load every item file under one or more directories.
  *
- * `diagnostics` is optional. Without it the loader falls back to the v3 console warnings,
- * which keeps the many existing call sites working unchanged while the bus is threaded
- * through the compiler over the remaining steps.
+ * `options.diagnostics` is required.
  */
 function loadItemsFromDir(dirs, options = {}) {
   const { diagnostics } = options;
@@ -112,8 +110,7 @@ function loadItemsFromDir(dirs, options = {}) {
       const { value: data, sourceMap } = loadYamlDocument(file);
 
       const warn = (code, message, at) => {
-        if (diagnostics) diagnostics.warn(code, message, at || { file });
-        else console.warn(`  WARN: ${message}`);
+        diagnostics.warn(code, message, at || { file });
       };
 
       if (data === null || data === undefined) {
@@ -145,25 +142,22 @@ function loadItemsFromDir(dirs, options = {}) {
 
         // Validate before normalization and before `_source` is stamped, so positions
         // address the document as written.
-        if (diagnostics) {
-          const at = Array.isArray(data) ? [String(index)] : [];
-          const label = entry.id || (typeof entry.name === 'string' ? entry.name : null);
-          validate(entry, ITEM_SCHEMA, {
-            diagnostics,
-            sourceMap,
-            path: at,
-            displayOffset: at.length,
-            context: label ? `item "${label}"` : `item ${index + 1} of ${path.basename(file)}`,
-          });
-        }
+        const at = Array.isArray(data) ? [String(index)] : [];
+        const label = entry.id || (typeof entry.name === 'string' ? entry.name : null);
+        validate(entry, ITEM_SCHEMA, {
+          diagnostics,
+          sourceMap,
+          path: at,
+          displayOffset: at.length,
+          context: label ? `item "${label}"` : `item ${index + 1} of ${path.basename(file)}`,
+        });
 
         // `:` separates a library set from an id in a reference (§17.2), so an id containing
         // one would make every reference to it ambiguous. Rejected at load, where the
         // position is still known, rather than at the confusing far end.
         if (typeof entry.id === 'string' && entry.id.includes(':')) {
           const message = `item id "${entry.id}" contains ":", which separates a library set from an id`;
-          if (diagnostics) diagnostics.error(CODES.ID_CONTAINS_COLON, message, { file });
-          else throw new Error(`${message} (source: ${file})`);
+          diagnostics.error(CODES.ID_CONTAINS_COLON, message, { file });
         }
 
         items.push({ ...normalizeItemVarField(entry, (code, message) => warn(code, message)), _source: file });
@@ -189,19 +183,13 @@ function buildRegistry(items, context, { diagnostics } = {}) {
     const id = (item.id || (typeof item.name === 'string' ? item.name : null) || '').toLowerCase();
     if (!id) {
       const message = `Item in ${context} is missing both id and name fields (source: ${item._source})`;
-      if (diagnostics) {
-        diagnostics.error(CODES.ITEM_WITHOUT_IDENTITY, message, { file: item._source });
-        continue;
-      }
-      throw new Error(message);
+      diagnostics.error(CODES.ITEM_WITHOUT_IDENTITY, message, { file: item._source });
+      continue;
     }
     if (registry.has(id)) {
       const message = `Duplicate item ID "${id}" in ${context}:\n  ${registry.get(id)._source}\n  ${item._source}`;
-      if (diagnostics) {
-        diagnostics.error(CODES.DUPLICATE_ITEM_ID, message, { file: item._source });
-        continue; // first definition wins — the newcomer is skipped
-      }
-      throw new Error(message);
+      diagnostics.error(CODES.DUPLICATE_ITEM_ID, message, { file: item._source });
+      continue; // first definition wins — the newcomer is skipped
     }
     registry.set(id, { ...item, id: item.id || item.name });
   }
@@ -227,11 +215,8 @@ function mergeRegistries(canonRegistry, projectRegistry, { diagnostics } = {}) {
   for (const [id, item] of projectRegistry) {
     if (merged.has(id)) {
       const message = `Item ID "${id}" exists in both a library set and the project:\n  Library: ${merged.get(id)._source}\n  Project: ${item._source}`;
-      if (diagnostics) {
-        diagnostics.error(CODES.DUPLICATE_ITEM_ID, message, { file: item._source });
-        continue; // the library item wins — the project copy is skipped
-      }
-      throw new Error(message);
+      diagnostics.error(CODES.DUPLICATE_ITEM_ID, message, { file: item._source });
+      continue; // the library item wins — the project copy is skipped
     }
     merged.set(id, item);
   }
@@ -256,8 +241,7 @@ function buildCanonRegistry(resolvedCanon, options = {}) {
   for (const [name, canonPath] of resolvedCanon) {
     if (!fs.existsSync(canonPath)) {
       const message = `library path not found for "${name}": ${canonPath}`;
-      if (options.diagnostics) options.diagnostics.warn(CODES.YAML_FILE_UNREADABLE, message);
-      else console.warn(`  WARN: ${message}`);
+      options.diagnostics.warn(CODES.YAML_FILE_UNREADABLE, message);
       continue;
     }
     registry.sources.add(String(name).toLowerCase());
@@ -319,8 +303,7 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
     const fullPath = path.isAbsolute(includePath) ? includePath : path.resolve(config._base, includePath);
     if (!fs.existsSync(fullPath)) {
       const message = `include path not found: ${fullPath}`;
-      if (diagnostics) diagnostics.warn(CODES.INCLUDE_NOT_FOUND, message, { file: def._source });
-      else console.warn(`  WARN: ${message}`);
+      diagnostics.warn(CODES.INCLUDE_NOT_FOUND, message, { file: def._source });
       continue;
     }
 
@@ -387,8 +370,7 @@ function reportUnmatchedSelectors(def, items, includePath, diagnostics) {
       + 'A selector aimed at every item in a file is silent where an item does not define '
       + 'the name (§7.6.2a), so a misspelling applies to nothing and changes nothing — this '
       + 'is the only report it produces.';
-    if (diagnostics) diagnostics.warn(CODES.SELECTOR_MATCHED_NOTHING, message, { file: def._source });
-    else console.warn(`  WARN: ${message}`);
+    diagnostics.warn(CODES.SELECTOR_MATCHED_NOTHING, message, { file: def._source });
   }
 }
 

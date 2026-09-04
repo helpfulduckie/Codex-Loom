@@ -284,25 +284,20 @@ describe('bus ownership', () => {
     expect(() => load('bogus: 1\n')).not.toThrow();
   });
 
-  test('without a supplied bus, errors are printed and thrown', () => {
-    const cfgPath = path.join(tmpDir, 'compile.cl.yaml');
-    fs.writeFileSync(cfgPath, 'version: 4\nstructure:\n  output: ./out\nbogus: 1\n', 'utf8');
-    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    expect(() => loadCompileConfig(cfgPath)).toThrow('Configuration has 1 error');
-    expect(spy).toHaveBeenCalled();
-    spy.mockRestore();
+  test('an unknown key is collected on the bus as an error, and the config still returns', () => {
+    const { config, diagnostics } = load('version: 4\nstructure:\n  output: ./out\nbogus: 1\n', { raw: true });
+    expect(diagnostics.hasErrors()).toBe(true);
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(config).not.toBeNull();
   });
 
-  test('warnings alone do not throw', () => {
-    const cfgPath = path.join(tmpDir, 'compile.cl.yaml');
-    fs.writeFileSync(
-      cfgPath,
+  test('warnings alone do not mark the bus as having errors', () => {
+    const { diagnostics } = load(
       'version: 4\nstructure:\n  output: ./out\n  input:\n    items: [./nope]\n',
-      'utf8'
+      { raw: true },
     );
-    const spy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(() => loadCompileConfig(cfgPath)).not.toThrow();
-    spy.mockRestore();
+    expect(diagnostics.hasErrors()).toBe(false);
+    expect(diagnostics.warnings.length).toBeGreaterThan(0);
   });
 });
 

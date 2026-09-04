@@ -133,10 +133,10 @@ function processFieldInterpolation(value, context) {
  * Leaves:  {$she}, {$Id}, {$Id.pronoun}, {%variable}, and all other {$...} tokens
  *          untouched so the pronoun pass can handle them.
  *
- * `options.diagnostics`/`options.file`, when given, turn a malformed call's
- * `console.warn` into a `CL0413` diagnostic naming the item instead. This is a field
- * value, not a template file, so the diagnostic carries no line — the same degradation
- * `Diagnostic#location` already handles.
+ * `options.diagnostics` (required) and `options.file` route a malformed call onto the bus
+ * as a `CL0413` diagnostic naming the item. This is a field value, not a template file, so
+ * the diagnostic carries no line — the same degradation `Diagnostic#location` already
+ * handles.
  */
 function applyFieldRenderFunctions(card, itemMap, options) {
   if (!card.body) return;
@@ -173,13 +173,11 @@ function processFieldRenderFunctions(value, context, options) {
         try {
           return fn(inner, context);
         } catch (e) {
-          if (options && options.diagnostics) {
-            options.diagnostics.error(
-              CODES.TEMPLATE_PARSE_FAILED,
-              `render function in field value: ${e.message}`,
-              { file: options.file },
-            );
-          }
+          options.diagnostics.error(
+            CODES.TEMPLATE_PARSE_FAILED,
+            `render function in field value: ${e.message}`,
+            { file: options.file },
+          );
           return match;
         }
       }

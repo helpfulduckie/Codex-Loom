@@ -23,6 +23,7 @@ const assert = require('assert');
 const { compile, buildCompileContext } = require('../../src/compile');
 const { loadCompileConfig } = require('../../src/config/load');
 const { loadTemplates } = require('../../src/loader');
+const { Diagnostics } = require('../../src/diag');
 const { readCards } = require('./tier-fixture');
 
 /** Compiled card text → `Map(cardName → [{ label, body }])`, stanzas in order. */
@@ -85,9 +86,12 @@ function assertTierWellFormed(dir, tierBranch, opts = {}) {
   const { fullBranch = 'full', types = ['Character'] } = opts;
   compile(`${dir}/compile.cl.yaml`);
 
-  const config = loadCompileConfig(`${dir}/compile.cl.yaml`);
-  const { fieldTable } = loadTemplates(config._resolvedTemplates || []);
-  const tierCtx = buildCompileContext(config, [tierBranch]);
+  // A throwaway bus: the compile above already reported this project, and the reads here
+  // only want the resolved tables back.
+  const diagnostics = new Diagnostics();
+  const config = loadCompileConfig(`${dir}/compile.cl.yaml`, { diagnostics });
+  const { fieldTable } = loadTemplates(config._resolvedTemplates || [], { diagnostics });
+  const tierCtx = buildCompileContext(config, [tierBranch], { diagnostics });
   const tierMap = (tierCtx.templateFor && tierCtx.templateFor.base) || {};
 
   for (const type of types) {

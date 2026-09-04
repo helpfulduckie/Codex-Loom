@@ -34,7 +34,16 @@ function resolveArgs(positional) {
   }
 
   if (cfgPath) {
-    const cfg = loadCompileConfig(cfgPath);
+    const resolveDiagnostics = new Diagnostics();
+    const cfg = loadCompileConfig(cfgPath, { diagnostics: resolveDiagnostics });
+    for (const diag of resolveDiagnostics.all) {
+      if (diag.severity === 'error') console.error(diag.format());
+      else console.warn(diag.format());
+    }
+    if (resolveDiagnostics.hasErrors()) {
+      const count = resolveDiagnostics.errors.length;
+      throw new Error(`Configuration has ${count} error${count === 1 ? '' : 's'}; nothing was compiled.`);
+    }
     return {
       configPath:   cfgPath,
       scenarioRoot: cfg._resolvedOutput,
@@ -395,7 +404,16 @@ if (require.main === module) {
         // no packs to run — the same honest gap `--lint` already has for `lint.level`.
         let lintConfig = null;
         if (configPath) {
-          try { lintConfig = loadCompileConfig(configPath); } catch (err) { lintConfig = null; }
+          const lintConfigDiagnostics = new Diagnostics();
+          try {
+            lintConfig = loadCompileConfig(configPath, { diagnostics: lintConfigDiagnostics });
+          } catch (err) {
+            lintConfig = null;
+          }
+          if (lintConfigDiagnostics.hasErrors()) {
+            for (const diag of lintConfigDiagnostics.all) console.error(diag.format());
+            lintConfig = null;
+          }
         }
         const result = runLintMode(scenarioRoot, dir, flags.verbose, {
           lintLevel: effectiveLintLevel, config: lintConfig, configPath,

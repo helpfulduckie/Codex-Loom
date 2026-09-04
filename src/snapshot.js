@@ -213,7 +213,7 @@ function diffEntryLines(entry, prevSection, liveHashes) {
  * exists and parses, writes a file-level change summary to `<reports>/snapshot/sync-diff.txt`.
  */
 function syncLibrary(config, options = {}) {
-  const { verbose = false, diagnostics = null } = options;
+  const { verbose = false, diagnostics } = options;
   const snapshotDir = config._resolvedSnapshot;
   if (!snapshotDir) {
     throw new Error('structure.input.snapshot is not set; nothing to sync.');
@@ -274,14 +274,12 @@ function syncLibrary(config, options = {}) {
     const section = { source: entry.sourcePath, files: fileHashes };
     const roleResult = requiresRolesByName.get(entry.name);
     if (roleResult && roleResult.refused) {
-      if (diagnostics) {
-        diagnostics.error(
-          CODES.LIBRARY_ROLE_SCAN_REFUSED,
-          `${entryLabel(entry)}: cannot compute requiresRoles — this set's own items do not `
-          + `validate (${roleResult.refused}). Fix the item content and re-run --snapshot.`,
-          {}
-        );
-      }
+      diagnostics.error(
+        CODES.LIBRARY_ROLE_SCAN_REFUSED,
+        `${entryLabel(entry)}: cannot compute requiresRoles — this set's own items do not `
+        + `validate (${roleResult.refused}). Fix the item content and re-run --snapshot.`,
+        {}
+      );
     } else if (roleResult && roleResult.roles) {
       section.requiresRoles = roleResult.roles;
     }

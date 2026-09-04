@@ -151,12 +151,14 @@ describe('buildRegistry', () => {
     expect(reg.get('felicia').id).toBe('Felicia');
   });
 
-  test('throws on duplicate id (case-insensitive)', () => {
+  test('raises CL0141 on the bus for a duplicate id (case-insensitive)', () => {
     const items = [
       { id: 'Zephon', name: 'Zephon', _source: 'a.yaml' },
       { id: 'zephon', name: 'Zephon Alt', _source: 'b.yaml' },
     ];
-    expect(() => buildRegistry(items, 'test')).toThrow(/Duplicate item ID/i);
+    const diagnostics = new Diagnostics();
+    buildRegistry(items, 'test', { diagnostics });
+    expect(diagnostics.errors.some((d) => /Duplicate item ID/i.test(d.message))).toBe(true);
   });
 
   test('skips import and include entries', () => {
@@ -190,10 +192,12 @@ describe('mergeRegistries', () => {
     expect(merged.has('b')).toBe(true);
   });
 
-  test('throws when same id appears in both registries', () => {
+  test('raises CL0141 on the bus when same id appears in both registries', () => {
     const canon = new Map([['felicia', { _source: 'canon/Felicia.yaml' }]]);
     const project = new Map([['felicia', { _source: 'items/Felicia.yaml' }]]);
-    expect(() => mergeRegistries(canon, project)).toThrow(/felicia/i);
+    const diagnostics = new Diagnostics();
+    mergeRegistries(canon, project, { diagnostics });
+    expect(diagnostics.errors.some((d) => /felicia/i.test(d.message))).toBe(true);
   });
 
   test('project-only items are included', () => {
@@ -267,13 +271,27 @@ describe('loadCompileConfig', () => {
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
-    jest.spyOn(console, 'warn').mockImplementation();
   });
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
     jest.restoreAllMocks();
   });
+
+  /**
+   * `loadCompileConfig` requires a bus and returns `null` (rather than throwing) for a
+   * config it cannot load. This mirrors the old owned-bus behavior for the tests below
+   * that still want a throw to assert against.
+   */
+  function load(cfgPath) {
+    const diagnostics = new Diagnostics();
+    const config = loadCompileConfig(cfgPath, { diagnostics });
+    if (diagnostics.hasErrors()) {
+      const count = diagnostics.errors.length;
+      throw new Error(`Configuration has ${count} error${count === 1 ? '' : 's'}; nothing was compiled.`);
+    }
+    return config;
+  }
 
   /**
    * v4 requires `version:`, `structure:` and `structure.output` (§6). Each fixture below
@@ -292,12 +310,12 @@ describe('loadCompileConfig', () => {
 
   test('_base is set to the directory containing compile.yaml', () => {
     const cfgPath = writeConfig('structure: {}\n');
-    expect(loadCompileConfig(cfgPath)._base).toBe(tmpDir);
+    expect(load(cfgPath)._base).toBe(tmpDir);
   });
 
   test('resolves structure.output relative to config dir', () => {
     const cfgPath = writeConfig('structure:\n  output: ./out\n');
-    expect(loadCompileConfig(cfgPath)._resolvedOutput).toBe(path.resolve(tmpDir, 'out'));
+    expect(load(cfgPath)._resolvedOutput).toBe(path.resolve(tmpDir, 'out'));
   });
 
   test('output is required — v3 silently defaulted it to ./output', () => {
@@ -305,34 +323,30 @@ describe('loadCompileConfig', () => {
     // required key is the better failure (§6).
     const p = path.join(tmpDir, 'compile.yaml');
     fs.writeFileSync(p, 'version: 4\nstructure:\n  input:\n    items: []\n', 'utf8');
-    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    expect(() => loadCompileConfig(p)).toThrow(/Configuration has/);
-    spy.mockRestore();
+    expect(() => load(p)).toThrow(/Configuration has/);
   });
 
   test('version is required — its absence is what identifies a v3 project', () => {
     const p = path.join(tmpDir, 'compile.yaml');
     fs.writeFileSync(p, 'structure:\n  output: ./out\n', 'utf8');
-    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    expect(() => loadCompileConfig(p)).toThrow(/Configuration has/);
-    spy.mockRestore();
+    expect(() => load(p)).toThrow(/Configuration has/);
   });
 
   test('resolves structure.reports relative to config dir', () => {
     // Renamed from `overview:` — the directory now holds diff, seed map, overview, item
     // sizes, leaf review and inventory, so the old name described one of its contents.
     const cfgPath = writeConfig('structure:\n  output: ./out\n  reports: ./reviews\n');
-    expect(loadCompileConfig(cfgPath)._resolvedReports).toBe(path.resolve(tmpDir, 'reviews'));
+    expect(load(cfgPath)._resolvedReports).toBe(path.resolve(tmpDir, 'reviews'));
   });
 
   test('_resolvedReports is null when structure.reports is not specified', () => {
     const cfgPath = writeConfig('structure:\n  output: ./out\n');
-    expect(loadCompileConfig(cfgPath)._resolvedReports).toBeNull();
+    expect(load(cfgPath)._resolvedReports).toBeNull();
   });
 
   test('resolves items sequence to absolute paths', () => {
     const cfgPath = writeConfig('structure:\n  input:\n    items:\n      - ./items\n');
-    expect(loadCompileConfig(cfgPath)._resolvedItems)
+    expect(load(cfgPath)._resolvedItems)
       .toEqual([path.resolve(tmpDir, 'items')]);
   });
 
@@ -351,14 +365,14 @@ describe('loadCompileConfig', () => {
       '      - "{%root}/Canon"',
       '      - "{%Base}/extra"',
     ].join('\n') + '\n');
-    const { _resolvedItems } = loadCompileConfig(cfgPath);
+    const { _resolvedItems } = load(cfgPath);
     expect(_resolvedItems[0]).toBe(path.resolve(tmpDir, 'shared/Canon'));
     expect(_resolvedItems[1]).toBe(path.resolve(tmpDir, 'base/extra'));
   });
 
   test('resolves library mapping entries to absolute paths', () => {
     const cfgPath = writeConfig('structure:\n  input:\n    library:\n      Core: ./canon/core\n');
-    const { _resolvedLibrary } = loadCompileConfig(cfgPath);
+    const { _resolvedLibrary } = load(cfgPath);
     expect(_resolvedLibrary.get('Core')).toBe(path.resolve(tmpDir, 'canon/core'));
   });
 
@@ -373,7 +387,7 @@ describe('loadCompileConfig', () => {
       '      Base: ./base',
       '      Ext: "{%Base}/ext"',
     ].join('\n') + '\n');
-    const { _resolvedLibrary } = loadCompileConfig(cfgPath);
+    const { _resolvedLibrary } = load(cfgPath);
     const ext = _resolvedLibrary.get('Ext');
     expect(ext).toContain('base');
     expect(ext).toContain('ext');
@@ -391,16 +405,14 @@ describe('loadCompileConfig', () => {
       '    library:',
       '      Base: ./base',
     ].join('\n') + '\n', 'utf8');
-    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    expect(() => loadCompileConfig(p)).toThrow(/Configuration has/);
-    spy.mockRestore();
+    expect(() => load(p)).toThrow(/Configuration has/);
   });
 
   test('passes through roles (protagonist included, §9.2), variables, and branches', () => {
     const cfgPath = writeConfig(
       'roles:\n  protagonist: Aria\nvariables:\n  role: knight\nbranches:\n  main: {}\n'
     );
-    const config = loadCompileConfig(cfgPath);
+    const config = load(cfgPath);
     expect(config.roles).toEqual({ protagonist: 'Aria' });
     expect(config.variables).toEqual({ role: 'knight' });
     expect(config.branches).toHaveProperty('main');

@@ -49,7 +49,6 @@ function loadNamedFiles(dirs, ext) {
  * than compile into something subtly broken.
  */
 function checkNoFences(files, ext, diagnostics) {
-  if (!diagnostics) return;
   for (const [name, entry] of files) {
     if (!entry.content.includes('~~~')) continue;
     diagnostics.error(

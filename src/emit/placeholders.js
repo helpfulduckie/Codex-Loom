@@ -343,7 +343,6 @@ function recordUsage(usage, name, usagePath) {
  * before writing the text that uses it, and that is not a broken build.
  */
 function reportUnusedPlaceholders(declarations, usage, { diagnostics, file } = {}) {
-  if (!diagnostics) return [];
   const unused = [];
 
   for (const { path: declPath, label, keys } of declarations) {

@@ -50,30 +50,26 @@ function expandVariables(text, variables, options = {}) {
 
     const cycleAt = chain.findIndex((k) => k === lower);
     if (cycleAt >= 0) {
-      if (diagnostics) {
-        const loop = [...chain.slice(cycleAt), lower].join('" → "');
-        diagnostics.error(CODES.VARIABLE_CYCLE, `Variable cycle: "${loop}".`, location);
-      }
+      const loop = [...chain.slice(cycleAt), lower].join('" → "');
+      diagnostics.error(CODES.VARIABLE_CYCLE, `Variable cycle: "${loop}".`, location);
       return match;
     }
 
     const actualKey = Object.keys(declared).find((k) => k.toLowerCase() === lower);
     if (actualKey === undefined) {
-      if (diagnostics) {
-        // §5.1's distinction, and the reason it needs its own code: a name declared only
-        // under a branch is not a typo, it is a scoping mistake. Reporting it as
-        // undeclared would send the author hunting for a declaration that exists.
-        if (branchOnly && branchOnly.has(lower)) {
-          diagnostics.error(
-            CODES.VARIABLE_PRE_BRANCH,
-            `"{%${key}}" is declared only under a branch, but this value resolves before `
-            + 'branches are enumerated.',
-            location,
-            { hint: 'Only root-level variables are available in include/import paths and under structure:.' }
-          );
-        } else {
-          diagnostics.error(CODES.VARIABLE_UNDECLARED, `Variable "{%${key}}" is not declared.`, location);
-        }
+      // §5.1's distinction, and the reason it needs its own code: a name declared only
+      // under a branch is not a typo, it is a scoping mistake. Reporting it as
+      // undeclared would send the author hunting for a declaration that exists.
+      if (branchOnly && branchOnly.has(lower)) {
+        diagnostics.error(
+          CODES.VARIABLE_PRE_BRANCH,
+          `"{%${key}}" is declared only under a branch, but this value resolves before `
+          + 'branches are enumerated.',
+          location,
+          { hint: 'Only root-level variables are available in include/import paths and under structure:.' }
+        );
+      } else {
+        diagnostics.error(CODES.VARIABLE_UNDECLARED, `Variable "{%${key}}" is not declared.`, location);
       }
       return match;
     }
@@ -204,49 +200,33 @@ function loadManifest(manifestPath, diagnostics) {
   try {
     parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   } catch (_) {
-    if (diagnostics) {
-      diagnostics.warn(
-        CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
-        `Snapshot manifest ${path.basename(manifestPath)} is not valid JSON.`,
-        {}
-      );
-    }
+    diagnostics.warn(
+      CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
+      `Snapshot manifest ${path.basename(manifestPath)} is not valid JSON.`,
+      {}
+    );
     return null;
   }
   if (!parsed || typeof parsed !== 'object' || typeof parsed.manifestVersion !== 'number') {
-    if (diagnostics) {
-      diagnostics.warn(
-        CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
-        `Snapshot manifest ${path.basename(manifestPath)} does not match the expected shape.`,
-        {}
-      );
-    }
+    diagnostics.warn(
+      CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
+      `Snapshot manifest ${path.basename(manifestPath)} does not match the expected shape.`,
+      {}
+    );
     return null;
   }
   return parsed;
 }
 
-/** Print collected diagnostics and abort if any of them are errors. */
-function flush(diagnostics) {
-  for (const diag of diagnostics.all) {
-    if (diag.severity === 'error') console.error(diag.format());
-    else console.warn(diag.format());
-  }
-  if (diagnostics.hasErrors()) {
-    const count = diagnostics.errors.length;
-    throw new Error(`Configuration has ${count} error${count === 1 ? '' : 's'}; nothing was compiled.`);
-  }
-}
-
 /**
  * Load compile.cl.yaml and resolve every path relative to it.
  *
- * Pass `options.diagnostics` to collect into an existing bus; otherwise a private one is
- * used, printed, and turned into a thrown error if it holds any.
+ * `options.diagnostics` is required; the caller's bus collects everything this raises.
+ * A config this function cannot load returns `null` rather than throwing — the bus is
+ * the only contract.
  */
 function loadCompileConfig(configPath, options = {}) {
-  const diagnostics = options.diagnostics || new Diagnostics();
-  const ownsBus = !options.diagnostics;
+  const { diagnostics } = options;
 
   const { value: parsed, sourceMap } = loadYamlDocument(configPath);
   const base = path.dirname(path.resolve(configPath));
@@ -257,7 +237,6 @@ function loadCompileConfig(configPath, options = {}) {
       'compile.yaml must be a mapping of configuration keys.',
       { file: configPath }
     );
-    if (ownsBus) flush(diagnostics);
     return null;
   }
 
@@ -285,7 +264,6 @@ function loadCompileConfig(configPath, options = {}) {
         at('version'),
       );
     }
-    if (ownsBus) flush(diagnostics);
     return null;
   }
 
@@ -385,10 +363,14 @@ function loadCompileConfig(configPath, options = {}) {
   // hatch back to the source; otherwise, an entry whose name is recorded in
   // `snapshot/manifest.json` reads from the snapshot copy instead. The manifest read here
   // is silent — `checkDrift` (called unconditionally elsewhere) stays the sole source of
-  // CL0111–CL0115, and anything this can't confirm just falls back to live.
+  // CL0111–CL0115, and anything this can't confirm just falls back to live. So the bus
+  // handed to `loadManifest` below is a throwaway, on purpose: `checkDrift` calls the same
+  // function with the real bus and reports CL0112 there, and a live bus here would raise
+  // it a second time. This read wants the value, not the finding — the same shape as
+  // `questionsForMeasurement` in treeWrite.js.
   let manifest = null;
   if (!options.live && resolvedSnapshot) {
-    manifest = loadManifest(path.join(resolvedSnapshot, 'manifest.json'), null);
+    manifest = loadManifest(path.join(resolvedSnapshot, 'manifest.json'), new Diagnostics());
   }
 
   const resolvedLibrary = new Map();
@@ -433,8 +415,6 @@ function loadCompileConfig(configPath, options = {}) {
       diagnostics.warn(CODES.PATH_NOT_FOUND, `Templates path not found: ${p}`, at('structure', 'input', 'templates', String(i)));
     }
   }
-
-  if (ownsBus) flush(diagnostics);
 
   return {
     _base: base,

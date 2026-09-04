@@ -57,8 +57,7 @@ function loadComponentDocument(spec, options = {}) {
   if (!spec || typeof spec !== 'string') return null;
   if (!fs.existsSync(spec)) {
     const message = `${label} file not found: ${spec}`;
-    if (diagnostics) diagnostics.warn(CODES.YAML_FILE_UNREADABLE, message, { file: spec });
-    else console.warn(`  WARN: ${message}`);
+    diagnostics.warn(CODES.YAML_FILE_UNREADABLE, message, { file: spec });
     return null;
   }
 
@@ -86,13 +85,9 @@ function loadComponentDocument(spec, options = {}) {
     throw new Error(`${label} file must be a YAML mapping: ${spec}`);
   }
 
-  if (diagnostics) {
-    validate(doc, COMPONENT_SCHEMA, { diagnostics, sourceMap, context: `the ${label} component` });
-  }
+  validate(doc, COMPONENT_SCHEMA, { diagnostics, sourceMap, context: `the ${label} component` });
 
-  const onWarn = diagnostics
-    ? busWarner(diagnostics, { file: spec })
-    : (code, message) => console.warn(`  WARN [${code}]: ${message}`);
+  const onWarn = busWarner(diagnostics, { file: spec });
 
   // §7.6: imports first, in order, then the local `sections:` layered on top. Merging
   // happens on raw section definitions — see `model/component.js` for why — so what reaches
@@ -365,10 +360,9 @@ function parseSelectorList(value) {
   return [];
 }
 
-/** Report to the bus, or to the console when there is no bus — the loader's standing shape. */
+/** Report to the bus. */
 function report(diagnostics, severity, code, message, file) {
-  if (diagnostics) diagnostics[severity](code, message, { file });
-  else console.warn(`  ${severity.toUpperCase()} [${code}]: ${message}`);
+  diagnostics[severity](code, message, { file });
 }
 
 module.exports = { loadComponentDocument };

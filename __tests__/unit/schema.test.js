@@ -325,10 +325,3 @@ describe('levenshtein', () => {
   });
 });
 
-describe('validation without a diagnostics bus', () => {
-  test('normalizes without throwing when no bus is supplied', () => {
-    const value = { variables: [] };
-    expect(() => validate(value, SCHEMA, {})).not.toThrow();
-    expect(value.variables).toEqual({});
-  });
-});

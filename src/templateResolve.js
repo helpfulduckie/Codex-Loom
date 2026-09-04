@@ -17,7 +17,6 @@ const { CODES } = require('./diag');
  * same typo printed thousands of times.
  */
 function checkConfigNotesTemplates(config, templates, diagnostics, configPath, fieldTable) {
-  if (!diagnostics) return;
   const fieldListTemplates = (fieldTable && fieldTable.templates) || {};
 
   const check = (node, where) => {
@@ -63,13 +62,11 @@ function renderNotesText(item, context, templates, partials, variables, projectN
     // Only rung 1 reaches here — the project/branch `render.notesTemplate` name is
     // existence-checked at load (`CL0411`), so a missing name came from the item.
     const label = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
-    if (diagnostics) {
-      diagnostics.error(
-        CODES.ITEM_NOTES_TEMPLATE_NOT_FOUND,
-        `item "${label}" declares render.notesTemplate "${resolved.name}", which is not a loaded template.`,
-        { file: item._source },
-      );
-    }
+    diagnostics.error(
+      CODES.ITEM_NOTES_TEMPLATE_NOT_FOUND,
+      `item "${label}" declares render.notesTemplate "${resolved.name}", which is not a loaded template.`,
+      { file: item._source },
+    );
     return undefined;
   }
 
@@ -125,23 +122,19 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
       const expanded = resolveVariables(String(file), variables, { diagnostics, file: configPath });
       const abs = findTemplateForFile(expanded, templateDirs, base);
       if (!abs) {
-        if (diagnostics) {
-          diagnostics.error(
-            CODES.PATH_NOT_FOUND,
-            `templateFor.${role} names "${file}", which was not found on the templates search path.`,
-            { file: configPath },
-          );
-        }
+        diagnostics.error(
+          CODES.PATH_NOT_FOUND,
+          `templateFor.${role} names "${file}", which was not found on the templates search path.`,
+          { file: configPath },
+        );
         continue;
       }
       let doc;
       try {
         doc = loadYaml(abs);
       } catch (err) {
-        if (diagnostics) {
-          diagnostics.error(CODES.FIELD_TABLE_MALFORMED,
-            `Could not parse templateFor.${role} file ${path.basename(abs)}: ${err.message}`, { file: abs });
-        }
+        diagnostics.error(CODES.FIELD_TABLE_MALFORMED,
+          `Could not parse templateFor.${role} file ${path.basename(abs)}: ${err.message}`, { file: abs });
         continue;
       }
       if (doc && doc.templates && typeof doc.templates === 'object') {

@@ -116,10 +116,6 @@ describe('item loading', () => {
     expect(diagnostics.errors.some((d) => d.code === CODES.ID_CONTAINS_COLON)).toBe(true);
   });
 
-  test('an id containing ":" throws when no diagnostics bus is supplied', () => {
-    write('a.cl.yaml', 'id: "grim:magic"\n');
-    expect(() => loadItemsFromDir([tmpDir])).toThrow(/contains ":"/);
-  });
 });
 
 describe('item schema validation (§4.3)', () => {
@@ -191,10 +187,6 @@ describe('item schema validation (§4.3)', () => {
     expect(diagnostics.warnings.every((d) => d.message.includes('not yet implemented'))).toBe(true);
   });
 
-  test('validation is skipped when no bus is supplied, preserving the old call shape', () => {
-    write('a.cl.yaml', 'id: A\nbogusKey: 1\n');
-    expect(() => loadItemsFromDir([tmpDir])).not.toThrow();
-  });
 });
 
 describe('registries', () => {
@@ -213,15 +205,6 @@ describe('registries', () => {
     expect(buildRegistry(items, 'p').size).toBe(0);
   });
 
-  test('an item with neither id nor name throws', () => {
-    expect(() => buildRegistry([{ _source: 'a' }], 'proj')).toThrow('missing both id and name');
-  });
-
-  test('a duplicate id throws, naming both sources', () => {
-    expect(() => buildRegistry([item('A', 'one.yaml'), item('A', 'two.yaml')], 'proj'))
-      .toThrow(/one\.yaml[\s\S]*two\.yaml/);
-  });
-
   test('rename-on-import (id + import) registers under the local id (§17.4)', () => {
     const items = [{ id: 'Dragon', import: 'wyvern', _source: 'a.yaml' }];
     const registry = buildRegistry(items, 'p');
@@ -234,22 +217,22 @@ describe('registries', () => {
     expect(buildRegistry(items, 'p').size).toBe(0);
   });
 
-  test('two renamed imports claiming the same local id throw the existing duplicate error', () => {
+  test('two renamed imports claiming the same local id raise the existing duplicate error on the bus', () => {
     const items = [
       { id: 'Dragon', import: 'wyvern', _source: 'one.yaml' },
       { id: 'Dragon', import: 'drake', _source: 'two.yaml' },
     ];
-    expect(() => buildRegistry(items, 'proj')).toThrow(/Duplicate item ID "dragon"/);
+    const diagnostics = new Diagnostics();
+    const registry = buildRegistry(items, 'proj', { diagnostics });
+    expect(registry.get('dragon').import).toBe('wyvern');
+    expect(diagnostics.errors.some(
+      (d) => d.code === CODES.DUPLICATE_ITEM_ID && /Duplicate item ID "dragon"/.test(d.message)
+    )).toBe(true);
   });
 
   test('mergeRegistries unions library and project', () => {
     const merged = mergeRegistries(buildRegistry([item('A')], 'c'), buildRegistry([item('B')], 'p'));
     expect([...merged.keys()].sort()).toEqual(['a', 'b']);
-  });
-
-  test('mergeRegistries throws on a library/project collision', () => {
-    expect(() => mergeRegistries(buildRegistry([item('A')], 'c'), buildRegistry([item('A')], 'p')))
-      .toThrow('exists in both a library set and the project');
   });
 
   test('a duplicate id raises CL0141 on the bus and keeps the first definition', () => {

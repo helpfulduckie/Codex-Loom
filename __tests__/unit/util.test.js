@@ -169,14 +169,6 @@ describe('resolveVariables', () => {
     expect(resolveVariables('{%x} and {%y}', { x: 'foo', y: 'bar' })).toBe('foo and bar');
   });
 
-  test('undeclared variable: warns and returns token literal', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const result = resolveVariables('{%missing}', {});
-    expect(result).toBe('{%missing}');
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('missing'));
-    warn.mockRestore();
-  });
-
   test('undeclared variable with a bus: raises CL0510 instead of warning, still returns the literal', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation();
     const diagnostics = new Diagnostics();
@@ -193,20 +185,13 @@ describe('resolveVariables', () => {
     // Measured bug this guards: `Object.keys().find()` finds a present-but-null key
     // regardless of its value, so a plain assign would fall through to
     // `String(variables[actualKey])` and ship the literal word "null" into compiled prose.
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const result = resolveVariables('X {%foo} Y', { foo: null });
+    const diagnostics = new Diagnostics();
+    const result = resolveVariables('X {%foo} Y', { foo: null }, { diagnostics, file: 'items.cl.yaml' });
     expect(result).toBe('X {%foo} Y');
     expect(result).not.toContain('null');
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('foo'));
-    warn.mockRestore();
-  });
-
-  test('cycle: warns and returns token literal', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const result = resolveVariables('{%a}', { a: '{%a}' });
-    expect(result).toBe('{%a}');
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('cycle'));
-    warn.mockRestore();
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0]).toMatchObject({ code: 'CL0510', file: 'items.cl.yaml' });
+    expect(diagnostics.errors[0].message).toContain('foo');
   });
 
   test('cycle with a bus: raises CL0511 and names every key in the loop', () => {
@@ -284,12 +269,6 @@ describe('checkUnexpandedVariables', () => {
     expect(checkUnexpandedVariables(42, 'x')).toBe(false);
   });
 
-  test('reports nothing and prints nothing when no bus is passed', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    expect(checkUnexpandedVariables('a {%role}', 'x')).toBe(true);
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
-  });
 });
 
 // ── walkItemTextFields ────────────────────────────────────────────────────────

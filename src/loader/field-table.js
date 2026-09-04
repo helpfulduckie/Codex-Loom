@@ -86,7 +86,7 @@ function checkSourceConflict(decl, label, file, report) {
  */
 function foldDocument(doc, file, acc, diagnostics) {
   const report = (code, message) => {
-    if (diagnostics) diagnostics.error(code, message, { file });
+    diagnostics.error(code, message, { file });
   };
 
   if (doc === undefined || doc === null) return;
@@ -170,7 +170,6 @@ function foldDocument(doc, file, acc, diagnostics) {
  * group a downstream project has not populated.
  */
 function checkReferences(table, diagnostics) {
-  if (!diagnostics) return;
   const knownField = (n) => Object.prototype.hasOwnProperty.call(table.fields, n) && table.fields[n] !== null;
   const knownGroup = (n) => Object.prototype.hasOwnProperty.call(table.groups, n) && table.groups[n] !== null;
 
@@ -221,7 +220,7 @@ function loadFieldTable(dirs, options = {}) {
         // — a near miss on the stem, which would otherwise leave the field table silently
         // empty.
         const stem = base.replace(/\.cl\.ya?ml$/, '');
-        if (diagnostics && stem !== 'fields' && levenshtein(stem, 'fields') <= 2) {
+        if (stem !== 'fields' && levenshtein(stem, 'fields') <= 2) {
           diagnostics.warn(CODES.FIELD_TABLE_STRAY_FILE,
             `"${path.basename(file)}" looks like a misspelled "fields.cl.yaml" and will be `
             + 'ignored. Rename it, or if it is a templateFor slot file the near-miss is '
@@ -234,10 +233,8 @@ function loadFieldTable(dirs, options = {}) {
       try {
         doc = loadYaml(file);
       } catch (err) {
-        if (diagnostics) {
-          diagnostics.error(CODES.FIELD_TABLE_MALFORMED,
-            `Could not parse field table ${path.basename(file)}: ${err.message}`, { file });
-        }
+        diagnostics.error(CODES.FIELD_TABLE_MALFORMED,
+          `Could not parse field table ${path.basename(file)}: ${err.message}`, { file });
         continue;
       }
       foldDocument(doc, file, acc, diagnostics);

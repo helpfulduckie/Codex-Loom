@@ -61,6 +61,7 @@ const path = require('path');
 
 const { compile } = require('../src/compile');
 const { loadCompileConfig } = require('../src/config/load');
+const { Diagnostics } = require('../src/diag');
 const { classifyDiff, OPAQUE } = require('../__tests__/helpers/diffShape');
 
 const { DEFAULT_REPORT_MODES } = require('../__tests__/helpers/baselineHarness');
@@ -230,7 +231,7 @@ function buildTempTree(projects, set) {
  * returns nothing that names the path.
  */
 function resolvedReportsDir(configPath) {
-  const config = loadCompileConfig(configPath);
+  const config = loadCompileConfig(configPath, { diagnostics: new Diagnostics() });
   return config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
 }
 

@@ -164,7 +164,7 @@ function outputText() {
 
 describe('examples/library — both sets load from outside the project directory', () => {
   test('a library declared as ../library/<set> resolves', () => {
-    const config = loadCompileConfig(path.join(projectDir, 'compile.cl.yaml'));
+    const config = loadCompileConfig(path.join(projectDir, 'compile.cl.yaml'), { diagnostics: new Diagnostics() });
     const resolved = config._resolvedLibrary;
     expect([...resolved.keys()].sort()).toEqual(['core', 'grimwood']);
     for (const dir of resolved.values()) {
@@ -175,7 +175,7 @@ describe('examples/library — both sets load from outside the project directory
   });
 
   test('every item file in both sets loads, including ones no project imports', () => {
-    const config = loadCompileConfig(path.join(projectDir, 'compile.cl.yaml'));
+    const config = loadCompileConfig(path.join(projectDir, 'compile.cl.yaml'), { diagnostics: new Diagnostics() });
     const diagnostics = new Diagnostics();
     const registry = buildCanonRegistry(config._resolvedLibrary, { diagnostics });
 
@@ -202,7 +202,7 @@ describe('the colliding magic pair (§17.2–§17.4)', () => {
   });
 
   test('`magic` is ambiguous, so the plain registry key is empty', () => {
-    const config = loadCompileConfig(path.join(projectDir, 'compile.cl.yaml'));
+    const config = loadCompileConfig(path.join(projectDir, 'compile.cl.yaml'), { diagnostics: new Diagnostics() });
     const registry = buildCanonRegistry(config._resolvedLibrary, { diagnostics: new Diagnostics() });
 
     expect(registry.get('magic')).toBeUndefined();
@@ -212,7 +212,7 @@ describe('the colliding magic pair (§17.2–§17.4)', () => {
   });
 
   test('an unqualified reference fails with CL0340 naming both sets', () => {
-    const config = loadCompileConfig(path.join(projectDir, 'compile.cl.yaml'));
+    const config = loadCompileConfig(path.join(projectDir, 'compile.cl.yaml'), { diagnostics: new Diagnostics() });
     const registry = buildCanonRegistry(config._resolvedLibrary, { diagnostics: new Diagnostics() });
 
     const result = resolveItemRef(registry, 'magic');

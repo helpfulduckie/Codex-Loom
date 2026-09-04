@@ -305,13 +305,11 @@ function validate(value, schema, options = {}) {
     const normalized = normalizeEmpty(node, types);
 
     if (!types.some((t) => matchesType(normalized, t))) {
-      if (diagnostics) {
-        diagnostics.error(
-          CODES.WRONG_TYPE,
-          `"${display(currentPath) || '<root>'}" must be ${typeName(types)}, but is ${describeType(normalized)}${inContext}.`,
-          locate(currentPath)
-        );
-      }
+      diagnostics.error(
+        CODES.WRONG_TYPE,
+        `"${display(currentPath) || '<root>'}" must be ${typeName(types)}, but is ${describeType(normalized)}${inContext}.`,
+        locate(currentPath)
+      );
       return normalized;
     }
 
@@ -319,14 +317,12 @@ function validate(value, schema, options = {}) {
     // as a type error rather than as an unlisted one — "must be a string" is the more
     // actionable of the two messages when both are true.
     if (descriptor.values && !descriptor.values.includes(normalized)) {
-      if (diagnostics) {
-        diagnostics.error(
-          CODES.VALUE_NOT_ALLOWED,
-          `"${display(currentPath) || '<root>'}" is ${JSON.stringify(normalized)}, but must be `
-          + `${descriptor.values.map((v) => JSON.stringify(v)).join(' or ')}${inContext}.`,
-          locate(currentPath)
-        );
-      }
+      diagnostics.error(
+        CODES.VALUE_NOT_ALLOWED,
+        `"${display(currentPath) || '<root>'}" is ${JSON.stringify(normalized)}, but must be `
+        + `${descriptor.values.map((v) => JSON.stringify(v)).join(' or ')}${inContext}.`,
+        locate(currentPath)
+      );
       return normalized;
     }
 
@@ -337,13 +333,11 @@ function validate(value, schema, options = {}) {
       const below = descriptor.min !== undefined && normalized < descriptor.min;
       const above = descriptor.max !== undefined && normalized > descriptor.max;
       if (below || above) {
-        if (diagnostics) {
-          diagnostics.error(
-            CODES.VALUE_OUT_OF_RANGE,
-            `"${display(currentPath) || '<root>'}" is ${normalized}, but must be ${rangeText(descriptor)}${inContext}.`,
-            locate(currentPath)
-          );
-        }
+        diagnostics.error(
+          CODES.VALUE_OUT_OF_RANGE,
+          `"${display(currentPath) || '<root>'}" is ${normalized}, but must be ${rangeText(descriptor)}${inContext}.`,
+          locate(currentPath)
+        );
         return normalized;
       }
     }
@@ -360,14 +354,12 @@ function validate(value, schema, options = {}) {
         re = null;
       }
       if (re && !re.test(normalized)) {
-        if (diagnostics) {
-          diagnostics.error(
-            CODES.PATTERN_MISMATCH,
-            `"${display(currentPath) || '<root>'}" is ${JSON.stringify(normalized)}, but must match `
-            + `${JSON.stringify(String(descriptor.pattern))}${inContext}.`,
-            locate(currentPath)
-          );
-        }
+        diagnostics.error(
+          CODES.PATTERN_MISMATCH,
+          `"${display(currentPath) || '<root>'}" is ${JSON.stringify(normalized)}, but must match `
+          + `${JSON.stringify(String(descriptor.pattern))}${inContext}.`,
+          locate(currentPath)
+        );
         return normalized;
       }
     }
@@ -393,12 +385,10 @@ function validate(value, schema, options = {}) {
 
           const child = descriptor.keys[key];
           if (!child) {
-            if (diagnostics) {
-              const { code, hint } = suggestFor(key, currentPath.slice(displayOffset), declared, keyIndex);
-              const shown = display(currentPath);
-              const where = shown ? `under "${shown}"` : 'at the top level';
-              diagnostics.error(code, `Unknown key "${key}" ${where}${inContext}.`, locate([...currentPath, key]), { hint });
-            }
+            const { code, hint } = suggestFor(key, currentPath.slice(displayOffset), declared, keyIndex);
+            const shown = display(currentPath);
+            const where = shown ? `under "${shown}"` : 'at the top level';
+            diagnostics.error(code, `Unknown key "${key}" ${where}${inContext}.`, locate([...currentPath, key]), { hint });
             continue;
           }
 

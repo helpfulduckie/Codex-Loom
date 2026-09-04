@@ -151,7 +151,6 @@ function topoOrder(graph) {
 
 /** `CL0418`, naming every item and field on the cycle's edges rather than the uncoded warning it replaces. */
 function reportCycle(group, edgeFields, resolvedById, diagnostics) {
-  if (!diagnostics) return;
   const groupSet = new Set(group);
   const parts = [];
   for (const from of group) {
