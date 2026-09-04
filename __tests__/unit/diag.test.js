@@ -321,14 +321,8 @@ describe('module purity', () => {
 
 describe('every registered code is raised somewhere in src/', () => {
   // A code the registry and the docs both carry but no call site raises is dead surface
-  // that the doc cross-check above cannot see. Each allowlisted entry names the site that
-  // should raise it and currently throws a raw Error instead; the entry goes when that
-  // site is put on the bus.
-  const NOT_YET_RAISED = {
-    YAML_PARSE_FAILED: 'loader/yaml.js parse failures surface as CL0102 through registry.js',
-    DOUBLE_INCLUDE: 'loader/registry.js resolveIncludes throws on a repeated include path',
-  };
-
+  // that the doc cross-check above cannot see. There is no allowlist: a new code is added
+  // together with the site that raises it, or not at all.
   const fs = require('fs');
   const path = require('path');
   const srcRoot = path.resolve(__dirname, '../../src');
@@ -345,12 +339,7 @@ describe('every registered code is raised somewhere in src/', () => {
   test.each(Object.keys(REGISTRY))('%s', (name) => {
     // Bare name rather than `CODES.<name>`: compile.js aliases the table and several
     // modules destructure it, so the name is the one spelling every raise site shares.
-    const referenced = new RegExp(`\\b${name}\\b`).test(sources);
-    if (name in NOT_YET_RAISED) {
-      expect(referenced).toBe(false);
-    } else {
-      expect(referenced).toBe(true);
-    }
+    expect(new RegExp(`\\b${name}\\b`).test(sources)).toBe(true);
   });
 });
 

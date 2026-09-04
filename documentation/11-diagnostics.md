@@ -52,6 +52,13 @@ spans need the deferred render rewrite.
 | `CL0104` | WARN | Document within a multi-document file is null; skipped. |
 | `CL0105` | ERROR | A Codex Loom token was parsed as a YAML mapping key. |
 
+`CL0101`, `CL0102` and `CL0105` are raised per file by whichever loader reached it — the
+item registry, an `include:`, a component document, or `compile.cl.yaml` itself — and the
+loader moves on to the next file, so three broken files are three reports in one run. The
+load bus aborts the compile once loading finishes. `fields.cl.yaml` is the exception: a
+field table that fails to parse is `CL0223`, because a broken field table is its own kind
+of mistake.
+
 ### CL0105 in detail
 
 `triggers: [{$name.display}]` is **valid YAML** — a flow sequence containing a single-key

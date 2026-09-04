@@ -21,7 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { loadYamlDocument } = require('./yaml');
+const { loadYamlDocument, YamlLoadError } = require('./yaml');
 const { validate } = require('../schema');
 const { COMPONENT_SCHEMA } = require('./component-schema');
 const { normalizeComponent, mergeSectionRecords, applySectionSelector } = require('../model/component');
@@ -63,7 +63,14 @@ function loadComponentDocument(spec, options = {}) {
 
   if (dependencyLedger) dependencyLedger.add(path.resolve(spec));
 
-  const { value: doc, sourceMap } = loadYamlDocument(spec);
+  let doc; let sourceMap;
+  try {
+    ({ value: doc, sourceMap } = loadYamlDocument(spec));
+  } catch (err) {
+    if (!(err instanceof YamlLoadError)) throw err;
+    diagnostics.error(err.code, `${label}: ${err.message}`, { file: spec });
+    return null;
+  }
   if (doc === null || doc === undefined) return null;
 
   if (Array.isArray(doc)) {

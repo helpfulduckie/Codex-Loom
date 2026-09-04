@@ -139,39 +139,73 @@ function parseYaml(raw, filePath) {
     const { token, path, key } = swallowed[0];
     const { line, col } = sourceMap.nearest([...path, key]);
     const at = line ? ` at line ${line}, column ${col}` : '';
-    throw new Error(
+    const err = new Error(
       `${CODES.TOKEN_SWALLOWED_BY_YAML}: the token ${token} was parsed as a YAML mapping key${at}. `
       + 'Wrap the value in quotes so it is read as text.'
     );
+    // Read by `YamlLoadError`, so a swallowed token reaches the bus as `CL0105` rather than
+    // as a generic parse failure.
+    err.code = CODES.TOKEN_SWALLOWED_BY_YAML;
+    throw err;
   }
 
   return { value, sourceMap };
 }
 
 /**
+ * The one error `loadYaml` / `loadYamlDocument` throw, typed so a caller can turn it into
+ * a coded diagnostic without parsing the message.
+ *
+ * Those two are leaf functions: they observe a fact — the file could not be read, or its
+ * text could not be parsed — and throw it. What the fact *means* is the caller's to decide,
+ * because the same failure is a different mistake in different places: the item registry
+ * reports a parse failure as `CL0101` and moves on to the next file; `field-table.js` reports
+ * the same failure as `CL0223`, because a broken field table is its own kind of wrong. So the
+ * error carries `kind` (the fact) and `code` (the loading-band default for a caller with
+ * nothing more specific to say), and the caller raises whichever it owns.
+ *
+ * `code` is `CL0102` for a read failure and `CL0101` for a parse failure — except a token
+ * the parser swallowed as a mapping key, which `parseYaml` marks with `CL0105` and keeps.
+ * The message is the v3 `Failed to load YAML at <path>: <reason>` string throughout, so a
+ * caller that only ever wanted the text still gets it.
+ */
+class YamlLoadError extends Error {
+  constructor(kind, filePath, cause) {
+    super(`Failed to load YAML at ${filePath}: ${cause.message}`);
+    this.name = 'YamlLoadError';
+    this.kind = kind;
+    this.file = filePath;
+    this.code = kind === 'read'
+      ? CODES.YAML_FILE_UNREADABLE
+      : (cause.code || CODES.YAML_PARSE_FAILED);
+    this.cause = cause;
+  }
+}
+
+/**
  * Read and parse a YAML file, returning the parsed value.
  *
- * Contract preserved from v3 `util.loadYaml`: returns the value, yields
- * `undefined` for an empty file, and throws `Failed to load YAML at <path>: <reason>`
- * for both unreadable files and malformed documents.
+ * Contract preserved from v3 `util.loadYaml`: returns the value, yields `undefined` for an
+ * empty file, and throws for both unreadable files and malformed documents — now as a
+ * `YamlLoadError`, so the caller can tell which.
  */
 function loadYaml(filePath) {
-  try {
-    const raw = fs.readFileSync(filePath, 'utf8');
-    return parseYaml(raw, filePath).value;
-  } catch (err) {
-    throw new Error(`Failed to load YAML at ${filePath}: ${err.message}`);
-  }
+  return loadYamlDocument(filePath).value;
 }
 
-/** As `loadYaml`, but returns `{ value, sourceMap, doc }` for position-aware callers. */
+/** As `loadYaml`, but returns `{ value, sourceMap }` for position-aware callers. */
 function loadYamlDocument(filePath) {
+  let raw;
   try {
-    const raw = fs.readFileSync(filePath, 'utf8');
+    raw = fs.readFileSync(filePath, 'utf8');
+  } catch (err) {
+    throw new YamlLoadError('read', filePath, err);
+  }
+  try {
     return parseYaml(raw, filePath);
   } catch (err) {
-    throw new Error(`Failed to load YAML at ${filePath}: ${err.message}`);
+    throw new YamlLoadError('parse', filePath, err);
   }
 }
 
-module.exports = { loadYaml, loadYamlDocument, parseYaml, SourceMap };
+module.exports = { loadYaml, loadYamlDocument, parseYaml, SourceMap, YamlLoadError };

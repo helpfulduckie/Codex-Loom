@@ -21,7 +21,7 @@ const path = require('path');
 
 const { Diagnostics, CODES } = require('../diag');
 const { validate } = require('../schema');
-const { loadYamlDocument } = require('../loader/yaml');
+const { loadYamlDocument, YamlLoadError } = require('../loader/yaml');
 const { CONFIG_SCHEMA } = require('./schema');
 const { walkBranchTree } = require('../model/branches');
 
@@ -228,7 +228,14 @@ function loadManifest(manifestPath, diagnostics) {
 function loadCompileConfig(configPath, options = {}) {
   const { diagnostics } = options;
 
-  const { value: parsed, sourceMap } = loadYamlDocument(configPath);
+  let parsed; let sourceMap;
+  try {
+    ({ value: parsed, sourceMap } = loadYamlDocument(configPath));
+  } catch (err) {
+    if (!(err instanceof YamlLoadError)) throw err;
+    diagnostics.error(err.code, err.message, { file: configPath });
+    return null;
+  }
   const base = path.dirname(path.resolve(configPath));
 
   if (parsed === null || parsed === undefined || typeof parsed !== 'object' || Array.isArray(parsed)) {

@@ -317,6 +317,12 @@ Phase A (`resolveBranchItems`) resolves all items for a branch and applies field
 
 `structure.input.library` is a named mapping (`{main: ./path}`) rather than a plain string or array. Names serve two purposes: they appear in error messages (`library:main` labels each side of a collision) and they are exposed as variables, so `{%main}` resolves in `include:` paths. A plain path string would require path-based display, which is brittle.
 
+**Diagnostics — the bus is required, a leaf throws facts, the caller assigns the code**
+
+Below `compile()`, every function that can report a problem takes a `Diagnostics` bus (`src/diag.js`) as a required argument, and every raise is unconditional. There is no `if (diagnostics)` guard, no `console.warn` fallback when one is absent, and no runtime "bus required" check — a caller that omits the bus fails at the first raise with a `TypeError`, and the suite is how such a caller is found. A guard would be the same conditional with its branches swapped, and after wiring it would be dead. The one place a bus is deliberately discarded is a read that wants a value the reporting caller has already reported — `questionsForMeasurement` in `treeWrite.js`, `loadManifest` in `config/load.js` — and each says so at the call.
+
+Three steps decide where a fault gets its code. A **leaf function throws a fact**: `loadYamlDocument` throws a `YamlLoadError` carrying `kind: 'read' | 'parse'`, because reading and parsing are all it knows. **The module that owns the diagnostic converts the throw**: the item registry's catch raises `CL0102` or `CL0101` and moves to the next file; `field-table.js` catches the same error and raises `CL0223`, because a broken field table is a different mistake from a broken item file. **A typed error exists only where a catch has to classify** — `YamlLoadError` is the one instance, and it carries a loading-band default `code` for callers with nothing more specific to say. Every other catch in `src/` maps to a single code and needs no type; do not add one until a second catch has to branch on cause.
+
 **Token expansion — one family, one expander**
 
 All `{%variable}` expansion routes through `resolveVariables()` in `src/util.js` — recursive, cycle-detecting, and reporting undeclared names through a caller-supplied sink. There is no second implementation.

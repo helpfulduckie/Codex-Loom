@@ -28,6 +28,20 @@ function loadWithDiagnostics(dir = tmpDir) {
   return { items, diagnostics, codes: diagnostics.all.map((d) => d.code) };
 }
 
+describe('a file that will not load is one coded ERROR, and the walk goes on (CL0101)', () => {
+  test('a malformed item file is CL0101 naming the file, and its sibling still loads', () => {
+    const bad = write('Codex/bad.cl.yaml', 'id: Bad\nname: [unclosed\n');
+    write('Codex/good.cl.yaml', 'id: Good\nname: Good\n');
+    const { items, diagnostics } = loadWithDiagnostics();
+    expect(items.map((i) => i.id)).toEqual(['Good']);
+    const parseFailures = diagnostics.errors.filter((d) => d.code === CODES.YAML_PARSE_FAILED);
+    expect(parseFailures).toHaveLength(1);
+    expect(parseFailures[0].file).toBe(bad);
+    expect(parseFailures[0].message).toContain('Failed to load YAML');
+    expect(diagnostics.all.map((d) => d.code)).not.toContain(CODES.YAML_FILE_UNREADABLE);
+  });
+});
+
 describe('file discovery across every accepted suffix (§4.6)', () => {
   test.each(YAML_SUFFIXES)('loads %s', (suffix) => {
     write(`Codex/item${suffix}`, 'id: A\n');

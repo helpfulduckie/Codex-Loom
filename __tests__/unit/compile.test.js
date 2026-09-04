@@ -246,7 +246,15 @@ describe('resolveIncludes — duplicate file detection', () => {
     expect(result[0].id).toBe('ItemA');
   });
 
-  test('duplicate include from two different source files throws an error', () => {
+  /** Resolve with a bus and hand back the CL0131 reports beside the result. */
+  const includeAll = (itemDefs) => {
+    const diagnostics = new Diagnostics();
+    const result = resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir), { diagnostics });
+    const doubles = diagnostics.errors.filter((d) => d.code === DIAG_CODES.DOUBLE_INCLUDE);
+    return { result, diagnostics, doubles };
+  };
+
+  test('duplicate include from two different source files is one CL0131, and the repeat is skipped', () => {
     const shared = path.join(tmpDir, 'shared.yaml');
     fs.writeFileSync(shared, '- id: ItemA\n  name: ItemA\n', 'utf8');
 
@@ -257,11 +265,15 @@ describe('resolveIncludes — duplicate file detection', () => {
       { include: shared, _source: source2 },
     ];
 
-    expect(() => resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir)))
-      .toThrow(/File included more than once/);
+    const { result, doubles } = includeAll(itemDefs);
+    expect(doubles).toHaveLength(1);
+    expect(doubles[0].message).toMatch(/File included more than once/);
+    expect(doubles[0].file).toBe(source2);
+    // The first include still contributes its items; the repeat contributes nothing.
+    expect(result.map((i) => i.id)).toEqual(['ItemA']);
   });
 
-  test('error message contains the duplicated file path', () => {
+  test('the CL0131 message contains the duplicated file path', () => {
     const shared = path.join(tmpDir, 'shared.yaml');
     fs.writeFileSync(shared, '- id: ItemA\n  name: ItemA\n', 'utf8');
 
@@ -270,14 +282,11 @@ describe('resolveIncludes — duplicate file detection', () => {
       { include: shared, _source: path.join(tmpDir, 'b.yaml') },
     ];
 
-    let err;
-    try { resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir)); }
-    catch (e) { err = e; }
-
-    expect(err.message).toContain(shared);
+    const { doubles } = includeAll(itemDefs);
+    expect(doubles[0].message).toContain(shared);
   });
 
-  test('error message lists both source files that include the duplicate', () => {
+  test('the CL0131 message lists both source files that include the duplicate', () => {
     const shared = path.join(tmpDir, 'shared.yaml');
     fs.writeFileSync(shared, '- id: ItemA\n  name: ItemA\n', 'utf8');
 
@@ -288,15 +297,12 @@ describe('resolveIncludes — duplicate file detection', () => {
       { include: shared, _source: source2 },
     ];
 
-    let err;
-    try { resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir)); }
-    catch (e) { err = e; }
-
-    expect(err.message).toContain(source1);
-    expect(err.message).toContain(source2);
+    const { doubles } = includeAll(itemDefs);
+    expect(doubles[0].message).toContain(source1);
+    expect(doubles[0].message).toContain(source2);
   });
 
-  test('duplicate include within the same source file throws and lists the source', () => {
+  test('duplicate include within the same source file is CL0131 and names the source', () => {
     const shared = path.join(tmpDir, 'shared.yaml');
     fs.writeFileSync(shared, '- id: ItemA\n  name: ItemA\n', 'utf8');
 
@@ -306,12 +312,10 @@ describe('resolveIncludes — duplicate file detection', () => {
       { include: shared, _source: source },
     ];
 
-    let err;
-    try { resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir)); }
-    catch (e) { err = e; }
-
-    expect(err.message).toContain(shared);
-    expect(err.message).toContain(source);
+    const { doubles } = includeAll(itemDefs);
+    expect(doubles).toHaveLength(1);
+    expect(doubles[0].message).toContain(shared);
+    expect(doubles[0].message).toContain(source);
   });
 
   test('two includes of different files succeeds and returns all items', () => {

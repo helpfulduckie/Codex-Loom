@@ -16,7 +16,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { findFiles, deepClone, resolveVariables, VAR_ALIASES, YAML_SUFFIXES, RESERVED_LIBRARY_BASENAMES } = require('../util');
-const { loadYamlDocument } = require('./yaml');
+const { loadYamlDocument, YamlLoadError } = require('./yaml');
 const { validate } = require('../schema');
 const { ITEM_SCHEMA } = require('./schema');
 const { CODES } = require('../diag');
@@ -107,7 +107,18 @@ function loadItemsFromDir(dirs, options = {}) {
       // item directories as well as library ones, so the skip applies to both.
       if (RESERVED_LIBRARY_BASENAMES.includes(path.basename(file).toLowerCase())) continue;
 
-      const { value: data, sourceMap } = loadYamlDocument(file);
+      // A file that cannot be read or parsed is one coded ERROR (`CL0102` / `CL0101`, or
+      // `CL0105` for a swallowed token) and the walk goes on to the next file, so an author
+      // with three broken files hears about all three in one run. The load bus aborts the
+      // compile once loading finishes, which is what a throw here used to do — one file early.
+      let data; let sourceMap;
+      try {
+        ({ value: data, sourceMap } = loadYamlDocument(file));
+      } catch (err) {
+        if (!(err instanceof YamlLoadError)) throw err;
+        diagnostics.error(err.code, err.message, { file });
+        continue;
+      }
 
       const warn = (code, message, at) => {
         diagnostics.warn(code, message, at || { file });
@@ -310,14 +321,26 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
     const importerSource = def._source || '(unknown)';
     if (seenFiles.has(fullPath)) {
       seenFiles.get(fullPath).push(importerSource);
-      throw new Error(
+      // `CL0131` names every importer seen so far, and the directive is skipped rather than
+      // merged a second time. Reported per repeat, so a third include lists all three.
+      diagnostics.error(
+        CODES.DOUBLE_INCLUDE,
         `File included more than once: ${fullPath}\nIncluded by:\n`
-        + seenFiles.get(fullPath).map((s) => `  ${s}`).join('\n')
+        + seenFiles.get(fullPath).map((s) => `  ${s}`).join('\n'),
+        { file: importerSource },
       );
+      continue;
     }
     seenFiles.set(fullPath, [importerSource]);
 
-    const { value: raw } = loadYamlDocument(fullPath);
+    let raw;
+    try {
+      ({ value: raw } = loadYamlDocument(fullPath));
+    } catch (err) {
+      if (!(err instanceof YamlLoadError)) throw err;
+      diagnostics.error(err.code, err.message, { file: fullPath });
+      continue;
+    }
     // The items this one directive contributed — the target set its selectors were aimed
     // at, and therefore the set CL0326 counts against. `included` accumulates across every
     // directive, so counting there would let one include's matches cover another's typo.
