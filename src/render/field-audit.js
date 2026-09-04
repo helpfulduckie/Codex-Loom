@@ -368,8 +368,6 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
 
   /** Emit every deduped finding, then the whole-table dead-declaration sweep (CL0428). */
   function finish(diagnostics) {
-    if (!diagnostics) return;
-
     // (item id \x00 field path) → { code, message, file }
     const findings = new Map();
     for (const [itemId, acc] of perItem) {

@@ -166,8 +166,10 @@ describe('checkLimit', () => {
     expect(diagnostics.errors[0].message).not.toContain('Compiled length is');
   });
 
-  test('it returns the measurement even with no bus, so a report need not measure twice', () => {
-    expect(checkLimit(body(10), null, LIMITS.cardBody, {}).expanded).toBe(10);
+  test('it returns the measurement, so a caller that wants the numbers need not measure twice', () => {
+    const diagnostics = new Diagnostics();
+    expect(checkLimit(body(10), null, LIMITS.cardBody, { diagnostics }).expanded).toBe(10);
+    expect(diagnostics.all).toEqual([]);
   });
 });
 

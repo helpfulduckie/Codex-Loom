@@ -15,8 +15,7 @@ const { reportUnusedPlaceholders, reportDuplicateQuestions } = require('./emit/p
  * golden declares a role yet, so there is no corpus case where a role is legitimately used
  * on one branch and unused on a sibling that this coarser check would miss.
  */
-function reportUnusedRoles(declarations, usage, { diagnostics, file } = {}) {
-  if (!diagnostics) return [];
+function reportUnusedRoles(declarations, usage, { diagnostics, file }) {
   const unused = [];
   for (const { label, keys } of declarations) {
     for (const key of keys) {

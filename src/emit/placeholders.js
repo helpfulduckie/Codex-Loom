@@ -412,8 +412,8 @@ function collectDuplicateQuestions(expandedTable, duplicates, where) {
 }
 
 /** Report what `collectDuplicateQuestions` gathered, once per distinct pair. */
-function reportDuplicateQuestions(duplicates, { diagnostics, file } = {}) {
-  if (!diagnostics || !duplicates) return [];
+function reportDuplicateQuestions(duplicates, { diagnostics, file }) {
+  if (!duplicates) return [];
   for (const { keys, question } of duplicates.values()) {
     diagnostics.warn(
       CODES.PLACEHOLDER_DUPLICATE_QUESTION,

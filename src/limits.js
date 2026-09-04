@@ -163,12 +163,12 @@ const n = (value) => Number(value).toLocaleString('en-US');
  * At most one, deliberately: a body over the cap is also over the band, and reporting both
  * would say the same thing twice at two severities. The cap wins.
  *
- * Returns the measurement either way, so a caller that wants the numbers for a report does
- * not measure twice.
+ * Returns the measurement, so a caller that wants the numbers for a report does not measure
+ * twice. The bus is required: the report modes that once reached this without one read
+ * `measure` directly, so nothing calls it that is not a compile.
  */
-function checkLimit(text, questions, limit, { diagnostics, loc = {}, label = null } = {}) {
+function checkLimit(text, questions, limit, { diagnostics, loc = {}, label = null }) {
   const result = measure(text, questions);
-  if (!diagnostics) return result;
 
   const subject = label ? `${limit.subject} for ${label}` : limit.subject;
   const detail = result.added > 0
