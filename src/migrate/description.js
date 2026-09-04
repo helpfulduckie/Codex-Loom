@@ -64,21 +64,24 @@ function convertDescription(doc) {
  * The path comes from `buildCompileContext` rather than from the raw config, so an alias
  * or a `{%variable}` resolves the way the compiler resolves it — the same reason the Plot
  * Essentials stage reaches for the compiler's own loader instead of a private copy.
+ *
+ * `options.diagnostics` is required: the loaders report through it, and this stage answers
+ * one question about the project rather than reporting anything of its own, so the caller
+ * owns what becomes of what they say (`migrateProjectFully` hands the three file stages one
+ * soak-up bus, the same shape its own config-reading stages use).
  */
 function migrateDescriptionFiles(configPath, options = {}) {
   const { loadCompileConfig } = require('../config/load');
   const { buildCompileContext } = require('../compile');
+  const { diagnostics } = options;
 
-  const saved = { log: console.log, warn: console.warn, error: console.error };
-  let config;
-  try {
-    console.log = () => {}; console.warn = () => {}; console.error = () => {};
-    config = loadCompileConfig(configPath);
-  } finally {
-    Object.assign(console, saved);
+  const config = loadCompileConfig(configPath, { diagnostics });
+  // `null` is a config that could not be loaded at all — nothing to inspect, the same
+  // outcome `wireNotesTemplate` reports for its own read.
+  if (!config) {
+    return { notes: ['could not load the migrated config to find the description — nothing migrated.'], touched: [] };
   }
-
-  const specPath = buildCompileContext(config, []).componentRefs.description;
+  const specPath = buildCompileContext(config, [], { diagnostics }).componentRefs.description;
   if (!specPath || !fs.existsSync(String(specPath))) {
     return { notes: ['no description file to migrate.'], touched: [] };
   }

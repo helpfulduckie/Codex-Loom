@@ -280,27 +280,28 @@ function migratePlotEssentialsFiles(configPath, options = {}) {
   const { buildCompileContext } = require('../compile');
   const { convertPlotEssentials, buildItemLookup } = require('./plot-essentials');
 
-  const saved = { log: console.log, warn: console.warn, error: console.error };
-  let config; let registry; let templateNames;
-  try {
-    console.log = () => {}; console.warn = () => {}; console.error = () => {};
-    config = loadCompileConfig(configPath);
-    const canon = buildCanonRegistry(config._resolvedLibrary);
-    registry = buildItemLookup(canon, loadItemsFromDir(config._resolvedItems));
-    const { templates, fieldTable } = loadTemplates(config._resolvedTemplates);
-    // A `.hint` / `.you` sibling target is valid whether it is a `.template` text file or a
-    // `templates:` entry in `fields.cl.yaml` (Phase 12) — both resolve through
-    // `lookupNamedTemplate` at compile time, so the migrator's existence check has to see
-    // both namespaces or it silently drops `template: Character.you` on a field-list corpus.
-    templateNames = new Set([
-      ...[...templates.keys()].map((k) => String(k).toLowerCase()),
-      ...Object.keys((fieldTable && fieldTable.templates) || {}).map((k) => k.toLowerCase()),
-    ]);
-  } finally {
-    Object.assign(console, saved);
+  // `options.diagnostics` is required; see `migrateDescriptionFiles` for why the stage does
+  // not own a bus of its own.
+  const { diagnostics } = options;
+  const config = loadCompileConfig(configPath, { diagnostics });
+  // `null` is a config that could not be loaded at all — nothing to inspect, the same
+  // outcome `wireNotesTemplate` reports for its own read.
+  if (!config) {
+    return { notes: ['could not load the migrated config to find Plot Essentials — nothing migrated.'], touched: [] };
   }
+  const canon = buildCanonRegistry(config._resolvedLibrary, { diagnostics });
+  const registry = buildItemLookup(canon, loadItemsFromDir(config._resolvedItems, { diagnostics }));
+  const { templates, fieldTable } = loadTemplates(config._resolvedTemplates, { diagnostics });
+  // A `.hint` / `.you` sibling target is valid whether it is a `.template` text file or a
+  // `templates:` entry in `fields.cl.yaml` (Phase 12) — both resolve through
+  // `lookupNamedTemplate` at compile time, so the migrator's existence check has to see
+  // both namespaces or it silently drops `template: Character.you` on a field-list corpus.
+  const templateNames = new Set([
+    ...[...templates.keys()].map((k) => String(k).toLowerCase()),
+    ...Object.keys((fieldTable && fieldTable.templates) || {}).map((k) => k.toLowerCase()),
+  ]);
 
-  const pePath = buildCompileContext(config, []).componentRefs.plotEssential;
+  const pePath = buildCompileContext(config, [], { diagnostics }).componentRefs.plotEssential;
   if (!pePath || !fs.existsSync(String(pePath))) {
     return { notes: ['no Plot Essentials file to migrate.'], touched: [] };
   }

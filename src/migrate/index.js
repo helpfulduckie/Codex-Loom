@@ -26,6 +26,7 @@ const { migratePlotEssentialsFiles } = require('./plot-essentials-apply');
 const { migrateDescriptionFiles } = require('./description');
 const { migrateOpeningFiles } = require('./opening');
 const { PRONOUN_SETS } = require('../model/pronouns');
+const { Diagnostics } = require('../diag');
 
 /**
  * Point `render.notesTemplate` at a notes template, once `aid.known` has become `notes:`.
@@ -421,19 +422,26 @@ function migrateProjectFully(configPath, options = {}) {
   notes.push(...pseudoRoles.notes);
   touched.push(...pseudoRoles.touched);
 
-  const pe = migratePlotEssentialsFiles(configPath, options);
+  // The three file stages below read the project back through the compiler's own loaders
+  // and answer one question each about it. A soak-up bus takes what the loaders say, the
+  // same shape `wireNotesTemplate` and `migratePseudoRoles` use for their own reads; the
+  // stages used to get the same silence by nulling `console` around a bus-less load.
+  // Whether anything on it should reach the migration notes is a separate decision.
+  const stageOptions = { ...options, diagnostics: new Diagnostics() };
+
+  const pe = migratePlotEssentialsFiles(configPath, stageOptions);
   notes.push(...pe.notes);
   touched.push(...pe.touched);
 
   // §7.7. After the config stage, because the description's path is read through
   // `buildCompileContext` and that needs a v4-valid config to resolve an alias.
-  const desc = migrateDescriptionFiles(configPath, options);
+  const desc = migrateDescriptionFiles(configPath, stageOptions);
   notes.push(...desc.notes);
   touched.push(...desc.touched);
 
   // §7.1's fourth syntax. Same position as the description stage and for the same reason:
   // the opening's path is read through `buildCompileContext`, which needs a v4-valid config.
-  const opening = migrateOpeningFiles(configPath, options);
+  const opening = migrateOpeningFiles(configPath, stageOptions);
   notes.push(...opening.notes);
   touched.push(...opening.touched);
 

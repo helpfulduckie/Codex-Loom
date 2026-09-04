@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { compile } = require('../../src/compile');
 const { migrateOpeningFiles } = require('../../src/migrate/opening');
+const { Diagnostics } = require('../../src/diag');
 
 const FIXTURE_DIR = path.resolve(__dirname, '../../test');
 
@@ -553,7 +554,7 @@ describe('opening {%Key} resolving to a migrated block file', () => {
       '  beta: {}',
     ].join('\n'), 'utf8');
 
-    migrateOpeningFiles(path.join(opKeyTmpDir, 'compile.yaml'));
+    migrateOpeningFiles(path.join(opKeyTmpDir, 'compile.yaml'), { diagnostics: new Diagnostics() });
     compile(path.join(opKeyTmpDir, 'compile.yaml'));
   });
 
@@ -685,7 +686,7 @@ describe('v3 block opening, migrated to sections and compiled', () => {
       '      knight: {}',
     ].join('\n'), 'utf8');
 
-    migrateOpeningFiles(path.join(blkTmpDir, 'compile.yaml'));
+    migrateOpeningFiles(path.join(blkTmpDir, 'compile.yaml'), { diagnostics: new Diagnostics() });
     compile(path.join(blkTmpDir, 'compile.yaml'));
   });
 

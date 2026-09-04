@@ -152,18 +152,20 @@ function convertOpening(blocks, source, base) {
  *
  * A `.md` or inline opening needs no migration and reports so: prose was always prose, and
  * the passthrough path carries it into v4 untouched. Only the YAML block list converts.
+ *
+ * `options.diagnostics` is required; see `migrateDescriptionFiles` for why the stage does
+ * not own a bus of its own.
  */
 function migrateOpeningFiles(configPath, options = {}) {
   const { loadCompileConfig } = require('../config/load');
   const { buildCompileContext } = require('../compile');
+  const { diagnostics } = options;
 
-  const saved = { log: console.log, warn: console.warn, error: console.error };
-  let config;
-  try {
-    console.log = () => {}; console.warn = () => {}; console.error = () => {};
-    config = loadCompileConfig(configPath);
-  } finally {
-    Object.assign(console, saved);
+  const config = loadCompileConfig(configPath, { diagnostics });
+  // `null` is a config that could not be loaded at all — nothing to inspect, the same
+  // outcome `wireNotesTemplate` reports for its own read.
+  if (!config) {
+    return { notes: ['could not load the migrated config to find openings — nothing migrated.'], touched: [] };
   }
 
   // Every node that declares one, not just the root: v3 projects routinely give a branch its
@@ -179,7 +181,7 @@ function migrateOpeningFiles(configPath, options = {}) {
   // of it exactly the way `node.components` reads out of any branch node.
   walkBranchTree(config, ({ node }) => collect(node.components));
 
-  const ctx = buildCompileContext(config, []);
+  const ctx = buildCompileContext(config, [], { diagnostics });
   const notes = [];
   const touched = [];
 
