@@ -91,13 +91,16 @@ function writeComponentFile(outputDir, filename, content, sink) {
  * `Opening.md`, the name a leaf's `opening:` uses, because Velvet Lattice reads a node's
  * prompt from that filename at every level.
  *
- * Per-node `roles`/`branchProtagonist` merge into the visitor's `state` the same way
- * `branchVars`/`table` do, via `mergeUnbindable` — the same key-wise `~`-deleting merge
- * `walkBranchChain` (`model/branches.js`) uses for roles, reused rather than reimplemented
- * so the two cannot disagree. `onRoleUsed` arrives as a parameter rather than a closure
- * because this is a top-level function with no closure over `compile()`'s scope.
+ * Per-node `roles` merge into the visitor's `state` the same way `branchVars`/`table` do,
+ * via `mergeUnbindable` — the same key-wise `~`-deleting merge `walkBranchChain`
+ * (`model/branches.js`) uses for roles, reused rather than reimplemented so the two cannot
+ * disagree. `branchProtagonist` arrives already resolved per node in `protagonistByPath`
+ * (`resolveProtagonists` in compile.js), keyed by `path.join('/')`, so the `{%var}` expand
+ * — and its `CL0510` — happens once where the answer can change rather than at every node.
+ * `onRoleUsed` arrives as a parameter rather than a closure because this is a top-level
+ * function with no closure over `compile()`'s scope.
  */
-function writeFramingRecursive(rootNode, outputBase, configBase, configPath, variables, verbose = false, diagnostics = null, usage = null, loadSectioned = null, registry = null, onRoleUsed = null) {
+function writeFramingRecursive(rootNode, outputBase, configBase, configPath, variables, verbose = false, diagnostics = null, usage = null, loadSectioned = null, registry = null, onRoleUsed = null, protagonistByPath = null) {
   // The walker visits the project root as a node (Phase 11 Step 0), so an unbranched
   // project still receives its root visit — that is where the "no branches" warn lands.
   if (!rootNode || typeof rootNode !== 'object') return;
@@ -166,14 +169,12 @@ function writeFramingRecursive(rootNode, outputBase, configBase, configPath, var
     const roles = mergeUnbindable(state.roles, node && node.roles, {
       code: DIAG_CODES.ROLE_UNBIND_UNKNOWN, kind: 'role', onWarn: null,
     });
-    // Same derivation the leaf loop uses (`chain.roles.protagonist`, resolved and
-    // lowercased against the branch's own variables) — reading the merged table directly
-    // rather than gating on `rolesDeclared` first, because an inherited protagonist is a
-    // real binding whether or not *this* node is the one that declared `roles:`.
-    const inheritedProtagonist = roles.protagonist || '';
-    // No bus, matching the leaf loop's resolve of the same string: a per-node walker, and an
-    // undeclared name here is one config mistake rather than one per branch.
-    const branchProtagonist = resolveVariables(inheritedProtagonist, branchVars).toLowerCase() || null;
+    // The same value the leaf loop reads for this node: an inherited protagonist is a real
+    // binding whether or not *this* node is the one that declared `roles:`, which is why the
+    // map is read directly rather than gated on `rolesDeclared`.
+    const branchProtagonist = protagonistByPath
+      ? (protagonistByPath.get(nodePath.join('/')) || null)
+      : null;
 
     if (framing != null) {
       if (isLeaf) {

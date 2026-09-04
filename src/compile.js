@@ -8,7 +8,7 @@ const {
 } = require('./model/item');
 const {
   branchTreeDeclares, enumerateLeaves, walkBranchChain, walkBranchTree,
-  resolveBranchSpec, localRoleKeysOf,
+  resolveBranchSpec, localRoleKeysOf, mergeUnbindable,
 } = require('./model/branches');
 const { applyRolePass, applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation } = require('./template');
@@ -46,6 +46,55 @@ const {
 } = require('./compileState');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * The branch protagonist at every node, keyed by `path.join('/')` (`''` for the root):
+ * `roles.protagonist` merged down the tree, `{%var}`-expanded against that node's merged
+ * variables, and lowercased for the id comparison every consumer makes — or `null` where no
+ * protagonist is bound.
+ *
+ * Resolved once here, ahead of both consumers, rather than by each of them. The leaf loop
+ * and the framing walker used to derive this themselves, per leaf and per node, and neither
+ * could pass a bus: an undeclared name in the string is one config mistake, and a resolve
+ * that reports at every leaf would raise it once per branch. The bus does not dedupe, so the
+ * dedupe has to be here, keyed on the identity of the mistake — and that identity is *a node
+ * where the answer can change*. Only three things change it: the root (the first resolve),
+ * a node whose merged protagonist string differs from its parent's, and a node that declares
+ * `variables:`. Every other node inherits its parent's resolved value without a call, so one
+ * mistake is one `CL0510`, on the compile bus, naming `compile.cl.yaml`.
+ *
+ * Variables and roles merge with `mergeUnbindable`, the same key-wise `~`-deleting merge
+ * `walkBranchChain` gives the leaf loop, so the two cannot see different tables. The root
+ * visit merges the declared `variables:` onto the seeded effective set (`_variables`, library
+ * names folded in) exactly as the framing walker does; `_variables` ⊇ `variables`, so the
+ * merge leaves it untouched.
+ */
+function resolveProtagonists(config, configPath, diagnostics) {
+  const byPath = new Map();
+  walkBranchTree(config, ({ node, path: nodePath, isRoot, state }) => {
+    const variables = mergeUnbindable(state.variables, node && node.variables, {
+      code: DIAG_CODES.VARIABLE_UNBIND_UNKNOWN, kind: 'variable', onWarn: null,
+    });
+    const roles = mergeUnbindable(state.roles, node && node.roles, {
+      code: DIAG_CODES.ROLE_UNBIND_UNKNOWN, kind: 'role', onWarn: null,
+    });
+    // Always a string: an absent `roles.protagonist` merges to `undefined`, and
+    // `resolveVariables` requires a string input.
+    const raw = roles.protagonist || '';
+    const canChange = isRoot || raw !== state.raw || !!(node && node.variables);
+    const resolved = canChange
+      ? (resolveVariables(raw, variables, { diagnostics, file: configPath }).toLowerCase() || null)
+      : state.resolved;
+    byPath.set(nodePath.join('/'), resolved);
+    return { variables, roles, raw, resolved };
+  }, {
+    variables: config._variables || config.variables || {},
+    roles: {},
+    raw: '',
+    resolved: null,
+  });
+  return byPath;
+}
 
 /**
  * Build the CompileContext for a given branch path.
@@ -943,6 +992,11 @@ function compileRun(configPath, options, buses) {
     }
   });
 
+  // The protagonist per node, resolved once where a `{%var}` in it can change its answer —
+  // see `resolveProtagonists`. Read by the leaf loop and the framing walker, which used to
+  // resolve it themselves with no bus to avoid repeating one config mistake per leaf.
+  const protagonistByPath = resolveProtagonists(config, configPath, compileDiagnostics);
+
   const leaves = enumerateLeaves(config.branches);
 
   if (options.clean) {
@@ -1018,7 +1072,7 @@ function compileRun(configPath, options, buses) {
     fieldTable, fieldAudit, cardTypeAudit,
     rootDirName, captureReports,
     buildCompileContext, resolveBranchItems, renderBranchItems,
-    placeholderState, roleState, gaps, componentLoader,
+    placeholderState, roleState, gaps, componentLoader, protagonistByPath,
     deferredComponents, deferredScripts, deferredCardLeaves,
     descriptionLeaves, openingLeaves,
     leafData, inventoryData, leafSummaries, allItemIds,
@@ -1041,7 +1095,7 @@ function compileRun(configPath, options, buses) {
   // Root-level branchFraming and the root Label land in these walkers' own root visits.
   writeTreeFiles({
     config, configPath, verbose, diagnostics: compileDiagnostics,
-    placeholderState, componentLoader, registry, roleState,
+    placeholderState, componentLoader, registry, roleState, protagonistByPath,
   });
   reportCompileDiagnostics();
 

@@ -21,13 +21,13 @@ const { applyTokenPass } = require('./model/pronouns');
  */
 function writeTreeFiles({
   config, configPath, verbose, diagnostics,
-  placeholderState, componentLoader, registry, roleState,
+  placeholderState, componentLoader, registry, roleState, protagonistByPath,
 }) {
   writeFramingRecursive(
     config, config._resolvedOutput, config._base, configPath,
     config._variables || config.variables || {},
     verbose, diagnostics, placeholderState.usage,
-    componentLoader.load, registry, roleState.onUsed,
+    componentLoader.load, registry, roleState.onUsed, protagonistByPath,
   );
 
   writeLabelsRecursive(

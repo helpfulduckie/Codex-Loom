@@ -2,7 +2,6 @@
 
 const { walkBranchChain } = require('./model/branches');
 const { busWarner, CODES: DIAG_CODES } = require('./diag');
-const { resolveVariables } = require('./util');
 const {
   resolveSectionedComponents, buildSlotIndex, warnEmptySlots,
   selectComponentSections, renderComponentStoryCards,
@@ -39,7 +38,7 @@ function compileLeaf(branchPath, ctx) {
     fieldTable, fieldAudit, cardTypeAudit,
     rootDirName, captureReports,
     buildCompileContext, resolveBranchItems, renderBranchItems,
-    placeholderState, roleState, gaps, componentLoader,
+    placeholderState, roleState, gaps, componentLoader, protagonistByPath,
     deferredComponents, deferredScripts, deferredCardLeaves,
     descriptionLeaves, openingLeaves,
     leafData, inventoryData, leafSummaries, allItemIds,
@@ -49,15 +48,9 @@ function compileLeaf(branchPath, ctx) {
   const label = branchPath.length > 0 ? branchPath.join('/') : '(root)';
   if (verbose) console.log(`\n  Branch: ${label}`);
 
-  // One traversal serves four things at once: the folder path, the inherited roles table
-  // (`protagonist` is `roles.protagonist`), the terminal node, and (inside
+  // One traversal serves the folder path, the terminal node, and (inside
   // buildCompileContext) the merged variables and components.
-  const chain = walkBranchChain(config.branches, branchPath, {
-    rootRoles: config.roles || {},
-  });
-  // Always a string: an absent `roles.protagonist` merges to `undefined`, and
-  // `resolveVariables` below requires a string input.
-  const inheritedProtagonist = chain.roles.protagonist || '';
+  const chain = walkBranchChain(config.branches, branchPath);
   const folderPath = chain.folderPath;
   const outputDir = buildBranchOutputDir(config._resolvedOutput, folderPath);
   const cctx = buildCompileContext(config, branchPath, {
@@ -65,11 +58,10 @@ function compileLeaf(branchPath, ctx) {
     diagnostics,
     configPath,
   });
-  // Expand {%var} in protagonist using branch-merged variables, before the
-  // case-insensitive match against item ids. No bus: this runs per leaf, and an undeclared
-  // name in the protagonist string is one config mistake, not one per branch — the config
-  // load and the role resolver own that diagnostic.
-  const branchProtagonist = resolveVariables(inheritedProtagonist, cctx.variables).toLowerCase() || null;
+  // Resolved ahead of the loop, once per node where it can change (`resolveProtagonists`
+  // in compile.js), so an undeclared `{%var}` in the string is one `CL0510` rather than
+  // one per leaf.
+  const branchProtagonist = protagonistByPath.get(branchPath.join('/')) || null;
   const compileContext = { branchPath, branchProtagonist, ...cctx, diagnostics };
 
   // Phase A: resolve all story cards

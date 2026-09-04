@@ -346,3 +346,96 @@ describe('the roles gap — branchFraming and the root Description', () => {
     expect(occurrences(output, 'CL0545')).toEqual([]);
   });
 });
+
+/**
+ * A `{%var}` in `roles.protagonist` is expanded once per node where the answer can change
+ * (`resolveProtagonists` in compile.js), not once per leaf. Before the hoist the leaf loop
+ * and the framing walker each expanded it themselves with no bus, so an undeclared name was
+ * an uncoded `console.warn` and the build passed with a protagonist that matched nothing.
+ * Now it is the same `CL0510` every other undeclared-variable site raises, exactly once, and
+ * the run fails.
+ */
+describe('an undeclared {%var} in roles.protagonist is one CL0510, not one per leaf', () => {
+  const files = {
+    ...BASE,
+    'Codex/items.yaml': [
+      '- id: Malcolm',
+      '  name: {display: Malcolm, full: Malcolm Vale}',
+      '  pronouns: male',
+      '  aid: {type: Character, triggers: [Malcolm]}',
+      '  render: {template: Full}',
+      '  body:',
+      '    Tagline: "Seen: {$Malcolm}."',
+    ].join('\n'),
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'roles:',
+      '  protagonist: "{%hero}"',
+      'branches:',
+      '  a: {}',
+      '  b: {}',
+      '  c: {}',
+      '',
+    ].join('\n'),
+  };
+
+  test('three leaves, one CL0510 naming the token, and the build fails', () => {
+    const { threw, output } = compileProject(files);
+    const found = occurrences(output, 'CL0510');
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain('{%hero}');
+    expect(threw).not.toBeNull();
+    expect(threw.message).toMatch(/while compiling/);
+  });
+});
+
+describe('a branch that declares the missing variable resolves its own protagonist', () => {
+  const files = {
+    ...BASE,
+    'Codex/items.yaml': [
+      '- id: Malcolm',
+      '  name: {display: Malcolm, full: Malcolm Vale}',
+      '  pronouns: male',
+      '  aid: {type: Character, triggers: [Malcolm]}',
+      '  render: {template: Full}',
+      '  body:',
+      '    Tagline: "Seen: {$Malcolm}."',
+    ].join('\n'),
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'roles:',
+      '  protagonist: "{%hero}"',
+      'branches:',
+      '  bound:',
+      '    variables: {hero: Malcolm}',
+      // Two leaves under an unbound interior node: the interior node and both leaves inherit
+      // the root's failed resolve without re-reporting it.
+      '  unbound:',
+      '    branches:',
+      '      x: {}',
+      '      y: {}',
+      '',
+    ].join('\n'),
+  };
+
+  test('the bound subtree renders "you", the unbound one renders the name, and CL0510 fires once', () => {
+    const { output, tmpDir } = compileProject(files);
+    expect(occurrences(output, 'CL0510')).toHaveLength(1);
+    const bound = fs.readFileSync(cardFile(tmpDir, 'bound', 'Character'), 'utf8');
+    expect(bound).toContain('Seen: you.');
+    // `x` and `y` render the card identically, so Phase 11 placement writes it once at the
+    // `unbound` node rather than at either leaf.
+    const unbound = fs.readFileSync(cardFile(tmpDir, 'unbound', 'Character'), 'utf8');
+    expect(unbound).toContain('Seen: Malcolm.');
+  });
+});
