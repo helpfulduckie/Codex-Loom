@@ -3,7 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { Diagnostics, LINT_LEVELS, SEVERITY } = require('./diag');
+const { Diagnostics, LINT_LEVELS, SEVERITY, SEVERITY_LABEL } = require('./diag');
 const { loadCompileConfig } = require('./config/load');
 const { syncLibrary } = require('./snapshot');
 const { findConfigEntry } = require('./loader/registry');
@@ -376,37 +376,41 @@ if (require.main === module) {
 
     try {
       const summaryParts = [];
+      const files = (n, what) => `${n} ${what} file${n === 1 ? '' : 's'}`;
 
       if (doLeafReview) {
         const { runLeafReviewMode } = require('./overview');
         const dir = path.join(outputDir, 'leaf-review');
         fs.mkdirSync(dir, { recursive: true });
-        const written = runLeafReviewMode(scenarioRoot, dir, flags.verbose);
-        summaryParts.push(`${written.length} leaf review file(s)`);
+        const result = runLeafReviewMode(scenarioRoot, dir, { log });
+        if (result) summaryParts.push(files(result.written.length, 'leaf review'));
+        else console.warn('No branch leaves found — nothing to review.');
       }
 
       if (doSeedMap) {
         const { runSeedMapMode } = require('./seedmap');
         const dir = path.join(outputDir, 'seed-map');
         fs.mkdirSync(dir, { recursive: true });
-        const result = runSeedMapMode(scenarioRoot, dir, flags.verbose);
-        if (result) summaryParts.push('2 seed map files');
+        const result = runSeedMapMode(scenarioRoot, dir, { log });
+        if (result) summaryParts.push(files(result.written.length, 'seed map'));
+        else console.warn('No branch leaves found — nothing to map.');
       }
 
       if (doOverview) {
         const { runOverviewMode } = require('./overview');
         const dir = path.join(outputDir, 'overview');
         fs.mkdirSync(dir, { recursive: true });
-        runOverviewMode(scenarioRoot, dir, flags.verbose);
-        summaryParts.push('an overview file');
+        const result = runOverviewMode(scenarioRoot, dir, { log });
+        summaryParts.push(files(result.written.length, 'overview'));
       }
 
       if (doCardSizes) {
         const { runBodySizeMode } = require('./bodysize');
         const dir = path.join(outputDir, 'card-sizes');
         fs.mkdirSync(dir, { recursive: true });
-        const result = runBodySizeMode(scenarioRoot, dir, flags.verbose);
-        if (result) summaryParts.push('2 card size files');
+        const result = runBodySizeMode(scenarioRoot, dir, { log });
+        if (result) summaryParts.push(files(result.written.length, 'card size'));
+        else console.warn('No cards or Openings found — nothing to size.');
       }
 
       if (doLint) {
@@ -429,10 +433,25 @@ if (require.main === module) {
             lintConfig = null;
           }
         }
-        const result = runLintMode(scenarioRoot, dir, flags.verbose, {
-          lintLevel: effectiveLintLevel, config: lintConfig, configPath,
+        const lintDiagnostics = new Diagnostics();
+        const result = runLintMode(scenarioRoot, dir, {
+          log, lintLevel: effectiveLintLevel, config: lintConfig, configPath,
+          diagnostics: lintDiagnostics,
         });
-        if (result) summaryParts.push(`a lint report (${result.errorCount} error(s), ${result.warnCount} warning(s))`);
+        printDiagnostics(lintDiagnostics);
+        if (result) {
+          summaryParts.push(`a lint report (${result.errorCount} error(s), ${result.warnCount} warning(s))`);
+          for (const f of result.findings) {
+            let loc;
+            if (f.leaf) loc = `leaf "${f.leaf}"`;
+            else if (f.card) loc = `card "${f.card}" in ${f.relPath}`;
+            else loc = `${f.relPath}:${f.lines[0]}`;
+            console.warn(`  ${SEVERITY_LABEL[f.severity]} [${f.category}]: ${loc} — ${f.hint}`);
+          }
+          console.log(`\nLint: ${result.errorCount} error(s), ${result.warnCount} warning(s) across ${result.fileCount} file(s).`);
+        } else {
+          console.warn('No Story Cards/Components .md files found — nothing to lint.');
+        }
       }
 
       if (summaryParts.length > 0) {

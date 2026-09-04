@@ -5,6 +5,7 @@ const path = require('path');
 
 const { discoverLeaves, sanitizeFilename } = require('./overview');
 const { resolveAt } = require('./compiledTree');
+const { NULL_LOG } = require('./log');
 
 // ── parsing ──────────────────────────────────────────────────────────────────
 
@@ -170,18 +171,18 @@ function formatSeedMapCsv(rootDirName, leafResults) {
 /**
  * Run seed-map mode on a scenario output root.
  * Discovers all leaf branches, collects their compiled cards, builds seed
- * relations, and writes a .seedmap.md and .seedmap.csv to outputDir.
- * Returns { mdPath, csvPath }.
+ * relations, and writes a .seedmap.md and .seedmap.csv to outputDir, plus one
+ * per-branch pair when there is more than one leaf.
+ * Returns `{ written, mdPath, csvPath }`, or `null` when no branch leaves were found.
+ * Prints nothing; the caller decides what to show.
  */
-function runSeedMapMode(scenarioRoot, outputDir, verbose = false) {
+function runSeedMapMode(scenarioRoot, outputDir, options = {}) {
+  const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
   const leaves      = discoverLeaves(rootAbs);
 
-  if (leaves.length === 0) {
-    console.warn('  WARN: No branch leaves found — nothing to map.');
-    return null;
-  }
+  if (leaves.length === 0) return null;
 
   const leafResults = [];
   for (const leaf of leaves) {
@@ -193,14 +194,13 @@ function runSeedMapMode(scenarioRoot, outputDir, verbose = false) {
     const relations                = buildSeedRelations(cards, peText);
     const seededInOpening          = buildOpeningFlags(cards, openingText);
     leafResults.push({ branchNames: leaf.branchNames, cards, relations, seededInOpening });
-    if (verbose) {
-      const label = leaf.branchNames.join(' - ') || rootDirName;
-      console.log(`  mapped: ${label} (${cards.length} cards, ${relations.length} seeds)`);
-    }
+    const label = leaf.branchNames.join(' - ') || rootDirName;
+    log.verbose(`  mapped: ${label} (${cards.length} cards, ${relations.length} seeds)`);
   }
 
   const mdPath  = path.join(outputDir, `${rootDirName}.seedmap.md`);
   const csvPath = path.join(outputDir, `${rootDirName}.seedmap.csv`);
+  const written = [mdPath, csvPath];
 
   fs.writeFileSync(mdPath,  formatSeedMap(rootDirName, leafResults) + '\n', 'utf8');
   fs.writeFileSync(csvPath, formatSeedMapCsv(rootDirName, leafResults) + '\n', 'utf8');
@@ -213,6 +213,7 @@ function runSeedMapMode(scenarioRoot, outputDir, verbose = false) {
       const stem       = sanitizeFilename(fileBase);
       const leafMd     = path.join(outputDir, `${stem}.seedmap.md`);
       const leafCsv    = path.join(outputDir, `${stem}.seedmap.csv`);
+      written.push(leafMd, leafCsv);
       // Format as a single-leaf doc (no "## Branch:" header — filename conveys the branch)
       const asSingle   = [{ ...leafResult, branchNames: [] }];
       fs.writeFileSync(leafMd,  formatSeedMap(rootDirName, asSingle) + '\n', 'utf8');
@@ -220,7 +221,7 @@ function runSeedMapMode(scenarioRoot, outputDir, verbose = false) {
     }
   }
 
-  return { mdPath, csvPath };
+  return { written, mdPath, csvPath };
 }
 
 module.exports = {

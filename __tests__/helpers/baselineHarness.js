@@ -43,7 +43,7 @@ const { Diagnostics } = require('../../src/diag');
 const { classifyDiff, OPAQUE } = require('./diffShape');
 
 /**
- * The report modes reachable as `(scenarioRoot, outputDir, verbose)` against an
+ * The report modes reachable as `(scenarioRoot, outputDir, options)` against an
  * already-written tree — the harness calls each one directly and it writes into `outputDir`.
  * `seed-map`, `card-sizes` and `lint` parse compiled cards back into the model, which is how
  * `emit/vl.js:parseCards` gets tested against real output; `overview` and `leaf-review` read
@@ -235,7 +235,7 @@ function describeBaselineSet(options) {
         for (const mode of project.reports) {
           const dir = reportsDirFor(project, configPath, mode);
           fs.mkdirSync(dir, { recursive: true });
-          REPORT_MODES[mode]()(scenarioRoot, dir, false);
+          REPORT_MODES[mode]()(scenarioRoot, dir);
         }
 
         if (!REPORTS_IN_PLACE) collectCompileReports(project, configPath);

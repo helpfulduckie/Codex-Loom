@@ -12,6 +12,7 @@ const {
   runLintMode,
   scanNativePlaceholders,
 } = require('../../src/lint');
+const { SEVERITY } = require('../../src/diag');
 
 function makeTmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cl-lint-test-'));
@@ -28,7 +29,7 @@ describe('scanText', () => {
   test('flags unresolved field tokens', () => {
     const findings = scanText('one of the top mages, has built {$her~} reputation');
     expect(findings).toHaveLength(1);
-    expect(findings[0]).toMatchObject({ category: 'unresolved-field-token', severity: 'ERROR', match: '{$her~}' });
+    expect(findings[0]).toMatchObject({ category: 'unresolved-field-token', severity: SEVERITY.ERROR, match: '{$her~}' });
     expect(findings[0].lines).toEqual([1]);
   });
 
@@ -56,7 +57,7 @@ describe('scanText', () => {
 
   test('flags a made-up verb marker like [does] as a suspect marker, not silently', () => {
     const findings = scanText('Aness love[does] magic research');
-    expect(findings).toContainEqual(expect.objectContaining({ category: 'suspect-verb-marker', severity: 'WARN', match: '[does]' }));
+    expect(findings).toContainEqual(expect.objectContaining({ category: 'suspect-verb-marker', severity: SEVERITY.WARN, match: '[does]' }));
   });
 
   test('flags other guessed verb-marker typos ([have], [do])', () => {
@@ -109,7 +110,7 @@ encapsulate: true
 
   test('flags bare undefined/NaN as warnings', () => {
     const findings = scanText('Age: undefined');
-    expect(findings[0]).toMatchObject({ category: 'js-interpolation-word', severity: 'WARN' });
+    expect(findings[0]).toMatchObject({ category: 'js-interpolation-word', severity: SEVERITY.WARN });
   });
 
   test('groups repeated occurrences of the same token with all line numbers', () => {
@@ -274,7 +275,7 @@ describe('scanNativePlaceholders — the §12.4 confusability check', () => {
   test('groups repeats and records every line', () => {
     const [finding] = scanNativePlaceholders('${she}\nfiller\n${she}');
     expect(finding.lines).toHaveLength(2);
-    expect(finding.severity).toBe('WARN');
+    expect(finding.severity).toBe(SEVERITY.WARN);
   });
 
   test('the hint shows the token spelling that was probably meant', () => {
@@ -297,8 +298,8 @@ describe('the compiler / lint split in the offline scanner (§12.5)', () => {
   test('level: warn keeps the opinions at WARN and does not touch the facts', () => {
     const findings = scanText('{$she} love[does] it');
     const kept = applyLevel(findings, 'warn');
-    expect(kept.find((f) => f.category === 'unresolved-field-token').severity).toBe('ERROR');
-    expect(kept.find((f) => f.category === 'suspect-verb-marker').severity).toBe('WARN');
+    expect(kept.find((f) => f.category === 'unresolved-field-token').severity).toBe(SEVERITY.ERROR);
+    expect(kept.find((f) => f.category === 'suspect-verb-marker').severity).toBe(SEVERITY.WARN);
   });
 
   test('no level leaves the list exactly as scanned', () => {
@@ -365,7 +366,7 @@ describe('runLintMode', () => {
     write(path.join(tmp, 'Branches', 'A', 'Story Cards', 'zz_Settings', 'tc.md'), TC);
     write(path.join(tmp, 'Branches', 'B', 'Story Cards', 'Character', 'y.md'), '## Y\n~~~\nencapsulate: false\n~~~\nbody\n');
 
-    const result = runLintMode(tmp, outDir, false, { config: { lint: { packs: { wtg: {} } } } });
+    const result = runLintMode(tmp, outDir, { config: { lint: { packs: { wtg: {} } } } });
     const reportText = fs.readFileSync(result.reportPath, 'utf8');
 
     const hits = reportText.split('\n').filter((l) => l.includes('CL-wtg/0002') || l.includes('(pack:wtg)'));
@@ -389,7 +390,7 @@ describe('runLintMode', () => {
     ].join('\n');
     write(path.join(tmp, 'Story Cards', 'Character', 'big.md'), over);
 
-    const result = runLintMode(tmp, outDir, false, { config: { lint: { packs: { duckieConv: {} } } } });
+    const result = runLintMode(tmp, outDir, { config: { lint: { packs: { duckieConv: {} } } } });
     const reportText = fs.readFileSync(result.reportPath, 'utf8');
     const packLines = reportText.split('\n').filter((l) => l.includes('(pack:duckieConv)'));
 

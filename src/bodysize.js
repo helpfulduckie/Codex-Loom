@@ -51,6 +51,7 @@ const path = require('path');
 
 const { buildTree, flattenNodes, resolveAt } = require('./compiledTree');
 const { LIMITS, measure }                    = require('./limits');
+const { NULL_LOG }                           = require('./log');
 
 // ── collection ────────────────────────────────────────────────────────────────
 
@@ -148,7 +149,7 @@ function measureRow(text, questions, limit, { branchLabel, target, title, kind }
  * Sorted by remaining ascending — the tightest first, which is the order the report exists
  * to produce. Ties break on branch then title so a re-run is byte-identical.
  */
-function collectRows(rootAbs, rootDirName, { verbose = false } = {}) {
+function collectRows(rootAbs, rootDirName, { log = NULL_LOG } = {}) {
   const rows  = [];
   const nodes = discoverNodes(rootAbs);
 
@@ -182,7 +183,7 @@ function collectRows(rootAbs, rootDirName, { verbose = false } = {}) {
         kind: card.kind,
       }));
     }
-    if (verbose) console.log(`  sized: ${label} (${cards.length} cards)`);
+    log.verbose(`  sized: ${label} (${cards.length} cards)`);
   }
 
   rows.sort((a, b) => (
@@ -325,18 +326,18 @@ function formatBodySizeMd(rootDirName, leafless, rows) {
  * Run card-sizes mode on a scenario output root.
  *
  * Writes `{name}.bodysize.csv` (every measured string) and `{name}.bodysize.md` (the
- * summary, and everything at NEAR or OVER) to outputDir. Returns { csvPath, mdPath }.
+ * summary, and everything at NEAR or OVER) to outputDir. Returns `{ written, csvPath,
+ * mdPath }`, or `null` when no cards or Openings were found. Prints nothing; the caller
+ * decides what to show.
  */
-function runBodySizeMode(scenarioRoot, outputDir, verbose = false) {
+function runBodySizeMode(scenarioRoot, outputDir, options = {}) {
+  const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
 
-  const { rows, nodes } = collectRows(rootAbs, rootDirName, { verbose });
+  const { rows, nodes } = collectRows(rootAbs, rootDirName, { log });
 
-  if (rows.length === 0) {
-    console.warn('  WARN: No cards or Openings found — nothing to size.');
-    return null;
-  }
+  if (rows.length === 0) return null;
 
   // The Branch column earns its place only when there is more than one node to name.
   const leafless = nodes.length === 1 && nodes[0].branchNames.length === 0;
@@ -347,7 +348,7 @@ function runBodySizeMode(scenarioRoot, outputDir, verbose = false) {
   fs.writeFileSync(csvPath, formatBodySizeCsv(leafless, rows) + '\n', 'utf8');
   fs.writeFileSync(mdPath,  formatBodySizeMd(rootDirName, leafless, rows) + '\n', 'utf8');
 
-  return { csvPath, mdPath };
+  return { written: [csvPath, mdPath], csvPath, mdPath };
 }
 
 module.exports = {

@@ -5,6 +5,7 @@ const path = require('path');
 
 const { buildTree, flattenNodes, leafNodes } = require('./compiledTree');
 const { PATH_UNSAFE_CHARS } = require('./util');
+const { NULL_LOG } = require('./log');
 
 // ── private helpers ──────────────────────────────────────────────────────────
 
@@ -195,7 +196,7 @@ function collectOverviewSections(rootDir, rootDirName) {
  * Compile a single leaf node into a .leaf.md file and write it to outputDir.
  * Filename: sanitize(branchNames.join(" - ") || rootDirName) + ".leaf.md"
  */
-function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose = false) {
+function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log = NULL_LOG) {
   const { branchNames, cards, leafDir } = leaf; // `cards` is the merged block, or null
 
   // Walk up from the leaf to find the nearest versions of each component file.
@@ -239,24 +240,23 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose = false
   if (cards) parts.push(`## Story Cards\n\n${cards}`);
 
   fs.writeFileSync(outPath, parts.join('\n\n'), 'utf8');
-  if (verbose) console.log(`  ✓  ${filename}`);
+  log.verbose(`  ✓  ${filename}`);
 }
 
 // ── exported runners ──────────────────────────────────────────────────────────
 
 /**
  * Run leaves mode on a scenario root: discover all leaves, compile each one.
- * Returns the list of output file paths written.
+ * Returns `{ written }` — the list of output file paths written — or `null` when no
+ * branch leaves were found. Prints nothing; the caller decides what to show.
  */
-function runLeafReviewMode(scenarioRoot, outputDir, verbose = false) {
+function runLeafReviewMode(scenarioRoot, outputDir, options = {}) {
+  const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
   const leaves      = discoverLeaves(rootAbs);
 
-  if (leaves.length === 0) {
-    console.warn('  WARN: No branch leaves found — nothing to compile.');
-    return [];
-  }
+  if (leaves.length === 0) return null;
 
   const isSingleLeaf = leaves.length === 1;
   const written      = [];
@@ -269,17 +269,19 @@ function runLeafReviewMode(scenarioRoot, outputDir, verbose = false) {
     const filename  = sanitizeFilename(fileBase || rootDirName) + '.leaf.md';
     written.push(path.join(outputDir, filename));
 
-    compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose);
+    compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log);
   }
 
-  return written;
+  return { written };
 }
 
 /**
  * Run overview mode: produce one .overview.md covering the whole tree.
- * Returns the output file path written.
+ * Returns `{ written, outPath }` — the output file path written. Prints nothing; the
+ * caller decides what to show.
  */
-function runOverviewMode(scenarioRoot, outputDir, verbose = false) {
+function runOverviewMode(scenarioRoot, outputDir, options = {}) {
+  const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
   const filename    = sanitizeFilename(rootDirName) + '.overview.md';
@@ -288,8 +290,8 @@ function runOverviewMode(scenarioRoot, outputDir, verbose = false) {
   const sections = collectOverviewSections(rootAbs, rootDirName);
   const doc = [`# ${rootDirName}`, ...sections].join('\n\n');
   fs.writeFileSync(outPath, doc, 'utf8');
-  if (verbose) console.log(`  ✓  ${filename}`);
-  return outPath;
+  log.verbose(`  ✓  ${filename}`);
+  return { written: [outPath], outPath };
 }
 
 module.exports = {

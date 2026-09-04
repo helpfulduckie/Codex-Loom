@@ -46,18 +46,11 @@ const card = (title, body, fence = 'triggers:\n  - thing') => (
 const run = (root) => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-bodysize-out-'));
   dirs.push(out);
-  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-  const log  = jest.spyOn(console, 'log').mockImplementation(() => {});
-  try {
-    const result = runBodySizeMode(root, out, false);
-    return result && {
-      csv: fs.readFileSync(result.csvPath, 'utf8'),
-      md:  fs.readFileSync(result.mdPath, 'utf8'),
-    };
-  } finally {
-    warn.mockRestore();
-    log.mockRestore();
-  }
+  const result = runBodySizeMode(root, out);
+  return result && {
+    csv: fs.readFileSync(result.csvPath, 'utf8'),
+    md:  fs.readFileSync(result.mdPath, 'utf8'),
+  };
 };
 
 describe('the collector is the report\'s own, not the seed map\'s', () => {

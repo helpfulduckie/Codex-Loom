@@ -168,7 +168,7 @@ describe('runLeafReviewMode', () => {
     const outDir = path.join(tmp, 'out');
     fs.mkdirSync(outDir);
     write(path.join(tmp, 'Story Cards', 'Char', 'Card.md'), 'content');
-    const written = runLeafReviewMode(tmp, outDir);
+    const { written } = runLeafReviewMode(tmp, outDir);
     expect(written).toHaveLength(1);
     fs.rmSync(tmp, { recursive: true });
   });
@@ -179,7 +179,7 @@ describe('runLeafReviewMode', () => {
     fs.mkdirSync(outDir);
     write(path.join(tmp, 'Branches', 'A', 'Story Cards', 'T', 'x.md'), 'x');
     write(path.join(tmp, 'Branches', 'B', 'Story Cards', 'T', 'y.md'), 'y');
-    const written = runLeafReviewMode(tmp, outDir);
+    const { written } = runLeafReviewMode(tmp, outDir);
     expect(written).toHaveLength(2);
     expect(written.every(p => p.endsWith('.leaf.md'))).toBe(true);
     fs.rmSync(tmp, { recursive: true });
@@ -190,7 +190,7 @@ describe('runLeafReviewMode', () => {
     const outDir = path.join(tmp, 'out');
     fs.mkdirSync(outDir);
     // No Story Cards, no Branches — but IS a leaf, just empty
-    const written = runLeafReviewMode(tmp, outDir);
+    const { written } = runLeafReviewMode(tmp, outDir);
     // one empty leaf still counts
     expect(written).toHaveLength(1);
     fs.rmSync(tmp, { recursive: true });
