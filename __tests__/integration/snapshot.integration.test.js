@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 
 const { compile } = require('../../src/compile');
+const { collectingLog } = require('../helpers/log');
 
 const CLI = path.resolve(__dirname, '../../src/cli.js');
 
@@ -145,10 +146,9 @@ describe('drift notice at compile time', () => {
     const configPath = buildProject();
     spawnSync(process.execPath, [CLI, '--snapshot', configPath], { encoding: 'utf8', cwd: tmpDir });
 
-    const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    compile(configPath);
-    const drifted = spy.mock.calls.some((args) => String(args[0]).includes('changed file(s) since last snapshot'));
-    spy.mockRestore();
+    const log = collectingLog();
+    compile(configPath, { log });
+    const drifted = log.lines.some((line) => String(line).includes('changed file(s) since last snapshot'));
     expect(drifted).toBe(false);
   });
 

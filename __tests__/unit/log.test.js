@@ -36,17 +36,9 @@ describe('only cli.js prints', () => {
 
   const STILL_PRINTING = [
     'bodysize.js',
-    'compile.js',
-    'inherit.js',
-    'leafLoop.js',
     'lint.js',
-    'outputPaths.js',
     'overview.js',
-    'reportDispatch.js',
     'seedmap.js',
-    'snapshot.js',
-    'treeFiles.js',
-    'treeWrite.js',
   ];
 
   test('no src/ module outside cli.js calls console, beyond the pinned not-yet-converted set', () => {

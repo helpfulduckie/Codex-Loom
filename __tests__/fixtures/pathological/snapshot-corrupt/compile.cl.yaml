@@ -4,7 +4,7 @@
 # Split from snapshot-mismatch/ for the same reason schema/ splits from placement/: the
 # layers abort differently. CL0115 is the one snapshot code that is an ERROR — a
 # hand-edited file under snapshot/<name>/ since the last --snapshot — and checkDrift runs
-# before reportLoadDiagnostics throws, so this project's compile aborts before anything is
+# before abortOnLoadErrors throws, so this project's compile aborts before anything is
 # written. Putting this in the same project as snapshot-mismatch/'s WARNs would mean the
 # ERROR fired first and neither CL0113 nor CL0114 was ever reached.
 #

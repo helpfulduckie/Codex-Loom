@@ -7,6 +7,8 @@ const path = require('path');
 const { Diagnostics } = require('../../src/diag');
 const { loadCompileConfig, CODES } = require('../../src/config/load');
 const { syncLibrary, checkDrift, listAllFiles } = require('../../src/snapshot');
+const { NULL_LOG } = require('../../src/log');
+const { collectingLog } = require('../helpers/log');
 
 let tmpDir;
 
@@ -147,9 +149,7 @@ describe('syncLibrary — the freeze', () => {
     syncLibrary(config);
 
     const diagnostics = new Diagnostics();
-    const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    checkDrift(config, diagnostics);
-    spy.mockRestore();
+    checkDrift(config, diagnostics, NULL_LOG);
     expect(diagnostics.all.find((d) => d.code === CODES.SNAPSHOT_FILE_UNTRACKED)).toBeUndefined();
   });
 });
@@ -229,22 +229,20 @@ describe('checkDrift — the compile-time notice', () => {
     fs.writeFileSync(cfgPath, 'version: 4\nstructure:\n  output: ./out\n  input:\n    library:\n      main: ./lib2\n', 'utf8');
     const diagnostics = new Diagnostics();
     const config = loadCompileConfig(cfgPath, { diagnostics });
-    const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    checkDrift(config, diagnostics);
-    expect(spy).not.toHaveBeenCalled();
+    const log = collectingLog();
+    checkDrift(config, diagnostics, log);
+    expect(log.lines).toEqual([]);
     expect(diagnostics.all.length).toBe(0);
-    spy.mockRestore();
   });
 
   test('prints nothing against a populated, unmodified snapshot', () => {
     const { config } = buildProject();
     syncLibrary(config);
     const diagnostics = new Diagnostics();
-    const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    checkDrift(config, diagnostics);
-    expect(spy).not.toHaveBeenCalled();
+    const log = collectingLog();
+    checkDrift(config, diagnostics, log);
+    expect(log.lines).toEqual([]);
     expect(diagnostics.all.length).toBe(0);
-    spy.mockRestore();
   });
 
   test('prints exactly one informational drift line after a live edit, and raises nothing on the bus', () => {
@@ -253,12 +251,11 @@ describe('checkDrift — the compile-time notice', () => {
     fs.writeFileSync(path.join(tmpDir, 'main-lib', 'thing.cl.yaml'), 'id: Thing\nname: Edited\n', 'utf8');
 
     const diagnostics = new Diagnostics();
-    const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    checkDrift(config, diagnostics);
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy.mock.calls[0][0]).toMatch(/Library "main" has 1 changed file\(s\) since last snapshot/);
+    const log = collectingLog();
+    checkDrift(config, diagnostics, log);
+    expect(log.lines.length).toBe(1);
+    expect(log.lines[0]).toMatch(/Library "main" has 1 changed file\(s\) since last snapshot/);
     expect(diagnostics.all.length).toBe(0);
-    spy.mockRestore();
   });
 
   test('hand-editing a file under snapshot/<name>/ raises CL0115 as an ERROR', () => {
@@ -267,9 +264,7 @@ describe('checkDrift — the compile-time notice', () => {
     fs.writeFileSync(path.join(config._resolvedSnapshot, 'main', 'thing.cl.yaml'), 'id: Thing\nname: Corrupted\n', 'utf8');
 
     const diagnostics = new Diagnostics();
-    const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    checkDrift(config, diagnostics);
-    spy.mockRestore();
+    checkDrift(config, diagnostics, NULL_LOG);
 
     const hashMismatch = diagnostics.all.find((d) => d.code === CODES.SNAPSHOT_HASH_MISMATCH);
     expect(hashMismatch).toBeDefined();
@@ -285,7 +280,7 @@ describe('checkDrift — the compile-time notice', () => {
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
 
     const diagnostics = new Diagnostics();
-    checkDrift(config, diagnostics);
+    checkDrift(config, diagnostics, NULL_LOG);
     const missingEntry = diagnostics.all.find((d) => d.code === CODES.SNAPSHOT_MISSING_ENTRY);
     expect(missingEntry).toBeDefined();
     expect(missingEntry.severity).toBe('warn');

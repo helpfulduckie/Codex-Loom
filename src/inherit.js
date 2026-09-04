@@ -21,7 +21,7 @@ const {
  */
 function placeInheritedFiles({
   deferredComponents, deferredScripts, deferredCardLeaves,
-  leaves, config, diagnostics, verbose,
+  leaves, config, diagnostics, log,
 }) {
   let filesWritten = 0;
 
@@ -53,7 +53,7 @@ function placeInheritedFiles({
         config._resolvedOutput, descriptor, text, { diagnostics }, metadata,
       );
       if (outPath) {
-        if (verbose) console.log(`    OK: ${descriptor.verboseLabel} (inherited from root) → ${outPath}`);
+        log.verbose(`    OK: ${descriptor.verboseLabel} (inherited from root) → ${outPath}`);
         filesWritten++;
       }
     } else {
@@ -62,7 +62,7 @@ function placeInheritedFiles({
           leafDir, descriptor, text, { diagnostics }, metadata,
         );
         if (outPath) {
-          if (verbose) console.log(`    OK: ${descriptor.verboseLabel} → ${outPath}`);
+          log.verbose(`    OK: ${descriptor.verboseLabel} → ${outPath}`);
           filesWritten++;
         }
       }
@@ -82,9 +82,7 @@ function placeInheritedFiles({
     if (canLift(deferredScripts, scriptsDeclaredInBranches)) {
       const [spec] = deferredScripts.values();
       copyScripts(spec, config._resolvedOutput);
-      if (verbose) {
-        console.log(`    OK: Scripts/ (inherited from root) → ${path.join(config._resolvedOutput, 'Scripts')}`);
-      }
+      log.verbose(`    OK: Scripts/ (inherited from root) → ${path.join(config._resolvedOutput, 'Scripts')}`);
     } else {
       for (const [leafDir, spec] of deferredScripts) copyScripts(spec, leafDir);
     }
@@ -114,7 +112,7 @@ function placeInheritedFiles({
           .sort((a, b) => a.sortKey.localeCompare(b.sortKey) || a.rendered.localeCompare(b.rendered))
           .map((c) => c.rendered);
         const outPath = writeOutput(leaf.outputDir, type, items);
-        if (verbose) console.log(`    OK: ${type} (${items.length} card(s)) → ${outPath}`);
+        log.verbose(`    OK: ${type} (${items.length} card(s)) → ${outPath}`);
         filesWritten += 1;
       }
     }
@@ -194,7 +192,7 @@ function placeInheritedFiles({
           .sort((a, b) => a.sortKey.localeCompare(b.sortKey) || a.rendered.localeCompare(b.rendered))
           .map((c) => c.rendered);
         const outPath = writeOutput(dir, type, items);
-        if (verbose) console.log(`    OK: ${type} (${items.length} card(s)) → ${outPath}`);
+        log.verbose(`    OK: ${type} (${items.length} card(s)) → ${outPath}`);
         filesWritten += 1;
       }
     }

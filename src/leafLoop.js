@@ -32,8 +32,8 @@ const LIFT_EXCLUDED_COMPONENTS = new Set(['opening', 'adventureDescription']);
  */
 function compileLeaf(branchPath, ctx) {
   const {
-    config, configPath, options, verbose,
-    diagnostics, flushDiagnostics,
+    config, configPath, options, log,
+    diagnostics,
     allItemDefs, registry, templates, partials,
     fieldTable, fieldAudit, cardTypeAudit,
     rootDirName, captureReports,
@@ -46,7 +46,7 @@ function compileLeaf(branchPath, ctx) {
 
   let leafFiles = 0;
   const label = branchPath.length > 0 ? branchPath.join('/') : '(root)';
-  if (verbose) console.log(`\n  Branch: ${label}`);
+  log.verbose(`\n  Branch: ${label}`);
 
   // One traversal serves the folder path, the terminal node, and (inside
   // buildCompileContext) the merged variables and components.
@@ -111,7 +111,6 @@ function compileLeaf(branchPath, ctx) {
     // rules read (`evaluatePackItemRules`).
     lint: cctx.lint, variables: cctx.variables, resolvedItems,
   });
-  flushDiagnostics();
 
   if (options.inventory) {
     inventoryData.push(
@@ -215,7 +214,7 @@ function compileLeaf(branchPath, ctx) {
       );
       wrote = !!outPath;
       if (outPath) {
-        if (verbose) console.log(`    OK: ${descriptor.verboseLabel} → ${outPath}`);
+        log.verbose(`    OK: ${descriptor.verboseLabel} → ${outPath}`);
         leafFiles += 1;
       }
     } else if (text) {

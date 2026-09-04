@@ -1,7 +1,7 @@
 # The pathological fixture, schema layer — a config that cannot be loaded.
 #
 # Split from ../placement/ because the layers abort differently (§4.3). A schema violation
-# is an ERROR that stops the compile *before anything is written*: `reportLoadDiagnostics`
+# is an ERROR that stops the compile *before anything is written*: `abortOnLoadErrors`
 # throws as soon as the config is validated, so nothing downstream runs and no placement
 # diagnostic is ever raised. Putting both classes in one project would mean the load errors
 # fired and everything the placement fixture exists to demonstrate silently vanished — the

@@ -20,24 +20,24 @@ const { applyTokenPass } = require('./model/pronouns');
  * root visits.
  */
 function writeTreeFiles({
-  config, configPath, verbose, diagnostics,
+  config, configPath, log, diagnostics,
   placeholderState, componentLoader, registry, roleState, protagonistByPath,
 }) {
   writeFramingRecursive(
     config, config._resolvedOutput, config._base, configPath,
     config._variables || config.variables || {},
-    verbose, diagnostics, placeholderState.usage,
+    log, diagnostics, placeholderState.usage,
     componentLoader.load, registry, roleState.onUsed, protagonistByPath,
   );
 
   writeLabelsRecursive(
     config, config._resolvedOutput, config._variables || config.variables || {}, config.variables || {},
-    verbose, diagnostics, configPath, placeholderState.usage,
+    log, diagnostics, configPath, placeholderState.usage,
   );
 
   writePlaceholdersRecursive(
     config, config._resolvedOutput,
-    config._variables || config.variables || {}, configPath, diagnostics, verbose,
+    config._variables || config.variables || {}, configPath, diagnostics, log,
     placeholderState.usage, placeholderState.declarations, placeholderState.duplicates,
   );
 }
@@ -51,7 +51,7 @@ function writeTreeFiles({
  * collision are recorded on the buses passed in.
  */
 function writeScenarioBlurb({
-  config, configPath, verbose, diagnostics,
+  config, configPath, log, diagnostics,
   rootVariables, registry, placeholderState, roleState, componentLoader, gaps, descriptionLeaves,
 }) {
   const descRequested = config.components && config.components.description != null;
@@ -126,7 +126,7 @@ function writeScenarioBlurb({
       { diagnostics }, descMetadata,
     );
     if (descPath) {
-      if (verbose) console.log(`  OK: Description → ${descPath}`);
+      log.verbose(`  OK: Description → ${descPath}`);
       // Both description keys write `Description.md`, and at an unbranched root they write
       // the same one — the root is its own leaf there, so the leaf loop has already been
       // through. Reported rather than silently resolved, because which of the two an author

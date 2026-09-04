@@ -15,6 +15,7 @@ const {
 const { resolveCrossItemRenderFunctions } = require('../../src/crossItem');
 const { buildRegistry, resolveIncludes } = require('../../src/loader/registry');
 const { Diagnostics, CODES: DIAG_CODES } = require('../../src/diag');
+const { NULL_LOG } = require('../../src/log');
 const template = require('../../src/template');
 
 // ── buildBranchOutputDir ──────────────────────────────────────────────────────
@@ -1047,7 +1048,7 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
 
   test('an interior node is swept — the case Phase 4 raised', () => {
     const nodes = buildTree();
-    cleanAndArchive(config(TIER), [['tier', 'alpha'], ['tier', 'beta']]);
+    cleanAndArchive(config(TIER), [['tier', 'alpha'], ['tier', 'beta']], NULL_LOG);
 
     expect(fs.existsSync(path.join(nodes.interior, 'Placeholders.yaml'))).toBe(false);
     expect(fs.existsSync(path.join(nodes.interior, 'Label.md'))).toBe(false);
@@ -1056,7 +1057,7 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
 
   test('the root of a branched project is swept too', () => {
     const nodes = buildTree();
-    cleanAndArchive(config(TIER), [['tier', 'alpha'], ['tier', 'beta']]);
+    cleanAndArchive(config(TIER), [['tier', 'alpha'], ['tier', 'beta']], NULL_LOG);
 
     expect(fs.existsSync(path.join(nodes.root, 'Placeholders.yaml'))).toBe(false);
     expect(fs.existsSync(path.join(nodes.root, 'Label.md'))).toBe(false);
@@ -1064,7 +1065,7 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
 
   test('leaves are still swept, and the tree itself survives', () => {
     const nodes = buildTree();
-    cleanAndArchive(config(TIER), [['tier', 'alpha'], ['tier', 'beta']]);
+    cleanAndArchive(config(TIER), [['tier', 'alpha'], ['tier', 'beta']], NULL_LOG);
 
     expect(fs.existsSync(path.join(nodes.alpha, 'Placeholders.yaml'))).toBe(false);
     expect(fs.existsSync(nodes.alpha)).toBe(true);
@@ -1076,7 +1077,7 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
     // Nothing but compiler output, so there is nothing to keep. Archiving is for what the
     // compiler does not own; see the next test.
     const nodes = buildTree();
-    cleanAndArchive(config({ tier: { branches: { alpha: {} } } }), [['tier', 'alpha']]);
+    cleanAndArchive(config({ tier: { branches: { alpha: {} } } }), [['tier', 'alpha']], NULL_LOG);
 
     expect(fs.existsSync(nodes.beta)).toBe(false);
     expect(fs.existsSync(nodes.alpha)).toBe(true);
@@ -1087,7 +1088,7 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
     const nodes = buildTree();
     fs.writeFileSync(path.join(nodes.beta, 'notes.txt'), 'written by hand', 'utf8');
 
-    cleanAndArchive(config({ tier: { branches: { alpha: {} } } }), [['tier', 'alpha']]);
+    cleanAndArchive(config({ tier: { branches: { alpha: {} } } }), [['tier', 'alpha']], NULL_LOG);
 
     const archive = path.join(outDir, 'Archive');
     const stamp = fs.readdirSync(archive)[0];
@@ -1100,7 +1101,7 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
     // Ancestors of a live leaf are live, so a stale node can never hold one — which is
     // what makes taking an interior node whole safe rather than destructive.
     buildTree();
-    cleanAndArchive(config({ other: {} }), [['other']]);
+    cleanAndArchive(config({ other: {} }), [['other']], NULL_LOG);
 
     expect(fs.existsSync(path.join(outDir, 'Branches', 'tier'))).toBe(false);
   });
@@ -1112,7 +1113,7 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
     const nodes = buildTree();
     fs.writeFileSync(path.join(nodes.alpha, 'notes.txt'), 'written by hand', 'utf8');
 
-    cleanAndArchive(config({ other: {} }), [['other']]);
+    cleanAndArchive(config({ other: {} }), [['other']], NULL_LOG);
 
     const archive = path.join(outDir, 'Archive');
     const stamp = fs.readdirSync(archive)[0];

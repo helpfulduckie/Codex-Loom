@@ -44,6 +44,7 @@ const { finalizeDiagnostics } = require('./reportDispatch');
 const {
   PlaceholderTracker, RoleTracker, GapList, ComponentLoader,
 } = require('./compileState');
+const { NULL_LOG } = require('./log');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -821,30 +822,19 @@ function renderBranchItems(resolvedItems, registry, templates, partials, branchP
 }
 
 /**
- * Print what the loading phase has collected since `since`, and abort if any of it —
- * checked across the whole bus, not just what's new — is an error.
+ * Abort if the loading phase has raised an error anywhere on the bus.
  *
  * Errors stop the compile before anything is written. A schema violation means some part
  * of what the author wrote is not being read, so continuing would emit a tree that looks
- * complete and is quietly missing something.
- *
- * Takes a cursor and returns the new one so a caller can check more than once — config
- * loading and item/library loading each add to the same bus, and a config-level error must
- * stop the compile before item loading ever touches disk, not only once both have run.
- * Without the cursor, calling this twice would reprint whatever the first call already
- * printed.
+ * complete and is quietly missing something. Nothing here prints: the caller reaches every
+ * diagnostic through `options.diagnostics`, which `compile()` merges in its `finally` on
+ * every exit path, including this throw.
  */
-function reportLoadDiagnostics(diagnostics, since = 0) {
-  const items = diagnostics.all;
-  for (const diag of items.slice(since)) {
-    if (diag.severity === 'error') console.error(diag.format());
-    else console.warn(diag.format());
-  }
+function abortOnLoadErrors(diagnostics) {
   if (diagnostics.hasErrors()) {
     const count = diagnostics.errors.length;
     throw new Error(`${count} error${count === 1 ? '' : 's'} while loading; nothing was compiled.`);
   }
-  return items.length;
 }
 
 // ── Main compile function ─────────────────────────────────────────────────────
@@ -852,13 +842,16 @@ function reportLoadDiagnostics(diagnostics, since = 0) {
 /**
  * Compile a project, optionally handing the caller the diagnostics as data.
  *
- * `compileRun` reports through the console and signals failure by throwing a *count* —
- * which is right for an author at a terminal and useless to a test that wants to assert
- * on codes. Passing `options.diagnostics` (a `Diagnostics`) collects everything both
- * internal buses saw, on every exit path: the early load throw, the component-gap throw,
- * the final error throw, and success alike. That is what the `finally` is for — a compile
- * that failed is precisely the one whose diagnostics are worth reading, so merging only
- * on the success path would collect nothing in the interesting case.
+ * Nothing below this function prints. Diagnostics reach the caller through
+ * `options.diagnostics`, progress through `options.log` — a `{ info(line), verbose(line) }`
+ * pair (`src/log.js`; `NULL_LOG` when the caller passes none). Passing `options.diagnostics`
+ * (a `Diagnostics`) collects everything both internal buses saw, on every exit path: the
+ * early load throw, the component-gap throw, the final error throw, and success alike.
+ * That is what the `finally` is for — a compile that failed is precisely the one whose
+ * diagnostics are worth reading, so merging only on the success path would collect nothing
+ * in the interesting case. A throw still signals failure, and its message still says "see
+ * the errors above" — true because the CLI prints the whole bus before it prints the fatal
+ * line, not because anything here printed them.
  *
  * The buses stay separate internally because their abort semantics differ: a load error
  * stops the compile before anything is written, a compile error lets the tree land and
@@ -878,8 +871,8 @@ function compile(configPath, options = {}) {
 }
 
 function compileRun(configPath, options, buses) {
-  // ── 1. Buses & report closures ─────────────────────────────────────────────
-  const verbose = !!options.verbose;
+  // ── 1. Buses & log ────────────────────────────────────────────────────────
+  const log = options.log || NULL_LOG;
 
   // One bus for everything the loading phase reports, so item schema violations are
   // collected with their source positions and reported together rather than as a stream
@@ -893,14 +886,6 @@ function compileRun(configPath, options, buses) {
   // end and the author gets both the artifact and a failed build.
   const compileDiagnostics = new Diagnostics();
   buses.compile = compileDiagnostics;
-  let compileCursor = 0;
-  const reportCompileDiagnostics = () => {
-    for (const diag of compileDiagnostics.all.slice(compileCursor)) {
-      if (diag.severity === 'error') console.error(diag.format());
-      else console.warn(diag.format());
-    }
-    compileCursor = compileDiagnostics.length;
-  };
 
   // ── 2. Config, drift, templates ────────────────────────────────────────────
   const config = loadCompileConfig(configPath, { diagnostics: loadDiagnostics, live: options.live });
@@ -908,14 +893,14 @@ function compileRun(configPath, options, buses) {
   // The snapshot drift notice: a complete no-op unless the project has opted into a
   // snapshot. Drift is informational — never a warning, never a non-zero exit; the one
   // exception is CL0115, corruption of the frozen copy itself, which is an ERROR.
-  if (config) checkDrift(config, loadDiagnostics);
+  if (config) checkDrift(config, loadDiagnostics, log);
 
   // Checked immediately, before any filesystem work — an unknown key, a missing required
   // field, or a bad path token in compile.yaml itself must stop the compile before
   // mkdirSync ever runs, not merely before the compiled tree is written. Folding this into
   // the single check below meant a config error still created the output directory and
   // read library/item files from disk before the throw was reached.
-  let loadCursor = reportLoadDiagnostics(loadDiagnostics);
+  abortOnLoadErrors(loadDiagnostics);
 
   // The lint-severity ceiling, set here because this is the first moment both halves of it
   // exist: `lint.level` has just been read off the config, and `--lint-level` came in with
@@ -936,8 +921,8 @@ function compileRun(configPath, options, buses) {
   // double envelope on every card it owns, and the report names the files. The
   // notes-template check needs both halves in hand, so it runs against the same bus.
   checkConfigNotesTemplates(config, templates, loadDiagnostics, configPath, fieldTable);
-  loadCursor = reportLoadDiagnostics(loadDiagnostics, loadCursor);
-  console.log(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
+  abortOnLoadErrors(loadDiagnostics);
+  log.info(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
   // ── 3. Registries & audits ────────────────────────────────────────────────────
   // The unread-field and card-type audits, built once so their per-compile dedupes span
@@ -952,7 +937,7 @@ function compileRun(configPath, options, buses) {
   // itemCount, not size: an id two library sets both define holds no plain key, and
   // "loaded 40 items" would otherwise quietly drop the very items worth mentioning.
   if (canonRegistry.itemCount > 0) {
-    console.log(`Loaded ${canonRegistry.itemCount} library item(s).`);
+    log.info(`Loaded ${canonRegistry.itemCount} library item(s).`);
   }
 
   // Load project items
@@ -961,10 +946,10 @@ function compileRun(configPath, options, buses) {
   // Resolve includes
   const includedItems = resolveIncludes(rawProjectItems, canonRegistry, config, { diagnostics: loadDiagnostics });
   if (includedItems.length > 0) {
-    console.log(`Loaded ${includedItems.length} included library item(s).`);
+    log.info(`Loaded ${includedItems.length} included library item(s).`);
   }
 
-  loadCursor = reportLoadDiagnostics(loadDiagnostics, loadCursor);
+  abortOnLoadErrors(loadDiagnostics);
 
   // include: directives are spent once resolveIncludes has read them — drop them here so
   // nothing downstream has to know they ever existed. `import:` defs are NOT dropped:
@@ -974,7 +959,7 @@ function compileRun(configPath, options, buses) {
   const allItemDefs = [...projectItems, ...includedItems];
 
   const projectRegistry = buildRegistry(projectItems, 'project', { diagnostics: loadDiagnostics });
-  console.log(`Loaded ${projectRegistry.size} project item definition(s).`);
+  log.info(`Loaded ${projectRegistry.size} project item definition(s).`);
 
   const registry = mergeRegistries(canonRegistry, projectRegistry, { diagnostics: loadDiagnostics });
 
@@ -1010,11 +995,11 @@ function compileRun(configPath, options, buses) {
   const leaves = enumerateLeaves(config.branches);
 
   if (options.clean) {
-    console.log('\nClean build: clearing output folders...');
-    cleanAndArchive(config, leaves);
+    log.info('\nClean build: clearing output folders...');
+    cleanAndArchive(config, leaves, log);
   }
 
-  console.log(`\nCompiling ${leaves.length} branch leaf/leaves...`);
+  log.info(`\nCompiling ${leaves.length} branch leaf/leaves...`);
 
   let totalFiles = 0;
   const allItemIds = new Set();
@@ -1076,8 +1061,8 @@ function compileRun(configPath, options, buses) {
 
   // ── 5. The leaf loop ──────────────────────────────────────────────────────────
   totalFiles += runLeafLoop({
-    leaves, config, configPath, options, verbose,
-    diagnostics: compileDiagnostics, flushDiagnostics: reportCompileDiagnostics,
+    leaves, config, configPath, options, log,
+    diagnostics: compileDiagnostics,
     allItemDefs, registry, templates, partials,
     fieldTable, fieldAudit, cardTypeAudit,
     rootDirName, captureReports,
@@ -1092,33 +1077,31 @@ function compileRun(configPath, options, buses) {
   // Convention packs, run over the cards each leaf just rendered while they are still
   // keyed per leaf. Dormant unless a project declares `lint.packs`.
   runPackChecks(config, deferredCardLeaves, configPath, compileDiagnostics);
-  reportCompileDiagnostics();
 
   // ── 7. Inheritance passes ─────────────────────────────────────────────────────
   totalFiles += placeInheritedFiles({
     deferredComponents, deferredScripts, deferredCardLeaves,
-    leaves, config, diagnostics: compileDiagnostics, verbose,
+    leaves, config, diagnostics: compileDiagnostics, log,
   });
 
   // ── 8. Tree-level writes ──────────────────────────────────────────────────────
   // Framing, labels and placeholder questions, each at a node the leaf loop never visits.
   // Root-level branchFraming and the root Label land in these walkers' own root visits.
   writeTreeFiles({
-    config, configPath, verbose, diagnostics: compileDiagnostics,
+    config, configPath, log, diagnostics: compileDiagnostics,
     placeholderState, componentLoader, registry, roleState, protagonistByPath,
   });
-  reportCompileDiagnostics();
 
   // The scenario blurb, written once to the output root alongside Branches/.
   writeScenarioBlurb({
-    config, configPath, verbose, diagnostics: compileDiagnostics,
+    config, configPath, log, diagnostics: compileDiagnostics,
     rootVariables, registry, placeholderState, roleState, componentLoader, gaps, descriptionLeaves,
   });
 
   // ── 9. Project diagnostics, summary, reports, finalize ────────────────────────
   finalizeDiagnostics({
-    config, configPath, options, verbose,
-    diagnostics: compileDiagnostics, flushDiagnostics: reportCompileDiagnostics,
+    config, configPath, options, log,
+    diagnostics: compileDiagnostics,
     descriptionLeaves, openingLeaves, leafSummaries,
     allItemIds, totalFiles, componentLoader,
     roleState, placeholderState, gaps, fieldAudit, cardTypeAudit,
@@ -1136,7 +1119,6 @@ function compileRun(configPath, options, buses) {
   // Item-resolution and emit ERRORs do not stop the compile: aborting mid-tree would leave
   // a half-written branch behind, and wrong output the author can read beats no output at
   // all. They do fail the run — the tree is written, then this throws and the CLI exits 1.
-  reportCompileDiagnostics();
   if (compileDiagnostics.hasErrors()) {
     const count = compileDiagnostics.errors.length;
     throw new Error(

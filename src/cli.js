@@ -3,12 +3,20 @@
 
 const fs = require('fs');
 const path = require('path');
-const { Diagnostics, LINT_LEVELS } = require('./diag');
+const { Diagnostics, LINT_LEVELS, SEVERITY } = require('./diag');
 const { loadCompileConfig } = require('./config/load');
 const { syncLibrary } = require('./snapshot');
 const { findConfigEntry } = require('./loader/registry');
 const { CONFIG_BASENAMES } = require('./util');
 const { compile } = require('./compile');
+
+/** The one place a diagnostic reaches a terminal: errors to stderr, everything else to stderr as warnings. */
+function printDiagnostics(bus) {
+  for (const diag of bus.all) {
+    if (diag.severity === SEVERITY.ERROR) console.error(diag.format());
+    else console.warn(diag.format());
+  }
+}
 
 /**
  * Resolve configPath, scenarioRoot, and outputDir from a CLI positional argument.
@@ -36,10 +44,7 @@ function resolveArgs(positional) {
   if (cfgPath) {
     const resolveDiagnostics = new Diagnostics();
     const cfg = loadCompileConfig(cfgPath, { diagnostics: resolveDiagnostics });
-    for (const diag of resolveDiagnostics.all) {
-      if (diag.severity === 'error') console.error(diag.format());
-      else console.warn(diag.format());
-    }
+    printDiagnostics(resolveDiagnostics);
     if (resolveDiagnostics.hasErrors()) {
       const count = resolveDiagnostics.errors.length;
       throw new Error(`Configuration has ${count} error${count === 1 ? '' : 's'}; nothing was compiled.`);
@@ -168,6 +173,11 @@ if (require.main === module) {
     if (idx !== -1) flagIdxs.add(idx);
   }
 
+  const log = {
+    info: (line) => console.log(line),
+    verbose: flags.verbose ? (line) => console.log(line) : () => {},
+  };
+
   // `--lint-level` is a value flag, so it is parsed apart from the boolean table above and
   // in both spellings: `--lint-level=warn` and `--lint-level warn`. It is deliberately not
   // folded into `--verbose` (§12.5) — verbosity is about compile progress, this is about
@@ -287,15 +297,22 @@ if (require.main === module) {
         process.exit(1);
       }
     } else {
+      const compileDiagnostics = new Diagnostics();
+      let failure = null;
       try {
         compile(configPath, {
-          clean: flags.clean, verbose: flags.verbose,
+          clean: flags.clean, log,
           diff: flags.diff, annotate: flags.annotate, inventory: flags.inventory,
           schemaTables: flags.schemaTables,
           lintLevel, live: flags.live,
+          diagnostics: compileDiagnostics,
         });
       } catch (err) {
-        console.error(`\nFatal: ${err.message}`);
+        failure = err;
+      }
+      printDiagnostics(compileDiagnostics);
+      if (failure) {
+        console.error(`\nFatal: ${failure.message}`);
         process.exit(1);
       }
     }
@@ -311,18 +328,15 @@ if (require.main === module) {
         const snapshotDiagnostics = new Diagnostics();
         const config = loadCompileConfig(configPath, { diagnostics: snapshotDiagnostics, live: true });
         if (!config) {
-          for (const diag of snapshotDiagnostics.all) console.error(diag.format());
+          printDiagnostics(snapshotDiagnostics);
           process.exit(1);
         }
         if (!config._resolvedSnapshot) {
           console.error('structure.input.snapshot is not set in compile.yaml; nothing to sync.');
           process.exit(1);
         }
-        const result = syncLibrary(config, { verbose: flags.verbose, diagnostics: snapshotDiagnostics });
-        for (const diag of snapshotDiagnostics.all) {
-          if (diag.severity === 'error') console.error(diag.format());
-          else console.warn(diag.format());
-        }
+        const result = syncLibrary(config, { log, diagnostics: snapshotDiagnostics });
+        printDiagnostics(snapshotDiagnostics);
         console.log(
           `\nSynced ${result.entries.length} entr${result.entries.length === 1 ? 'y' : 'ies'} `
           + `(${result.filesWritten} file(s)) to:\n  ${config._resolvedSnapshot}\n`
@@ -411,7 +425,7 @@ if (require.main === module) {
             lintConfig = null;
           }
           if (lintConfigDiagnostics.hasErrors()) {
-            for (const diag of lintConfigDiagnostics.all) console.error(diag.format());
+            printDiagnostics(lintConfigDiagnostics);
             lintConfig = null;
           }
         }

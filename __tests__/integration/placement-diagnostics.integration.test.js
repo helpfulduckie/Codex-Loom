@@ -20,6 +20,7 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { compile } = require('../../src/compile');
+const { Diagnostics } = require('../../src/diag');
 
 const dirs = [];
 
@@ -27,9 +28,9 @@ const dirs = [];
  * Compile a one-off project and hand back what it said.
  *
  * `compile` throws when it raised an ERROR — the message is a count, not the diagnostics —
- * so the diagnostics themselves are read off the console, which is where an author reads
- * them. The throw is caught and reported as `threw` rather than swallowed: whether a code
- * is an ERROR or a WARN is half of what these tests assert.
+ * so the diagnostics themselves are read off `options.diagnostics`, the same bus the CLI
+ * reads to print them. The throw is caught and reported as `threw` rather than swallowed:
+ * whether a code is an ERROR or a WARN is half of what these tests assert.
  */
 function compileProject(files) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-invariants-'));
@@ -42,18 +43,14 @@ function compileProject(files) {
     fs.writeFileSync(full, content.replace(/%TMP%/g, slash(tmpDir)), 'utf8');
   }
 
-  const lines = [];
-  const capture = (...args) => { lines.push(args.join(' ')); };
-  const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(capture));
+  const diagnostics = new Diagnostics();
   let threw = null;
   try {
-    compile(path.join(tmpDir, 'compile.yaml'));
+    compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
   } catch (err) {
     threw = err;
-  } finally {
-    spies.forEach((s) => s.mockRestore());
   }
-  return { output: lines.join('\n'), threw, tmpDir };
+  return { output: diagnostics.all.map((d) => d.format()).join('\n'), threw, tmpDir };
 }
 
 /**

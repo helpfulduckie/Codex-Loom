@@ -17,6 +17,7 @@ const crypto = require('crypto');
 const { CODES, loadManifest, isOutOfBase } = require('./config/load');
 const { buildCanonRegistry } = require('./loader/registry');
 const { Diagnostics } = require('./diag');
+const { NULL_LOG } = require('./log');
 
 /** Matches an applyTokenPass-style brace token: `{$X}`, `{$X.pronoun}`, `{$X's}`, etc. */
 const ROLE_TOKEN_RE = /\{\$([^{}]+)\}/g;
@@ -213,7 +214,7 @@ function diffEntryLines(entry, prevSection, liveHashes) {
  * exists and parses, writes a file-level change summary to `<reports>/snapshot/sync-diff.txt`.
  */
 function syncLibrary(config, options = {}) {
-  const { verbose = false, diagnostics } = options;
+  const { log = NULL_LOG, diagnostics } = options;
   const snapshotDir = config._resolvedSnapshot;
   if (!snapshotDir) {
     throw new Error('structure.input.snapshot is not set; nothing to sync.');
@@ -286,7 +287,7 @@ function syncLibrary(config, options = {}) {
     if (entry.kind === 'library') newManifest.library[entry.name] = section;
     else newManifest.templates[entry.name] = section;
 
-    if (verbose) console.log(`  synced ${entryLabel(entry)}: ${files.length} file(s)`);
+    log.verbose(`  synced ${entryLabel(entry)}: ${files.length} file(s)`);
   }
 
   if (config._resolvedReports) {
@@ -307,7 +308,7 @@ function syncLibrary(config, options = {}) {
  * covers every project until it opts in (§Decision 4: drift is expected and comfortable,
  * never a warning, never a non-zero exit).
  */
-function checkDrift(config, diagnostics) {
+function checkDrift(config, diagnostics, log) {
   const snapshotDir = config._resolvedSnapshot;
   if (!snapshotDir) return;
   const manifestPath = path.join(snapshotDir, 'manifest.json');
@@ -343,7 +344,7 @@ function checkDrift(config, diagnostics) {
       if (!(rel in liveHashes)) changedCount += 1;
     }
     if (changedCount > 0) {
-      console.log(
+      log.info(
         `${entryLabel(entry)} has ${changedCount} changed file(s) since last snapshot `
         + `(${syncedDate}). Run --snapshot to review.`
       );

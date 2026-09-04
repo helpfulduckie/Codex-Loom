@@ -26,7 +26,7 @@ wrongly, and either way the bytes are not the thing under test.
 
 **The layers abort differently (§4.3), and Phase 7 added a second axis that aborts the
 same way.** A schema violation is an ERROR that stops the compile before anything is
-written: `reportLoadDiagnostics` throws as soon as the config is validated. Putting a bad
+written: `abortOnLoadErrors` throws as soon as the config is validated. Putting a bad
 config in the placement project would mean the load errors fired and every placement
 diagnostic silently vanished — the suite would still be red, and would prove nothing about
 the checks the fixture was written for. `checkDrift` (Phase 7) runs at the same point in
@@ -101,7 +101,7 @@ rather than inventing a whitelist.
 - **One deliberate mistake per item**, named in a comment with the code it should raise.
 - **Nothing here is an example.** Every file in both projects is wrong somewhere.
 - **An item-level *schema* ERROR cannot live here at all**, and it is worth knowing why
-  before trying. `reportLoadDiagnostics` throws the moment loading finishes with any ERROR,
+  before trying. `abortOnLoadErrors` throws the moment loading finishes with any ERROR,
   so a bad key or value on an item in `placement/` would abort that project's compile and
   take every placement row with it — while `schema/` never reaches item loading, because its
   config violations abort first. Both projects were checked; neither can carry one. Item

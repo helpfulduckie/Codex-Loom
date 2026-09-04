@@ -121,7 +121,7 @@ describe('pathological fixture', () => {
   /**
    * The snapshot-corrupt project: a frozen file hand-edited since the manifest was
    * written. CL0115 is the one snapshot code that is an ERROR, and checkDrift runs before
-   * reportLoadDiagnostics throws — so, like schema/, this project aborts before anything
+   * abortOnLoadErrors throws — so, like schema/, this project aborts before anything
    * downstream runs.
    */
   test('a hand-edited snapshot file aborts the load', () => {

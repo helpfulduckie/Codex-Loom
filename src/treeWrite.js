@@ -100,7 +100,7 @@ function writeComponentFile(outputDir, filename, content, sink) {
  * `onRoleUsed` arrives as a parameter rather than a closure because this is a top-level
  * function with no closure over `compile()`'s scope.
  */
-function writeFramingRecursive(rootNode, outputBase, configBase, configPath, variables, verbose = false, diagnostics, usage = null, loadSectioned = null, registry = null, onRoleUsed = null, protagonistByPath = null) {
+function writeFramingRecursive(rootNode, outputBase, configBase, configPath, variables, log, diagnostics, usage = null, loadSectioned = null, registry = null, onRoleUsed = null, protagonistByPath = null) {
   // The walker visits the project root as a node (Phase 11 Step 0), so an unbranched
   // project still receives its root visit — that is where the "no branches" warn lands.
   if (!rootNode || typeof rootNode !== 'object') return;
@@ -211,7 +211,7 @@ function writeFramingRecursive(rootNode, outputBase, configBase, configPath, var
             diagnostics, label: isRoot ? 'the project root (framing)' : `branch "${name}" (framing)`,
           });
           const outPath = writeComponentFile(nodeOutput, 'Opening.md', framingText, { diagnostics });
-          if (verbose) console.log(isRoot ? `    OK: Root OpeningChoice → ${outPath}` : `    OK: BranchFraming → ${outPath}`);
+          log.verbose(isRoot ? `    OK: Root OpeningChoice → ${outPath}` : `    OK: BranchFraming → ${outPath}`);
         }
       }
     }
@@ -237,7 +237,7 @@ function writeFramingRecursive(rootNode, outputBase, configBase, configPath, var
  * Node-level, not leaf-level, which is why it uses the tree visitor rather than the
  * leaf loop: a branch label belongs to the node the player is choosing.
  */
-function writeLabelsRecursive(rootNode, outputBase, variables, rootVariables, verbose = false, diagnostics, configPath = null, usage = null) {
+function writeLabelsRecursive(rootNode, outputBase, variables, rootVariables, log, diagnostics, configPath = null, usage = null) {
   walkBranchTree(rootNode, ({ name, node, path: path_, isRoot, state }) => {
     const nodeOutput = isRoot ? state.outputBase : path.join(state.outputBase, 'Branches', name);
     const branchVars = (node && node.variables)
@@ -272,7 +272,7 @@ function writeLabelsRecursive(rootNode, outputBase, variables, rootVariables, ve
           + 'joke, but never substituted.',
       });
       fs.writeFileSync(labelPath, rootLabel + '\n', 'utf8');
-      if (verbose) console.log(`  OK: Label → ${labelPath}`);
+      log.verbose(`  OK: Label → ${labelPath}`);
       return { outputBase: nodeOutput, variables: branchVars, table };
     }
 
@@ -306,7 +306,7 @@ function writeLabelsRecursive(rootNode, outputBase, variables, rootVariables, ve
     // title the author wrote is reportable whether or not the file lands.
     if (labelText !== name) {
       fs.writeFileSync(outPath, labelText + '\n', 'utf8');
-      if (verbose) console.log(`    OK: Label → ${outPath}`);
+      log.verbose(`    OK: Label → ${outPath}`);
     } else if (fs.existsSync(outPath)) {
       // A prior compile of a since-shortened title left one behind. Harmless to VL, which
       // would read it and get the same string it now defaults to, but noise in the tree
@@ -331,7 +331,7 @@ function writeLabelsRecursive(rootNode, outputBase, variables, rootVariables, ve
  * key carries that key's question inline — see `emit/placeholders.js` for why the nesting
  * cannot be left to VL.
  */
-function writePlaceholdersRecursive(rootNode, outputBase, variables, configPath, diagnostics, verbose = false, usage = null, declarations = null, duplicates = null) {
+function writePlaceholdersRecursive(rootNode, outputBase, variables, configPath, diagnostics, log, usage = null, declarations = null, duplicates = null) {
   const onWarn = (code, message, file) => diagnostics.add(
     severityOf(code), code, message, { file: file || configPath },
   );
@@ -364,7 +364,7 @@ function writePlaceholdersRecursive(rootNode, outputBase, variables, configPath,
     const outPath = writeNodePlaceholders(nodeOutput, node, table, branchVars, {
       onWarn, file: configPath, diagnostics, usage, usagePath: path_.join('/'), duplicates,
     });
-    if (outPath && verbose) console.log(`    OK: Placeholders → ${outPath}`);
+    if (outPath) log.verbose(`    OK: Placeholders → ${outPath}`);
 
     return { outputBase: nodeOutput, variables: branchVars, table };
   }, { outputBase, variables, table: {} });

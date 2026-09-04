@@ -104,7 +104,7 @@ function isDirEmpty(dir) {
  * Ancestors of an expected leaf are expected, which gives the stale pass an invariant it
  * needs: a stale node can never contain a live descendant, so archiving one whole is safe.
  */
-function cleanAndArchive(config, leaves) {
+function cleanAndArchive(config, leaves, log) {
   const baseOutput = config._resolvedOutput;
 
   const expectedDirs = new Set();
@@ -117,7 +117,7 @@ function cleanAndArchive(config, leaves) {
 
   for (const dir of expectedDirs) {
     cleanBranchOutputDir(dir);
-    console.log(`  Cleaned: ${path.relative(baseOutput, dir) || '(root)'}`);
+    log.info(`  Cleaned: ${path.relative(baseOutput, dir) || '(root)'}`);
   }
 
   const branchesRoot = path.join(baseOutput, 'Branches');
@@ -137,13 +137,13 @@ function cleanAndArchive(config, leaves) {
     if (fs.existsSync(container) && isDirEmpty(container)) fs.rmSync(container, { recursive: true });
     if (isDirEmpty(staleDir)) {
       fs.rmSync(staleDir, { recursive: true, force: true });
-      console.log(`  Removed empty stale branch: ${path.relative(baseOutput, staleDir)}`);
+      log.info(`  Removed empty stale branch: ${path.relative(baseOutput, staleDir)}`);
     } else {
       const rel = path.relative(baseOutput, staleDir);
       const dest = path.join(archiveBase, rel);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.renameSync(staleDir, dest);
-      console.log(`  Archived stale branch → Archive/${ts}/${rel}`);
+      log.info(`  Archived stale branch → Archive/${ts}/${rel}`);
     }
   }
 }

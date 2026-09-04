@@ -13,6 +13,7 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { compile } = require('../../src/compile');
+const { Diagnostics } = require('../../src/diag');
 
 const dirs = [];
 
@@ -28,18 +29,14 @@ function compileProject(files) {
     fs.writeFileSync(full, content.replace(/%TMP%/g, slash(tmpDir)), 'utf8');
   }
 
-  const lines = [];
-  const capture = (...args) => { lines.push(args.join(' ')); };
-  const spies = ['log', 'warn', 'error'].map((l) => jest.spyOn(console, l).mockImplementation(capture));
+  const diagnostics = new Diagnostics();
   let threw = null;
   try {
-    compile(path.join(tmpDir, 'compile.yaml'));
+    compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
   } catch (err) {
     threw = err;
-  } finally {
-    spies.forEach((s) => s.mockRestore());
   }
-  return { output: lines.join('\n'), threw, tmpDir };
+  return { output: diagnostics.all.map((d) => d.format()).join('\n'), threw, tmpDir };
 }
 
 /**

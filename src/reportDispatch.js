@@ -55,7 +55,7 @@ function buildLibraryManifest(config) {
  * ordering the integration snapshots capture does not move.
  */
 function runReports({
-  config, configPath, options, registry, rootDirName,
+  config, configPath, options, log, registry, rootDirName,
   fieldTable, tierTemplates, captureReports, leafData, inventoryData, allItemDefs,
 }) {
   // Cross-branch review reports — emitted from the per-leaf data captured above.
@@ -105,7 +105,7 @@ function runReports({
     }
   }
   if (reportSummary.length > 0) {
-    console.log(`\nWrote ${reportSummary.join(' and ')} to:\n  ${reportBase}`);
+    log.info(`\nWrote ${reportSummary.join(' and ')} to:\n  ${reportBase}`);
   }
 }
 
@@ -118,8 +118,8 @@ function runReports({
  * compile bus. The spine keeps the `gaps.length` and `hasErrors()` throws.
  */
 function finalizeDiagnostics({
-  config, configPath, options, verbose,
-  diagnostics, flushDiagnostics,
+  config, configPath, options, log,
+  diagnostics,
   descriptionLeaves, openingLeaves, leafSummaries,
   allItemIds, totalFiles, componentLoader,
   roleState, placeholderState, gaps, fieldAudit, cardTypeAudit,
@@ -170,7 +170,6 @@ function finalizeDiagnostics({
       );
     }
   }
-  flushDiagnostics();
 
   // Per-leaf summary table (printed after all component writes so Opening status is known)
   for (const s of leafSummaries) {
@@ -179,14 +178,14 @@ function finalizeDiagnostics({
   const maxLabelLen = Math.max(...leafSummaries.map(s => s.label.length), 'Branch'.length);
   const lp = maxLabelLen + 2;
   const c = b => b ? ' ✓ ' : ' - ';
-  console.log(`\n  ${'Branch'.padEnd(lp)} ${'Items'.padStart(5)}  ${'Var'.padStart(3)}   Open   PE  AIN   AN`);
+  log.info(`\n  ${'Branch'.padEnd(lp)} ${'Items'.padStart(5)}  ${'Var'.padStart(3)}   Open   PE  AIN   AN`);
   for (const s of leafSummaries) {
-    console.log(
+    log.info(
       `  ${s.label.padEnd(lp)} ${String(s.leafItems).padStart(5)}  ${String(s.leafVariants).padStart(3)}  ` +
       ` ${c(s.hasOpening)}  ${c(s.hasPE)} ${c(s.hasAIN)} ${c(s.hasAN)}`
     );
   }
-  console.log(`\n${allItemIds.size} unique items across project. Wrote ${totalFiles} file(s).`);
+  log.info(`\n${allItemIds.size} unique items across project. Wrote ${totalFiles} file(s).`);
 
   // Library dependency manifest
   const libraryManifest = buildLibraryManifest(config);
@@ -199,7 +198,7 @@ function finalizeDiagnostics({
       library: libraryManifest,
     };
     fs.writeFileSync(manifestPath, JSON.stringify(manifestData, null, 2), 'utf8');
-    if (verbose) console.log(`  OK: Library manifest → ${manifestPath}`);
+    log.verbose(`  OK: Library manifest → ${manifestPath}`);
   }
 
   // Dependency-coverage check: the ledger is every resolved component path this compile
@@ -230,7 +229,7 @@ function finalizeDiagnostics({
   }
 
   runReports({
-    config, configPath, options, registry, rootDirName,
+    config, configPath, options, log, registry, rootDirName,
     fieldTable, tierTemplates, captureReports, leafData, inventoryData, allItemDefs,
   });
 
@@ -250,8 +249,8 @@ function finalizeDiagnostics({
   });
 
   // Requested-but-unwritten components: surface as an error so the gap is never silent.
-  // Raised before `flushDiagnostics()` below, so these reach the printed output —
-  // a bus error raised after that call would never be rendered.
+  // Raised onto the bus before the spine's `hasErrors()` check in `compile.js`, which is
+  // why a gap fails the run — nothing here prints it; the CLI prints the bus.
   for (const g of gaps.entries) {
     diagnostics.error(
       DIAG_CODES.COMPONENT_NO_OUTPUT,
@@ -259,8 +258,6 @@ function finalizeDiagnostics({
       { file: configPath },
     );
   }
-
-  flushDiagnostics();
 }
 
 module.exports = { finalizeDiagnostics };
