@@ -71,16 +71,16 @@ describe('loadFieldTable', () => {
       table = loadFieldTable([path.join(FIXTURE, 'malformed')], { diagnostics });
     });
 
-    test('an unknown key on a field is CL0423, and the field still loads', () => {
+    test('an unknown key on a field is CL0201, and the field still loads', () => {
       const codes = diagnostics.errors.map((d) => d.code);
-      expect(codes).toContain(CODES.FIELD_TABLE_UNKNOWN_KEY);
+      expect(codes).toContain(CODES.UNKNOWN_KEY);
       expect(table.fields.weird).toBeDefined();
       expect(table.fields.good).toEqual({ label: 'Good', join: '; ' });
     });
 
-    test('an unknown render function is CL0423', () => {
+    test('an unknown render function is CL0206', () => {
       const msg = diagnostics.errors
-        .filter((d) => d.code === CODES.FIELD_TABLE_UNKNOWN_KEY)
+        .filter((d) => d.code === CODES.VALUE_NOT_ALLOWED)
         .map((d) => d.message);
       expect(msg.some((m) => m.includes('sparkle'))).toBe(true);
     });
@@ -114,9 +114,8 @@ describe('loadFieldTable', () => {
 
   // Composition primitive, step 3a (2026-09-03 handoff): `parts:` is a source *plus* a
   // composition, so carrying it alongside `from:` on one declaration is an author error
-  // rather than two settings that combine. No CL04xx code already names "two mutually
-  // exclusive keys given together"; CL0422 ("entry has the wrong shape") is reused rather
-  // than a new code being minted, since diagnostic numbering is a human decision.
+  // rather than two settings that combine. `CL0423` names exactly this — a fields:
+  // declaration giving more than one of from:, parts: and try:.
   describe('parts: and from: are mutually exclusive', () => {
     const dir = path.join(FIXTURE, '__parts-from-conflict__');
     beforeAll(() => {
@@ -130,11 +129,11 @@ describe('loadFieldTable', () => {
     });
     afterAll(() => require('fs').rmSync(dir, { recursive: true, force: true }));
 
-    test('a top-level from: + parts: conflict is CL0422, and the field still loads', () => {
+    test('a top-level from: + parts: conflict is CL0423, and the field still loads', () => {
       const d = new Diagnostics();
       const table = loadFieldTable([dir], { diagnostics: d });
       const codes = d.errors.map((e) => e.code);
-      expect(codes).toContain(CODES.FIELD_TABLE_MALFORMED);
+      expect(codes).toContain(CODES.FIELD_SOURCE_CONFLICT);
       expect(d.errors.some((e) => e.message.includes('conflicted'))).toBe(true);
       expect(table.fields.conflicted).toBeDefined();
     });
@@ -142,14 +141,14 @@ describe('loadFieldTable', () => {
     test('the conflict is caught inside a nested part too', () => {
       const d = new Diagnostics();
       loadFieldTable([dir], { diagnostics: d });
-      const msgs = d.errors.filter((e) => e.code === CODES.FIELD_TABLE_MALFORMED).map((e) => e.message);
+      const msgs = d.errors.filter((e) => e.code === CODES.FIELD_SOURCE_CONFLICT).map((e) => e.message);
       expect(msgs.some((m) => m.includes('nested part') && m.includes('nested'))).toBe(true);
     });
 
     test('a clean parts: declaration with no from: raises nothing', () => {
       const d = new Diagnostics();
       loadFieldTable([dir], { diagnostics: d });
-      const msgs = d.errors.filter((e) => e.code === CODES.FIELD_TABLE_MALFORMED).map((e) => e.message);
+      const msgs = d.errors.filter((e) => e.code === CODES.FIELD_SOURCE_CONFLICT).map((e) => e.message);
       expect(msgs.some((m) => m.includes('"clean"'))).toBe(false);
     });
   });
@@ -171,52 +170,35 @@ describe('loadFieldTable', () => {
     });
     afterAll(() => require('fs').rmSync(dir, { recursive: true, force: true }));
 
-    test('try: + from: on one declaration is CL0422, and the field still loads', () => {
+    test('try: + from: on one declaration is CL0423, and the field still loads', () => {
       const d = new Diagnostics();
       const table = loadFieldTable([dir], { diagnostics: d });
       const codes = d.errors.map((e) => e.code);
-      expect(codes).toContain(CODES.FIELD_TABLE_MALFORMED);
+      expect(codes).toContain(CODES.FIELD_SOURCE_CONFLICT);
       expect(d.errors.some((e) => e.message.includes('tryFrom'))).toBe(true);
       expect(table.fields.tryFrom).toBeDefined();
     });
 
-    test('try: + parts: on one declaration is CL0422 too', () => {
+    test('try: + parts: on one declaration is CL0423 too', () => {
       const d = new Diagnostics();
       loadFieldTable([dir], { diagnostics: d });
-      expect(d.errors.some((e) => e.code === CODES.FIELD_TABLE_MALFORMED
+      expect(d.errors.some((e) => e.code === CODES.FIELD_SOURCE_CONFLICT
         && e.message.includes('tryParts'))).toBe(true);
     });
 
     test('the conflict is caught inside a nested try: source too', () => {
       const d = new Diagnostics();
       loadFieldTable([dir], { diagnostics: d });
-      const msgs = d.errors.filter((e) => e.code === CODES.FIELD_TABLE_MALFORMED).map((e) => e.message);
+      const msgs = d.errors.filter((e) => e.code === CODES.FIELD_SOURCE_CONFLICT).map((e) => e.message);
       expect(msgs.some((m) => m.includes('nested try source') && m.includes('nested'))).toBe(true);
     });
 
     test('a clean try: declaration with no from:/parts: raises nothing', () => {
       const d = new Diagnostics();
       loadFieldTable([dir], { diagnostics: d });
-      const msgs = d.errors.filter((e) => e.code === CODES.FIELD_TABLE_MALFORMED).map((e) => e.message);
+      const msgs = d.errors.filter((e) => e.code === CODES.FIELD_SOURCE_CONFLICT).map((e) => e.message);
       expect(msgs.some((m) => m.includes('"clean"'))).toBe(false);
     });
   });
 
-});
-
-describe('FIELD_TABLE_SCHEMA stays in step with the procedural loader', () => {
-  // The declarative descriptor (`field-table-schema.js`, used by the schema engine and by
-  // the doc-example test) and the procedural fold in `field-table.js` are two views of one
-  // surface. This binds them so a key added to one is added to the other.
-  const { FIELD_KEYS } = require('../../src/loader/field-table');
-  const { FIELD_DECL, RENDER_FUNCTIONS } = require('../../src/loader/field-table-schema');
-  const { FUNCTION_NAMES } = require('../../src/render/parse');
-
-  test('a fields: entry declares exactly the keys FIELD_KEYS allows', () => {
-    expect(Object.keys(FIELD_DECL.keys).sort()).toEqual([...FIELD_KEYS].sort());
-  });
-
-  test('the render set is the seven functions plus bare, taken from render/parse', () => {
-    expect(RENDER_FUNCTIONS).toEqual([...FUNCTION_NAMES, 'bare']);
-  });
 });

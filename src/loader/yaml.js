@@ -160,7 +160,7 @@ function parseYaml(raw, filePath) {
  * text could not be parsed — and throw it. What the fact *means* is the caller's to decide,
  * because the same failure is a different mistake in different places: the item registry
  * reports a parse failure as `CL0101` and moves on to the next file; `field-table.js` reports
- * the same failure as `CL0223`, because a broken field table is its own kind of wrong. So the
+ * the same failure as `CL0422`, because a broken field table is its own kind of wrong. So the
  * error carries `kind` (the fact) and `code` (the loading-band default for a caller with
  * nothing more specific to say), and the caller raises whichever it owns.
  *

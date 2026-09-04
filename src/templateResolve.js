@@ -133,8 +133,16 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
       try {
         doc = loadYaml(abs);
       } catch (err) {
-        diagnostics.error(CODES.FIELD_TABLE_MALFORMED,
-          `Could not parse templateFor.${role} file ${path.basename(abs)}: ${err.message}`, { file: abs });
+        // Same code and same shape as `field-table.js`'s parse failure, because it is the
+        // same kind of loss with a narrower blast radius: the tier's own templates go
+        // missing, so items on this branch quietly fall back to the base template instead
+        // of the one `templateFor.<role>` names.
+        diagnostics.error(CODES.FIELD_TABLE_UNUSABLE,
+          `templateFor.${role} names this file, and it could not be read — so the templates `
+          + 'it declares are unavailable, and every item on this branch falls back to its '
+          + 'base template instead of the one this file names.',
+          { file: abs },
+          { hint: `YAML error: ${err.cause ? err.cause.message : err.message}` });
         continue;
       }
       if (doc && doc.templates && typeof doc.templates === 'object') {

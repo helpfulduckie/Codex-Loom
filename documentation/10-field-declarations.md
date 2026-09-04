@@ -241,7 +241,7 @@ templates:
 
 **Groups do not nest**, matching item `include:`. The two positions take different things, and the checker enforces it:
 
-- **A group's members must be declared *fields*.** Naming another group there is `CL0424`, a WARN — it is not expanded, and it contributes nothing to the output.
+- **A group's members are declared *fields*, or the same inline overrides and escape hatches a template list takes** — `{ field: … }`, `{ include: … }`, `{ raw: … }`. Group members and template entries run through one code path (`pushEntry` in `render/field-list.js`), so what is legal in a template list is legal in a group. What a group member may *not* be is another group's name: that is `CL0424`, a WARN — it is not expanded, and it contributes nothing to the output.
 - **A template's entries may name fields *or* groups.** This is the only position a group name resolves in.
 
 **A `templates:` key is normally an `aid.type` name.** A free-standing name is reachable through `render.template` — see [Keeping one card at full detail](#keeping-one-card-at-full-detail).

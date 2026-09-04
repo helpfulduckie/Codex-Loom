@@ -21,140 +21,136 @@
  * The load inherits snapshot freezing for free — it reads the same
  * `config._resolvedTemplates` directories `loadTemplates` does, which `config/load.js` has
  * already redirected through `snapshot/manifest.json` where one exists.
+ *
+ * ── Shape checking ──────────────────────────────────────────────────────────
+ *
+ * The key surface (which keys a `fields:`/`templates:` entry may carry, what type each
+ * takes, the closed `render:` set) is checked once, declaratively, by `FIELD_TABLE_SCHEMA`
+ * (`field-table-schema.js`) via the shared `validate` engine — the same machinery
+ * `config/load.js` and `loader/schema.js` use, so an unknown key, a wrong type or a bad
+ * `render:` name all raise the same codes (`CL0201`/`CL0202`/`CL0206`) an author sees
+ * elsewhere in the compiler. What `validate` cannot express stays here: `checkSourceConflict`
+ * (a cross-key constraint — `from:`/`parts:`/`try:` mutual exclusion) and the fold itself,
+ * which merges three namespaces key-wise and must skip a malformed entry without aborting
+ * the whole file, since a later directory may override the very entry that is broken here.
  */
 
 const path = require('path');
 
 const { findFiles, isPlainObject } = require('../util');
-const { loadYaml } = require('./yaml');
-const { FUNCTION_NAMES, entryName } = require('../render/parse');
-const { levenshtein } = require('../schema');
+const { loadYamlDocument } = require('./yaml');
+const { entryName } = require('../render/parse');
+const { levenshtein, validate } = require('../schema');
+const { FIELD_TABLE_SCHEMA } = require('./field-table-schema');
 const { CODES } = require('../diag');
 
 /** The exact basenames a field table is read from — the `.cl.yaml` config pair (§4.6). */
 const FIELD_TABLE_BASENAMES = Object.freeze(['fields.cl.yaml', 'fields.cl.yml']);
 
-/**
- * Keys a `fields:` entry may carry (§13.2). `field`/`name` are template-list overrides only.
- * `allowExtra` is *not* here: it opts a whole template out of the §13.6 unread-field audit
- * and rides in the template's list as a `{ allowExtra: true }` marker (Decision 4).
- */
-const FIELD_KEYS = Object.freeze([
-  'label', 'render', 'join', 'wrap', 'wrapLabel', 'block', 'from', 'always', 'labelWhen', 'parts', 'try',
-]);
+/** `try:` resolves first, then `parts:`, then `from:` (`render/field-list.js:319-333`,
+ * `render/field-audit.js:163-168`) — the order `checkSourceConflict` names as the winner
+ * when a declaration gives more than one. */
+const SOURCE_PRECEDENCE = Object.freeze(['try', 'parts', 'from']);
+
+/** Join `from:`, `parts:`, `try:` (in whatever subset and order they were given) into prose:
+ * one key alone, two as `a: and b:`, three as `a:, b: and c:`. */
+function joinKeys(keys) {
+  if (keys.length <= 1) return keys.map((k) => `${k}:`).join('');
+  if (keys.length === 2) return `${keys[0]}: and ${keys[1]}:`;
+  return `${keys.slice(0, -1).map((k) => `${k}:`).join(', ')} and ${keys[keys.length - 1]}:`;
+}
 
 /**
  * `from:`, `parts:` and `try:` are mutually exclusive on one declaration (2026-09-03 handoff,
- * composition primitive steps 3a/4) — all three are source specifications (a plain source, a
- * source plus a composition, and an ordered list of alternatives), so a declaration naming
- * more than one is an author error rather than settings that combine. Reported as `CL0422`
- * (the existing "entry has the wrong shape" code): no code in the `CL04xx` band already
- * covers "two keys that cannot compose", and diagnostic numbering is a decision for a human,
- * not something to invent here. Recurses into `parts:` and `try:` themselves, so a nested
- * declaration carrying more than one source key is caught the same way, at whatever depth.
+ * composition primitive steps 3a/4) — from: reads a single body path, parts: joins several
+ * pieces into one field, try: uses the first path that exists, and a declaration naming more
+ * than one is an author error rather than settings that combine. No schema descriptor can
+ * express this — it is a constraint across sibling keys, not a shape any one of them has —
+ * so it is checked here, as `CL0423`. The message names which key wins, because the
+ * precedence (`SOURCE_PRECEDENCE`) is real and invisible from outside; it recurses into
+ * `parts:` and `try:` themselves, so a nested declaration carrying more than one source key
+ * is caught the same way, at whatever depth.
  */
-function checkSourceConflict(decl, label, file, report) {
+function checkSourceConflict(decl, label, currentPath, sourceMap, diagnostics) {
   if (!isPlainObject(decl)) return;
   const present = ['from', 'parts', 'try'].filter((k) => decl[k] !== undefined);
   if (present.length > 1) {
-    report(CODES.FIELD_TABLE_MALFORMED,
-      `${label} in ${path.basename(file)} carries ${present.map((k) => `${k}:`).join(' and ')} `
-      + '— from:, parts: and try: are all source specifications, and only one may be given '
-      + 'on one declaration.');
+    const winner = SOURCE_PRECEDENCE.find((k) => present.includes(k));
+    const losers = present.filter((k) => k !== winner);
+    const both = present.length === 2 ? 'declares both ' : 'declares ';
+    diagnostics.error(CODES.FIELD_SOURCE_CONFLICT,
+      `${label} ${both}${joinKeys(present)}. Each of these says where the field's text comes `
+      + 'from, so a declaration may give only one — from: reads a single body path, parts: '
+      + 'joins several pieces into one field, try: uses the first path that exists. Until this '
+      + `is fixed, ${joinKeys([winner])} is used and ${joinKeys(losers)} is ignored.`,
+      sourceMap.nearest(currentPath),
+      { hint: 'Keep the one you meant and delete the other.' });
   }
   if (Array.isArray(decl.parts)) {
-    for (const entry of decl.parts) {
-      if (isPlainObject(entry)) checkSourceConflict(entry, `A nested part of ${label}`, file, report);
-    }
+    decl.parts.forEach((entry, i) => {
+      if (isPlainObject(entry)) {
+        checkSourceConflict(entry, `A nested part of ${label}`,
+          [...currentPath, 'parts', String(i)], sourceMap, diagnostics);
+      }
+    });
   }
   if (Array.isArray(decl.try)) {
-    for (const entry of decl.try) {
-      if (isPlainObject(entry)) checkSourceConflict(entry, `A nested try source of ${label}`, file, report);
-    }
+    decl.try.forEach((entry, i) => {
+      if (isPlainObject(entry)) {
+        checkSourceConflict(entry, `A nested try source of ${label}`,
+          [...currentPath, 'try', String(i)], sourceMap, diagnostics);
+      }
+    });
   }
 }
 
 /**
  * Validate one parsed `fields.cl.yaml` document, folding its three namespaces into the
- * accumulators. Structural problems report and the offending entry is skipped; the load
- * does not abort, because a field table that a later directory overrides entirely should
- * not fail the compile on a stanza nothing reads.
+ * accumulators. `validate` reports the shape problems (unknown keys, wrong types, a bad
+ * `render:`) but does not remove the offending entry from the document, so the fold below
+ * still has to skip a malformed entry rather than folding it into the accumulator — the load
+ * does not abort, because a field table that a later directory overrides entirely should not
+ * fail the compile on a stanza nothing reads.
  */
-function foldDocument(doc, file, acc, diagnostics) {
-  const report = (code, message) => {
-    diagnostics.error(code, message, { file });
-  };
-
+function foldDocument(doc, file, sourceMap, acc, diagnostics) {
   if (doc === undefined || doc === null) return;
   if (!isPlainObject(doc)) {
-    report(CODES.FIELD_TABLE_MALFORMED, `${path.basename(file)} must be a mapping of fields:/groups:/templates:.`);
+    diagnostics.error(CODES.FIELD_TABLE_UNUSABLE,
+      'This field table could not be read, so none of the fields, groups or templates it '
+      + 'declares are available. Any template entry naming one of them renders nothing, with '
+      + 'no further error.',
+      sourceMap.nearest([]),
+      { hint: 'A field table must be a mapping with fields:, groups: and/or templates: at the top level.' });
     return;
   }
 
-  for (const key of Object.keys(doc)) {
-    if (!['fields', 'groups', 'templates'].includes(key)) {
-      report(CODES.FIELD_TABLE_UNKNOWN_KEY,
-        `Unknown top-level key "${key}" in ${path.basename(file)} — expected fields:, groups: or templates:.`);
-    }
-  }
+  validate(doc, FIELD_TABLE_SCHEMA, { diagnostics, sourceMap, context: path.basename(file) });
 
   const fields = doc.fields;
-  if (fields !== undefined && fields !== null) {
-    if (!isPlainObject(fields)) {
-      report(CODES.FIELD_TABLE_MALFORMED, `"fields:" in ${path.basename(file)} must be a mapping.`);
-    } else {
-      for (const [name, decl] of Object.entries(fields)) {
-        if (decl === null) { acc.fields[name] = null; continue; } // `~` unbinds an inherited field
-        if (!isPlainObject(decl)) {
-          report(CODES.FIELD_TABLE_MALFORMED, `Field "${name}" in ${path.basename(file)} must be a mapping.`);
-          continue;
-        }
-        for (const k of Object.keys(decl)) {
-          if (!FIELD_KEYS.includes(k)) {
-            report(CODES.FIELD_TABLE_UNKNOWN_KEY,
-              `Unknown key "${k}" on field "${name}" in ${path.basename(file)}.`);
-          }
-        }
-        if (decl.render !== undefined && decl.render !== null
-          && !FUNCTION_NAMES.includes(decl.render) && decl.render !== 'bare') {
-          report(CODES.FIELD_TABLE_UNKNOWN_KEY,
-            `Field "${name}" declares render: "${decl.render}", not one of ${FUNCTION_NAMES.join(', ')}.`);
-        }
-        checkSourceConflict(decl, `Field "${name}"`, file, report);
-        acc.fields[name] = decl; // replace-per-entry (Decision 5), not deep
-      }
+  if (fields !== undefined && fields !== null && isPlainObject(fields)) {
+    for (const [name, decl] of Object.entries(fields)) {
+      if (decl === null) { acc.fields[name] = null; continue; } // `~` unbinds an inherited field
+      if (!isPlainObject(decl)) continue;
+      checkSourceConflict(decl, `Field "${name}"`, ['fields', name], sourceMap, diagnostics);
+      acc.fields[name] = decl; // replace-per-entry (Decision 5), not deep
     }
   }
 
   const groups = doc.groups;
-  if (groups !== undefined && groups !== null) {
-    if (!isPlainObject(groups)) {
-      report(CODES.FIELD_TABLE_MALFORMED, `"groups:" in ${path.basename(file)} must be a mapping.`);
-    } else {
-      for (const [name, members] of Object.entries(groups)) {
-        if (members === null) { acc.groups[name] = null; continue; }
-        if (!Array.isArray(members)) {
-          report(CODES.FIELD_TABLE_MALFORMED, `Group "${name}" in ${path.basename(file)} must be a sequence.`);
-          continue;
-        }
-        acc.groups[name] = members;
-      }
+  if (groups !== undefined && groups !== null && isPlainObject(groups)) {
+    for (const [name, members] of Object.entries(groups)) {
+      if (members === null) { acc.groups[name] = null; continue; }
+      if (!Array.isArray(members)) continue;
+      acc.groups[name] = members;
     }
   }
 
   const templates = doc.templates;
-  if (templates !== undefined && templates !== null) {
-    if (!isPlainObject(templates)) {
-      report(CODES.FIELD_TABLE_MALFORMED, `"templates:" in ${path.basename(file)} must be a mapping.`);
-    } else {
-      for (const [name, list] of Object.entries(templates)) {
-        if (list === null) { acc.templates[name] = null; continue; }
-        if (!Array.isArray(list)) {
-          report(CODES.FIELD_TABLE_MALFORMED, `Template "${name}" in ${path.basename(file)} must be a sequence.`);
-          continue;
-        }
-        acc.templates[name] = list;
-      }
+  if (templates !== undefined && templates !== null && isPlainObject(templates)) {
+    for (const [name, list] of Object.entries(templates)) {
+      if (list === null) { acc.templates[name] = null; continue; }
+      if (!Array.isArray(list)) continue;
+      acc.templates[name] = list;
     }
   }
 }
@@ -226,14 +222,19 @@ function loadFieldTable(dirs, options = {}) {
         continue;
       }
       let doc;
+      let sourceMap;
       try {
-        doc = loadYaml(file);
+        ({ value: doc, sourceMap } = loadYamlDocument(file));
       } catch (err) {
-        diagnostics.error(CODES.FIELD_TABLE_MALFORMED,
-          `Could not parse field table ${path.basename(file)}: ${err.message}`, { file });
+        diagnostics.error(CODES.FIELD_TABLE_UNUSABLE,
+          'This field table could not be read, so none of the fields, groups or templates it '
+          + 'declares are available. Any template entry naming one of them renders nothing, '
+          + 'with no further error.',
+          { file },
+          { hint: `YAML error: ${(err.cause && err.cause.message) || err.message}` });
         continue;
       }
-      foldDocument(doc, file, acc, diagnostics);
+      foldDocument(doc, file, sourceMap, acc, diagnostics);
       acc._sources.push(file);
     }
   }
@@ -242,4 +243,4 @@ function loadFieldTable(dirs, options = {}) {
   return acc;
 }
 
-module.exports = { FIELD_KEYS, loadFieldTable };
+module.exports = { loadFieldTable };

@@ -84,8 +84,15 @@ const TEMPLATE_ENTRY = {
   },
 };
 
-/** A `groups:` entry — a flat list of declared field names (§13.3, no nesting). */
-const GROUP_LIST = { type: TYPES.SEQ, of: STRING };
+/**
+ * A `groups:` entry (§13.3). Members share `TEMPLATE_ENTRY`'s grammar exactly — a bare field
+ * name or one of the same escape forms (`raw:`, `include:`, an inline override) — because
+ * `render/field-list.js`'s `pushEntry` walks a group's members through the same code path it
+ * walks a template list through. The one difference is behavioral, not shape: a group does
+ * not itself nest inside another group (§13.3), so a string member is never re-expanded as a
+ * group name the way it would be at template-list level.
+ */
+const GROUP_LIST = { type: TYPES.SEQ, of: TEMPLATE_ENTRY };
 
 const TEMPLATE_LIST = { type: TYPES.SEQ, of: TEMPLATE_ENTRY };
 

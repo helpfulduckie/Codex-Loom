@@ -270,8 +270,8 @@ are always mistakes, and they are what drift produces.
 | `CL0433` | ERROR | A template control tag (`{if}`, `{wrapper}`, `{preserve}`, `{include}`) leaked into rendered output. |
 | `CL0434` | ERROR | A verb-conjugation marker (`[s]`/`[es]`/`[is]`/`[was]`/`[has]`) was left unresolved. |
 | `CL0435` | ERROR | A JS interpolation artifact (`[object Object]` and friends) reached rendered output. |
-| `CL0422` | ERROR | A `fields.cl.yaml` is not a mapping, or one of its `fields:`/`groups:`/`templates:` entries has the wrong shape. |
-| `CL0423` | ERROR | A `fields:` entry carries an unknown key or an unknown `render:` function name. |
+| `CL0422` | ERROR | A `fields.cl.yaml` or a `templateFor` slot file could not be read, or is not a mapping — everything it declares is unavailable. |
+| `CL0423` | ERROR | A `fields:` declaration gives more than one of `from:`, `parts:` and `try:`. |
 | `CL0424` | WARN | A group member or template entry names something that is not a declared field or group. |
 | `CL0425` | WARN | A file in a templates directory looks like a misspelled `fields.cl.yaml` and is being ignored. |
 | `CL0426` | WARN | A `body:` key the consuming project authored is read by no template the item renders through and no declaration names it — a typo; its content is dropped. |
@@ -329,11 +329,24 @@ English word. They stay WARN, they are tagged opinion-layer, and `lint.level` re
 
 ### CL0422–CL0428 in detail — the field table
 
-`CL0422`–`CL0425` are load-time checks on `fields.cl.yaml` itself: a malformed document,
-an unknown key or render function, a group or template entry that names nothing, and a
-filename that is a near-miss of `fields.cl.yaml` (a `templateFor` slot file that only
-resembles one is left alone). A structurally broken entry is skipped and the rest of the
-table still loads, because a downstream project may override the whole file.
+`CL0422` is the load-time check on a field-table document as a whole: it did not parse, or
+parsed to something other than a mapping, and the entire file is skipped as a result. It
+covers `templateFor` slot files (§13.4) as well as `fields.cl.yaml`, because the loss is the
+same kind with a narrower blast radius — a slot file that cannot be read takes its tier's
+templates with it, and every item on that branch falls back to its base template. Both
+messages lead with that consequence rather than with the parser's complaint, which rides
+along as the hint: a field table that fails to load is silent downstream, and an author who
+is only told the YAML is bad still has to work out why their cards came back empty. The
+key surface underneath that — an unknown key, a wrong type, an unrecognized `render:` name —
+is caught the same way any other schema-checked surface in the compiler is, as `CL0201`,
+`CL0202` or `CL0206`, not folded into `CL0422`. `CL0423` is a narrower, field-specific check
+that no schema descriptor can express: a declaration naming more than one of `from:`, `parts:`
+and `try:`, which are mutually exclusive because they are three ways of saying where a field's
+text comes from, not settings that combine. `CL0424` flags a group member or template entry
+that names nothing, and `CL0425` flags a filename that is a near-miss of `fields.cl.yaml` (a
+`templateFor` slot file that only resembles one is left alone). A structurally broken entry
+is skipped and the rest of the table still loads, because a downstream project may override
+the whole file.
 
 `CL0426`–`CL0428` are the unread-field audit. A field-list template names the
 `body:` keys it renders, so a key no template reads is content the compiler silently drops —
