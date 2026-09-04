@@ -15,10 +15,8 @@
  */
 
 const fs = require('fs');
-const YAML = require('yaml');
 
-const NL = '\n';
-const SPLIT_LINES = /\r?\n/;
+const { migrateComponentDoc } = require('./component-doc');
 
 /**
  * Convert one parsed v3 description into the v4 `sections:` record.
@@ -91,19 +89,16 @@ function migrateDescriptionFiles(configPath, options = {}) {
     return { notes: ['the description is prose, not a document — nothing to migrate.'], touched: [] };
   }
 
-  const source = fs.readFileSync(String(specPath), 'utf8');
-  const converted = convertDescription(YAML.parse(source));
-  if (!converted) {
-    return { notes: ['the description is already a sections: document — nothing to migrate.'], touched: [] };
-  }
-
   // The author's own leading comments survive, as they do in the Plot Essentials stage:
   // they name the project rather than the two keys being replaced, and a migration that
   // discards a banner is one that cannot be audited afterward.
-  const banner = source.split(SPLIT_LINES).filter((line) => line.trim().startsWith('#')).join(NL);
-  const text = (banner ? banner + NL : '')
-    + YAML.stringify({ sections: converted.sections }, { lineWidth: 0 });
-  if (!options.dryRun) fs.writeFileSync(String(specPath), text, 'utf8');
+  const converted = migrateComponentDoc(specPath, (doc) => convertDescription(doc), {
+    dryRun: options.dryRun,
+    bannerFilter: (line) => line.trim().startsWith('#'),
+  });
+  if (!converted) {
+    return { notes: ['the description is already a sections: document — nothing to migrate.'], touched: [] };
+  }
 
   return {
     notes: [

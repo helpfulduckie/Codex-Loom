@@ -27,11 +27,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const YAML = require('yaml');
 
 const { walkBranchTree } = require('../model/branches');
+const { migrateComponentDoc } = require('./component-doc');
 
-const NL = '\n';
 const SPLIT_LINES = /\r?\n/;
 
 /** A comment line reads as a block name when it is short and not a divider. */
@@ -191,16 +190,15 @@ function migrateOpeningFiles(configPath, options = {}) {
       : path.resolve(config._base, String(rawSpec));
     if (!fs.existsSync(String(resolved)) || !/\.ya?ml$/i.test(String(resolved))) continue;
 
-    const source = fs.readFileSync(String(resolved), 'utf8');
-    const converted = convertOpening(YAML.parse(source), source, config._base);
+    const converted = migrateComponentDoc(
+      resolved,
+      (blocks, source) => convertOpening(blocks, source, config._base),
+      {
+        dryRun: options.dryRun,
+        bannerFilter: (line) => line.trim().startsWith('#') && !nameFromComment(line),
+      },
+    );
     if (!converted) continue;
-
-    const banner = source.split(SPLIT_LINES)
-      .filter((line) => line.trim().startsWith('#') && !nameFromComment(line))
-      .join(NL);
-    const text = (banner ? banner + NL : '')
-      + YAML.stringify({ sections: converted.sections }, { lineWidth: 0 });
-    if (!options.dryRun) fs.writeFileSync(String(resolved), text, 'utf8');
 
     touched.push(String(resolved));
     notes.push(
