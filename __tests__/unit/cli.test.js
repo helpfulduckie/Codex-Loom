@@ -417,7 +417,11 @@ describe('CLI --lint-level flag', () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  /** A card with a leaked `{$she}` (a fact) and a `[does]` (an opinion) in one body. */
+  /**
+   * A card with a leaked `{$she}` (a fact) and a `[does]` (an opinion) in one body. The
+   * fact is an ERROR finding, so every `--lint` run over this tree exits 1 — the report is
+   * still written, which is what the assertions read.
+   */
   function writeLintable() {
     write(
       path.join(tmp, 'scenario', 'Story Cards', 'Char', 'a.md'),
@@ -428,7 +432,7 @@ describe('CLI --lint-level flag', () => {
   test('--lint-level=off silences the opinions and leaves the facts', () => {
     writeLintable();
     const result = run(['-L', '--lint-level=off', path.join(tmp, 'scenario')], tmp);
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(1);
     const report = fs.readFileSync(
       path.join(tmp, 'overview', 'lint', 'scenario.lint.md'), 'utf8');
     expect(report).toContain('unresolved-field-token');
@@ -438,17 +442,33 @@ describe('CLI --lint-level flag', () => {
   test('the space-separated spelling works too, and does not eat the path', () => {
     writeLintable();
     const result = run(['-L', '--lint-level', 'off', path.join(tmp, 'scenario')], tmp);
-    expect(result.status).toBe(0);
+    // Exit 1 is the ERROR finding, not a swallowed path: the report landed where the path said.
+    expect(result.status).toBe(1);
+    expect(result.stderr).not.toMatch(/Fatal|not found/);
     expect(fs.existsSync(path.join(tmp, 'overview', 'lint'))).toBe(true);
   });
 
   test('with no flag the opinions are reported as scanned', () => {
     writeLintable();
     const result = run(['-L', path.join(tmp, 'scenario')], tmp);
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(1);
     const report = fs.readFileSync(
       path.join(tmp, 'overview', 'lint', 'scenario.lint.md'), 'utf8');
     expect(report).toContain('suspect-verb-marker');
+  });
+
+  test('--lint exits 1 on an ERROR finding and 0 on a tree that only has WARNs', () => {
+    writeLintable();
+    expect(run(['-L', path.join(tmp, 'scenario')], tmp).status).toBe(1);
+
+    fs.rmSync(path.join(tmp, 'scenario'), { recursive: true, force: true });
+    write(
+      path.join(tmp, 'scenario', 'Story Cards', 'Char', 'a.md'),
+      ['## Aria', '', '~~~', 'triggers: [Aria]', '~~~', '', 'She love[does] it.', ''].join('\n')
+    );
+    const result = run(['-L', path.join(tmp, 'scenario')], tmp);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/Lint: 0 error\(s\), 1 warning\(s\)/);
   });
 
   /**
@@ -465,7 +485,7 @@ describe('CLI --lint-level flag', () => {
     );
 
     const result = run(['-L', path.join(tmp, 'proj')], tmp);
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(1);
     const report = fs.readFileSync(
       path.join(tmp, 'proj', 'output', 'Overview', 'lint', 'output.lint.md'), 'utf8');
     expect(report).toContain('unresolved-field-token');

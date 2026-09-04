@@ -377,6 +377,10 @@ if (require.main === module) {
     try {
       const summaryParts = [];
       const files = (n, what) => `${n} ${what} file${n === 1 ? '' : 's'}`;
+      // `--lint` fails the run on an ERROR finding the same way a compile fails on a bus
+      // ERROR: the report is written first, the summary is printed, then the exit code says
+      // the tree does not pass. Pack-load errors are already folded into the count.
+      let lintErrors = 0;
 
       if (doLeafReview) {
         const { runLeafReviewMode } = require('./overview');
@@ -440,6 +444,7 @@ if (require.main === module) {
         });
         printDiagnostics(lintDiagnostics);
         if (result) {
+          lintErrors = result.errorCount;
           summaryParts.push(`a lint report (${result.errorCount} error(s), ${result.warnCount} warning(s))`);
           for (const f of result.findings) {
             let loc;
@@ -460,6 +465,7 @@ if (require.main === module) {
           : summaryParts.slice(0, -1).join(', ') + ', and ' + summaryParts.at(-1);
         console.log(`\nWrote ${joined} to:\n  ${outputDir}\n`);
       }
+      if (lintErrors > 0) process.exit(1);
     } catch (err) {
       console.error(`\nFatal: ${err.message}`);
       process.exit(1);

@@ -213,7 +213,7 @@ function buildTempTree(projects, set) {
     for (const mode of project.reports) {
       const dir = path.join(reportBase, mode);
       fs.mkdirSync(dir, { recursive: true });
-      REPORT_MODES[mode]()(scenarioRoot, dir, false);
+      REPORT_MODES[mode]()(scenarioRoot, dir);
     }
 
     if (!REPORTS_IN_PLACE) collectCompileReports(project, configPath, tmpDir, set);

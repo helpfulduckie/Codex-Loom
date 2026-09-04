@@ -287,8 +287,12 @@ function scanStoryCardStructure(content) {
   for (const card of parseCards(content).filter((c) => c.hasFence)) {
     if (card.kind === 'reference') continue;
     if (card.triggers.length === 0) {
+      // `(untitled)` rather than the parser's `null`: both renderings branch on `card` to
+      // pick the location form, and a null here fell through to the line-numbered form
+      // with no line numbers to read.
       findings.push({
-        category: 'empty-triggers', severity: SEVERITY.WARN, layer: 'opinion', card: card.title,
+        category: 'empty-triggers', severity: SEVERITY.WARN, layer: 'opinion',
+        card: card.title || '(untitled)',
         hint: 'card has an empty or missing trigger list',
       });
     }

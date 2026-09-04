@@ -168,7 +168,7 @@ Core lint carries only that one structural check on purpose. Rules about what a 
 
 This is pure pattern-matching — deterministic and exhaustive, with no false-negative risk from an LLM guessing at the token list. It catches the mechanical half of a QA pass; bleed, missing-information, and cross-branch consistency checks still require holding the whole branch structure in mind and are out of scope here.
 
-The same patterns run automatically on every compile (no flag needed) — each item/component prints a `WARN:`/`ERROR`-style line to stdout as it's written, the same way unresolved `{$...}`/`{%...}` tokens already do. `--lint` is for post-hoc scanning of an already-compiled output folder; the automatic pass is for catching problems immediately during a normal compile.
+The same patterns run automatically on every compile (no flag needed) — each finding is a coded diagnostic (`CL0430`–`CL0437`) on the compile's diagnostics bus, printed together after the compile with every other diagnostic, and an `ERROR` among them fails the run. `--lint` is for post-hoc scanning of an already-compiled output folder; the automatic pass is for catching problems immediately during a normal compile.
 
 One report is written to the overview folder:
 
@@ -177,6 +177,8 @@ One report is written to the overview folder:
 | `{name}.lint.md` | Every finding, grouped by file, with severity (`ERROR`/`WARN`), category, and line number(s) |
 
 `ERROR` findings are near-certain bugs (a token that should always resolve). `WARN` findings need a human glance — a bare `undefined` could theoretically be intentional prose, and an item with no triggers is legitimate when it is never meant to be pulled in by name.
+
+Every finding is also echoed to the terminal, and `--lint` exits non-zero when the count of `ERROR` findings is above zero — the report is still written first, so a CI step that runs it gets both the file and the failure.
 
 **Path resolution** — When given a project folder (or no argument), Codex Loom looks for `compile.yaml` inside it to derive the output path and overview path. If no `compile.yaml` is found, it treats the folder as an already-compiled scenario root and runs any requested review modes directly on it — with a warning if `-C` was also requested.
 

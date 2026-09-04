@@ -72,7 +72,7 @@ moves no bytes, and passes. `baselineHarness.js` and `scripts/rebaseline.js` bot
 they must stay in step or the regeneration and the check disagree about what they compiled.
 The harness also asserts per project that every snapshot entry still hashes equal to the live
 source it was frozen from, because that is now the only check standing between a stale freeze
-and nothing: `checkDrift`'s live-drift report is a bare `console.log` the harness mutes, and
+and nothing: `checkDrift`'s live-drift report is a progress-log line the harness passes no sink for, and
 `CL0113` compares the frozen copy against its own manifest rather than against its source. A
 snapshot that has genuinely moved gets refreshed with `--snapshot` and committed.
 

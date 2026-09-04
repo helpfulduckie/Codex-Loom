@@ -355,6 +355,24 @@ describe('runLintMode', () => {
     fs.rmSync(outDir, { recursive: true });
   });
 
+  test('a fenced block with no heading is reported as an untitled card, not a crash', () => {
+    // `parseCards` gives such a block `title: null`. The finding used to carry that null as
+    // `card`, and both renderings branch on `card` to pick a location form — so it fell to
+    // the line-numbered form with no lines to read and threw from inside the report writer.
+    const tmp = makeTmp();
+    const outDir = makeTmp();
+    write(path.join(tmp, 'Story Cards', 'Character', 'bare.md'), ['~~~', 'She walks in.', '~~~', ''].join('\n'));
+
+    const result = runLintMode(tmp, outDir);
+    expect(result).not.toBeNull();
+    const untitled = result.findings.find((f) => f.category === 'empty-triggers');
+    expect(untitled).toMatchObject({ card: '(untitled)', relPath: path.join('Story Cards', 'Character', 'bare.md') });
+    expect(fs.readFileSync(result.reportPath, 'utf8')).toContain('card "(untitled)"');
+
+    fs.rmSync(tmp, { recursive: true });
+    fs.rmSync(outDir, { recursive: true });
+  });
+
   test('a wtg requireCard rule fires per leaf offline — names only the branch with no card', () => {
     const tmp = makeTmp();
     const outDir = makeTmp();
