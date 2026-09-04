@@ -49,6 +49,12 @@ const TYPES = Object.freeze({
 });
 
 const { CODES } = require('./diag');
+const { isPlainObject } = require('./util');
+
+const STRING = { type: TYPES.STRING };
+const NUMBER = { type: TYPES.NUMBER };
+const BOOLEAN = { type: TYPES.BOOLEAN };
+const ANY = { type: TYPES.ANY };
 
 // ── suggestions ──────────────────────────────────────────────────────────────
 
@@ -208,10 +214,6 @@ function suggestFor(key, ownPath, declaredHere, keyIndex) {
 }
 
 // ── type checking ────────────────────────────────────────────────────────────
-
-function isPlainObject(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
 
 function describeType(value) {
   if (value === null) return 'null';
@@ -458,4 +460,4 @@ function validate(value, schema, options = {}) {
   return walk(value, schema, path);
 }
 
-module.exports = { TYPES, CODES, validate, buildKeyIndex, levenshtein };
+module.exports = { TYPES, STRING, NUMBER, BOOLEAN, ANY, validate, buildKeyIndex, levenshtein };

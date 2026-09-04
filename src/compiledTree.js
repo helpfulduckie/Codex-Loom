@@ -38,6 +38,7 @@ const YAML = require('yaml');
 
 const { parseCards } = require('./emit/vl');
 const { FILENAME: PLACEHOLDERS_FILE } = require('./emit/placeholders');
+const { findFiles } = require('./util');
 
 // ── filesystem primitives ───────────────────────────────────────────────────
 
@@ -49,20 +50,10 @@ function readFileTrim(filePath) {
   }
 }
 
-/** Every `.md` file under `dir`, depth-first, sorted. */
+/** Every `.md` file under `dir`, depth-first, sorted. This walks compiled output, not
+ * source, so `findFiles`'s symlink-following is harmless here. */
 function collectMdFiles(dir) {
-  const results = [];
-  if (!fs.existsSync(dir)) return results;
-  function walk(current) {
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })
-      .sort((a, b) => a.name.localeCompare(b.name))) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.isFile() && entry.name.endsWith('.md')) results.push(full);
-    }
-  }
-  walk(dir);
-  return results;
+  return findFiles(dir, '.md', { sort: true });
 }
 
 /** Immediate child branch directories under `nodeDir/Branches`, sorted. */

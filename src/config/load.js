@@ -486,6 +486,6 @@ function loadCompileConfig(configPath, options = {}) {
 }
 
 module.exports = {
-  loadCompileConfig, expandVariables, collectVariableNames, CODES,
+  loadCompileConfig, expandVariables, collectVariableNames,
   loadManifest, isOutOfBase, normalize,
 };

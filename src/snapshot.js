@@ -14,10 +14,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const { CODES, loadManifest, isOutOfBase } = require('./config/load');
+const { loadManifest, isOutOfBase } = require('./config/load');
 const { buildCanonRegistry } = require('./loader/registry');
-const { Diagnostics } = require('./diag');
+const { Diagnostics, CODES } = require('./diag');
 const { NULL_LOG } = require('./log');
+const { listFilesRelative } = require('./util');
 
 /** Matches an applyTokenPass-style brace token: `{$X}`, `{$X.pronoun}`, `{$X's}`, etc. */
 const ROLE_TOKEN_RE = /\{\$([^{}]+)\}/g;
@@ -126,29 +127,13 @@ function removeEmptyDirs(dir) {
   }
 }
 
-/** Every file under `dir`, relative paths, sorted — not suffix-filtered (companion `.md`
- * files beside a `.yaml` component must survive a freeze same as the component itself). */
-function listAllFiles(dir) {
-  const out = [];
-  const walk = (current, prefix) => {
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const abs = path.join(current, entry.name);
-      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) walk(abs, rel);
-      else out.push(rel);
-    }
-  };
-  if (fs.existsSync(dir)) walk(dir, '');
-  return out.sort();
-}
-
 function hashFile(absPath) {
   const buf = fs.readFileSync(absPath);
   return 'sha256:' + crypto.createHash('sha256').update(buf).digest('hex');
 }
 
 function hashTree(dir) {
-  const files = listAllFiles(dir);
+  const files = listFilesRelative(dir);
   const out = {};
   for (const rel of files) out[rel] = hashFile(path.join(dir, rel));
   return out;
@@ -236,7 +221,7 @@ function syncLibrary(config, options = {}) {
   // token unresolved in its own set resolves in another snapshotted one before elimination
   // treats it as a role.
   const collected = entries.map((entry) => {
-    const files = listAllFiles(entry.sourcePath);
+    const files = listFilesRelative(entry.sourcePath);
     const fileHashes = hashTree(entry.sourcePath);
     return { entry, files, fileHashes };
   });
@@ -266,7 +251,7 @@ function syncLibrary(config, options = {}) {
     // automatic. Deletions are not counted in `filesWritten` — that tracks copies.
     if (fs.existsSync(destDir)) {
       const keep = new Set(files);
-      for (const rel of listAllFiles(destDir)) {
+      for (const rel of listFilesRelative(destDir)) {
         if (!keep.has(rel)) fs.rmSync(path.join(destDir, rel));
       }
       removeEmptyDirs(destDir);
@@ -360,7 +345,7 @@ function checkDrift(config, diagnostics, log) {
       );
       continue;
     }
-    const snapFiles = listAllFiles(snapEntryDir);
+    const snapFiles = listFilesRelative(snapEntryDir);
     for (const rel of snapFiles) {
       if (!(rel in section.files)) {
         diagnostics.warn(
@@ -384,5 +369,5 @@ function checkDrift(config, diagnostics, log) {
 }
 
 module.exports = {
-  syncLibrary, checkDrift, listAllFiles, hashTree, collectEntries, entryLabel, CODES,
+  syncLibrary, checkDrift, hashTree, collectEntries, entryLabel,
 };

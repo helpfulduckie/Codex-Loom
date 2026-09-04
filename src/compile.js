@@ -13,7 +13,6 @@ const {
 const { applyRolePass, applyPronounPasses, applyCrossItemRefs } = require('./model/pronouns');
 const { render, applyFieldInterpolation, applyVariableInterpolation } = require('./template');
 const { renderFieldList } = require('./render/field-list');
-const { CODES: FIELD_TABLE_CODES } = require('./loader/field-table');
 const { buildFieldAudit } = require('./render/field-audit');
 const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts, itemContext } = require('./util');
 const { validateCardType, buildCardTypeAudit } = require('./cardType');

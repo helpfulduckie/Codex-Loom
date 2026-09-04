@@ -4,9 +4,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { Diagnostics } = require('../../src/diag');
-const { loadCompileConfig, CODES } = require('../../src/config/load');
-const { syncLibrary, checkDrift, listAllFiles } = require('../../src/snapshot');
+const { Diagnostics, CODES } = require('../../src/diag');
+const { loadCompileConfig } = require('../../src/config/load');
+const { syncLibrary, checkDrift } = require('../../src/snapshot');
+const { listFilesRelative } = require('../../src/util');
 const { NULL_LOG } = require('../../src/log');
 const { collectingLog } = require('../helpers/log');
 
@@ -44,18 +45,18 @@ function buildProject() {
   return { config, diagnostics };
 }
 
-describe('listAllFiles — the full-tree lister', () => {
+describe('listFilesRelative — the full-tree lister', () => {
   test('is not suffix-filtered: it lists every file type under a directory', () => {
     writeFile('tree/a.cl.yaml', 'a');
     writeFile('tree/b.md', 'b');
     writeFile('tree/sub/c.txt', 'c');
-    const files = listAllFiles(path.join(tmpDir, 'tree'));
+    const files = listFilesRelative(path.join(tmpDir, 'tree'));
     expect(files.sort()).toEqual(['a.cl.yaml', 'b.md', 'sub/c.txt']);
   });
 
   test('.cl.yaml files are included in a snapshot copy (pinning the open question from Step 0)', () => {
     writeFile('tree2/component.cl.yaml', 'x');
-    const files = listAllFiles(path.join(tmpDir, 'tree2'));
+    const files = listFilesRelative(path.join(tmpDir, 'tree2'));
     expect(files).toContain('component.cl.yaml');
   });
 });

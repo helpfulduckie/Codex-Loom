@@ -300,4 +300,4 @@ function applyDelta(item, delta, onWarn) {
   }
 }
 
-module.exports = { applyFieldOp, applyFieldsDelta, applyDelta, CODES };
+module.exports = { applyFieldOp, applyFieldsDelta, applyDelta };

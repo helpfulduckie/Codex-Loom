@@ -13,11 +13,11 @@ const path = require('path');
 const fs = require('fs');
 
 const {
-  loadPack, evaluatePack, evaluatePackExistence, evaluatePackItemRules, clampFinding, CODES,
+  loadPack, evaluatePack, evaluatePackExistence, evaluatePackItemRules, clampFinding,
 } = require('../../src/lint/packs');
 const { parseNotesBlock, parseSettingsBlock } = require('../../src/emit/vl');
 const { walkBranchChain } = require('../../src/model/branches');
-const { Diagnostics } = require('../../src/diag');
+const { Diagnostics, CODES } = require('../../src/diag');
 
 let TMP;
 beforeAll(() => { TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-packs-')); });
@@ -204,7 +204,8 @@ describe('parseSettingsBlock', () => {
 // ── the schema min/max extension ─────────────────────────────────────────────
 
 describe('src/schema.js numeric min/max (CL0207)', () => {
-  const { validate, CODES: SC } = require('../../src/schema');
+  const { validate } = require('../../src/schema');
+  const { CODES: SC } = require('../../src/diag');
   const desc = {
     type: 'map',
     keys: { n: { type: 'number', min: 0, max: 2 } },

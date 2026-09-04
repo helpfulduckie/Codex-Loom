@@ -3,9 +3,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { Diagnostics } = require('../../src/diag');
-const { loadCompileConfig, CODES } = require('../../src/config/load');
-const { CODES: SCHEMA_CODES } = require('../../src/schema');
+const { Diagnostics, CODES } = require('../../src/diag');
+const { loadCompileConfig } = require('../../src/config/load');
 
 let tmpDir;
 
@@ -312,16 +311,16 @@ describe('bus ownership', () => {
  */
 describe('every diagnostic the config surface can emit', () => {
   const CASES = [
-    ['unknown key', SCHEMA_CODES.UNKNOWN_KEY, 'bogus: 1\n', {}],
-    ['a v3 key that was renamed', SCHEMA_CODES.UNKNOWN_KEY, 'overview: ./Review\n', {}],
-    ['wrong type, non-empty', SCHEMA_CODES.WRONG_TYPE, 'variables:\n  - a\n  - b\n', {}],
-    ['missing required key', SCHEMA_CODES.MISSING_REQUIRED, 'version: 4\nstructure:\n  input:\n    items: []\n', { raw: true }],
+    ['unknown key', CODES.UNKNOWN_KEY, 'bogus: 1\n', {}],
+    ['a v3 key that was renamed', CODES.UNKNOWN_KEY, 'overview: ./Review\n', {}],
+    ['wrong type, non-empty', CODES.WRONG_TYPE, 'variables:\n  - a\n  - b\n', {}],
+    ['missing required key', CODES.MISSING_REQUIRED, 'version: 4\nstructure:\n  input:\n    items: []\n', { raw: true }],
     ['a v3 project (no version: key)', CODES.UNSUPPORTED_VERSION, 'structure:\n  output: ./out\n', { raw: true }],
     // No CL0204 case: `lint.packs` went live in Phase 14 (§8.2.2) and it held the last
     // `note:` on the config surface, so NOT_YET_IMPLEMENTED is now unreachable here —
     // recorded in the `unreachable` set below.
     // The §4.3 case: a correctly spelled key one level too high.
-    ['a valid key at the wrong level', SCHEMA_CODES.MISPLACED_KEY, 'items: [./Codex]\n', {}],
+    ['a valid key at the wrong level', CODES.MISPLACED_KEY, 'items: [./Codex]\n', {}],
     ['a document that is not a mapping', CODES.CONFIG_NOT_A_MAPPING, '- a\n- list\n', {}],
     ['a path that does not exist', CODES.PATH_NOT_FOUND, 'structure:\n  input:\n    items: [./nope]\n', {}],
     ['an undeclared variable', CODES.VARIABLE_UNDECLARED, 'variables:\n  a: "{%nope}"\n', {}],
@@ -357,11 +356,11 @@ describe('every diagnostic the config surface can emit', () => {
     //    or `pattern:` — only the convention-pack schema surface does (covered in
     //    schema.test.js and lint-packs.test.js).
     const schemaUnreachable = new Set([
-      SCHEMA_CODES.SUPERSEDED_KEY, SCHEMA_CODES.VALUE_NOT_ALLOWED,
-      SCHEMA_CODES.NOT_YET_IMPLEMENTED, SCHEMA_CODES.VALUE_OUT_OF_RANGE,
-      SCHEMA_CODES.PATTERN_MISMATCH,
+      CODES.SUPERSEDED_KEY, CODES.VALUE_NOT_ALLOWED,
+      CODES.NOT_YET_IMPLEMENTED, CODES.VALUE_OUT_OF_RANGE,
+      CODES.PATTERN_MISMATCH,
     ]);
-    for (const c of Object.values(SCHEMA_CODES)) {
+    for (const c of Object.values(CODES)) {
       if (/^CL02\d\d$/.test(c) && !schemaUnreachable.has(c)) configCodes.add(c);
     }
 
@@ -441,7 +440,7 @@ describe('lint: is a fully implemented key surface (§8.2.2, Phase 14)', () => {
 
   test('an out-of-set pack level: is a CL0206', () => {
     const { codes } = load('lint:\n  packs:\n    wtg:\n      level: loud\n');
-    expect(codes).toContain(SCHEMA_CODES.VALUE_NOT_ALLOWED);
+    expect(codes).toContain(CODES.VALUE_NOT_ALLOWED);
   });
 
   /**

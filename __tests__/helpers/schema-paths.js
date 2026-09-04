@@ -25,6 +25,8 @@
  * terminates.
  */
 
+const { isPlainObject } = require('../../src/util');
+
 const TYPES_MAP = 'map';
 const TYPES_RECORD = 'record';
 const TYPES_SEQ = 'seq';
@@ -35,10 +37,6 @@ const SEQ_INDEX = '[]';
 
 function typesOf(descriptor) {
   return Array.isArray(descriptor.type) ? descriptor.type : [descriptor.type];
-}
-
-function isPlainObject(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**

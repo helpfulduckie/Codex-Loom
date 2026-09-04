@@ -11,8 +11,8 @@
 
 const path = require('path');
 
-const { Diagnostics } = require('../../src/diag');
-const { loadFieldTable, CODES } = require('../../src/loader/field-table');
+const { Diagnostics, CODES } = require('../../src/diag');
+const { loadFieldTable } = require('../../src/loader/field-table');
 const { loadTemplates } = require('../../src/loader');
 
 const FIXTURE = path.resolve(__dirname, '../fixtures/field-table');

@@ -441,5 +441,5 @@ function resolvePlacements(item) {
 
 module.exports = {
   resolveItem, collectVariantDeltas, parseVariantsList, resolvePlacements,
-  PLACEABLE_COMPONENTS, DEFAULT_ORDER, CODES,
+  PLACEABLE_COMPONENTS, DEFAULT_ORDER,
 };

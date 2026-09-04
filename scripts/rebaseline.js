@@ -62,6 +62,7 @@ const path = require('path');
 const { compile } = require('../src/compile');
 const { loadCompileConfig } = require('../src/config/load');
 const { Diagnostics } = require('../src/diag');
+const { listFilesRelative } = require('../src/util');
 const { classifyDiff, OPAQUE } = require('../__tests__/helpers/diffShape');
 
 const { DEFAULT_REPORT_MODES } = require('../__tests__/helpers/baselineHarness');
@@ -145,20 +146,6 @@ function parseArgs(argv) {
 }
 
 // ── file walking ─────────────────────────────────────────────────────────────
-
-function listFiles(dir) {
-  const out = [];
-  const walk = (current, prefix) => {
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const abs = path.join(current, entry.name);
-      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) walk(abs, rel);
-      else out.push(rel);
-    }
-  };
-  if (fs.existsSync(dir)) walk(dir, '');
-  return out.sort();
-}
 
 function copyFile(from, to) {
   fs.mkdirSync(path.dirname(to), { recursive: true });
@@ -269,8 +256,8 @@ function collectCompileReports(project, configPath, tmpDir, set) {
  * asserts separately and which no line-class can describe.
  */
 function diffTree(actualDir, expectedDir, { markdownOnly }) {
-  const actual = new Set(listFiles(actualDir));
-  const expected = new Set(listFiles(expectedDir));
+  const actual = new Set(listFilesRelative(actualDir));
+  const expected = new Set(listFilesRelative(expectedDir));
   const report = {
     changed: [], added: [], removed: [], relocated: [], derived: [], classes: new Set(),
   };

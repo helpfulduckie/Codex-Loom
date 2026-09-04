@@ -40,6 +40,7 @@ const { compile } = require('../../src/compile');
 const { loadCompileConfig, loadManifest } = require('../../src/config/load');
 const { collectEntries, entryLabel, hashTree } = require('../../src/snapshot');
 const { Diagnostics } = require('../../src/diag');
+const { listFilesRelative } = require('../../src/util');
 const { classifyDiff, OPAQUE } = require('./diffShape');
 
 /**
@@ -56,21 +57,6 @@ const DEFAULT_REPORT_MODES = {
   overview: () => require('../../src/overview').runOverviewMode,
   'leaf-review': () => require('../../src/overview').runLeafReviewMode,
 };
-
-/** Collect every file under `dir` as a sorted list of paths relative to it. */
-function listFiles(dir) {
-  const out = [];
-  const walk = (current, prefix) => {
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const abs = path.join(current, entry.name);
-      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) walk(abs, rel);
-      else out.push(rel);
-    }
-  };
-  if (fs.existsSync(dir)) walk(dir, '');
-  return out.sort();
-}
 
 /**
  * The library manifest is the one output that cannot match byte-for-byte: it stamps a fresh
@@ -256,7 +242,7 @@ function describeBaselineSet(options) {
     });
 
     test('emits exactly the baseline file set', () => {
-      expect(listFiles(actualDir)).toEqual(listFiles(expectedDir));
+      expect(listFilesRelative(actualDir)).toEqual(listFilesRelative(expectedDir));
     });
 
     /**
@@ -314,7 +300,7 @@ function describeBaselineSet(options) {
      */
     function collectDifferences() {
       const differences = [];
-      for (const rel of listFiles(expectedDir)) {
+      for (const rel of listFilesRelative(expectedDir)) {
         const actualPath = path.join(actualDir, ...rel.split('/'));
         const expectedPath = path.join(expectedDir, ...rel.split('/'));
         if (!fs.existsSync(actualPath)) continue; // reported by the file-set test
@@ -376,11 +362,11 @@ function describeBaselineSet(options) {
      */
     function reportAssertions(actual, expected) {
       test('emits exactly the baseline file set', () => {
-        expect(listFiles(actual())).toEqual(listFiles(expected()));
+        expect(listFilesRelative(actual())).toEqual(listFilesRelative(expected()));
       });
 
       test('every file is byte-identical to the baseline', () => {
-        const differing = listFiles(expected()).filter((rel) => {
+        const differing = listFilesRelative(expected()).filter((rel) => {
           const a = path.join(actual(), ...rel.split('/'));
           const b = path.join(expected(), ...rel.split('/'));
           return !fs.existsSync(a) || !fs.readFileSync(a).equals(fs.readFileSync(b));

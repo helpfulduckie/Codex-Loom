@@ -424,5 +424,4 @@ module.exports = {
   buildCanonRegistry,
   resolveIncludes,
   findConfigEntry,
-  CODES,
 };

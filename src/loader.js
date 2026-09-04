@@ -85,7 +85,6 @@ function loadTemplates(dirs, options = {}) {
 // and item loading, registries and overlays are loader/registry.js (§3.2).
 
 module.exports = {
-  CODES,
   loadNamedFiles,
   loadTemplates,
 };

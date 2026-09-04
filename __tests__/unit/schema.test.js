@@ -1,7 +1,7 @@
 'use strict';
 
-const { TYPES, CODES, validate, buildKeyIndex, levenshtein } = require('../../src/schema');
-const { Diagnostics } = require('../../src/diag');
+const { TYPES, validate, buildKeyIndex, levenshtein } = require('../../src/schema');
+const { Diagnostics, CODES } = require('../../src/diag');
 
 const S = { type: TYPES.STRING };
 

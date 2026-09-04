@@ -3,12 +3,12 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { loadTemplates, CODES } = require('../../src/loader');
+const { loadTemplates } = require('../../src/loader');
 const {
   buildRegistry, mergeRegistries, loadItemsFromDir,
 } = require('../../src/loader/registry');
 const { loadCompileConfig } = require('../../src/config/load');
-const { Diagnostics } = require('../../src/diag');
+const { Diagnostics, CODES } = require('../../src/diag');
 
 // ---------------------------------------------------------------------------
 // Helpers

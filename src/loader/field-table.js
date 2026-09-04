@@ -25,7 +25,7 @@
 
 const path = require('path');
 
-const { findFiles } = require('../util');
+const { findFiles, isPlainObject } = require('../util');
 const { loadYaml } = require('./yaml');
 const { FUNCTION_NAMES, entryName } = require('../render/parse');
 const { levenshtein } = require('../schema');
@@ -42,10 +42,6 @@ const FIELD_TABLE_BASENAMES = Object.freeze(['fields.cl.yaml', 'fields.cl.yml'])
 const FIELD_KEYS = Object.freeze([
   'label', 'render', 'join', 'wrap', 'wrapLabel', 'block', 'from', 'always', 'labelWhen', 'parts', 'try',
 ]);
-
-function isPlainObject(v) {
-  return v !== null && typeof v === 'object' && !Array.isArray(v);
-}
 
 /**
  * `from:`, `parts:` and `try:` are mutually exclusive on one declaration (2026-09-03 handoff,
@@ -246,4 +242,4 @@ function loadFieldTable(dirs, options = {}) {
   return acc;
 }
 
-module.exports = { CODES, FIELD_KEYS, loadFieldTable };
+module.exports = { FIELD_KEYS, loadFieldTable };

@@ -44,7 +44,7 @@ const path = require('path');
 const YAML = require('yaml');
 const { applyLintLevel, Diagnostics, CODES } = require('../diag');
 const { resolveVariables } = require('../util');
-const { validate, TYPES, CODES: SCHEMA_CODES } = require('../schema');
+const { validate, TYPES } = require('../schema');
 const { parseNotesBlock, parseSettingsBlock } = require('../emit/vl');
 const { resolveField } = require('../render/eval');
 
@@ -580,6 +580,4 @@ module.exports = {
   evaluatePackExistence,
   evaluatePackItemRules,
   clampFinding,
-  CODES,
-  SCHEMA_CODES,
 };

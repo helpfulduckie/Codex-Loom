@@ -1,6 +1,7 @@
 'use strict';
 
-const { splitRef, resolveItemRef, describeRefFailure, CODES } = require('../../src/model/refs');
+const { splitRef, resolveItemRef, describeRefFailure } = require('../../src/model/refs');
+const { CODES } = require('../../src/diag');
 const { ItemRegistry } = require('../../src/loader/registry');
 
 describe('splitRef', () => {

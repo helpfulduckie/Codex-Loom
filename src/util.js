@@ -58,33 +58,60 @@ function hasSuffix(name, suffixes) {
   return suffixes.some((s) => lower.endsWith(s));
 }
 
+function isPlainObject(v) {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
 /**
  * Recursively collect files matching one suffix or a list of them.
  *
  * Symlinks are followed, with broken ones skipped rather than thrown.
+ *
+ * `sort` orders each directory's entries by `localeCompare` before descending; it defaults
+ * to `false` so every existing caller keeps `readdirSync`'s raw order unchanged.
  */
-function findFiles(dir, ext) {
+function findFiles(dir, ext, { sort = false } = {}) {
   const suffixes = Array.isArray(ext) ? ext : [ext];
   const results = [];
   if (!fs.existsSync(dir)) return results;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+  let entries = fs.readdirSync(dir, { withFileTypes: true });
+  if (sort) entries = entries.sort((a, b) => a.name.localeCompare(b.name));
+  for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isSymbolicLink()) {
       try {
         const stat = fs.statSync(full);
         if (stat.isDirectory()) {
-          results.push(...findFiles(full, suffixes));
+          results.push(...findFiles(full, suffixes, { sort }));
         } else if (stat.isFile() && hasSuffix(entry.name, suffixes)) {
           results.push(full);
         }
       } catch (_) { /* broken symlink — skip */ }
     } else if (entry.isDirectory()) {
-      results.push(...findFiles(full, suffixes));
+      results.push(...findFiles(full, suffixes, { sort }));
     } else if (entry.isFile() && hasSuffix(entry.name, suffixes)) {
       results.push(full);
     }
   }
   return results;
+}
+
+/**
+ * Every file under `dir`, as sorted paths relative to it — not suffix-filtered, so a
+ * companion file beside a matched one (a `.md` beside a `.yaml`) survives alongside it.
+ */
+function listFilesRelative(dir) {
+  const out = [];
+  const walk = (current, prefix) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const abs = path.join(current, entry.name);
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(abs, rel);
+      else out.push(rel);
+    }
+  };
+  if (fs.existsSync(dir)) walk(dir, '');
+  return out.sort();
 }
 
 // `loadYaml` now lives in loader/yaml.js, which parses with position tracking so
@@ -424,9 +451,9 @@ function checkMechanicalArtifacts(text, label, sink) {
 }
 
 module.exports = {
-  findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
+  findFiles, listFilesRelative, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
   ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
-  YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix, PATH_UNSAFE_CHARS,
+  YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix, PATH_UNSAFE_CHARS, isPlainObject,
   resolveVariables, checkUnexpandedVariables, walkItemTextFields, walkTextRecursive, itemContext, ITEM_CONTEXT_KEYS, checkUnresolvedFieldTokens,
   checkMechanicalArtifacts, maskFencedRegions,
   FIELD_TOKEN_RE, VAR_TOKEN_RE, TEMPLATE_FN_RE, TEMPLATE_TAG_RE, VERB_MARKER_RE, SUSPECT_VERB_MARKER_RE, JS_ARTIFACT_RE, JS_WORD_RE,

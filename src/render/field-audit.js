@@ -55,10 +55,7 @@
 
 const { entryName } = require('./parse');
 const { CODES } = require('../diag');
-
-function isPlainObject(v) {
-  return v !== null && typeof v === 'object' && !Array.isArray(v);
-}
+const { isPlainObject } = require('../util');
 
 /**
  * Case-insensitive own-property lookup, matching the renderer's field matching (a
@@ -131,52 +128,30 @@ function readablePathsFor(list, fieldTable, partials, refRoot = 'body') {
   };
 
   /**
-   * `parts:` (Decision 8's field-audit half, applied to the composition primitive): every
-   * ref at every depth must reach `content`, root-qualified, or a `parts:` field the item
-   * genuinely reads raises a phantom CL0428 dead-declaration finding. A `$`-prefixed entry
-   * is a ref; any other string is a literal and contributes nothing; a mapping is a nested
-   * declaration, walked the same way `addField` walks a top-level one — recursively through
-   * its own `parts:`, and through `from:` if it carries that instead (the two are mutually
-   * exclusive by CL0422, but this does not assume the loader caught it).
+   * `parts:`/`try:` (Decision 8's and Decision 7's field-audit halves, applied to the two
+   * composition primitives): every ref at every depth must reach `content`, root-qualified,
+   * or a field the item genuinely reads raises a phantom CL0428 dead-declaration finding.
+   * The two lists agree on everything except what a bare string means (`field-table-
+   * schema.js`'s declared difference): `try:` has no non-source entries, so every string is
+   * a ref following `from:`'s rules; `parts:` mixes refs with literal prose, so only a
+   * `$`-prefixed string is one and any other is skipped. `isTrySource` selects that one arm;
+   * a mapping entry is a nested declaration either way, walked the same way `addField` walks
+   * a top-level one — recursively through its own `parts:`/`try:`, and through `from:` if it
+   * carries that instead (the two are mutually exclusive by CL0422, but this does not assume
+   * the loader caught it).
    */
-  const collectPartsRefs = (parts) => {
-    for (const entry of parts || []) {
-      if (typeof entry === 'string') {
-        if (entry.startsWith('$')) content.add(qualify(entry, refRoot).toLowerCase());
-        continue; // a literal — no ref
-      }
-      if (!isPlainObject(entry)) continue;
-      if (entry.from !== undefined) {
-        for (const p of fromPaths(entry, undefined)) content.add(qualify(p, refRoot).toLowerCase());
-      }
-      if (entry.parts !== undefined) collectPartsRefs(entry.parts);
-      if (entry.try !== undefined) collectTryRefs(entry.try);
-      if (isPlainObject(entry.labelWhen)) {
-        const whenKey = Object.keys(entry.labelWhen)[0];
-        if (whenKey) ack.add(qualify(whenKey, refRoot).toLowerCase());
-      }
-    }
-  };
-
-  /**
-   * `try:` (Decision 7's field-audit half): every source is read, whichever one resolves at
-   * render time, so all of them must reach `content` — unlike `parts:`'s literals, `try:`
-   * has no non-source entries to skip. A bare string follows `from:`'s ref rules (root-
-   * relative, qualified by `refRoot`) and a `$`-prefixed string is already absolute; a
-   * mapping is a nested declaration, walked the same way `addField` walks a top-level one.
-   */
-  const collectTryRefs = (list) => {
+  const collectRefs = (list, isTrySource) => {
     for (const entry of list || []) {
       if (typeof entry === 'string') {
-        content.add(qualify(entry, refRoot).toLowerCase());
-        continue;
+        if (isTrySource || entry.startsWith('$')) content.add(qualify(entry, refRoot).toLowerCase());
+        continue; // parts: a literal — no ref
       }
       if (!isPlainObject(entry)) continue;
       if (entry.from !== undefined) {
         for (const p of fromPaths(entry, undefined)) content.add(qualify(p, refRoot).toLowerCase());
       }
-      if (entry.parts !== undefined) collectPartsRefs(entry.parts);
-      if (entry.try !== undefined) collectTryRefs(entry.try);
+      if (entry.parts !== undefined) collectRefs(entry.parts, false);
+      if (entry.try !== undefined) collectRefs(entry.try, true);
       if (isPlainObject(entry.labelWhen)) {
         const whenKey = Object.keys(entry.labelWhen)[0];
         if (whenKey) ack.add(qualify(whenKey, refRoot).toLowerCase());
@@ -186,9 +161,9 @@ function readablePathsFor(list, fieldTable, partials, refRoot = 'body') {
 
   const addField = (name, decl) => {
     if (decl && decl.try !== undefined) {
-      collectTryRefs(decl.try);
+      collectRefs(decl.try, true);
     } else if (decl && decl.parts !== undefined) {
-      collectPartsRefs(decl.parts);
+      collectRefs(decl.parts, false);
     } else {
       for (const p of fromPaths(decl, name)) content.add(qualify(p, refRoot).toLowerCase());
     }
@@ -479,4 +454,4 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
   return { collectForItem, finish };
 }
 
-module.exports = { CODES, buildFieldAudit, readablePathsFor, bodyLeafPaths };
+module.exports = { buildFieldAudit, readablePathsFor, bodyLeafPaths };

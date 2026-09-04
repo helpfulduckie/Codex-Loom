@@ -492,7 +492,6 @@ function applyPronounPasses(item, registry, branchProtagonist, resolvedById, rol
 }
 
 module.exports = {
-  CODES,
   applyRolePass,
   applyPronounPasses,
   applyTokenPass,

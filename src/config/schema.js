@@ -20,9 +20,8 @@
  * because `roles:` is an implemented feature rather than a declared-but-inert key.
  */
 
-const { TYPES } = require('../schema');
+const { TYPES, STRING } = require('../schema');
 
-const STRING = { type: TYPES.STRING };
 const STRING_SEQ = { type: TYPES.SEQ, of: STRING };
 const STRING_RECORD = { type: TYPES.RECORD, of: STRING };
 

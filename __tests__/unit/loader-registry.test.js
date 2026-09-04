@@ -3,11 +3,10 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { Diagnostics } = require('../../src/diag');
-const { CODES: SCHEMA_CODES } = require('../../src/schema');
+const { Diagnostics, CODES } = require('../../src/diag');
 const {
   loadItemsFromDir, buildRegistry, mergeRegistries,
-  buildCanonRegistry, resolveIncludes, findConfigEntry, CODES,
+  buildCanonRegistry, resolveIncludes, findConfigEntry,
 } = require('../../src/loader/registry');
 const { YAML_SUFFIXES, CONFIG_BASENAMES } = require('../../src/util');
 
@@ -136,7 +135,7 @@ describe('item schema validation (§4.3)', () => {
   test('the canonical case: triggers outside aid suggests relocation', () => {
     write('monsters.cl.yaml', '- id: Wyvern\n  aid:\n    type: Race\n  triggers: Wyvern\n');
     const { diagnostics, codes } = loadWithDiagnostics();
-    expect(codes).toContain(SCHEMA_CODES.MISPLACED_KEY);
+    expect(codes).toContain(CODES.MISPLACED_KEY);
     expect(diagnostics.errors[0].hint).toContain('"triggers" is valid under "aid:"');
   });
 

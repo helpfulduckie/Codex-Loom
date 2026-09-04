@@ -16,11 +16,8 @@
  * function set is shared from `render/parse` rather than restated.
  */
 
-const { TYPES } = require('../schema');
+const { TYPES, STRING, BOOLEAN } = require('../schema');
 const { FUNCTION_NAMES } = require('../render/parse');
-
-const STRING = { type: TYPES.STRING };
-const BOOLEAN = { type: TYPES.BOOLEAN };
 
 /** `render:` names one of the seven functions or the no-op `bare` (§13.2). */
 const RENDER_FUNCTIONS = Object.freeze([...FUNCTION_NAMES, 'bare']);

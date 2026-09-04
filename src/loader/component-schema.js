@@ -27,12 +27,7 @@
  * Sections do not nest (§7.4), so there is no `sections:` key inside a section either.
  */
 
-const { TYPES } = require('../schema');
-
-const STRING = { type: TYPES.STRING };
-const NUMBER = { type: TYPES.NUMBER };
-const BOOLEAN = { type: TYPES.BOOLEAN };
-const ANY = { type: TYPES.ANY };
+const { TYPES, STRING, NUMBER, BOOLEAN, ANY } = require('../schema');
 
 /**
  * `render:` on a section — how the section lays itself out, not what it contains.

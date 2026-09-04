@@ -23,8 +23,8 @@
 
 const path = require('path');
 
-const { Diagnostics, CODES: DIAG_CODES } = require('../../src/diag');
-const { validate, CODES: SCHEMA_CODES } = require('../../src/schema');
+const { Diagnostics, CODES: SCHEMA_CODES } = require('../../src/diag');
+const { validate } = require('../../src/schema');
 const { loadYamlDocument } = require('../../src/loader/yaml');
 const { loadCompileConfig } = require('../../src/config/load');
 const { CONFIG_SCHEMA } = require('../../src/config/schema');

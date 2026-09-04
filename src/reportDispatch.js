@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { CODES: DIAG_CODES } = require('./diag');
-const { CODES: LOAD_CODES, isOutOfBase, normalize } = require('./config/load');
+const { isOutOfBase, normalize } = require('./config/load');
 const { reportUnusedPlaceholders, reportDuplicateQuestions } = require('./emit/placeholders');
 
 /**
@@ -216,7 +216,7 @@ function finalizeDiagnostics({
     });
     if (!covered) {
       diagnostics.warn(
-        LOAD_CODES.LIBRARY_DEPENDENCY_UNCOVERED,
+        DIAG_CODES.LIBRARY_DEPENDENCY_UNCOVERED,
         `This component is read from outside the project (${specPath}), and no `
         + 'structure.input.library entry covers it — --snapshot will not freeze it, and '
         + 'a live edit to this file changes every project that reaches it. Declare its '

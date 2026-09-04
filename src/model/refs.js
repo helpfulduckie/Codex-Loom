@@ -98,4 +98,4 @@ function describeRefFailure(result) {
   return result.hint ? `${result.message}\n${result.hint}` : result.message;
 }
 
-module.exports = { splitRef, resolveItemRef, describeRefFailure, CODES };
+module.exports = { splitRef, resolveItemRef, describeRefFailure };

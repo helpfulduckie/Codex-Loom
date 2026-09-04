@@ -24,10 +24,7 @@
  * surfaces are validated by one engine rather than two.
  */
 
-const { TYPES } = require('../schema');
-
-const STRING = { type: TYPES.STRING };
-const ANY = { type: TYPES.ANY };
+const { TYPES, STRING, ANY } = require('../schema');
 
 /** `aid:` — the AI Dungeon Story Card fields. Meaningful only for a story-card target. */
 const AID = {
