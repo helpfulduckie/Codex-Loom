@@ -3,11 +3,11 @@
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
+const { compile } = require('../../src/compile');
 const {
-  compile,
   buildCompileContext,
   resolveBranchItems,
-} = require('../../src/compile');
+} = require('../../src/branchCompile');
 const { validateCardType, normalizeCardType, buildCardTypeAudit } = require('../../src/cardType');
 const {
   writeOutput, buildBranchOutputDir, cleanAndArchive,

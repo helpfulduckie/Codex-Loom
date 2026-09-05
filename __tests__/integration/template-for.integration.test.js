@@ -18,7 +18,7 @@ const path = require('path');
 const fs = require('fs');
 
 const { compile } = require('../../src/compile');
-const { buildCompileContext } = require('../../src/compile');
+const { buildCompileContext } = require('../../src/branchCompile');
 const { loadCompileConfig } = require('../../src/config/load');
 const { Diagnostics } = require('../../src/diag');
 

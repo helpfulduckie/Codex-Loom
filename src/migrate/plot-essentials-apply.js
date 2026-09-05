@@ -29,6 +29,7 @@ const path = require('path');
 const YAML = require('yaml');
 
 const { YAML_SUFFIXES, hasSuffix } = require('../util');
+const { buildCompileContext } = require('../branchCompile');
 
 const NL = '\n';
 const SPLIT_LINES = /\r?\n/;
@@ -277,7 +278,6 @@ function migratePlotEssentialsFiles(configPath, options = {}) {
   const { loadCompileConfig } = require('../config/load');
   const { loadItemsFromDir } = require('../loader/registry');
   const { buildCanonRegistry } = require('../loader/registry');
-  const { buildCompileContext } = require('../compile');
   const { convertPlotEssentials, buildItemLookup } = require('./plot-essentials');
 
   // `options.diagnostics` is required; see `migrateDescriptionFiles` for why the stage does

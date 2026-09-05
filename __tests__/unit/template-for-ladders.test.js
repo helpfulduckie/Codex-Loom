@@ -8,7 +8,7 @@
  */
 
 const { resolveBodyRender, resolveNotesRender } = require('../../src/templateResolve');
-const { renderPlacementBody } = require('../../src/compile');
+const { renderPlacementBody } = require('../../src/branchCompile');
 const { Diagnostics } = require('../../src/diag');
 
 const textTemplates = new Map([

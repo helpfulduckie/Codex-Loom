@@ -20,7 +20,8 @@
  */
 
 const assert = require('assert');
-const { compile, buildCompileContext } = require('../../src/compile');
+const { compile } = require('../../src/compile');
+const { buildCompileContext } = require('../../src/branchCompile');
 const { loadCompileConfig } = require('../../src/config/load');
 const { loadTemplates } = require('../../src/loader');
 const { Diagnostics } = require('../../src/diag');

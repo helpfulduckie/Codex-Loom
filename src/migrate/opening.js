@@ -30,6 +30,7 @@ const path = require('path');
 
 const { walkBranchTree } = require('../model/branches');
 const { migrateComponentDoc } = require('./component-doc');
+const { buildCompileContext } = require('../branchCompile');
 
 const SPLIT_LINES = /\r?\n/;
 
@@ -157,7 +158,6 @@ function convertOpening(blocks, source, base) {
  */
 function migrateOpeningFiles(configPath, options = {}) {
   const { loadCompileConfig } = require('../config/load');
-  const { buildCompileContext } = require('../compile');
   const { diagnostics } = options;
 
   const config = loadCompileConfig(configPath, { diagnostics });

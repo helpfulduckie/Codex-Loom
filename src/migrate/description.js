@@ -17,6 +17,7 @@
 const fs = require('fs');
 
 const { migrateComponentDoc } = require('./component-doc');
+const { buildCompileContext } = require('../branchCompile');
 
 /**
  * Convert one parsed v3 description into the v4 `sections:` record.
@@ -70,7 +71,6 @@ function convertDescription(doc) {
  */
 function migrateDescriptionFiles(configPath, options = {}) {
   const { loadCompileConfig } = require('../config/load');
-  const { buildCompileContext } = require('../compile');
   const { diagnostics } = options;
 
   const config = loadCompileConfig(configPath, { diagnostics });

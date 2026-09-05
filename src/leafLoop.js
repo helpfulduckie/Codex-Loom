@@ -3,6 +3,9 @@
 const { walkBranchChain } = require('./model/branches');
 const { busWarner, CODES: DIAG_CODES } = require('./diag');
 const {
+  buildCompileContext, resolveBranchItems, renderBranchItems,
+} = require('./branchCompile');
+const {
   resolveSectionedComponents, buildSlotIndex, warnEmptySlots,
   selectComponentSections, renderComponentStoryCards,
 } = require('./slots');
@@ -37,7 +40,6 @@ function compileLeaf(branchPath, ctx) {
     allItemDefs, registry, templates, partials,
     fieldTable, fieldAudit, cardTypeAudit,
     rootDirName, captureReports,
-    buildCompileContext, resolveBranchItems, renderBranchItems,
     placeholderState, roleState, gaps, componentLoader, protagonistByPath,
     deferredComponents, deferredScripts, deferredCardLeaves,
     descriptionLeaves, openingLeaves,
@@ -62,7 +64,6 @@ function compileLeaf(branchPath, ctx) {
   // in compile.js), so an undeclared `{%var}` in the string is one `CL0510` rather than
   // one per leaf.
   const branchProtagonist = protagonistByPath.get(branchPath.join('/')) || null;
-  const compileContext = { branchPath, branchProtagonist, ...cctx, diagnostics };
 
   // Phase A: resolve all story cards
   const resolvedItems = resolveBranchItems(allItemDefs, registry, branchPath, cctx.variables, diagnostics);
@@ -80,7 +81,7 @@ function compileLeaf(branchPath, ctx) {
   // them be raised where the placement is made rather than a hundred lines later, at a
   // point that no longer knows which item was responsible. `componentLoader.load` caches by
   // resolved path, so a per-leaf hoist costs one Map lookup.
-  const sectionedForLeaf = resolveSectionedComponents(compileContext, label, {
+  const sectionedForLeaf = resolveSectionedComponents(cctx, label, {
     loadSectioned: componentLoader.load, recordGap: gaps.record,
   });
   const slotIndex = buildSlotIndex(sectionedForLeaf, branchPath);
@@ -92,7 +93,7 @@ function compileLeaf(branchPath, ctx) {
     resolvedItems, registry, templates, partials, branchProtagonist, cctx.variables,
     {
       renderedById,
-      projectNotesTemplate: (compileContext.render && compileContext.render.notesTemplate) || null,
+      projectNotesTemplate: (cctx.render && cctx.render.notesTemplate) || null,
       diagnostics, slotIndex, branchLabel: label, placeholders: cctx.placeholders,
       usage: placeholderState.usage, usagePath: branchPath.join('/'),
       roles: cctx.roles, onRoleUsed: roleState.onUsed,
@@ -279,7 +280,7 @@ function compileLeaf(branchPath, ctx) {
   // so a `scripts:` spec that resolves identically at every leaf and is redeclared by no
   // branch is written once at the output root, exactly as the deferred components are.
   // Anything else is written per leaf, at this leaf's `outputDir`.
-  const scriptsSpec = compileContext.componentRefs.scripts;
+  const scriptsSpec = cctx.componentRefs.scripts;
   if (scriptsSpec && typeof scriptsSpec === 'string') {
     deferredScripts.set(outputDir, scriptsSpec);
   }
