@@ -130,4 +130,37 @@ cannot show it — Git normalizes on read and reports the file unmodified. If fi
 assertions ever fail by a handful of characters on a fresh clone, check this before
 suspecting the compiler.
 
+## Comments
+
+**A comment explains why the present code is shaped as it is. Anything about what it used to
+be goes in the vault record, which already exists and is the better place for it.** The
+project keeps a phase plan and a session record for every change; a comment restating that
+history duplicates a document that is more complete, better indexed and correctly dated.
+
+Do not write:
+
+- What a previous version did — "v3 walked this separately", "exactly as the old rung did".
+- Which phase, session, handoff or date produced the code, or who decided it.
+- A design that was considered and rejected, unless a reader would otherwise reintroduce it.
+- A restatement of what the function below does, at any length.
+- Hardcoded `file.js:NNN` references. Name the function; line numbers rot silently and are
+  never updated.
+
+Do write the constraint that is not visible from the code: an ordering that matters, an
+invariant a caller must hold, a workaround whose cause is elsewhere, a case the obvious
+implementation gets wrong.
+
+**If a comment block is longer than the code it introduces, it is documentation and belongs
+in the dev guide.** Rewrite it to the one sentence a reader needs at that line, and move the
+rest.
+
+**Test titles name behavior, not provenance.** No phase numbers, no spec section citations,
+no "the case Phase 4 raised". A title that only makes sense to someone who read the plan is
+a title that will outlive the plan.
+
+**When a step removes behavior, deleting the tests that asserted it is part of that step.**
+A test asserting that something no longer happens is a change-log entry wearing a test's
+clothes: it passes forever, proves nothing about the current system, and the record already
+says the behavior was removed.
+
 @~/.claude/codex-loom.md
