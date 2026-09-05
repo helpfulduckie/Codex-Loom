@@ -79,7 +79,7 @@ describe('resolveBodyRender — body ladder', () => {
   });
 });
 
-describe('resolveNotesRender — notes ladder (three rungs, §13.4 end state)', () => {
+describe('resolveNotesRender — notes ladder (three rungs)', () => {
   test('rung 1: item render.notesTemplate, named', () => {
     expect(resolveNotesRender(
       { render: { notesTemplate: 'Fancy' }, aid: { type: 'Character' } },
@@ -110,7 +110,7 @@ describe('resolveNotesRender — notes ladder (three rungs, §13.4 end state)', 
       new Map(), { templates: {} }, 'Fancy', {})).toEqual({ kind: 'missing', name: 'Ghost' });
   });
 
-  test('nothing set → null (§4.5 default)', () => {
+  test('nothing set → null (default)', () => {
     expect(resolveNotesRender({ aid: { type: 'X' } }, new Map(), { templates: {} }, null, {})).toBeNull();
   });
 

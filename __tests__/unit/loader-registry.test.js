@@ -1,7 +1,6 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { Diagnostics, CODES } = require('../../src/diag');
 const {
@@ -9,10 +8,10 @@ const {
   buildCanonRegistry, resolveIncludes, findConfigEntry,
 } = require('../../src/loader/registry');
 const { YAML_SUFFIXES, CONFIG_BASENAMES } = require('../../src/util');
+const { withTmpDir } = require('../helpers/project');
 
 let tmpDir;
-beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-reg-')); });
-afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+beforeEach(() => { tmpDir = withTmpDir(); });
 
 function write(relPath, content) {
   const full = path.join(tmpDir, relPath);
@@ -41,7 +40,7 @@ describe('a file that will not load is one coded ERROR, and the walk goes on (CL
   });
 });
 
-describe('file discovery across every accepted suffix (§4.6)', () => {
+describe('file discovery across every accepted suffix', () => {
   test.each(YAML_SUFFIXES)('loads %s', (suffix) => {
     write(`Codex/item${suffix}`, 'id: A\n');
     expect(loadItemsFromDir([tmpDir]).map((i) => i.id)).toEqual(['A']);
@@ -62,7 +61,7 @@ describe('file discovery across every accepted suffix (§4.6)', () => {
     expect(loadItemsFromDir([path.join(tmpDir, 'nope')])).toEqual([]);
   });
 
-  test('library.cl.yaml is excluded from item loading (§9.4.2, Decision 3, Phase 8)', () => {
+  test('library.cl.yaml is excluded from item loading', () => {
     // Written by hand, ahead of any tooling — a manifest opening with a string `name:`
     // fails the component-shape skip and would otherwise register as a phantom item and
     // raise unknown-key errors on its own `roles:`/`placeholders:`/`requires:` keys.
@@ -122,7 +121,7 @@ describe('item loading', () => {
     expect(codes).toContain(CODES.MULTIPLE_VAR_ALIASES);
   });
 
-  test('an id containing ":" reports CL0144 on the diagnostics bus (§17.2)', () => {
+  test('an id containing ":" reports CL0144 on the diagnostics bus', () => {
     write('a.cl.yaml', 'id: "grim:magic"\n');
     const { diagnostics, codes } = loadWithDiagnostics();
     expect(codes).toContain(CODES.ID_CONTAINS_COLON);
@@ -131,7 +130,7 @@ describe('item loading', () => {
 
 });
 
-describe('item schema validation (§4.3)', () => {
+describe('item schema validation', () => {
   test('the canonical case: triggers outside aid suggests relocation', () => {
     write('monsters.cl.yaml', '- id: Wyvern\n  aid:\n    type: Race\n  triggers: Wyvern\n');
     const { diagnostics, codes } = loadWithDiagnostics();
@@ -218,7 +217,7 @@ describe('registries', () => {
     expect(buildRegistry(items, 'p').size).toBe(0);
   });
 
-  test('rename-on-import (id + import) registers under the local id (§17.4)', () => {
+  test('rename-on-import (id + import) registers under the local id', () => {
     const items = [{ id: 'Dragon', import: 'wyvern', _source: 'a.yaml' }];
     const registry = buildRegistry(items, 'p');
     expect([...registry.keys()]).toEqual(['dragon']);
@@ -284,7 +283,7 @@ describe('library registry', () => {
     expect([...buildCanonRegistry(map).keys()].sort()).toEqual(['a', 'b']);
   });
 
-  test('a duplicate id across library sets loads both, unqualified and unreachable (§17.3)', () => {
+  test('a duplicate id across library sets loads both, unqualified and unreachable', () => {
     write('canonA/a.cl.yaml', 'id: Dup\n');
     write('canonB/b.cl.yaml', 'id: Dup\n');
     const map = new Map([['a', path.join(tmpDir, 'canonA')], ['b', path.join(tmpDir, 'canonB')]]);
@@ -309,10 +308,10 @@ describe('library registry', () => {
   });
 });
 
-describe('config entry-point discovery (§4.6)', () => {
+describe('config entry-point discovery', () => {
   test('finds each accepted basename', () => {
     for (const name of CONFIG_BASENAMES) {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-entry-'));
+      const dir = withTmpDir();
       fs.writeFileSync(path.join(dir, name), 'x: 1\n');
       expect(findConfigEntry(dir, CONFIG_BASENAMES)).toBe(path.join(dir, name));
       fs.rmSync(dir, { recursive: true, force: true });
@@ -333,5 +332,153 @@ describe('config entry-point discovery (§4.6)', () => {
     write('compile.cl.yaml', 'x: 1\n');
     write('compile.yml', 'x: 1\n');
     expect(() => findConfigEntry(tmpDir, CONFIG_BASENAMES)).toThrow(/compile\.cl\.yaml[\s\S]*compile\.yml/);
+  });
+});
+
+// ── resolveIncludes — duplicate file detection ────────────────────────────────
+
+describe('resolveIncludes — duplicate file detection', () => {
+  const makeConfig = (base) => ({
+    _base: base,
+    _resolvedComponents: {},
+    _resolvedCanon: new Map(),
+  });
+
+  test('single include of a file succeeds and returns its items', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: ItemA\n  name: ItemA\n', 'utf8');
+
+    const itemDefs = [{ include: shared, _source: path.join(tmpDir, 'project.yaml') }];
+    const result = resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir));
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('ItemA');
+  });
+
+  /** Resolve with a bus and hand back the CL0131 reports beside the result. */
+  const includeAll = (itemDefs) => {
+    const diagnostics = new Diagnostics();
+    const result = resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir), { diagnostics });
+    const doubles = diagnostics.errors.filter((d) => d.code === CODES.DOUBLE_INCLUDE);
+    return { result, diagnostics, doubles };
+  };
+
+  test('duplicate include from two different source files is one CL0131, and the repeat is skipped', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: ItemA\n  name: ItemA\n', 'utf8');
+
+    const source1 = path.join(tmpDir, 'first.yaml');
+    const source2 = path.join(tmpDir, 'second.yaml');
+    const itemDefs = [
+      { include: shared, _source: source1 },
+      { include: shared, _source: source2 },
+    ];
+
+    const { result, doubles } = includeAll(itemDefs);
+    expect(doubles).toHaveLength(1);
+    expect(doubles[0].message).toMatch(/File included more than once/);
+    expect(doubles[0].file).toBe(source2);
+    // The first include still contributes its items; the repeat contributes nothing.
+    expect(result.map((i) => i.id)).toEqual(['ItemA']);
+  });
+
+  test('the CL0131 message contains the duplicated file path', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: ItemA\n  name: ItemA\n', 'utf8');
+
+    const itemDefs = [
+      { include: shared, _source: path.join(tmpDir, 'a.yaml') },
+      { include: shared, _source: path.join(tmpDir, 'b.yaml') },
+    ];
+
+    const { doubles } = includeAll(itemDefs);
+    expect(doubles[0].message).toContain(shared);
+  });
+
+  test('the CL0131 message lists both source files that include the duplicate', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: ItemA\n  name: ItemA\n', 'utf8');
+
+    const source1 = path.join(tmpDir, 'a.yaml');
+    const source2 = path.join(tmpDir, 'b.yaml');
+    const itemDefs = [
+      { include: shared, _source: source1 },
+      { include: shared, _source: source2 },
+    ];
+
+    const { doubles } = includeAll(itemDefs);
+    expect(doubles[0].message).toContain(source1);
+    expect(doubles[0].message).toContain(source2);
+  });
+
+  test('duplicate include within the same source file is CL0131 and names the source', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: ItemA\n  name: ItemA\n', 'utf8');
+
+    const source = path.join(tmpDir, 'items.yaml');
+    const itemDefs = [
+      { include: shared, _source: source },
+      { include: shared, _source: source },
+    ];
+
+    const { doubles } = includeAll(itemDefs);
+    expect(doubles).toHaveLength(1);
+    expect(doubles[0].message).toContain(shared);
+    expect(doubles[0].message).toContain(source);
+  });
+
+  test('two includes of different files succeeds and returns all items', () => {
+    const fileA = path.join(tmpDir, 'a.yaml');
+    const fileB = path.join(tmpDir, 'b.yaml');
+    fs.writeFileSync(fileA, '- id: ItemA\n  name: ItemA\n', 'utf8');
+    fs.writeFileSync(fileB, '- id: ItemB\n  name: ItemB\n', 'utf8');
+
+    const itemDefs = [
+      { include: fileA, _source: path.join(tmpDir, 'project.yaml') },
+      { include: fileB, _source: path.join(tmpDir, 'project.yaml') },
+    ];
+    const result = resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir));
+    expect(result).toHaveLength(2);
+    expect(result.map(c => c.id)).toEqual(expect.arrayContaining(['ItemA', 'ItemB']));
+  });
+
+  test('expands a root variable and a canon name in an include path', () => {
+    // Canon names are variables now (§6.1), so `{%main}` does what `{@main}` used to.
+    const charDir = path.join(tmpDir, 'Characters');
+    fs.mkdirSync(charDir);
+    fs.writeFileSync(path.join(charDir, 'Aria.yaml'), '- id: Aria\n  name: Aria\n', 'utf8');
+
+    const config = {
+      _base: tmpDir,
+      _resolvedCanon: new Map([['main', tmpDir]]),
+      _variables: { who: 'Aria', main: tmpDir },
+      variables: { who: 'Aria' },
+    };
+    const itemDefs = [{ include: '{%main}/Characters/{%who}.yaml', _source: path.join(tmpDir, 'p.yaml') }];
+    const result = resolveIncludes(itemDefs, new Map(), config);
+    expect(result.map(c => c.id)).toContain('Aria');
+  });
+
+  test('a renamed import (id + import) does not suppress an included item with the imported id', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: Wyvern\n  name: Wyvern\n', 'utf8');
+
+    const itemDefs = [
+      { id: 'Dragon', import: 'wyvern', _source: path.join(tmpDir, 'project.yaml') },
+      { include: shared, _source: path.join(tmpDir, 'project.yaml') },
+    ];
+    const result = resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir));
+    expect(result.map((c) => c.id)).toEqual(['Wyvern']);
+  });
+
+  test('a renamed import DOES suppress an included item with the local id', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: Dragon\n  name: Dragon\n', 'utf8');
+
+    const itemDefs = [
+      { id: 'Dragon', import: 'wyvern', _source: path.join(tmpDir, 'project.yaml') },
+      { include: shared, _source: path.join(tmpDir, 'project.yaml') },
+    ];
+    const result = resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir));
+    expect(result).toEqual([]);
   });
 });

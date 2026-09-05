@@ -6,11 +6,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const {
   collectRows, formatProvenanceMd, formatProvenanceCsv, runProvenanceMode,
 } = require('../../src/provenance');
 const { ItemRegistry } = require('../../src/loader/registry');
+const { withTmpDir } = require('../helpers/project');
 
 describe('provenance collectRows', () => {
   test('lists resolved items with library source and project source', () => {
@@ -76,11 +76,7 @@ describe('runProvenanceMode', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-provenance-'));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    tmpDir = withTmpDir();
   });
 
   test('writes md and csv and returns both paths', () => {

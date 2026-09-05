@@ -29,7 +29,7 @@ describe('Diagnostic.location', () => {
 });
 
 describe('Diagnostic.format', () => {
-  test('matches the §4.4 shape', () => {
+  test('matches the documented diagnostic shape', () => {
     const d = new Diagnostic({
       code: 'CL0310',
       severity: SEVERITY.ERROR,
@@ -264,7 +264,7 @@ describe('every CL code raised in src/ is in the registry', () => {
   });
 });
 
-describe('the compiler / lint split (§12.5)', () => {
+describe('the compiler / lint split', () => {
   const { isOpinion, applyLintLevel, LINT_LEVELS } = require('../../src/diag');
 
   test('the opinion layer is exactly the six codes tagged layer: opinion', () => {
@@ -338,7 +338,7 @@ describe('Diagnostics applies the ceiling at add time', () => {
 });
 
 describe('module purity', () => {
-  test('diag.js requires neither fs nor console — model/ depends on this (§3.3)', () => {
+  test('diag.js requires neither fs nor console — model/ depends on this', () => {
     const source = require('fs').readFileSync(require.resolve('../../src/diag'), 'utf8');
     const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
     expect(code).not.toMatch(/require\(['"]fs['"]\)/);

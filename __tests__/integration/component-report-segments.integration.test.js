@@ -23,10 +23,10 @@
  * varying line drags the whole document into every leaf.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { compile } = require('../../src/compile');
+const { withTmpDir, writeTree } = require('../helpers/project');
 
 let tmpDir;
 
@@ -35,16 +35,11 @@ const readReport = (name) => fs.readFileSync(
 );
 
 beforeAll(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-segments-'));
-  const write = (rel, content) => {
-    const full = path.join(tmpDir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content, 'utf8');
-  };
-
-  // Two sections, and only one of them dispatches on the branch. The house rule is the
-  // constant; the register line is what the `flashback` branch rewrites.
-  write('components/authors-note.yaml', [
+  tmpDir = withTmpDir();
+  writeTree(tmpDir, {
+    // Two sections, and only one of them dispatches on the branch. The house rule is the
+    // constant; the register line is what the `flashback` branch rewrites.
+    'components/authors-note.yaml': [
     'sections:',
     '  houseRule:',
     '    text: "Keep scenes in the present tense."',
@@ -56,36 +51,33 @@ beforeAll(() => {
     '    variants:',
     '      soft:',
     '        text: "Write with a light touch."',
-  ].join('\n'));
+    ].join('\n'),
 
-  write('Codex/items.yaml', [
+    'Codex/items.yaml': [
     '- id: Ally',
     '  name: {display: Ally, full: Ally Renn}',
     '  aid: {type: Character, triggers: [Ally]}',
     '  body: {tagline: the second}',
-  ].join('\n'));
+    ].join('\n'),
 
-  write('templates/Character.template', '{$name.full}\nTagline: {$body.tagline}');
+    'templates/Character.template': '{$name.full}\nTagline: {$body.tagline}',
 
-  write('compile.yaml', [
-    'version: 4',
-    'structure:',
-    '  input:',
-    `    items: [${tmpDir.replace(/\\/g, '/')}/Codex]`,
-    `    templates: [${tmpDir.replace(/\\/g, '/')}/templates]`,
-    `  output: ${tmpDir.replace(/\\/g, '/')}/output`,
-    'components:',
-    '  authorsNote: ./components/authors-note.yaml',
-    'branches:',
-    '  present: {}',
-    '  flashback: {}',
-  ].join('\n'));
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'components:',
+      '  authorsNote: ./components/authors-note.yaml',
+      'branches:',
+      '  present: {}',
+      '  flashback: {}',
+    ].join('\n'),
+  });
 
   compile(path.join(tmpDir, 'compile.yaml'), { diff: true });
-});
-
-afterAll(() => {
-  if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 describe("Author's Note reports per section (step 10)", () => {

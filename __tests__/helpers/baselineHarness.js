@@ -44,6 +44,14 @@ const { listFilesRelative } = require('../../src/util');
 const { classifyDiff, OPAQUE } = require('./diffShape');
 
 /**
+ * The one definition of the goldens-presence gate. The golden fixtures are a separate private
+ * repo cloned into the gitignored `goldenFixtures/`; every suite that consumes them probes for
+ * the manifest the same way, and each supplies its own absent-case fallback.
+ */
+const GOLDEN_DIR = path.resolve(__dirname, '../../goldenFixtures');
+const HAVE_GOLDENS = fs.existsSync(path.join(GOLDEN_DIR, 'projects.js'));
+
+/**
  * The report modes reachable as `(scenarioRoot, outputDir, options)` against an
  * already-written tree — the harness calls each one directly and it writes into `outputDir`.
  * `seed-map`, `card-sizes` and `lint` parse compiled cards back into the model, which is how
@@ -430,4 +438,5 @@ function describeBaselineSet(options) {
 
 module.exports = {
   describeBaselineSet, DEFAULT_REPORT_MODES, prepareTempTree, resolvedReportsDir, collectCompileReports,
+  GOLDEN_DIR, HAVE_GOLDENS,
 };

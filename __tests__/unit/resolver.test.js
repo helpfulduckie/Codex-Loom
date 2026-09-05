@@ -335,135 +335,80 @@ describe('enumerateLeaves', () => {
 // ── resolveBranchSpec ─────────────────────────────────────────────────────────
 
 describe('resolveBranchSpec', () => {
-  test('null spec → empty array (include with no variants)', () => {
-    expect(resolveBranchSpec(null, ['subject'])).toEqual([]);
-  });
-
-  test('exact key match returns its variant names', () => {
-    const spec = { subject: 'subject-variant' };
-    expect(resolveBranchSpec(spec, ['subject'])).toEqual(['subject-variant']);
-  });
-
-  test('exact null key → returns null (excluded)', () => {
-    const spec = { subject: null };
-    expect(resolveBranchSpec(spec, ['subject'])).toBeNull();
-  });
-
-  test('wildcard * applies as baseline for any non-excluded branch', () => {
-    const spec = { '*': 'generic' };
-    expect(resolveBranchSpec(spec, ['anything'])).toEqual(['generic']);
-    expect(resolveBranchSpec(spec, ['other'])).toEqual(['generic']);
-  });
-
-  test('explicit key stacks on top of wildcard (both apply)', () => {
-    const spec = { '*': 'generic', Wyvern: 'draconic' };
-    // Wyvern: wildcard fires first, then explicit — both appear
-    expect(resolveBranchSpec(spec, ['Wyvern'])).toEqual(['generic', 'draconic']);
-    // Free Form: only wildcard
-    expect(resolveBranchSpec(spec, ['Free Form'])).toEqual(['generic']);
-  });
-
-  test('explicit null prevents wildcard from applying', () => {
-    const spec = { '*': 'generic', Wyvern: null };
-    expect(resolveBranchSpec(spec, ['Wyvern'])).toBeNull();
-    expect(resolveBranchSpec(spec, ['Other'])).toEqual(['generic']);
-  });
-
-  test('array apply form at a branch level', () => {
-    const spec = { subject: { apply: ['a', 'b'] } };
-    expect(resolveBranchSpec(spec, ['subject'])).toEqual(['a', 'b']);
-  });
-
-  test('multi-level descent: [A, X]', () => {
-    const spec = {
-      A: {
-        apply: 'a-variant',
-        branches: {
-          X: 'x-variant',
-          Y: 'y-variant',
-        },
-      },
-    };
-    expect(resolveBranchSpec(spec, ['A', 'X'])).toEqual(['a-variant', 'x-variant']);
-    expect(resolveBranchSpec(spec, ['A', 'Y'])).toEqual(['a-variant', 'y-variant']);
-  });
-
-  test('wildcard at first level descends into sub-branches', () => {
-    const spec = {
-      '*': {
-        branches: {
-          Aness: 'aness-shared',
-          Veryn: 'veryn-shared',
-        },
-      },
-    };
-    expect(resolveBranchSpec(spec, ['Free Form', 'Aness'])).toEqual(['aness-shared']);
-    expect(resolveBranchSpec(spec, ['Wyvern', 'Veryn'])).toEqual(['veryn-shared']);
-  });
-
-  test('wildcard baseline + explicit sub-branch stack', () => {
-    const spec = {
-      '*': { branches: { Aness: 'shared' } },
-      Wyvern: { branches: { Aness: 'wyvern-specific' } },
-    };
-    // Free Form/Aness: only */Aness fires
-    expect(resolveBranchSpec(spec, ['Free Form', 'Aness'])).toEqual(['shared']);
-    // Wyvern/Aness: */Aness fires, then Wyvern/Aness stacks on top
-    expect(resolveBranchSpec(spec, ['Wyvern', 'Aness'])).toEqual(['shared', 'wyvern-specific']);
+  test.each([
+    { name: 'null spec → empty array (include with no variants)',
+      spec: null, leaf: ['subject'], expected: [] },
+    { name: 'exact key match returns its variant names',
+      spec: { subject: 'subject-variant' }, leaf: ['subject'], expected: ['subject-variant'] },
+    { name: 'exact null key → returns null (excluded)',
+      spec: { subject: null }, leaf: ['subject'], expected: null },
+    { name: 'wildcard * applies as baseline for any non-excluded branch',
+      spec: { '*': 'generic' }, leaf: ['anything'], expected: ['generic'] },
+    { name: 'wildcard * applies as baseline for a second non-excluded branch',
+      spec: { '*': 'generic' }, leaf: ['other'], expected: ['generic'] },
+    { name: 'explicit key stacks on top of wildcard (both apply)',
+      spec: { '*': 'generic', Wyvern: 'draconic' }, leaf: ['Wyvern'], expected: ['generic', 'draconic'] },
+    { name: 'a branch with only the wildcard gets just the wildcard',
+      spec: { '*': 'generic', Wyvern: 'draconic' }, leaf: ['Free Form'], expected: ['generic'] },
+    { name: 'explicit null prevents wildcard from applying',
+      spec: { '*': 'generic', Wyvern: null }, leaf: ['Wyvern'], expected: null },
+    { name: 'wildcard still applies to a non-excluded branch alongside an explicit null',
+      spec: { '*': 'generic', Wyvern: null }, leaf: ['Other'], expected: ['generic'] },
+    { name: 'array apply form at a branch level',
+      spec: { subject: { apply: ['a', 'b'] } }, leaf: ['subject'], expected: ['a', 'b'] },
+    { name: 'multi-level descent: [A, X]',
+      spec: { A: { apply: 'a-variant', branches: { X: 'x-variant', Y: 'y-variant' } } },
+      leaf: ['A', 'X'], expected: ['a-variant', 'x-variant'] },
+    { name: 'multi-level descent: [A, Y]',
+      spec: { A: { apply: 'a-variant', branches: { X: 'x-variant', Y: 'y-variant' } } },
+      leaf: ['A', 'Y'], expected: ['a-variant', 'y-variant'] },
+    { name: 'wildcard at first level descends into sub-branches: [Free Form, Aness]',
+      spec: { '*': { branches: { Aness: 'aness-shared', Veryn: 'veryn-shared' } } },
+      leaf: ['Free Form', 'Aness'], expected: ['aness-shared'] },
+    { name: 'wildcard at first level descends into sub-branches: [Wyvern, Veryn]',
+      spec: { '*': { branches: { Aness: 'aness-shared', Veryn: 'veryn-shared' } } },
+      leaf: ['Wyvern', 'Veryn'], expected: ['veryn-shared'] },
+    { name: 'wildcard baseline + explicit sub-branch stack: only */Aness fires',
+      spec: { '*': { branches: { Aness: 'shared' } }, Wyvern: { branches: { Aness: 'wyvern-specific' } } },
+      leaf: ['Free Form', 'Aness'], expected: ['shared'] },
+    { name: 'wildcard baseline + explicit sub-branch stack: */Aness then Wyvern/Aness stacks',
+      spec: { '*': { branches: { Aness: 'shared' } }, Wyvern: { branches: { Aness: 'wyvern-specific' } } },
+      leaf: ['Wyvern', 'Aness'], expected: ['shared', 'wyvern-specific'] },
+  ])('$name', ({ spec, leaf, expected }) => {
+    expect(resolveBranchSpec(spec, leaf)).toEqual(expected);
   });
 });
 
 // ── _ fallback wildcard ───────────────────────────────────────────────────────
 
 describe('_ fallback wildcard (resolveBranchSpec)', () => {
-  test('_ applies to branches with no exact key match', () => {
-    const spec = { '_': 'fallback' };
-    expect(resolveBranchSpec(spec, ['anything'])).toEqual(['fallback']);
-    expect(resolveBranchSpec(spec, ['other'])).toEqual(['fallback']);
-  });
-
-  test('_ does NOT apply when an exact key matches', () => {
-    const spec = { '_': 'fallback', Felix: 'felix-variant' };
-    expect(resolveBranchSpec(spec, ['Felix'])).toEqual(['felix-variant']);
-  });
-
-  test('_ stacks on top of * for unmatched branches', () => {
-    const spec = { '*': 'base', '_': 'extra' };
-    expect(resolveBranchSpec(spec, ['unmatched'])).toEqual(['base', 'extra']);
-  });
-
-  test('_ does not apply alongside * when exact key matches', () => {
-    const spec = { '*': 'base', '_': 'extra', Felix: 'felix-only' };
-    expect(resolveBranchSpec(spec, ['Felix'])).toEqual(['base', 'felix-only']);
-    expect(resolveBranchSpec(spec, ['Other'])).toEqual(['base', 'extra']);
-  });
-
-  test('_: ~ (null) excludes unmatched branches', () => {
-    const spec = { '_': null, Felix: 'felix-variant' };
-    expect(resolveBranchSpec(spec, ['Other'])).toBeNull();
-    expect(resolveBranchSpec(spec, ['Unrelated'])).toBeNull();
-  });
-
-  test('_: ~ does not affect branches with an exact key', () => {
-    const spec = { '_': null, Felix: 'felix-variant' };
-    expect(resolveBranchSpec(spec, ['Felix'])).toEqual(['felix-variant']);
-  });
-
-  test('_ with branches: sub-key descends correctly', () => {
-    const spec = {
-      '_': {
-        branches: {
-          Aness: 'aness-fallback',
-        },
-      },
-      Felix: {
-        branches: {
-          Aness: 'aness-felix',
-        },
-      },
-    };
-    expect(resolveBranchSpec(spec, ['Other', 'Aness'])).toEqual(['aness-fallback']);
-    expect(resolveBranchSpec(spec, ['Felix', 'Aness'])).toEqual(['aness-felix']);
+  test.each([
+    { name: '_ applies to branches with no exact key match',
+      spec: { '_': 'fallback' }, leaf: ['anything'], expected: ['fallback'] },
+    { name: '_ applies to a second branch with no exact key match',
+      spec: { '_': 'fallback' }, leaf: ['other'], expected: ['fallback'] },
+    { name: '_ does NOT apply when an exact key matches',
+      spec: { '_': 'fallback', Felix: 'felix-variant' }, leaf: ['Felix'], expected: ['felix-variant'] },
+    { name: '_ stacks on top of * for unmatched branches',
+      spec: { '*': 'base', '_': 'extra' }, leaf: ['unmatched'], expected: ['base', 'extra'] },
+    { name: '_ does not apply alongside * when exact key matches',
+      spec: { '*': 'base', '_': 'extra', Felix: 'felix-only' }, leaf: ['Felix'], expected: ['base', 'felix-only'] },
+    { name: '* still applies alongside _ when no exact key matches',
+      spec: { '*': 'base', '_': 'extra', Felix: 'felix-only' }, leaf: ['Other'], expected: ['base', 'extra'] },
+    { name: '_: ~ (null) excludes unmatched branches',
+      spec: { '_': null, Felix: 'felix-variant' }, leaf: ['Other'], expected: null },
+    { name: '_: ~ (null) excludes a second unmatched branch',
+      spec: { '_': null, Felix: 'felix-variant' }, leaf: ['Unrelated'], expected: null },
+    { name: '_: ~ does not affect branches with an exact key',
+      spec: { '_': null, Felix: 'felix-variant' }, leaf: ['Felix'], expected: ['felix-variant'] },
+    { name: '_ with branches: sub-key descends correctly (fallback path)',
+      spec: { '_': { branches: { Aness: 'aness-fallback' } }, Felix: { branches: { Aness: 'aness-felix' } } },
+      leaf: ['Other', 'Aness'], expected: ['aness-fallback'] },
+    { name: '_ with branches: sub-key descends correctly (exact path)',
+      spec: { '_': { branches: { Aness: 'aness-fallback' } }, Felix: { branches: { Aness: 'aness-felix' } } },
+      leaf: ['Felix', 'Aness'], expected: ['aness-felix'] },
+  ])('$name', ({ spec, leaf, expected }) => {
+    expect(resolveBranchSpec(spec, leaf)).toEqual(expected);
   });
 });
 
@@ -762,7 +707,7 @@ describe('resolveItem', () => {
     });
   });
 
-  describe('rename-on-import (§17.4)', () => {
+  describe('rename-on-import', () => {
     const wyvern = {
       id: 'wyvern',
       name: 'Wyvern',

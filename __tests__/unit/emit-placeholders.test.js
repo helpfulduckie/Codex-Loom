@@ -14,7 +14,6 @@
  * pass cannot get the order wrong.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const YAML = require('yaml');
@@ -24,15 +23,7 @@ const {
   reportUnusedPlaceholders, collectDuplicateQuestions, reportDuplicateQuestions, FILENAME,
 } = require('../../src/emit/placeholders');
 const { CODES, Diagnostics } = require('../../src/diag');
-
-const dirs = [];
-afterAll(() => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }); });
-
-const tmp = () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-ph-'));
-  dirs.push(dir);
-  return dir;
-};
+const { withTmpDir } = require('../helpers/project');
 
 describe('expandQuestions', () => {
   test('expands {%variables} in question text', () => {
@@ -70,7 +61,7 @@ describe('expandQuestions', () => {
     expect(out.c).toBe('C about ${B about ${A?}?}?');
   });
 
-  test('an undeclared reference is left as written, for §12.3 check 1 to report', () => {
+  test('an undeclared reference is left as written, for a later check to report', () => {
     const warnings = [];
     const out = expandQuestions({ q: 'About %nobody%?' }, {}, {
       onWarn: (code, message) => warnings.push({ code, message }),
@@ -121,7 +112,7 @@ describe('localKeysOf', () => {
 
 describe('writeNodePlaceholders', () => {
   test('emits only the keys the node adds, not the merged table', () => {
-    const dir = tmp();
+    const dir = withTmpDir();
     const node = { placeholders: { local: 'Local?' } };
     const merged = { inherited: 'Inherited?', local: 'Local?' };
     writeNodePlaceholders(dir, node, merged, {});
@@ -135,7 +126,7 @@ describe('writeNodePlaceholders', () => {
     // The cross-node case, and the reason expansion cannot be left to Velvet Lattice: VL
     // merges the parent's key ahead of this one, so its single pass would substitute the
     // inner key before the outer question existed in the text.
-    const dir = tmp();
+    const dir = withTmpDir();
     const node = { placeholders: { liGender: 'What is %liName% gender?' } };
     const merged = { liName: 'Their name?', liGender: 'What is %liName% gender?' };
     writeNodePlaceholders(dir, node, merged, {});
@@ -146,13 +137,13 @@ describe('writeNodePlaceholders', () => {
   });
 
   test('a node adding nothing writes no file', () => {
-    const dir = tmp();
+    const dir = withTmpDir();
     expect(writeNodePlaceholders(dir, {}, { inherited: 'Inherited?' }, {})).toBeNull();
     expect(fs.existsSync(path.join(dir, FILENAME))).toBe(false);
   });
 
   test('a node that only unbinds writes no file — VL cannot express a removal', () => {
-    const dir = tmp();
+    const dir = withTmpDir();
     writeNodePlaceholders(dir, { placeholders: { gone: null } }, {}, {});
     expect(fs.existsSync(path.join(dir, FILENAME))).toBe(false);
   });
@@ -160,7 +151,7 @@ describe('writeNodePlaceholders', () => {
   test('a stale file is removed when the node stops declaring anything', () => {
     // Otherwise the deleted declaration outlives its source: VL still reads the orphan and
     // still inherits it down the whole subtree.
-    const dir = tmp();
+    const dir = withTmpDir();
     writeNodePlaceholders(dir, { placeholders: { a: 'A?' } }, { a: 'A?' }, {});
     expect(fs.existsSync(path.join(dir, FILENAME))).toBe(true);
 
@@ -169,7 +160,7 @@ describe('writeNodePlaceholders', () => {
   });
 
   test('round-trips through YAML with characters that need quoting', () => {
-    const dir = tmp();
+    const dir = withTmpDir();
     const question = 'Name: which one? (e.g. "Aness", or leave blank)';
     writeNodePlaceholders(dir, { placeholders: { q: question } }, { q: question }, {});
     expect(YAML.parse(fs.readFileSync(path.join(dir, FILENAME), 'utf8')).q).toBe(question);
@@ -180,7 +171,7 @@ describe('writeNodePlaceholders', () => {
     // {%var} sweep, so an undeclared name reached Placeholders.yaml with only a console
     // warning. `resolveVariables` now raises CL0510 at expansion, and the emitted-output
     // sweep raises CL0431 as the backstop every other surface already has.
-    const dir = tmp();
+    const dir = withTmpDir();
     const diagnostics = new Diagnostics();
     writeNodePlaceholders(
       dir,
@@ -347,7 +338,7 @@ describe('checkPlaceholderContext', () => {
   });
 });
 
-describe('reportUnusedPlaceholders — §12.3 check 2', () => {
+describe('reportUnusedPlaceholders — a placeholder declared but never used', () => {
   const bus = () => {
     const found = [];
     return { found, diagnostics: { warn: (code, message) => found.push({ code, message }) } };
@@ -412,7 +403,7 @@ describe('reportUnusedPlaceholders — §12.3 check 2', () => {
   });
 });
 
-describe('duplicate question text — §12.3 check 4', () => {
+describe('duplicate question text', () => {
   const collect = (table, where) => {
     const duplicates = new Map();
     collectDuplicateQuestions(table, duplicates, where || '');

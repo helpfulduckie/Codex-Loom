@@ -1,7 +1,6 @@
 'use strict';
 
 const fs   = require('fs');
-const os   = require('os');
 const path = require('path');
 
 const {
@@ -10,11 +9,12 @@ const {
   compileLeaf,
   runLeafReviewMode,
 } = require('../../src/overview');
+const { withTmpDir } = require('../helpers/project');
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function makeTmp() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'cl-overview-test-'));
+  return withTmpDir();
 }
 
 function write(filePath, content) {

@@ -1,15 +1,14 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { Diagnostics, CODES } = require('../../src/diag');
 const { loadCompileConfig } = require('../../src/config/load');
+const { withTmpDir } = require('../helpers/project');
 
 let tmpDir;
 
-beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cfg-')); });
-afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+beforeEach(() => { tmpDir = withTmpDir(); });
 
 /**
  * Write a config and load it into a private bus, so nothing prints or throws.
@@ -40,7 +39,7 @@ function load(yaml, { dirs = [], raw = false } = {}) {
   return { config, diagnostics, codes: diagnostics.all.map((d) => d.code), cfgPath };
 }
 
-describe('diagnostics carry source positions (§4.4)', () => {
+describe('diagnostics carry source positions', () => {
   test('an unknown key names its line and column', () => {
     const { diagnostics } = load('title: x\nbogus: y\n');
     const diag = diagnostics.errors[0];
@@ -69,7 +68,7 @@ describe('variable graph checking', () => {
     expect(diagnostics.errors[0].message).toContain('referenced by variable "a"');
   });
 
-  test('a cycle names every key in the loop (§6.2)', () => {
+  test('a cycle names every key in the loop', () => {
     const { diagnostics, codes } = load('variables:\n  a: "{%b}"\n  b: "{%c}"\n  c: "{%a}"\n');
     expect(codes).toContain(CODES.VARIABLE_CYCLE);
     const message = diagnostics.errors[0].message;
@@ -132,7 +131,7 @@ describe('variable graph checking', () => {
   });
 });
 
-describe('pre-branch scoping (§5.1, CL0520)', () => {
+describe('pre-branch scoping (CL0520)', () => {
   const CONFIG = [
     'structure:',
     '  input:',
@@ -426,7 +425,7 @@ describe('version: 4 detection (CL0209)', () => {
   });
 });
 
-describe('lint: is a fully implemented key surface (§8.2.2, Phase 14)', () => {
+describe('lint: is a fully implemented key surface', () => {
   test('lint.packs at the root validates with no error and no not-yet-implemented WARN', () => {
     const { diagnostics } = load('lint:\n  packs:\n    wtg: {}\n');
     expect(diagnostics.hasErrors()).toBe(false);
@@ -454,7 +453,7 @@ describe('lint: is a fully implemented key surface (§8.2.2, Phase 14)', () => {
     expect(diagnostics.hasErrors()).toBe(false);
   });
 
-  test('lint.packs on a branch node stays legal — §8.2.2 branch-merges it', () => {
+  test('lint.packs on a branch node stays legal — the branch merge carries it', () => {
     const { diagnostics } = load(
       'branches:\n  hero:\n    lint:\n      packs:\n        wtg: {}\n');
     expect(diagnostics.hasErrors()).toBe(false);

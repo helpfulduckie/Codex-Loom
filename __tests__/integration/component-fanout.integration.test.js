@@ -14,37 +14,9 @@
  * `model/component.js`.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { compile } = require('../../src/compile');
-const { Diagnostics } = require('../../src/diag');
-
-const dirs = [];
-
-afterAll(() => {
-  for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
-});
-
-function compileProject(files) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-fanout-'));
-  dirs.push(tmpDir);
-  const slash = (p) => p.replace(/\\/g, '/');
-
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(tmpDir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content.replace(/%TMP%/g, slash(tmpDir)), 'utf8');
-  }
-
-  const diagnostics = new Diagnostics();
-  try {
-    compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
-  } catch (err) {
-    // Some of these raise ERRORs by construction.
-  }
-  return { diagnostics, tmpDir };
-}
+const { compileProject } = require('../helpers/project');
 
 const codes = (diagnostics, code) => diagnostics.all.filter((d) => d.code === code);
 

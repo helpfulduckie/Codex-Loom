@@ -11,37 +11,31 @@
  */
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { Diagnostics } = require('../../src/diag');
 const { loadCompileConfig } = require('../../src/config/load');
+const { withTmpDir, writeTree } = require('../helpers/project');
 
 let tmpDir;
 
-beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cfg-snapshot-')); });
-afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
-
-function writeFile(rel, content) {
-  const full = path.join(tmpDir, rel);
-  fs.mkdirSync(path.dirname(full), { recursive: true });
-  fs.writeFileSync(full, content, 'utf8');
-  return full;
-}
+beforeEach(() => { tmpDir = withTmpDir(); });
 
 /** A project with one library entry, `main`, already synced into `snapshot/main/`. */
 function buildSyncedProject() {
-  writeFile('main-lib/note.cl.yaml', 'id: Note\nname: Note\n');
-  writeFile('snapshot/main/note.cl.yaml', 'id: Note\nname: Note\n');
-  writeFile('snapshot/manifest.json', JSON.stringify({
-    manifestVersion: 1,
-    syncedAt: new Date().toISOString(),
-    library: {
-      main: {
-        source: path.join(tmpDir, 'main-lib'),
-        files: { 'note.cl.yaml': 'sha256:whatever' },
+  writeTree(tmpDir, {
+    'main-lib/note.cl.yaml': 'id: Note\nname: Note\n',
+    'snapshot/main/note.cl.yaml': 'id: Note\nname: Note\n',
+    'snapshot/manifest.json': JSON.stringify({
+      manifestVersion: 1,
+      syncedAt: new Date().toISOString(),
+      library: {
+        main: {
+          source: path.join(tmpDir, 'main-lib'),
+          files: { 'note.cl.yaml': 'sha256:whatever' },
+        },
       },
-    },
-  }, null, 2));
+    }, null, 2),
+  });
 
   const cfgPath = path.join(tmpDir, 'compile.cl.yaml');
   fs.writeFileSync(cfgPath, [
@@ -57,7 +51,7 @@ function buildSyncedProject() {
   return cfgPath;
 }
 
-describe('snapshot-preferring resolution (Phase 7 Session B)', () => {
+describe('snapshot-preferring resolution', () => {
   test('a populated snapshot redirects the active library map and `{%name}`', () => {
     const cfgPath = buildSyncedProject();
     const config = loadCompileConfig(cfgPath, { diagnostics: new Diagnostics() });
@@ -80,7 +74,7 @@ describe('snapshot-preferring resolution (Phase 7 Session B)', () => {
   });
 
   test('an unsynced project (no manifest) falls back to the live source, silently', () => {
-    writeFile('main-lib/note.cl.yaml', 'id: Note\nname: Note\n');
+    writeTree(tmpDir, { 'main-lib/note.cl.yaml': 'id: Note\nname: Note\n' });
     const cfgPath = path.join(tmpDir, 'compile.cl.yaml');
     fs.writeFileSync(cfgPath, [
       'version: 4',

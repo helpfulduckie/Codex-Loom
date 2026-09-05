@@ -15,35 +15,11 @@
  * on their own frontier.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { compile } = require('../../src/compile');
 const { Diagnostics } = require('../../src/diag');
 const { scanStoryCardStructure } = require('../../src/lint');
-
-const dirs = [];
-afterAll(() => { for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true }); });
-
-function compileProject(files) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-storycards-'));
-  dirs.push(tmpDir);
-  const slash = (p) => p.replace(/\\/g, '/');
-
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(tmpDir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content.replace(/%TMP%/g, slash(tmpDir)), 'utf8');
-  }
-
-  const diagnostics = new Diagnostics();
-  try {
-    compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
-  } catch (err) {
-    // Some cases raise ERRORs by construction.
-  }
-  return { diagnostics, tmpDir };
-}
+const { compileProject } = require('../helpers/project');
 
 const codes = (d, code) => d.all.filter((x) => x.code === code);
 const cardFile = (tmpDir, type, ...branch) => {
@@ -153,7 +129,7 @@ describe('a render.storyCards entry emits a trigger-less kind: reference card', 
 
 // ── The three-rung type ladder ──────────────────────────────────────────────
 
-describe('the card type resolves on §7.8\'s three-rung ladder', () => {
+describe('the card type resolves on a three-rung ladder', () => {
   const entry = [
     '    - title: AI Instructions — Full',
     '      variant: full',

@@ -87,7 +87,7 @@ describe('normalizeComponent', () => {
   });
 });
 
-describe('wrap (§7.4, per-occupant by default)', () => {
+describe('wrap (per-occupant by default)', () => {
   test('a slot wraps each occupant unless it asks for the collection', () => {
     const { slots } = normalizeComponent({
       sections: {
@@ -135,7 +135,7 @@ describe('section diagnostics', () => {
   });
 });
 
-describe('branch gating (§7.2 component-level visibility)', () => {
+describe('branch gating (component-level visibility)', () => {
   const component = () => normalizeComponent({
     sections: {
       genre: { text: 'Genre: Thriller' },
@@ -167,7 +167,7 @@ describe('branch gating (§7.2 component-level visibility)', () => {
   });
 });
 
-describe('section variants (§7.2)', () => {
+describe('section variants', () => {
   const doc = (extra = {}) => normalizeComponent({
     sections: {
       genre: {
@@ -254,7 +254,7 @@ describe('applySectionVariant text forms', () => {
     expect(applySectionVariant(section, null)).toBe(section);
   });
 
-  test('a string text is a field op, so §7.6.2\'s appending variant appends', () => {
+  test('a string text is a field op, so the appending variant appends', () => {
     // `dark: {text: '+{ … }'}` is the spec's own worked example and used to install the
     // literal characters `+{ … }` as the section's whole text. One vocabulary across both
     // positions a section variant is reached from: branch dispatch here, import selector

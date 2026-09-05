@@ -19,6 +19,7 @@ const {
   renderCard, parseCards, cardTitle, decodeTriggerPadding, defaultNotesText, writeScalar,
 } = require('../../src/emit/vl');
 const { Diagnostics, CODES } = require('../../src/diag');
+const { HAVE_GOLDENS } = require('../helpers/baselineHarness');
 
 const aness = () => ({
   id: 'Aness',
@@ -328,7 +329,7 @@ describe('parseCards', () => {
     expect(card.body).toBe('{\nFelicia Grayls - Academy Researcher\n}');
   });
 
-  test('a card with no kind key is story, which is what every card written before §4.8 is', () => {
+  test('a card with no kind key is story', () => {
     expect(parseCards(file).map((c) => c.kind)).toEqual(['story', 'story']);
   });
 
@@ -412,7 +413,7 @@ describe('maskFences', () => {
 });
 
 // This is the one place a unit test reads a real compiled fixture rather than a literal
-// built in the test. The fixtures are a separate private repo cloned into the gitignored
+// built in the test. The goldens are a separate private repo cloned into the gitignored
 // goldenFixtures/ (see .gitignore), so these two skip when it is absent — the parser's
 // behavior against hand-built input is covered by the describes above.
 // The base Character type is constant across The Institute's whole tree, so Phase 11
@@ -422,7 +423,7 @@ const FIXTURE = path.resolve(
   '../../goldenFixtures/Esudia/The Institute/v3/Story Cards/Character/Character.md',
 );
 
-(fs.existsSync(FIXTURE) ? describe : describe.skip)('against real compiled fixture output', () => {
+(HAVE_GOLDENS ? describe : describe.skip)('against real compiled fixture output', () => {
 
   test('parses a real v3 story-card file', () => {
     const cards = parseCards(fs.readFileSync(FIXTURE, 'utf8'), { type: 'Character' });

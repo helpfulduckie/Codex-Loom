@@ -12,7 +12,6 @@
  * `GENDERED_PRONOUN_RE`) get their own direct coverage below.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const YAML = require('yaml');
@@ -20,22 +19,10 @@ const {
   migratePseudoRoles, migrateProjectFully, rewritePseudoRoleTokens,
   GENDERED_PRONOUN_RE, GENDERED_PRONOUN_WORDS,
 } = require('../../src/migrate');
-
-const dirs = [];
-afterAll(() => {
-  for (const d of dirs) fs.rmSync(d, { recursive: true, force: true });
-});
+const { withTmpDir, writeTree } = require('../helpers/project');
 
 function buildProject(files) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-pseudo-role-'));
-  dirs.push(tmpDir);
-  const slash = (p) => p.replace(/\\/g, '/');
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(tmpDir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content.replace(/%TMP%/g, slash(tmpDir)), 'utf8');
-  }
-  return tmpDir;
+  return writeTree(withTmpDir(), files);
 }
 
 const BASE = {
@@ -140,7 +127,7 @@ describe('migratePseudoRoles', () => {
     expect(itemText).not.toContain('{%li}');
   });
 
-  test('reaches a component section written inline in compile.yaml, not only item bodies (§9.7)', () => {
+  test('reaches a component section written inline in compile.yaml, not only item bodies', () => {
     const tmpDir = buildProject(pseudoRoleProject());
     const configPath = path.join(tmpDir, 'compile.yaml');
     migratePseudoRoles(configPath);
@@ -192,7 +179,7 @@ describe('migratePseudoRoles', () => {
     expect(config.roles).toBeUndefined();
   });
 
-  test('a duplicate item id is reported through the bus, not thrown (§14.2, Phase 17 Step 9)', () => {
+  test('a duplicate item id is reported through the bus, not thrown', () => {
     const files = pseudoRoleProject();
     files['Codex/items.yaml'] = [
       ITEM_WITH_LI,
@@ -237,7 +224,7 @@ describe('migratePseudoRoles', () => {
   });
 });
 
-describe('composing with renameProtagonist (carried from the Session A handoff\'s Watch)', () => {
+describe('composing with renameProtagonist', () => {
   // A v3 project with both `protagonist: X` and a `{%li}`-style pseudo-role variable on the
   // same node should produce one `roles:` block with both entries, not two blocks or a
   // collision — `renameProtagonist` (migrate/v3.js) runs during the config break, before

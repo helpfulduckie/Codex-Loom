@@ -16,35 +16,10 @@
  * block-rendering assertions were kept and re-pointed through the migrator.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { compile } = require('../../src/compile');
-const { Diagnostics, CODES } = require('../../src/diag');
-
-const dirs = [];
-afterAll(() => { for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true }); });
-
-function compileProject(files) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-open-'));
-  dirs.push(tmpDir);
-  const slash = (p) => p.replace(/\\/g, '/');
-
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(tmpDir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content.replace(/%TMP%/g, slash(tmpDir)), 'utf8');
-  }
-
-  const diagnostics = new Diagnostics();
-  let threw = null;
-  try {
-    compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
-  } catch (err) {
-    threw = err;
-  }
-  return { diagnostics, tmpDir, threw };
-}
+const { CODES } = require('../../src/diag');
+const { compileProject } = require('../helpers/project');
 
 const codes = (diagnostics, code) => diagnostics.all.filter((d) => d.code === code);
 const exists = (p) => fs.existsSync(p);
@@ -310,7 +285,7 @@ describe('items route into an opening, and never into framing', () => {
 
 // ── The cap, and the retired format ──────────────────────────────────────────
 
-describe('§8.5 and the deleted block list', () => {
+describe('the deleted block list', () => {
   test('an opening over 4,000 characters is still CL0710 after the move', () => {
     const { diagnostics } = compileProject({
       ...BASE,

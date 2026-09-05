@@ -2,8 +2,8 @@
 
 const { spawnSync } = require('child_process');
 const fs   = require('fs');
-const os   = require('os');
 const path = require('path');
+const { withTmpDir } = require('../helpers/project');
 
 const CLI = path.resolve(__dirname, '../../src/cli.js');
 
@@ -50,7 +50,7 @@ describe('CLI --leafReview flag', () => {
   let tmp;
 
   beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cli-test-'));
+    tmp = withTmpDir();
   });
 
   afterEach(() => {
@@ -137,7 +137,7 @@ describe('CLI --overview flag', () => {
   let tmp;
 
   beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cli-test-'));
+    tmp = withTmpDir();
   });
 
   afterEach(() => {
@@ -229,7 +229,7 @@ describe('CLI --leafReview + --overview combined', () => {
   let tmp;
 
   beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cli-test-'));
+    tmp = withTmpDir();
   });
 
   afterEach(() => {
@@ -294,7 +294,7 @@ describe('CLI --compile flag', () => {
   let tmp;
 
   beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cli-test-'));
+    tmp = withTmpDir();
   });
 
   afterEach(() => {
@@ -410,7 +410,7 @@ describe('CLI --lint-level flag', () => {
   let tmp;
 
   beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cli-lintlevel-'));
+    tmp = withTmpDir();
   });
 
   afterEach(() => {
@@ -531,7 +531,7 @@ describe('CLI --migrate flag', () => {
   let tmp;
 
   beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cli-test-'));
+    tmp = withTmpDir();
   });
 
   afterEach(() => {
@@ -591,7 +591,7 @@ describe('CLI version: 4 detection', () => {
   let tmp;
 
   beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cli-test-'));
+    tmp = withTmpDir();
   });
 
   afterEach(() => {

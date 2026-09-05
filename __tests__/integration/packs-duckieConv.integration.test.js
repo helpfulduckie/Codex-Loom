@@ -13,33 +13,7 @@
  * `resolvedItems`, and are not observable below `compile()`.
  */
 
-const os = require('os');
-const path = require('path');
-const fs = require('fs');
-const { compile } = require('../../src/compile');
-const { Diagnostics } = require('../../src/diag');
-
-const dirs = [];
-afterAll(() => { for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true }); });
-
-function compileProject(files) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-dc-'));
-  dirs.push(tmpDir);
-  const slash = (p) => p.replace(/\\/g, '/');
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(tmpDir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content.replace(/%TMP%/g, slash(tmpDir)), 'utf8');
-  }
-  const diagnostics = new Diagnostics();
-  try {
-    compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
-  } catch (err) {
-    // A pack ERROR fails the build by design (§12.5); duckieConv is all WARN, so this
-    // should not fire — but keep the shape parallel to packs-wtg.
-  }
-  return diagnostics;
-}
+const { compileProject } = require('../helpers/project');
 
 const find = (d, code) => d.all.filter((x) => x.code === code);
 const BUDGET = 'CL-duckieConv/0001';
@@ -83,7 +57,7 @@ const ENABLED = ['lint: {packs: {duckieConv: {}}}'];
 
 describe('CL-duckieConv/0001 — per-role character budget', () => {
   test('a role-less 500-char card is measured at standard (400) → WARN', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': item({ id: 'npc', text: 'x'.repeat(500) }),
@@ -96,7 +70,7 @@ describe('CL-duckieConv/0001 — per-role character budget', () => {
   });
 
   test('the same body at role: anchor (800) is silent', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': item({ id: 'npc', text: 'x'.repeat(500), meta: 'duckieConv:\n  role: anchor' }),
@@ -105,7 +79,7 @@ describe('CL-duckieConv/0001 — per-role character budget', () => {
   });
 
   test('an anchor card over 800 still WARNs', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': item({ id: 'boss', text: 'x'.repeat(900), meta: 'duckieConv:\n  role: anchor' }),
@@ -120,7 +94,7 @@ describe('CL-duckieConv/0001 — per-role character budget', () => {
 
 describe('CL-duckieConv/0004 — meta.duckieConv.role must be a known value', () => {
   test('a typo\'d role value → one WARN, and the card is still measured at standard', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': item({ id: 'npc', text: 'x'.repeat(500), meta: 'duckieConv:\n  role: minr' }),
@@ -133,7 +107,7 @@ describe('CL-duckieConv/0004 — meta.duckieConv.role must be a known value', ()
   });
 
   test('a valid role is silent on the role rule', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': item({ id: 'npc', text: 'short', meta: 'duckieConv:\n  role: minor' }),
@@ -146,7 +120,7 @@ describe('CL-duckieConv/0004 — meta.duckieConv.role must be a known value', ()
 
 describe('CL-duckieConv/0002 — count', () => {
   test('a 2-item vibe list is below the 3–5 range → WARN', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': item({ id: 'npc', fields: 'vibe: [tense, quiet]' }),
@@ -157,7 +131,7 @@ describe('CL-duckieConv/0002 — count', () => {
   });
 
   test('a 6-item background list trips the * default (max 5) → WARN', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': item({ id: 'npc', fields: 'background: [a, b, c, d, e, f]\nvibe: [x, y, z, w]' }),
@@ -167,7 +141,7 @@ describe('CL-duckieConv/0002 — count', () => {
   });
 
   test('a bare comma-string vibe is NOT split — one value, no finding', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': item({ id: 'npc', fields: 'vibe: "tense, quiet, close, hot, loud, dim, still"' }),
@@ -176,7 +150,7 @@ describe('CL-duckieConv/0002 — count', () => {
   });
 
   test('a 2-word tagline is below the 3–5 word range → WARN', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': item({ id: 'npc', fields: 'tagline: The Sultan\nvibe: [a, b, c, d]' }),
@@ -190,7 +164,7 @@ describe('CL-duckieConv/0002 — count', () => {
 
 describe('CL-duckieConv/0003 — mutexHint', () => {
   test('a card carrying all four of overview/purpose/structure/methods → WARN', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': item({
@@ -204,7 +178,7 @@ describe('CL-duckieConv/0003 — mutexHint', () => {
   });
 
   test('only three of the four → silent', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': item({
@@ -220,7 +194,7 @@ describe('CL-duckieConv/0003 — mutexHint', () => {
 
 describe('a variant that sets meta.duckieConv.role resolves per leaf', () => {
   test('the same 500-char body is silent on the anchor branch and WARNs on the other', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': [
         'version: 4',
@@ -265,7 +239,7 @@ describe('a conforming card is silent, and level: off silences the pack', () => 
   });
 
   test('a conforming card raises no duckieConv finding', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': CONFORMING,
@@ -276,7 +250,7 @@ describe('a conforming card is silent, and level: off silences the pack', () => 
   });
 
   test('a project that never declares the pack gets nothing (no auto-activation)', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config([]),
       'Codex/items.yaml': item({ id: 'npc', text: 'x'.repeat(500), fields: 'vibe: [a, b]' }),
@@ -286,7 +260,7 @@ describe('a conforming card is silent, and level: off silences the pack', () => 
   });
 
   test('level: off silences every rule, count and budget alike', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {duckieConv: {level: off}}}']),
       'Codex/items.yaml': item({

@@ -27,7 +27,6 @@
  * a baseline to re-cut for no reader's benefit.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
 
@@ -36,6 +35,7 @@ const { loadCompileConfig } = require('../../src/config/load');
 const { buildCanonRegistry } = require('../../src/loader/registry');
 const { resolveItemRef } = require('../../src/model/refs');
 const { Diagnostics } = require('../../src/diag');
+const { withTmpDir } = require('../helpers/project');
 
 const LIBRARY_SRC = path.resolve(__dirname, '../../examples/library');
 
@@ -89,7 +89,7 @@ function writeProject(dir, items) {
 }
 
 beforeAll(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-examples-library-'));
+  tmpDir = withTmpDir();
   fs.cpSync(LIBRARY_SRC, path.join(tmpDir, 'library'), { recursive: true });
 
   projectDir = path.join(tmpDir, 'consumer');
@@ -139,10 +139,6 @@ beforeAll(() => {
   compile(configPath, { diagnostics });
 }, 120000);
 
-afterAll(() => {
-  if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
-});
-
 /** Every compiled file under the project's output, as one string. */
 function outputText() {
   const out = [];
@@ -186,7 +182,7 @@ describe('examples/library — both sets load from outside the project directory
 
 });
 
-describe('the colliding magic pair (§17.2–§17.4)', () => {
+describe('two library sets that both define magic, coexisting', () => {
   /**
    * The plan's constraint, asserted rather than assumed: a project holding both magic
    * systems compiles clean. If it could not, the example and the pathological fixture

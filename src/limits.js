@@ -53,11 +53,13 @@
  * band is part of the same fact. A card the platform will truncate is malformed whatever
  * the card exists for.
  *
- * Pure by contract (§3.3): no `fs`, no `console`. It measures and reports; callers decide
- * where the text came from.
+ * Pure by contract (§3.3): performs no I/O and prints nothing, so it is testable without
+ * fixtures on disk. It measures and reports; callers decide where the text came from and
+ * what reaches a terminal.
  */
 
 const { CODES } = require('./diag');
+const { PLACEHOLDER_RE } = require('./util');
 
 /**
  * The confirmed caps. §8.5 lists no guessed limits, and adding one when it is confirmed is
@@ -89,9 +91,6 @@ const LIMITS = Object.freeze({
     near: CODES.NOTES_NEAR_LIMIT,
   }),
 });
-
-/** VL's own pattern, so what we count cannot drift from what it will substitute. */
-const PLACEHOLDER_RE = /%(\w+)%/g;
 
 /**
  * Perform Velvet Lattice's placeholder substitution.

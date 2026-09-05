@@ -10,10 +10,9 @@
  * both, and a slot gated off on a branch takes its contents with it.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { compile } = require('../../src/compile');
+const { compileProject } = require('../helpers/project');
 
 let tmpDir;
 
@@ -36,17 +35,11 @@ const branchCard = (branch, type) => {
 };
 
 beforeAll(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-placement-'));
-  const write = (rel, content) => {
-    const full = path.join(tmpDir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content, 'utf8');
-  };
+  ({ tmpDir } = compileProject({
+    'templates/Full.template': '{$name.full}\nTagline: {$body.tagline}',
+    'templates/Brief.template': '{$name.full} ({$body.tagline})',
 
-  write('templates/Full.template', '{$name.full}\nTagline: {$body.tagline}');
-  write('templates/Brief.template', '{$name.full} ({$body.tagline})');
-
-  write('Codex/items.yaml', [
+    'Codex/items.yaml': [
     // Renders only into Plot Essentials, and carries no `aid:` block — §7.4 asks for
     // triggers and a type only when a story-card target exists.
     '- id: Hero',
@@ -75,9 +68,9 @@ beforeAll(() => {
     '    template: Full',
     '    plotEssential: {slot: cast, order: 1, template: Brief}',
     '  body: {tagline: the first}',
-  ].join('\n'));
+    ].join('\n'),
 
-  write('components/plot-essentials.yaml', [
+    'components/plot-essentials.yaml': [
     'sections:',
     '  genre:',
     '    text: "Genre: Test"',
@@ -90,27 +83,22 @@ beforeAll(() => {
     '    heading: Cast',
     '    render: {position: 3, wrapper: square, wrap: all, compact: true}',
     '    branches: {hidden: ~}',
-  ].join('\n'));
+    ].join('\n'),
 
-  write('compile.yaml', [
-    'version: 4',
-    'structure:',
-    '  input:',
-    `    items: [${tmpDir.replace(/\\/g, '/')}/Codex]`,
-    `    templates: [${tmpDir.replace(/\\/g, '/')}/templates]`,
-    `  output: ${tmpDir.replace(/\\/g, '/')}/output`,
-    'components:',
-    '  plotEssential: ./components/plot-essentials.yaml',
-    'branches:',
-    '  shown: {}',
-    '  hidden: {}',
-  ].join('\n'));
-
-  compile(path.join(tmpDir, 'compile.yaml'));
-});
-
-afterAll(() => {
-  if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'components:',
+      '  plotEssential: ./components/plot-essentials.yaml',
+      'branches:',
+      '  shown: {}',
+      '  hidden: {}',
+    ].join('\n'),
+  }));
 });
 
 describe('story cards stop asking permission (step 5)', () => {

@@ -1,6 +1,6 @@
 'use strict';
 
-// Isolated in its own file (rather than folded into compile.test.js) because the pass-count
+// Isolated in its own file (rather than folded into branchCompile.test.js) because the pass-count
 // proof below needs `applyFieldRenderFunctions` spied on *before* `crossItem.js` is required —
 // crossItem.js destructures the function into a local binding at its own module load time
 // (`const { applyFieldRenderFunctions } = require('./template')`), so a spy installed after
@@ -22,7 +22,7 @@ beforeEach(() => {
   applyFieldRenderFunctionsSpy.mockClear();
 });
 
-describe('resolveCrossItemRenderFunctions — dependency-ordered evaluation (Phase 9 Step 2)', () => {
+describe('resolveCrossItemRenderFunctions — dependency-ordered evaluation', () => {
   test('a three-item chain resolves in one evaluation pass, proven by call count', () => {
     // C is a leaf (no cross-item refs); B reads C; A reads B. Order in the array is
     // deliberately not dependency order, so a correct result also proves the graph — not

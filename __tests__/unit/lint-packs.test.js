@@ -8,7 +8,6 @@
  * The `wtg` pack itself and its end-to-end wiring are Session C.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
 
@@ -18,15 +17,13 @@ const {
 const { parseNotesBlock, parseSettingsBlock } = require('../../src/emit/vl');
 const { walkBranchChain } = require('../../src/model/branches');
 const { Diagnostics, CODES } = require('../../src/diag');
+const { withTmpDir, writeTree } = require('../helpers/project');
 
 let TMP;
-beforeAll(() => { TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-packs-')); });
-afterAll(() => { fs.rmSync(TMP, { recursive: true, force: true }); });
+beforeAll(() => { TMP = withTmpDir(); });
 
 function writePack(name, body) {
-  const p = path.join(TMP, `${name}.cl.yaml`);
-  fs.writeFileSync(p, body, 'utf8');
-  return p;
+  writeTree(TMP, { [`${name}.cl.yaml`]: body });
 }
 
 // ── loader ───────────────────────────────────────────────────────────────────

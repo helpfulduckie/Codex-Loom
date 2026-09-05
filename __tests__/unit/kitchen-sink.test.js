@@ -313,7 +313,7 @@ describe('kitchen-sink component (components/plot-essentials.cl.yaml)', () => {
    * the report says the key exists but not here. The migration is exactly "move it down
    * one level", and that is what the author is told.
    */
-  test('a document-level branches: is accepted — it is the §7.6.2a fan-out', () => {
+  test('a document-level branches: is accepted', () => {
     // It used to be a misplaced key, on the reasoning that v3's document layer was deleted
     // and everything it did moved onto sections. Phase 6 brought the *selector* half back
     // and only that half: a name here is looked up in each section's own `variants:`, and

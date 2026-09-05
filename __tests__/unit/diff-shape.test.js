@@ -80,7 +80,7 @@ describe('classifyDiff', () => {
     });
   });
 
-  test('a re-quoted trigger list is a fence-only change — Phase 2 expected shape', () => {
+  test('a re-quoted trigger list is a fence-only change', () => {
     const result = classifyDiff(card(), card({ triggers: '["Aness", "Vale"]' }));
     expect(result.classes).toEqual(['fence']);
     expect(result.changedLines).toBe(2);
@@ -96,7 +96,7 @@ describe('classifyDiff', () => {
     expect(classifyDiff(card(), card({ title: 'Aness Vale' })).classes).toEqual(['title']);
   });
 
-  test('an edited body line is a body change — the Phase 2 bug case', () => {
+  test('an edited body line is a body change', () => {
     expect(classifyDiff(card(), card({ body: 'Aness - Master Healer' })).classes).toEqual(['body']);
   });
 

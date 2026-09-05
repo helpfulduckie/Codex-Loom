@@ -367,7 +367,7 @@ describe('buildFieldAudit — Fix 3: CL0428 sees fields referenced only inside a
   });
 });
 
-describe('buildFieldAudit — templateFor slot files (§13.4, Phase 14 Step 1)', () => {
+describe('buildFieldAudit — templateFor slot files', () => {
   // A terse Person list — `name` only. Against the shared `Person` template it omits the
   // declared `vibe` and the `personality` group.
   const terseList = ['name'];

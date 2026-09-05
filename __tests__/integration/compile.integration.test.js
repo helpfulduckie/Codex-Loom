@@ -1,60 +1,50 @@
 'use strict';
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { compile } = require('../../src/compile');
 const { migrateOpeningFiles } = require('../../src/migrate/opening');
 const { Diagnostics } = require('../../src/diag');
+const { withTmpDir, writeTree, compileProject } = require('../helpers/project');
 
 const FIXTURE_DIR = path.resolve(__dirname, '../../test');
 
 let tmpDir;
-let patchedConfigPath;
 
 beforeAll(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-test-'));
-
-  // Write a patched compile.yaml (based on the test/ smoke project) that redirects output
-  // to a temp dir but uses the real test fixtures for everything else.
-  const patchedConfig = [
-    'version: 4',
-    'structure:',
-    `  input:`,
-    `    items:`,
-    // The key is the v4 spelling; the directory on disk is still test/cards.
-    `      - ${FIXTURE_DIR}/cards`,
-    `    library:`,
-    `      main: ${FIXTURE_DIR}/canon`,
-    `    templates:`,
-    `      - ${FIXTURE_DIR}/templates`,
-    `  output: ${tmpDir}/output`,
-    // The fixture items carry `notes: {known: true}`; this is the template that turns
-    // that flag into the `[e]` marker (§4.5.1, rung 3).
-    'render:',
-    '  notesTemplate: Notes',
-    'roles:',
-    '  protagonist: Aness',
-    'branches:',
-    '  subject:',
-    '    roles:',
-    '      protagonist: Aness',
-    '  researcher:',
-    '    roles:',
-    '      protagonist: Veyrn',
-    '  felix:',
-    '    roles:',
-    '      protagonist: Aness',
-  ].join('\n');
-
-  patchedConfigPath = path.join(tmpDir, 'compile.yaml');
-  fs.writeFileSync(patchedConfigPath, patchedConfig, 'utf8');
-
-  compile(patchedConfigPath);
-});
-
-afterAll(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  // A patched compile.yaml (based on the test/ smoke project) that redirects output to a
+  // temp dir but uses the real test fixtures for everything else.
+  ({ tmpDir } = compileProject({
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      `  input:`,
+      `    items:`,
+      // The key is the v4 spelling; the directory on disk is still test/cards.
+      `      - ${FIXTURE_DIR}/cards`,
+      `    library:`,
+      `      main: ${FIXTURE_DIR}/canon`,
+      `    templates:`,
+      `      - ${FIXTURE_DIR}/templates`,
+      '  output: %TMP%/output',
+      // The fixture items carry `notes: {known: true}`; this is the template that turns
+      // that flag into the `[e]` marker (§4.5.1, rung 3).
+      'render:',
+      '  notesTemplate: Notes',
+      'roles:',
+      '  protagonist: Aness',
+      'branches:',
+      '  subject:',
+      '    roles:',
+      '      protagonist: Aness',
+      '  researcher:',
+      '    roles:',
+      '      protagonist: Veyrn',
+      '  felix:',
+      '    roles:',
+      '      protagonist: Aness',
+    ].join('\n'),
+  }));
 });
 
 // Phase 11 Step 5: a card constant across a subtree is written once at the node that owns
@@ -145,43 +135,35 @@ describe('protagonist inherited from parent branch node', () => {
   let nestedTmpDir;
 
   beforeAll(() => {
-    nestedTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-nested-proto-'));
-
-    const patchedConfig = [
-      'version: 4',
-      'structure:',
-      '  input:',
-      `    items:`,
-      // The key is the v4 spelling; the directory on disk is still test/cards.
-      `      - ${FIXTURE_DIR}/cards`,
-      `    library:`,
-      `      main: ${FIXTURE_DIR}/canon`,
-      `    templates:`,
-      `      - ${FIXTURE_DIR}/templates`,
-      `  output: ${nestedTmpDir}/output`,
-      'render:',
-      '  notesTemplate: Notes',
-      // protagonist declared on parent node only — leaf nodes have none
-      'branches:',
-      '  Aness:',
-      '    roles:',
-      '      protagonist: Aness',
-      '    branches:',
-      '      Cult: {}',
-      '  Veyrn:',
-      '    roles:',
-      '      protagonist: Veyrn',
-      '    branches:',
-      '      Cult: {}',
-    ].join('\n');
-
-    const cfgPath = path.join(nestedTmpDir, 'compile.yaml');
-    fs.writeFileSync(cfgPath, patchedConfig, 'utf8');
-    compile(cfgPath);
-  });
-
-  afterAll(() => {
-    fs.rmSync(nestedTmpDir, { recursive: true, force: true });
+    ({ tmpDir: nestedTmpDir } = compileProject({
+      'compile.yaml': [
+        'version: 4',
+        'structure:',
+        '  input:',
+        `    items:`,
+        // The key is the v4 spelling; the directory on disk is still test/cards.
+        `      - ${FIXTURE_DIR}/cards`,
+        `    library:`,
+        `      main: ${FIXTURE_DIR}/canon`,
+        `    templates:`,
+        `      - ${FIXTURE_DIR}/templates`,
+        '  output: %TMP%/output',
+        'render:',
+        '  notesTemplate: Notes',
+        // protagonist declared on parent node only — leaf nodes have none
+        'branches:',
+        '  Aness:',
+        '    roles:',
+        '      protagonist: Aness',
+        '    branches:',
+        '      Cult: {}',
+        '  Veyrn:',
+        '    roles:',
+        '      protagonist: Veyrn',
+        '    branches:',
+        '      Cult: {}',
+      ].join('\n'),
+    }));
   });
 
   function nestedCardFile(tier1, tier2, type) {
@@ -210,63 +192,50 @@ describe('Opening.md generation', () => {
   let openingTmpDir;
 
   beforeAll(() => {
-    openingTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-opening-int-'));
-
-    // Minimal v3-format item + template so compile has something to do
-    fs.mkdirSync(path.join(openingTmpDir, 'items'), { recursive: true });
-    fs.mkdirSync(path.join(openingTmpDir, 'templates'), { recursive: true });
-    fs.mkdirSync(path.join(openingTmpDir, 'openings'), { recursive: true });
-
-    fs.writeFileSync(path.join(openingTmpDir, 'items', 'items.yaml'), [
-      '- id: Widget',
-      '  name: Widget',
-      '  aid:',
-      '    type: Item',
-      '    title: Widget',
-      '  render:',
-      '    template: Item',
-      '  body:',
-      '    Desc: a widget',
-    ].join('\n'), 'utf8');
-
-    fs.writeFileSync(path.join(openingTmpDir, 'templates', 'Item.template'), [
-      '{$body.Desc}',
-    ].join('\n'), 'utf8');
-
-    // File-based opening content
-    fs.writeFileSync(path.join(openingTmpDir, 'openings', 'b-opening.md'), 'Leaf B from file\n', 'utf8');
-
     // the test/ smoke project's shape — opening under components: at root and branch levels
     // opening: inherits to leaves; branchFraming: writes to branch node directly
-    fs.writeFileSync(path.join(openingTmpDir, 'compile.yaml'), [
-      'version: 4',
-      'structure:',
-      '  input:',
-      `    items: [${openingTmpDir}/items]`,
-      `    templates: [${openingTmpDir}/templates]`,
-      `  output: ${openingTmpDir}/output`,
-      'components:',
-      '  opening: "Root question"',
-      'branches:',
-      '  A:',
-      '    components:',
-      '      opening: "Leaf A inline"',
-      '  B:',
-      `    components:`,
-      `      opening: ${openingTmpDir}/openings/b-opening.md`,
-      '  nested:',
-      '    components:',
-      '      branchFraming: "Branch question"',
-      '    branches:',
-      '      X: {}',
-      '      Y: {}',
-    ].join('\n'), 'utf8');
-
-    compile(path.join(openingTmpDir, 'compile.yaml'));
-  });
-
-  afterAll(() => {
-    fs.rmSync(openingTmpDir, { recursive: true, force: true });
+    ({ tmpDir: openingTmpDir } = compileProject({
+      // Minimal v3-format item + template so compile has something to do
+      'items/items.yaml': [
+        '- id: Widget',
+        '  name: Widget',
+        '  aid:',
+        '    type: Item',
+        '    title: Widget',
+        '  render:',
+        '    template: Item',
+        '  body:',
+        '    Desc: a widget',
+      ].join('\n'),
+      'templates/Item.template': [
+        '{$body.Desc}',
+      ].join('\n'),
+      // File-based opening content
+      'openings/b-opening.md': 'Leaf B from file\n',
+      'compile.yaml': [
+        'version: 4',
+        'structure:',
+        '  input:',
+        '    items: [%TMP%/items]',
+        '    templates: [%TMP%/templates]',
+        '  output: %TMP%/output',
+        'components:',
+        '  opening: "Root question"',
+        'branches:',
+        '  A:',
+        '    components:',
+        '      opening: "Leaf A inline"',
+        '  B:',
+        `    components:`,
+        '      opening: %TMP%/openings/b-opening.md',
+        '  nested:',
+        '    components:',
+        '      branchFraming: "Branch question"',
+        '    branches:',
+        '      X: {}',
+        '      Y: {}',
+      ].join('\n'),
+    }));
   });
 
   test('leaf A inline opening written to Branches/A/Components/Opening.md', () => {
@@ -312,60 +281,49 @@ describe('branchFraming {%Key} resolution', () => {
   let atKeyTmpDir;
 
   beforeAll(() => {
-    atKeyTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-atkey-int-'));
-
-    fs.mkdirSync(path.join(atKeyTmpDir, 'items'), { recursive: true });
-    fs.mkdirSync(path.join(atKeyTmpDir, 'templates'), { recursive: true });
-
-    fs.writeFileSync(path.join(atKeyTmpDir, 'items', 'items.yaml'), [
-      '- id: Widget',
-      '  name: Widget',
-      '  aid:',
-      '    type: Item',
-      '    title: Widget',
-      '  render:',
-      '    template: Item',
-      '  body:',
-      '    Desc: a widget',
-    ].join('\n'), 'utf8');
-
-    fs.writeFileSync(path.join(atKeyTmpDir, 'templates', 'Item.template'), [
-      '{$body.Desc}',
-    ].join('\n'), 'utf8');
-
-    fs.writeFileSync(path.join(atKeyTmpDir, 'compile.yaml'), [
-      'version: 4',
-      'structure:',
-      '  input:',
-      `    items: [${atKeyTmpDir}/items]`,
-      `    templates: [${atKeyTmpDir}/templates]`,
-      `  output: ${atKeyTmpDir}/output`,
-      'variables:',
-      '  roleChoice: Are you the mage or the employer?',
-      '  mageChoice: Who is your mage?',
-      '  employerChoice: Who is your employer?',
-      'components:',
-      "  branchFraming: '{%roleChoice}'",
-      'branches:',
-      '  employer:',
-      '    title: Employer',
-      '    components:',
-      "      branchFraming: '{%mageChoice}'",
-      '    branches:',
-      '      alice: {}',
-      '  mage:',
-      '    title: Personal Mage',
-      '    components:',
-      "      branchFraming: '{%employerChoice}'",
-      '    branches:',
-      '      bob: {}',
-    ].join('\n'), 'utf8');
-
-    compile(path.join(atKeyTmpDir, 'compile.yaml'));
-  });
-
-  afterAll(() => {
-    fs.rmSync(atKeyTmpDir, { recursive: true, force: true });
+    ({ tmpDir: atKeyTmpDir } = compileProject({
+      'items/items.yaml': [
+        '- id: Widget',
+        '  name: Widget',
+        '  aid:',
+        '    type: Item',
+        '    title: Widget',
+        '  render:',
+        '    template: Item',
+        '  body:',
+        '    Desc: a widget',
+      ].join('\n'),
+      'templates/Item.template': [
+        '{$body.Desc}',
+      ].join('\n'),
+      'compile.yaml': [
+        'version: 4',
+        'structure:',
+        '  input:',
+        '    items: [%TMP%/items]',
+        '    templates: [%TMP%/templates]',
+        '  output: %TMP%/output',
+        'variables:',
+        '  roleChoice: Are you the mage or the employer?',
+        '  mageChoice: Who is your mage?',
+        '  employerChoice: Who is your employer?',
+        'components:',
+        "  branchFraming: '{%roleChoice}'",
+        'branches:',
+        '  employer:',
+        '    title: Employer',
+        '    components:',
+        "      branchFraming: '{%mageChoice}'",
+        '    branches:',
+        '      alice: {}',
+        '  mage:',
+        '    title: Personal Mage',
+        '    components:',
+        "      branchFraming: '{%employerChoice}'",
+        '    branches:',
+        '      bob: {}',
+      ].join('\n'),
+    }));
   });
 
   test('root branchFraming {%roleChoice} resolves to literal string', () => {
@@ -398,16 +356,13 @@ describe('cross-item refs inside body field render functions', () => {
   let xrefTmpDir;
 
   beforeAll(() => {
-    xrefTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-xref-int-'));
-    fs.mkdirSync(path.join(xrefTmpDir, 'items'), { recursive: true });
-    fs.mkdirSync(path.join(xrefTmpDir, 'templates'), { recursive: true });
-
     // Items: Alice and Carol cross-ref Bishop's hair (plain token, resolved by applyCrossItemRefs).
     // Bishop's familyMembers use join() on Alice/Carol's physicalTraits (new cross-item render fn).
     // Store's employees use join() on Bishop's familyMembers (chained, order-dependent without multi-pass).
     // Items are deliberately ordered Store → Bishop → Carol → Alice (deepest-dependent first)
     // so that cross-item references resolve in topological order (crossItem.js).
-    fs.writeFileSync(path.join(xrefTmpDir, 'items', 'items.yaml'), [
+    ({ tmpDir: xrefTmpDir } = compileProject({
+      'items/items.yaml': [
       '- id: Store',
       '  name: Store',
       '  aid:',
@@ -460,29 +415,22 @@ describe('cross-item refs inside body field render functions', () => {
       '    physicalTraits:',
       "      hair: '{$Bishop.body.physicalTraits.hair}'",
       '      eyes: blue',
-    ].join('\n'), 'utf8');
-
-    fs.writeFileSync(path.join(xrefTmpDir, 'templates', 'Item.template'), [
-      '{$body.employees}',
-      '{join("; ", $body.familyMembers)}',
-    ].join('\n'), 'utf8');
-
-    fs.writeFileSync(path.join(xrefTmpDir, 'compile.yaml'), [
-      'version: 4',
-      'structure:',
-      '  input:',
-      `    items: [${xrefTmpDir}/items]`,
-      `    templates: [${xrefTmpDir}/templates]`,
-      `  output: ${xrefTmpDir}/output`,
-      'branches:',
-      '  main: {}',
-    ].join('\n'), 'utf8');
-
-    compile(path.join(xrefTmpDir, 'compile.yaml'));
-  });
-
-  afterAll(() => {
-    fs.rmSync(xrefTmpDir, { recursive: true, force: true });
+      ].join('\n'),
+      'templates/Item.template': [
+        '{$body.employees}',
+        '{join("; ", $body.familyMembers)}',
+      ].join('\n'),
+      'compile.yaml': [
+        'version: 4',
+        'structure:',
+        '  input:',
+        '    items: [%TMP%/items]',
+        '    templates: [%TMP%/templates]',
+        '  output: %TMP%/output',
+        'branches:',
+        '  main: {}',
+      ].join('\n'),
+    }));
   });
 
   function xrefItem() {
@@ -515,50 +463,42 @@ describe('opening {%Key} resolving to a migrated block file', () => {
   let opKeyTmpDir;
 
   beforeAll(() => {
-    opKeyTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-opkey-int-'));
-    fs.mkdirSync(path.join(opKeyTmpDir, 'items'), { recursive: true });
-    fs.mkdirSync(path.join(opKeyTmpDir, 'templates'), { recursive: true });
-    fs.mkdirSync(path.join(opKeyTmpDir, 'components'), { recursive: true });
-
-    fs.writeFileSync(path.join(opKeyTmpDir, 'items', 'c.yaml'), [
-      '- id: W',
-      '  name: W',
-      '  aid: { type: Item, title: W }',
-      '  render: { template: Item }',
-      '  body: { Desc: w }',
-    ].join('\n'), 'utf8');
-    fs.writeFileSync(path.join(opKeyTmpDir, 'templates', 'Item.template'),
-      '{$body.Desc}', 'utf8');
-
-    fs.writeFileSync(path.join(opKeyTmpDir, 'components', 'opening.yaml'), [
-      '- text: "Universal paragraph."',
-      '- text: "Alpha-only paragraph."',
-      '  branches:',
-      '    alpha: []',
-      '    _: ~',
-    ].join('\n'), 'utf8');
-
-    fs.writeFileSync(path.join(opKeyTmpDir, 'compile.yaml'), [
-      'version: 4',
-      'structure:',
-      '  input:',
-      `    items: [${opKeyTmpDir}/items]`,
-      `    templates: [${opKeyTmpDir}/templates]`,
-      `  output: ${opKeyTmpDir}/output`,
-      'variables:',
-      `  op: ${opKeyTmpDir}/components/opening.yaml`,
-      'components:',
-      "  opening: '{%op}'",
-      'branches:',
-      '  alpha: {}',
-      '  beta: {}',
-    ].join('\n'), 'utf8');
+    opKeyTmpDir = writeTree(withTmpDir(), {
+      'items/c.yaml': [
+        '- id: W',
+        '  name: W',
+        '  aid: { type: Item, title: W }',
+        '  render: { template: Item }',
+        '  body: { Desc: w }',
+      ].join('\n'),
+      'templates/Item.template': '{$body.Desc}',
+      'components/opening.yaml': [
+        '- text: "Universal paragraph."',
+        '- text: "Alpha-only paragraph."',
+        '  branches:',
+        '    alpha: []',
+        '    _: ~',
+      ].join('\n'),
+      'compile.yaml': [
+        'version: 4',
+        'structure:',
+        '  input:',
+        '    items: [%TMP%/items]',
+        '    templates: [%TMP%/templates]',
+        '  output: %TMP%/output',
+        'variables:',
+        '  op: %TMP%/components/opening.yaml',
+        'components:',
+        "  opening: '{%op}'",
+        'branches:',
+        '  alpha: {}',
+        '  beta: {}',
+      ].join('\n'),
+    });
 
     migrateOpeningFiles(path.join(opKeyTmpDir, 'compile.yaml'), { diagnostics: new Diagnostics() });
     compile(path.join(opKeyTmpDir, 'compile.yaml'));
   });
-
-  afterAll(() => { fs.rmSync(opKeyTmpDir, { recursive: true, force: true }); });
 
   test('alpha leaf contains both universal and alpha-only paragraphs', () => {
     const p = path.join(opKeyTmpDir, 'output', 'Branches', 'alpha', 'Components', 'Opening.md');
@@ -587,7 +527,7 @@ describe('v3 block opening, migrated to sections and compiled', () => {
   let blkTmpDir;
 
   beforeAll(() => {
-    blkTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-blk-opening-'));
+    blkTmpDir = withTmpDir();
 
     fs.mkdirSync(path.join(blkTmpDir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(blkTmpDir, 'templates'), { recursive: true });
@@ -690,10 +630,6 @@ describe('v3 block opening, migrated to sections and compiled', () => {
     compile(path.join(blkTmpDir, 'compile.yaml'));
   });
 
-  afterAll(() => {
-    fs.rmSync(blkTmpDir, { recursive: true, force: true });
-  });
-
   function opening(branchPath) {
     const segments = branchPath.split('/');
     let p = path.join(blkTmpDir, 'output');
@@ -746,7 +682,7 @@ describe('v3 block opening, migrated to sections and compiled', () => {
 
   test('existing .md opening still works (regression)', () => {
     // Use a separate minimal project that points opening: to a .md file
-    const mdDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-blk-md-'));
+    const mdDir = withTmpDir();
     try {
       fs.mkdirSync(path.join(mdDir, 'items'), { recursive: true });
       fs.mkdirSync(path.join(mdDir, 'templates'), { recursive: true });
@@ -784,7 +720,7 @@ describe('deterministic item ordering', () => {
   let orderTmpDir;
 
   beforeAll(() => {
-    orderTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-order-'));
+    orderTmpDir = withTmpDir();
     fs.mkdirSync(path.join(orderTmpDir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(orderTmpDir, 'templates'), { recursive: true });
 
@@ -824,8 +760,6 @@ describe('deterministic item ordering', () => {
     compile(path.join(orderTmpDir, 'compile.yaml'));
   });
 
-  afterAll(() => { fs.rmSync(orderTmpDir, { recursive: true, force: true }); });
-
   function typeFile(type) {
     return path.join(orderTmpDir, 'output', 'Branches', 'main', 'Story Cards', type, `${type}.md`);
   }
@@ -853,7 +787,7 @@ describe('deterministic item ordering', () => {
 describe('component gap detection', () => {
   // Build a minimal project; `extraComponents` lines are spliced into components:.
   function makeProject(extraComponents) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-gap-'));
+    const dir = withTmpDir();
     fs.mkdirSync(path.join(dir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'items', 'c.yaml'), [
@@ -935,7 +869,7 @@ describe('component gap detection', () => {
 
 describe('item-level ERROR diagnostics fail the build after writing the tree', () => {
   test('an item declaring both notes: and description: throws, but the leaf is still written', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-notesdesc-'));
+    const dir = withTmpDir();
     fs.mkdirSync(path.join(dir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'items', 'c.yaml'), [
@@ -966,7 +900,7 @@ describe('item-level ERROR diagnostics fail the build after writing the tree', (
   });
 
   test('a failed import (CL0324) fails the build, but the ordinary item still renders', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-badimport-'));
+    const dir = withTmpDir();
     fs.mkdirSync(path.join(dir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'items', 'c.yaml'), [
@@ -996,7 +930,7 @@ describe('item-level ERROR diagnostics fail the build after writing the tree', (
   });
 
   test('a missing template (CL0420) fails the build', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-notemplate-'));
+    const dir = withTmpDir();
     fs.mkdirSync(path.join(dir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'items', 'c.yaml'), [
@@ -1026,7 +960,7 @@ describe('item-level ERROR diagnostics fail the build after writing the tree', (
 
 describe('root title -> Label.md', () => {
   function makeTitleProject(extraLines) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-title-'));
+    const dir = withTmpDir();
     fs.mkdirSync(path.join(dir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'items', 'c.yaml'), [
@@ -1090,5 +1024,401 @@ describe('root title -> Label.md', () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+// ── opening paths and branch variables ───────────────────────────────────────
+//
+// These used to call `writeOpeningsRecursive` directly. `opening:` is an ordinary inherited
+// component since Phase 6 Step 6, so the branch-variable merge is `buildCompileContext`'s
+// rather than a hand-rolled walk — which is the point of the move, and is why the property
+// is now asserted through a whole compile instead of through a private writer.
+
+describe('opening paths resolve against branch variables', () => {
+  const NL = String.fromCharCode(10);
+  let tmpDir;
+
+  beforeEach(() => { tmpDir = withTmpDir(); });
+
+  const project = (lines) => {
+    fs.mkdirSync(path.join(tmpDir, 'items'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'templates', 'Item.template'), '{$body.Desc}', 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'items', 'i.yaml'), [
+      '- id: W', '  name: W', '  aid: {type: Item, title: W}',
+      '  render: {template: Item}', '  body: {Desc: w}',
+    ].join(NL), 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'compile.yaml'), [
+      'version: 4',
+      'structure:',
+      '  input:',
+      `    items: [${tmpDir.split(String.fromCharCode(92)).join('/')}/items]`,
+      `    templates: [${tmpDir.split(String.fromCharCode(92)).join('/')}/templates]`,
+      `  output: ${tmpDir.split(String.fromCharCode(92)).join('/')}/output`,
+      ...lines,
+    ].join(NL), 'utf8');
+    compile(path.join(tmpDir, 'compile.yaml'));
+  };
+
+  const opening = (...segments) => {
+    let p = path.join(tmpDir, 'output');
+    for (const s of segments) p = path.join(p, 'Branches', s);
+    return fs.readFileSync(path.join(p, 'Components', 'Opening.md'), 'utf8').trim();
+  };
+
+  test('a branch variable override is used when resolving the opening path', () => {
+    const dir = path.join(tmpDir, 'openings');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'E-Kaiden.md'), 'Kaiden opening content', 'utf8');
+    fs.writeFileSync(path.join(dir, 'E-Zephon.md'), 'Zephon opening content', 'utf8');
+    const spec = `${dir.split(String.fromCharCode(92)).join('/')}/E-{%pcName}.md`;
+
+    // The root table has no pcName at all — each branch has to supply its own.
+    project([
+      'branches:',
+      '  Kaiden:',
+      '    variables: {pcName: Kaiden}',
+      `    components: {opening: '${spec}'}`,
+      '  Zephon:',
+      '    variables: {pcName: Zephon}',
+      `    components: {opening: '${spec}'}`,
+    ]);
+
+    expect(opening('Kaiden')).toBe('Kaiden opening content');
+    expect(opening('Zephon')).toBe('Zephon opening content');
+  });
+
+  test('nested branch variables accumulate', () => {
+    const dir = path.join(tmpDir, 'openings');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'PM-Felix-Pet.md'), 'Felix pet opening', 'utf8');
+
+    project([
+      'branches:',
+      '  personalMage:',
+      '    branches:',
+      '      felix:',
+      '        variables: {employerName: Felix}',
+      '        branches:',
+      '          pet:',
+      `            components: {opening: '${dir.split(String.fromCharCode(92)).join('/')}/PM-{%employerName}-Pet.md'}`,
+    ]);
+
+    expect(opening('personalMage', 'felix', 'pet')).toBe('Felix pet opening');
+  });
+});
+
+// ── config-loading errors abort before any filesystem work ────────────────────
+//
+// A schema violation in compile.yaml itself — here, a missing required structure.output —
+// must stop the compile before mkdirSync, template loading, or item/canon loading ever
+// run. It used to be checked only after all of that had already happened, so the output
+// directory was created (into the wrong, defaulted location) before the throw arrived.
+
+describe('config errors abort before filesystem work', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = withTmpDir();
+  });
+
+  test('a missing structure.output throws and never creates an output directory', () => {
+    const configPath = path.join(tmpDir, 'compile.yaml');
+    fs.writeFileSync(configPath, 'version: 4\nstructure:\n  input:\n    items: [./Codex]\n', 'utf8');
+
+    expect(() => compile(configPath)).toThrow(/error/i);
+
+    // The fallback default the config loader computes when output: is absent.
+    expect(fs.existsSync(path.join(tmpDir, 'output'))).toBe(false);
+  });
+});
+
+// ── the emitter owns the envelope (§8.2) ─────────────────────────────────────
+
+describe('compile writes the VL envelope through emit/vl.js', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = withTmpDir();
+    fs.mkdirSync(path.join(tmpDir, 'items'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
+  });
+
+  /**
+   * Compile a one-item project and return its compiled Item.md.
+   *
+   * `options.config` splices extra root-level config lines; `options.branches` replaces
+   * the branch block; `options.leaf` picks which leaf's output to read back.
+   */
+  function compileItem(itemLines, templateContent, extraTemplates = {}, options = {}) {
+    const { config = [], branches = ['  main: {}'], leaf = ['main'] } = options;
+    fs.writeFileSync(path.join(tmpDir, 'items', 'items.yaml'), itemLines.join('\n'), 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'templates', 'Item.template'), templateContent, 'utf8');
+    for (const [name, content] of Object.entries(extraTemplates)) {
+      fs.writeFileSync(path.join(tmpDir, 'templates', `${name}.template`), content, 'utf8');
+    }
+    fs.writeFileSync(path.join(tmpDir, 'compile.yaml'), [
+      'version: 4',
+      'structure:',
+      `  input: { items: [${tmpDir}/items], templates: [${tmpDir}/templates] }`,
+      `  output: ${tmpDir}/output`,
+      ...config,
+      'branches:',
+      ...branches,
+    ].join('\n'), 'utf8');
+    compile(path.join(tmpDir, 'compile.yaml'));
+    // Phase 11 Step 5: a card constant across the subtree is written once at the node that
+    // owns it and inherited down, so a leaf may not hold its own copy. Read it the way
+    // Velvet Lattice resolves it — the nearest Story Cards/Item/Item.md up the chain.
+    let dir = leaf.reduce((acc, segment) => path.join(acc, 'Branches', segment),
+      path.join(tmpDir, 'output'));
+    const base = path.join(tmpDir, 'output');
+    for (;;) {
+      const candidate = path.join(dir, 'Story Cards', 'Item', 'Item.md');
+      if (fs.existsSync(candidate)) return fs.readFileSync(candidate, 'utf8');
+      if (dir === base) throw new Error('no Item.md found from leaf up to output root');
+      dir = path.dirname(path.dirname(dir)); // strip "<segment>/Branches"
+    }
+  }
+
+  const ITEM = [
+    '- id: Widget',
+    '  name: { display: Widget, full: Widget of Power }',
+    '  aid: { type: Item, triggers: [widget, _gizmo_] }',
+    '  render: { template: Item }',
+    '  body: { Desc: a widget }',
+  ];
+
+  test('the heading, fence and encapsulate come from the emitter, not the template', () => {
+    const output = compileItem(ITEM, '{$body.Desc}');
+    expect(output).toBe([
+      '## Widget of Power',
+      '~~~',
+      "triggers: [widget, ' gizmo ']",
+      'encapsulate: false',
+      '~~~',
+      'a widget',
+      '',
+    ].join('\n'));
+  });
+
+  test('notes: reaches the fence through the default rendering', () => {
+    const output = compileItem([...ITEM, "  notes: '[e]'"], '{$body.Desc}');
+    expect(output).toContain("notes: '[e]'");
+  });
+
+  test('render.notesTemplate renders the notes text', () => {
+    const item = [...ITEM.slice(0, 3), '  render: { template: Item, notesTemplate: Marker }',
+      '  body: { Desc: a widget }', '  notes: { known: true }'];
+    const output = compileItem(item, '{$body.Desc}', { Marker: '{if $notes.known}[e]{/if}' });
+    expect(output).toContain("notes: '[e]'");
+  });
+
+  test('an empty notes template emits no notes line at all', () => {
+    const item = [...ITEM.slice(0, 3), '  render: { template: Item, notesTemplate: Marker }',
+      '  body: { Desc: a widget }', '  notes: { known: false }'];
+    const output = compileItem(item, '{$body.Desc}', { Marker: '{if $notes.known}[e]{/if}' });
+    expect(output).not.toContain('notes:');
+  });
+
+  test('the wrapper is applied to the body and stays out of the fence', () => {
+    const item = [...ITEM.slice(0, 3), '  render: { template: Item, wrapper: curly }',
+      '  body: { Desc: a widget }'];
+    const output = compileItem(item, '{$body.Desc}');
+    expect(output).toContain('~~~\n{\na widget\n}');
+  });
+});
+
+// ── CL0622 card-name collision (Phase 10 Step 3) ───────────────────────────────
+
+describe('CL0622 card-name collision', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = withTmpDir();
+    fs.mkdirSync(path.join(tmpDir, 'items'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
+  });
+
+  function compileCollisionProject(itemsYaml) {
+    fs.writeFileSync(path.join(tmpDir, 'items', 'items.yaml'), itemsYaml, 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'templates', 'Character.template'), '{$body.Tagline}', 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'templates', 'Location.template'), '{$body.Tagline}', 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'compile.yaml'), [
+      'version: 4',
+      'structure:',
+      `  input: { items: [${tmpDir}/items], templates: [${tmpDir}/templates] }`,
+      `  output: ${tmpDir}/output`,
+      'branches:',
+      '  main: {}',
+    ].join('\n'), 'utf8');
+
+    const diagnostics = new Diagnostics();
+    // CL0622 is an error as of Phase 11 Step 5, so `compile` aborts — the diagnostics
+    // object is populated before it throws, which is what these tests read.
+    try {
+      compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
+    } catch {
+      /* expected: compile aborts once the collision is an error */
+    }
+    return diagnostics;
+  }
+
+  test('errors when two cards share a name across types', () => {
+    const diagnostics = compileCollisionProject([
+      '- id: FirstCard',
+      '  name: Shared Name',
+      '  aid: { type: Character, triggers: [First] }',
+      '  body: { Tagline: first }',
+      '',
+      '- id: SecondCard',
+      '  name: Shared Name',
+      '  aid: { type: Location, triggers: [Second] }',
+      '  body: { Tagline: second }',
+    ].join('\n'));
+
+    const collision = diagnostics.errors.find((d) => d.code === 'CL0622');
+    expect(collision).toBeTruthy();
+    expect(collision.message).toContain('Shared Name');
+    // Lowercase because `Character` and `Location` are AID built-ins and the emit path folds them
+    // before anything downstream reads `aid.type` — including this message. The fixture
+    // still authors them capitalized, which is what keeps the fold covered from this end.
+    expect(collision.message).toContain('character');
+    expect(collision.message).toContain('location');
+  });
+
+  test('errors when two cards share a name within one type', () => {
+    const diagnostics = compileCollisionProject([
+      '- id: FirstCard',
+      '  name: Shared Name',
+      '  aid: { type: Character, triggers: [First] }',
+      '  body: { Tagline: first }',
+      '',
+      '- id: SecondCard',
+      '  name: Shared Name',
+      '  aid: { type: Character, triggers: [Second] }',
+      '  body: { Tagline: second }',
+    ].join('\n'));
+
+    const collision = diagnostics.errors.find((d) => d.code === 'CL0622');
+    expect(collision).toBeTruthy();
+    expect(collision.message).toContain('Shared Name');
+  });
+});
+
+// ── the notes template ladder (§4.5) ─────────────────────────────────────────
+
+describe('the notes ladder end to end', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = withTmpDir();
+    fs.mkdirSync(path.join(tmpDir, 'items'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
+  });
+
+  const ITEM = [
+    '- id: Widget',
+    '  name: Widget',
+    '  aid: { type: Item, triggers: [widget] }',
+    '  body: { Desc: a widget }',
+    '  notes: { known: true }',
+  ];
+
+  function build({ templates = {}, config = [], branches = ['  main: {}'] }) {
+    fs.writeFileSync(path.join(tmpDir, 'items', 'items.yaml'), ITEM.join('\n'), 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'templates', 'Item.template'), '{$body.Desc}', 'utf8');
+    for (const [name, content] of Object.entries(templates)) {
+      fs.writeFileSync(path.join(tmpDir, 'templates', `${name}.template`), content, 'utf8');
+    }
+    fs.writeFileSync(path.join(tmpDir, 'compile.yaml'), [
+      'version: 4',
+      'structure:',
+      `  input: { items: [${tmpDir}/items], templates: [${tmpDir}/templates] }`,
+      `  output: ${tmpDir}/output`,
+      ...config,
+      'branches:',
+      ...branches,
+    ].join('\n'), 'utf8');
+    compile(path.join(tmpDir, 'compile.yaml'));
+    // Phase 11 Step 5: the card may be written at an ancestor node and inherited, so read
+    // it the way Velvet Lattice resolves it — nearest Item.md from the leaf up.
+    return (...segments) => {
+      let dir = path.join(tmpDir, 'output', ...segments.flatMap((s) => ['Branches', s]));
+      const base = path.join(tmpDir, 'output');
+      for (;;) {
+        const candidate = path.join(dir, 'Story Cards', 'Item', 'Item.md');
+        if (fs.existsSync(candidate)) return fs.readFileSync(candidate, 'utf8');
+        if (dir === base) throw new Error('no Item.md found from leaf up to output root');
+        dir = path.dirname(path.dirname(dir));
+      }
+    };
+  }
+
+  test('the project default applies when no type template exists', () => {
+    const read = build({
+      templates: { ProjectNotes: '{if $notes.known}[e]{/if}' },
+      config: ['render:', '  notesTemplate: ProjectNotes'],
+    });
+    expect(read('main')).toContain("notes: '[e]'");
+  });
+
+  test('a branch turns the marker off by pointing at a blank template', () => {
+    // The mod-loading case: the marker means something on the branch that loads the mod
+    // and nothing on the branch that does not, and no item changes.
+    const read = build({
+      templates: { ProjectNotes: '{if $notes.known}[e]{/if}', NoNotes: '' },
+      config: ['render:', '  notesTemplate: ProjectNotes'],
+      branches: ['  wtg: {}', '  vanilla:', '    render:', '      notesTemplate: NoNotes'],
+    });
+    expect(read('wtg')).toContain("notes: '[e]'");
+    expect(read('vanilla')).not.toContain('notes:');
+  });
+
+  test('~ unbinds the project default, falling through to the default rendering rather than suppressing', () => {
+    // Worth pinning down, because the two readings differ in output rather than in
+    // tidiness: `~` removes the binding, and rung 4 then renders the notes value itself.
+    // For a mapping that means `known: true` reaching AID as text — which is why the
+    // idiom for "off" is a blank template, not `~`.
+    const read = build({
+      templates: { ProjectNotes: '{if $notes.known}[e]{/if}' },
+      config: ['render:', '  notesTemplate: ProjectNotes'],
+      branches: ['  wtg: {}', '  vanilla:', '    render:', '      notesTemplate: ~'],
+    });
+    expect(read('wtg')).toContain("notes: '[e]'");
+    expect(read('vanilla')).toContain("notes: 'known: true'");
+  });
+
+  test('a branch swaps the project default for its own template', () => {
+    const read = build({
+      templates: {
+        ProjectNotes: '{if $notes.known}[e]{/if}',
+        OtherNotes: '{if $notes.known}[x]{/if}',
+      },
+      config: ['render:', '  notesTemplate: ProjectNotes'],
+      branches: ['  a: {}', '  b:', '    render:', '      notesTemplate: OtherNotes'],
+    });
+    expect(read('a')).toContain("notes: '[e]'");
+    expect(read('b')).toContain("notes: '[x]'");
+  });
+
+  test('the branch default is inherited by nested leaves', () => {
+    const read = build({
+      templates: { OtherNotes: '{if $notes.known}[x]{/if}' },
+      branches: ['  outer:', '    render:', '      notesTemplate: OtherNotes',
+        '    branches:', '      inner: {}'],
+    });
+    expect(read('outer', 'inner')).toContain("notes: '[x]'");
+  });
+
+  test('a project notesTemplate naming no loaded template is a load-time ERROR', () => {
+    expect(() => build({ config: ['render:', '  notesTemplate: Missing'] }))
+      .toThrow(/error/i);
+  });
+
+  test('a branch notesTemplate naming no loaded template is a load-time ERROR', () => {
+    expect(() => build({
+      branches: ['  a:', '    render:', '      notesTemplate: AlsoMissing'],
+    })).toThrow(/error/i);
   });
 });

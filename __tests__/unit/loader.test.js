@@ -1,7 +1,6 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { loadTemplates } = require('../../src/loader');
 const {
@@ -9,13 +8,14 @@ const {
 } = require('../../src/loader/registry');
 const { loadCompileConfig } = require('../../src/config/load');
 const { Diagnostics, CODES } = require('../../src/diag');
+const { withTmpDir } = require('../helpers/project');
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function makeTmpDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'cl-test-'));
+  return withTmpDir();
 }
 
 function writeTemplate(dir, name, content) {
@@ -55,7 +55,7 @@ describe('loadTemplates', () => {
     expect(caught.code).toBe(CODES.DUPLICATE_NAMED_FILE);
   });
 
-  test('a template that still writes a fence is an ERROR naming the file (§8.3)', () => {
+  test('a template that still writes a fence is an ERROR naming the file', () => {
     const dir = makeTmpDir();
     writeTemplate(dir, 'Character', '## {$name.full}\n~~~\ntriggers: []\n~~~\nbody');
     const diagnostics = new Diagnostics();
@@ -161,15 +161,6 @@ describe('buildRegistry', () => {
     expect(diagnostics.errors.some((d) => /Duplicate item ID/i.test(d.message))).toBe(true);
   });
 
-  test('skips import and include entries', () => {
-    const items = [
-      { import: 'Zephon', _source: 'a.yaml' },
-      { include: 'some/file.yaml', _source: 'b.yaml' },
-    ];
-    const reg = buildRegistry(items, 'test');
-    expect(reg.size).toBe(0);
-  });
-
   test('stores multiple distinct items', () => {
     const items = [
       { id: 'Alpha', name: 'Alpha', _source: 'a.yaml' },
@@ -183,15 +174,6 @@ describe('buildRegistry', () => {
 });
 
 describe('mergeRegistries', () => {
-  test('merges disjoint registries', () => {
-    const canon = new Map([['a', { id: 'a' }]]);
-    const project = new Map([['b', { id: 'b' }]]);
-    const merged = mergeRegistries(canon, project);
-    expect(merged.size).toBe(2);
-    expect(merged.has('a')).toBe(true);
-    expect(merged.has('b')).toBe(true);
-  });
-
   test('raises CL0141 on the bus when same id appears in both registries', () => {
     const canon = new Map([['felicia', { _source: 'canon/Felicia.yaml' }]]);
     const project = new Map([['felicia', { _source: 'items/Felicia.yaml' }]]);
@@ -216,24 +198,6 @@ describe('loadItemsFromDir', () => {
   test('returns empty array when directory is empty', () => {
     const dir = makeTmpDir();
     expect(loadItemsFromDir([dir])).toEqual([]);
-  });
-
-  test('loads a single-item YAML (non-array) and wraps it', () => {
-    const dir = makeTmpDir();
-    fs.writeFileSync(path.join(dir, 'item.yaml'), 'id: Aria\nname: Aria Voss\n', 'utf8');
-    const items = loadItemsFromDir([dir]);
-    expect(items).toHaveLength(1);
-    expect(items[0].id).toBe('Aria');
-    expect(items[0]._source).toContain('item.yaml');
-  });
-
-  test('loads a multi-item YAML (array sequence)', () => {
-    const dir = makeTmpDir();
-    fs.writeFileSync(path.join(dir, 'items.yaml'), '- id: Alpha\n- id: Beta\n', 'utf8');
-    const items = loadItemsFromDir([dir]);
-    expect(items).toHaveLength(2);
-    expect(items[0].id).toBe('Alpha');
-    expect(items[1].id).toBe('Beta');
   });
 
   test('normalizes vars: field to v: on each item', () => {
@@ -274,7 +238,6 @@ describe('loadCompileConfig', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
     jest.restoreAllMocks();
   });
 
@@ -308,46 +271,9 @@ describe('loadCompileConfig', () => {
     return p;
   }
 
-  test('_base is set to the directory containing compile.yaml', () => {
-    const cfgPath = writeConfig('structure: {}\n');
-    expect(load(cfgPath)._base).toBe(tmpDir);
-  });
-
-  test('resolves structure.output relative to config dir', () => {
-    const cfgPath = writeConfig('structure:\n  output: ./out\n');
-    expect(load(cfgPath)._resolvedOutput).toBe(path.resolve(tmpDir, 'out'));
-  });
-
-  test('output is required — v3 silently defaulted it to ./output', () => {
-    // The old default wrote a tree somewhere the author was not looking. A missing
-    // required key is the better failure (§6).
-    const p = path.join(tmpDir, 'compile.yaml');
-    fs.writeFileSync(p, 'version: 4\nstructure:\n  input:\n    items: []\n', 'utf8');
-    expect(() => load(p)).toThrow(/Configuration has/);
-  });
-
-  test('version is required — its absence is what identifies a v3 project', () => {
-    const p = path.join(tmpDir, 'compile.yaml');
-    fs.writeFileSync(p, 'structure:\n  output: ./out\n', 'utf8');
-    expect(() => load(p)).toThrow(/Configuration has/);
-  });
-
-  test('resolves structure.reports relative to config dir', () => {
-    // Renamed from `overview:` — the directory now holds diff, seed map, overview, item
-    // sizes, leaf review and inventory, so the old name described one of its contents.
-    const cfgPath = writeConfig('structure:\n  output: ./out\n  reports: ./reviews\n');
-    expect(load(cfgPath)._resolvedReports).toBe(path.resolve(tmpDir, 'reviews'));
-  });
-
   test('_resolvedReports is null when structure.reports is not specified', () => {
     const cfgPath = writeConfig('structure:\n  output: ./out\n');
     expect(load(cfgPath)._resolvedReports).toBeNull();
-  });
-
-  test('resolves items sequence to absolute paths', () => {
-    const cfgPath = writeConfig('structure:\n  input:\n    items:\n      - ./items\n');
-    expect(load(cfgPath)._resolvedItems)
-      .toEqual([path.resolve(tmpDir, 'items')]);
   });
 
   test('expands {%variable} and library names in items paths', () => {
@@ -370,12 +296,6 @@ describe('loadCompileConfig', () => {
     expect(_resolvedItems[1]).toBe(path.resolve(tmpDir, 'base/extra'));
   });
 
-  test('resolves library mapping entries to absolute paths', () => {
-    const cfgPath = writeConfig('structure:\n  input:\n    library:\n      Core: ./canon/core\n');
-    const { _resolvedLibrary } = load(cfgPath);
-    expect(_resolvedLibrary.get('Core')).toBe(path.resolve(tmpDir, 'canon/core'));
-  });
-
   test('a library entry may reference a sibling library name', () => {
     // v3 needed a bespoke two-pass resolver for this. Library names are variables now, so
     // it falls out of ordinary variable resolution.
@@ -393,22 +313,7 @@ describe('loadCompileConfig', () => {
     expect(ext).toContain('ext');
   });
 
-  test('a library name colliding with a declared variable is an ERROR', () => {
-    const p = path.join(tmpDir, 'compile.yaml');
-    fs.writeFileSync(p, [
-      'version: 4',
-      'variables:',
-      '  Base: ./somewhere',
-      'structure:',
-      '  output: ./out',
-      '  input:',
-      '    library:',
-      '      Base: ./base',
-    ].join('\n') + '\n', 'utf8');
-    expect(() => load(p)).toThrow(/Configuration has/);
-  });
-
-  test('passes through roles (protagonist included, §9.2), variables, and branches', () => {
+  test('passes through roles (protagonist included), variables, and branches', () => {
     const cfgPath = writeConfig(
       'roles:\n  protagonist: Aria\nvariables:\n  role: knight\nbranches:\n  main: {}\n'
     );

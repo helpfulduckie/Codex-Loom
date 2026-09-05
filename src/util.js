@@ -345,6 +345,9 @@ function walkTextRecursive(obj, transform) {
   }
 }
 
+/** AID's native placeholder syntax: `%key%` around a bare word, global so `replace` sees every one. */
+const PLACEHOLDER_RE = /%(\w+)%/g;
+
 // ── mechanical syntax patterns ──────────────────────────────────────────────
 //
 // Single source of truth for every compile-time artifact pattern that should
@@ -483,7 +486,7 @@ function checkMechanicalArtifacts(text, label, sink) {
 module.exports = {
   findFiles, readFileTrim, listFilesRelative, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
   ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
-  YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix, PATH_UNSAFE_CHARS, isPlainObject,
+  YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix, PATH_UNSAFE_CHARS, PLACEHOLDER_RE, isPlainObject,
   resolveVariables, checkUnexpandedVariables, walkItemTextFields, walkTextRecursive, itemContext, ITEM_CONTEXT_KEYS, checkUnresolvedFieldTokens,
   checkMechanicalArtifacts, maskFencedRegions,
   FIELD_TOKEN_RE, VAR_TOKEN_RE, TEMPLATE_FN_RE, TEMPLATE_TAG_RE, VERB_MARKER_RE, SUSPECT_VERB_MARKER_RE, JS_ARTIFACT_RE, JS_WORD_RE,

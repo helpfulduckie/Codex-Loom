@@ -14,26 +14,17 @@
  */
 
 const fs   = require('fs');
-const os   = require('os');
 const path = require('path');
 
 const {
   runBodySizeMode, discoverNodes, mergedPlaceholders, collectLeafCardsForSizing, collectRows,
 } = require('../../src/bodysize');
-
-const dirs = [];
-afterAll(() => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }); });
+const { withTmpDir, writeTree } = require('../helpers/project');
 
 /** Write a compiled-output tree and return its root. `files` is relative path → content. */
 function tree(files) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-bodysize-'));
-  dirs.push(dir);
-  const root = path.join(dir, 'Velvet Lattice');
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(root, ...rel.split('/'));
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content, 'utf8');
-  }
+  const root = path.join(withTmpDir(), 'Velvet Lattice');
+  writeTree(root, files);
   fs.mkdirSync(root, { recursive: true });
   return root;
 }
@@ -44,8 +35,7 @@ const card = (title, body, fence = 'triggers:\n  - thing') => (
 );
 
 const run = (root) => {
-  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-bodysize-out-'));
-  dirs.push(out);
+  const out = withTmpDir();
   const result = runBodySizeMode(root, out);
   return result.written.length > 0 ? {
     csv: fs.readFileSync(result.csvPath, 'utf8'),
@@ -54,7 +44,7 @@ const run = (root) => {
 };
 
 describe('the collector is the report\'s own, not the seed map\'s', () => {
-  test('a trigger-less card is measured — §4.8 puts hard limits on everything', () => {
+  test('a trigger-less card is measured — hard limits apply to everything', () => {
     // The defect the rework fixes: `collectLeafCards` filters through `parseCardsFromMd`,
     // which keeps only cards with triggers, so a reference card over 2,000 characters was
     // invisible to the one report that exists to find it.
@@ -324,7 +314,7 @@ describe('an empty tree', () => {
   });
 });
 
-describe('card resolution is name-keyed, not file-keyed (Phase 10 Decision 3)', () => {
+describe('card resolution is name-keyed, not file-keyed', () => {
   test('a leaf that overrides one card of a type resolves to one card, not two', () => {
     // The corpus collision (The Institute's "The Institute" Location/Organization pair) is
     // two cards of the same name at the *same* node — this pins the other shape the rule

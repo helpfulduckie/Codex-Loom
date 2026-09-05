@@ -67,7 +67,7 @@ describe('targets', () => {
   });
 });
 
-describe('the template ladder (§7.4)', () => {
+describe('the template ladder', () => {
   const item = (target) => ({
     aid: { type: 'Character' },
     render: { template: 'Mixed', plotEssential: { slot: 'you', ...target } },

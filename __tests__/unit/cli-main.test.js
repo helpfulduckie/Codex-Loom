@@ -11,10 +11,10 @@
 // suite running in the same worker.
 
 const fs   = require('fs');
-const os   = require('os');
 const path = require('path');
 
 const { main } = require('../../src/cli.js');
+const { withTmpDir } = require('../helpers/project');
 
 function write(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -62,11 +62,7 @@ describe('main(argv) — in-process', () => {
     let tmp;
 
     beforeEach(() => {
-      tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-cli-main-test-'));
-    });
-
-    afterEach(() => {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      tmp = withTmpDir();
     });
 
     test('a successful compile returns 0', () => {

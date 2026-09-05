@@ -10,15 +10,14 @@
  */
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
 const { loadComponentDocument } = require('../../src/loader/component');
 const { Diagnostics } = require('../../src/diag');
+const { withTmpDir } = require('../helpers/project');
 
 let tmpDir;
-beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-component-')); });
-afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+beforeEach(() => { tmpDir = withTmpDir(); });
 
 function write(name, content) {
   const full = path.join(tmpDir, name);

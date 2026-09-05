@@ -13,28 +13,16 @@
  * compiled) and "expected" (committed baseline) dirs it normally gets from a temp compile.
  */
 
-const os = require('os');
-const path = require('path');
-const fs = require('fs');
 const { OPAQUE } = require('../helpers/diffShape');
+const { withTmpDir, writeTree } = require('../helpers/project');
 
 // `diffTree` needs no fixture, and requiring the script has no side effects: the set is
 // loaded only under `require.main === module`, so this suite runs on every checkout.
 const { diffTree } = require('../../scripts/rebaseline');
 
-const dirs = [];
-afterAll(() => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }); });
-
 /** Build a tree from `{ relPath: contents }` and return its root. */
 function tree(files) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-rebaseline-'));
-  dirs.push(root);
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(root, ...rel.split('/'));
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content);
-  }
-  return root;
+  return writeTree(withTmpDir(), files);
 }
 
 const LIB = 'exports.shared = 1;\n// a fairly long line to make a byte flip unambiguous\n';

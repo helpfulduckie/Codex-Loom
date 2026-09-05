@@ -1,7 +1,6 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const YAML = require('yaml');
 const {
@@ -10,10 +9,10 @@ const {
   encodeTriggerPadding,
 } = require('../../src/migrate/v3');
 const { renameConfigToCl, migrateProjectFully } = require('../../src/migrate');
+const { withTmpDir } = require('../helpers/project');
 
 let tmpDir;
-beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-mig-')); });
-afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+beforeEach(() => { tmpDir = withTmpDir(); });
 
 function writeConfig(yaml) {
   const p = path.join(tmpDir, 'compile.yaml');
@@ -45,7 +44,7 @@ const V3 = [
   '',
 ].join('\n');
 
-describe('the §14.2 config transformations', () => {
+describe('the config transformations', () => {
   let migrated;
   beforeEach(() => { migrated = migrateConfigFile(writeConfig(V3)).output; });
 
@@ -312,7 +311,7 @@ describe('migrateItemDocument', () => {
    * a *candidate list*, and turning a candidate into a declaration is the guess the field
    * exists to stop the compiler making.
    */
-  describe('kind: reference candidates (§4.8)', () => {
+  describe('kind: reference candidates', () => {
     test('a trigger-less card is listed for review and left untouched', () => {
       const { text, notes, changes } = migrate(
         '- id: WTG Time Config\n  aid:\n    type: System\n    triggers: []\n');
@@ -430,7 +429,7 @@ describe('migrateItemDocument', () => {
  * an option rather than a default: plain `.yaml` is not deprecated and `--migrate` renames
  * only when asked.
  */
-describe('renaming the entry point to compile.cl.yaml (§4.6)', () => {
+describe('renaming the entry point to compile.cl.yaml', () => {
   test('off by default — a migrated project keeps compile.yaml', () => {
     // Not dryRun: the later stages read the project back through the compiler's loader,
     // which rejects a config the earlier stages were told not to write.

@@ -72,7 +72,7 @@ describe('walkBranchChain — merged variables and components', () => {
   });
 });
 
-describe('walkBranchChain — inherited protagonist (§9.2: roles.protagonist)', () => {
+describe('walkBranchChain — inherited protagonist (roles.protagonist)', () => {
   test('takes the nearest ancestor that declares one', () => {
     expect(walkBranchChain(TREE, ['Free Form', 'Veryn', 'lovesYou']).roles.protagonist).toBe('Veryn');
   });
@@ -90,7 +90,7 @@ describe('walkBranchChain — inherited protagonist (§9.2: roles.protagonist)',
   });
 });
 
-describe('walkBranchChain — merged roles (§9.2)', () => {
+describe('walkBranchChain — merged roles', () => {
   const ROLE_TREE = {
     root: {
       roles: { LI: 'Malcolm', rival: 'Voss' },
@@ -278,7 +278,7 @@ describe('walkBranchTree — enumeration rooted at the project node', () => {
   });
 });
 
-describe('model/ purity (§3.3)', () => {
+describe('model/ purity', () => {
   const MODEL_DIR = path.resolve(__dirname, '../../src/model');
 
   // The invariant that makes the compiler testable without fixtures on disk, and that

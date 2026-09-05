@@ -18,32 +18,7 @@
  * unbind, none of which is observable below `compile()`.
  */
 
-const os = require('os');
-const path = require('path');
-const fs = require('fs');
-const { compile } = require('../../src/compile');
-const { Diagnostics } = require('../../src/diag');
-
-const dirs = [];
-afterAll(() => { for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true }); });
-
-function compileProject(files) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-wtg-'));
-  dirs.push(tmpDir);
-  const slash = (p) => p.replace(/\\/g, '/');
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(tmpDir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content.replace(/%TMP%/g, slash(tmpDir)), 'utf8');
-  }
-  const diagnostics = new Diagnostics();
-  try {
-    compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
-  } catch (err) {
-    // A pack ERROR fails the build by design (§12.5); the tree is still written.
-  }
-  return diagnostics;
-}
+const { compileProject } = require('../helpers/project');
 
 const find = (d, code) => d.all.filter((x) => x.code === code);
 const MARKER = 'CL-wtg/0001';
@@ -78,7 +53,7 @@ const item = ({ id, title, notes, text = 'body text' }) => [
 
 describe('CL-wtg/0001 — [e] / [wtg-no-timestamp] used together with /]', () => {
   test('a card carrying both markers is an ERROR', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': item({ id: 'gate', title: 'North Gate', notes: '[e]', text: 'the gate /] stands' }),
@@ -89,7 +64,7 @@ describe('CL-wtg/0001 — [e] / [wtg-no-timestamp] used together with /]', () =>
   });
 
   test('the markers are caught in the notes text alone, not only the body', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': item({ id: 'gate', title: 'North Gate', notes: '[wtg-no-timestamp] /]' }),
@@ -98,7 +73,7 @@ describe('CL-wtg/0001 — [e] / [wtg-no-timestamp] used together with /]', () =>
   });
 
   test('either marker alone is fine — the rule is the contradiction, not the markers', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': [
@@ -126,7 +101,7 @@ const tcItem = (text) => item({ id: 'tc', title: 'WTG Time Config', text });
 
 describe('CL-wtg/0002 — the "WTG Time Config" card exists and is complete', () => {
   test('(a) no card at all → one WARN naming the leaf', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': item({ id: 'aria', title: 'Aria', text: 'just a character' }),
@@ -138,7 +113,7 @@ describe('CL-wtg/0002 — the "WTG Time Config" card exists and is complete', ()
   });
 
   test('(b) a core field missing → one WARN naming that field', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': tcItem('Starting Date: 6/28/1326\nStarting Time: 9:00 AM\nInitialized: true'),
@@ -149,7 +124,7 @@ describe('CL-wtg/0002 — the "WTG Time Config" card exists and is complete', ()
   });
 
   test('(c) a key WTG will not read → one WARN naming it, with a typo hint when close', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': tcItem(`${VALID_TC}\nNotes: remember to update this`),
@@ -160,7 +135,7 @@ describe('CL-wtg/0002 — the "WTG Time Config" card exists and is complete', ()
   });
 
   test('(d) a recognized override key → silent', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': tcItem(`${VALID_TC}\nClock Format: 24h`),
@@ -170,7 +145,7 @@ describe('CL-wtg/0002 — the "WTG Time Config" card exists and is complete', ()
   });
 
   test('(f) a fully valid card → silent', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': tcItem(VALID_TC),
@@ -180,7 +155,7 @@ describe('CL-wtg/0002 — the "WTG Time Config" card exists and is complete', ()
   });
 
   test('(i) a recognized override with a bad value → one WARN naming the key', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': tcItem(`${VALID_TC}\nClock Format: purple`),
@@ -192,7 +167,7 @@ describe('CL-wtg/0002 — the "WTG Time Config" card exists and is complete', ()
   });
 
   test('(j) every override key present with a valid value → silent', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': tcItem([
@@ -232,7 +207,7 @@ describe('CL-wtg/0002 — the "WTG Time Config" card exists and is complete', ()
   });
 
   test('(k) enum and boolean overrides are matched case-insensitively — 24H / AMERICAN / TRUE pass', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': tcItem(`${VALID_TC}\nClock Format: 24H\nDate Format: AMERICAN\nEnable WTG: TRUE`),
@@ -244,7 +219,7 @@ describe('CL-wtg/0002 — the "WTG Time Config" card exists and is complete', ()
 
 describe('CL-wtg/0003 — the "WTG Time Config" core fields are well-formed', () => {
   test('(e) an ISO date is an ERROR — WTG wants M/D/year', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': tcItem('Starting Date: 2024-01-01\nStarting Era: AD\nStarting Time: 9:00 AM\nInitialized: true'),
@@ -257,7 +232,7 @@ describe('CL-wtg/0003 — the "WTG Time Config" core fields are well-formed', ()
   });
 
   test('the four fields are matched case-insensitively — bc / 9:00 am / TRUE pass', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': tcItem('Starting Date: 6/28/1326\nStarting Era: bc\nStarting Time: 9:00 am\nInitialized: TRUE'),
@@ -267,7 +242,7 @@ describe('CL-wtg/0003 — the "WTG Time Config" core fields are well-formed', ()
   });
 
   test('an out-of-set era is an ERROR — {AD, CE, BC, BCE} only, dotted forms rejected', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': tcItem('Starting Date: 6/28/1326\nStarting Era: A.D.\nStarting Time: 9:00 AM\nInitialized: true'),
@@ -278,7 +253,7 @@ describe('CL-wtg/0003 — the "WTG Time Config" core fields are well-formed', ()
   });
 
   test('the rule is scoped by title — a malformed field on any other card is ignored', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
       'Codex/items.yaml': item({ id: 'aria', title: 'Aria', text: 'Starting Date: nonsense' }),
@@ -297,12 +272,12 @@ describe('level: and declaration control whether the pack runs', () => {
   };
 
   test('a project that never declares the pack gets no findings (no auto-activation)', () => {
-    const d = compileProject({ ...TRAP, 'compile.yaml': config([]) });
+    const { diagnostics: d } = compileProject({ ...TRAP, 'compile.yaml': config([]) });
     expect(find(d, MARKER)).toHaveLength(0);
   });
 
   test('per-pack level: warn demotes the ERROR to WARN and the build survives', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TRAP,
       'compile.yaml': config(['lint: {packs: {wtg: {level: warn}}}']),
     });
@@ -312,7 +287,7 @@ describe('level: and declaration control whether the pack runs', () => {
   });
 
   test('per-pack level: off silences it entirely', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TRAP,
       'compile.yaml': config(['lint: {packs: {wtg: {level: off}}}']),
     });
@@ -320,7 +295,7 @@ describe('level: and declaration control whether the pack runs', () => {
   });
 
   test('(g) level: warn demotes the CL-wtg/0003 ERROR to WARN and the build survives', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {level: warn}}}']),
       'Codex/items.yaml': tcItem('Starting Date: 2024-01-01\nStarting Era: AD\nStarting Time: 9:00 AM\nInitialized: true'),
@@ -331,7 +306,7 @@ describe('level: and declaration control whether the pack runs', () => {
   });
 
   test('(h) level: off silences both WTG Time Config rules', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['lint: {packs: {wtg: {level: off}}}']),
       'Codex/items.yaml': tcItem('Starting Date: 2024-01-01'),
@@ -341,7 +316,7 @@ describe('level: and declaration control whether the pack runs', () => {
   });
 
   test('requireCard fires per binding leaf with no card — once, and not on an unbound branch', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       // No WTG Time Config card anywhere; every item is global to both leaves.
       'Codex/items.yaml': item({ id: 'aria', title: 'Aria', text: 'a character' }),
@@ -366,7 +341,7 @@ describe('level: and declaration control whether the pack runs', () => {
   });
 
   test('wtg: ~ on a branch unbinds it there while a sibling branch still fires', () => {
-    const d = compileProject({
+    const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'Codex/items.yaml': item({ id: 'gate', title: 'North Gate', notes: '[e] /]' }),
       'compile.yaml': [

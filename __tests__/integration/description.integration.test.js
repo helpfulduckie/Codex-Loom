@@ -17,37 +17,10 @@
  * frontmatter is a property of the bytes rather than of the rendered text.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { compile } = require('../../src/compile');
-const { Diagnostics, CODES } = require('../../src/diag');
-
-const dirs = [];
-
-afterAll(() => {
-  for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
-});
-
-function compileProject(files) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-desc-'));
-  dirs.push(tmpDir);
-  const slash = (p) => p.replace(/\\/g, '/');
-
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(tmpDir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content.replace(/%TMP%/g, slash(tmpDir)), 'utf8');
-  }
-
-  const diagnostics = new Diagnostics();
-  try {
-    compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
-  } catch (err) {
-    // Several of these raise ERRORs by construction.
-  }
-  return { diagnostics, tmpDir };
-}
+const { CODES } = require('../../src/diag');
+const { compileProject } = require('../helpers/project');
 
 const codes = (diagnostics, code) => diagnostics.all.filter((d) => d.code === code);
 const exists = (p) => fs.existsSync(p);
@@ -567,7 +540,7 @@ const structPreamble = [
   '  output: %TMP%/output',
 ];
 
-describe('a leaf with neither an opening nor a description is CL0630 (Phase 14 Step 2)', () => {
+describe('a leaf with neither an opening nor a description is CL0630', () => {
   test('the leaf that resolves nothing is named at WARN; the one with an opening is not', () => {
     const { diagnostics } = compileProject({
       ...BASE,
@@ -620,7 +593,7 @@ describe('a leaf with neither an opening nor a description is CL0630 (Phase 14 S
   });
 });
 
-describe('a leaf that resolves no aiInstructions is CL0631 (Phase 14 Step 2)', () => {
+describe('a leaf that resolves no aiInstructions is CL0631', () => {
   const openBoth = [
     'branches:',
     '  calm:',

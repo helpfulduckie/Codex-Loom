@@ -61,7 +61,7 @@ describe('unknown keys', () => {
   });
 });
 
-describe('relocation suggestions — the §4.3 headline', () => {
+describe('relocation suggestions', () => {
   test('a valid key at the wrong level suggests where it belongs', () => {
     const { diagnostics, codes } = run({ canon: { a: 'b' }, structure: { output: 'o' } });
     expect(codes).toContain(CODES.MISPLACED_KEY);
@@ -140,7 +140,7 @@ describe('type checking', () => {
   });
 });
 
-describe('empty-collection normalization (§3.3)', () => {
+describe('empty-collection normalization', () => {
   test('{} is accepted where a sequence is expected, and normalized to []', () => {
     const { diagnostics, result } = run({ structure: { output: 'o', input: { items: {} } } });
     expect(diagnostics.isEmpty()).toBe(true);
@@ -157,7 +157,7 @@ describe('empty-collection normalization (§3.3)', () => {
     expect(run({ variables: ['a'] }).codes).toContain(CODES.WRONG_TYPE);
   });
 
-  test('null is left alone — `~` means delete, not empty (§6.4)', () => {
+  test('null is left alone — `~` means delete, not empty', () => {
     const { diagnostics, result } = run({ variables: null });
     expect(diagnostics.isEmpty()).toBe(true);
     expect(result.variables).toBeNull();

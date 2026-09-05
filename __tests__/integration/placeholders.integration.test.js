@@ -19,15 +19,12 @@
  * silent tests are the load-bearing ones.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { compile } = require('../../src/compile');
 const { Diagnostics } = require('../../src/diag');
 const { CODES } = require('../../src/diag');
-
-const dirs = [];
-afterAll(() => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }); });
+const { withTmpDir, writeTree } = require('../helpers/project');
 
 const ITEM = [
   '- id: Anchor',
@@ -42,13 +39,7 @@ const ITEM = [
  * diagnostics, so a test can also read back what the compile wrote.
  */
 function runProject(files) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-ph-int-'));
-  dirs.push(dir);
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(dir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content, 'utf8');
-  }
+  const dir = writeTree(withTmpDir(), files);
   fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'templates', 'Character.template'), '{$body.Tagline}\n', 'utf8');
   if (!files['Codex/items.cl.yaml']) {
@@ -191,7 +182,7 @@ describe('declared placeholders are silent everywhere', () => {
   });
 });
 
-describe('§12.3 check 3 — where a placeholder may not go', () => {
+describe('where a placeholder may not go', () => {
   const DECLARED = ['placeholders:', '  hero: Your name?'];
 
   test('the Description errors even though the key is declared', () => {
@@ -267,7 +258,7 @@ describe('§12.3 check 3 — where a placeholder may not go', () => {
   });
 });
 
-describe('§12.3 check 2 — declared but never used', () => {
+describe('a placeholder declared but never used', () => {
   const unused = (diags) => diags
     .filter((d) => d.code === CODES.PLACEHOLDER_UNUSED)
     .map((d) => d.message);

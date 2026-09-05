@@ -120,7 +120,7 @@ describe('emit/vl.js fence — kitchen-sink corpus', () => {
       ]));
     });
 
-    test('underscore padding decodes to spaces in the trigger line (§4.2)', () => {
+    test('underscore padding decodes to spaces in the trigger line', () => {
       expect(byId.get('Aness')).toContain("triggers: [Aness, Vale, ' Aria', 'Voss ']");
     });
 
@@ -133,7 +133,7 @@ describe('emit/vl.js fence — kitchen-sink corpus', () => {
       expect(byId.get('WTG Time Config')).not.toContain('triggers:');
     });
 
-    test('every card carries the unconditional encapsulate: false (§8.4)', () => {
+    test('every card carries the unconditional encapsulate: false', () => {
       for (const text of byId.values()) expect(text).toContain('encapsulate: false');
     });
 

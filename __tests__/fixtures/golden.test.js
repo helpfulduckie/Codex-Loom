@@ -36,10 +36,7 @@
 const path = require('path');
 const fs = require('fs');
 
-const { describeBaselineSet } = require('../helpers/baselineHarness');
-
-const GOLDEN_DIR = path.resolve(__dirname, '../../goldenFixtures');
-const HAVE_FIXTURES = fs.existsSync(path.join(GOLDEN_DIR, 'projects.js'));
+const { describeBaselineSet, GOLDEN_DIR, HAVE_GOLDENS } = require('../helpers/baselineHarness');
 
 /**
  * The set manifest lives beside the fixtures, because `scripts/rebaseline.js` regenerates
@@ -48,12 +45,12 @@ const HAVE_FIXTURES = fs.existsSync(path.join(GOLDEN_DIR, 'projects.js'));
  * as a project-relative path, `REPORTS_IN_PLACE` — defaults to what this set already does.
  */
 // eslint-disable-next-line global-require, import/no-dynamic-require
-const manifest = HAVE_FIXTURES ? require('../../goldenFixtures/projects') : null;
+const manifest = HAVE_GOLDENS ? require('../../goldenFixtures/projects') : null;
 
 const { getTmpDir } = describeBaselineSet({
   root: GOLDEN_DIR,
   manifest,
-  present: HAVE_FIXTURES,
+  present: HAVE_GOLDENS,
   absentReason: 'goldenFixtures/ is not cloned — see .gitignore',
   expectedDiffClasses: [],
   expectedDiffFiles: null,
@@ -75,7 +72,7 @@ const { getTmpDir } = describeBaselineSet({
  */
 const { parseCards, isSubsequence } = require('../helpers/tier-wellformed');
 
-(HAVE_FIXTURES ? describe : describe.skip)('Coinflip Company — lowContext tier is well-formed', () => {
+(HAVE_GOLDENS ? describe : describe.skip)('Coinflip Company — lowContext tier is well-formed', () => {
   const CARD = ['Branches', '%b', 'Story Cards', 'Character', 'Character.md'];
   const read = (branch) => {
     const rel = CARD.map((s) => (s === '%b' ? branch : s));

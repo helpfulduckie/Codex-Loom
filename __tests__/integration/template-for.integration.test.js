@@ -13,7 +13,6 @@
  * assertions read together.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
 
@@ -21,6 +20,7 @@ const { compile } = require('../../src/compile');
 const { buildCompileContext } = require('../../src/branchCompile');
 const { loadCompileConfig } = require('../../src/config/load');
 const { Diagnostics } = require('../../src/diag');
+const { withTmpDir, writeTree } = require('../helpers/project');
 
 let dir;
 
@@ -77,18 +77,13 @@ const ITEMS = `
 `;
 
 beforeAll(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-templatefor-'));
-  fs.mkdirSync(path.join(dir, 'templates'));
-  fs.mkdirSync(path.join(dir, 'items'));
-  fs.writeFileSync(path.join(dir, 'templates', 'fields.cl.yaml'), FIELDS.trimStart());
-  fs.writeFileSync(path.join(dir, 'templates', 'notes-root.cl.yaml'), NOTES_ROOT.trimStart());
-  fs.writeFileSync(path.join(dir, 'templates', 'notes-modA.cl.yaml'), NOTES_MODA.trimStart());
-  fs.writeFileSync(path.join(dir, 'compile.cl.yaml'), CONFIG.trimStart());
-  fs.writeFileSync(path.join(dir, 'items', 'items.cl.yaml'), ITEMS.trimStart());
-});
-
-afterAll(() => {
-  fs.rmSync(dir, { recursive: true, force: true });
+  dir = writeTree(withTmpDir(), {
+    'templates/fields.cl.yaml': FIELDS.trimStart(),
+    'templates/notes-root.cl.yaml': NOTES_ROOT.trimStart(),
+    'templates/notes-modA.cl.yaml': NOTES_MODA.trimStart(),
+    'compile.cl.yaml': CONFIG.trimStart(),
+    'items/items.cl.yaml': ITEMS.trimStart(),
+  });
 });
 
 function cardText(branch) {

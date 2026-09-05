@@ -1,7 +1,6 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
 const { Diagnostics, CODES } = require('../../src/diag');
@@ -10,17 +9,15 @@ const { syncLibrary, checkDrift } = require('../../src/snapshot');
 const { listFilesRelative } = require('../../src/util');
 const { NULL_LOG } = require('../../src/log');
 const { collectingLog } = require('../helpers/log');
+const { withTmpDir, writeTree } = require('../helpers/project');
 
 let tmpDir;
 
-beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-snapshot-')); });
-afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+beforeEach(() => { tmpDir = withTmpDir(); });
 
 function writeFile(rel, content) {
-  const full = path.join(tmpDir, rel);
-  fs.mkdirSync(path.dirname(full), { recursive: true });
-  fs.writeFileSync(full, content, 'utf8');
-  return full;
+  writeTree(tmpDir, { [rel]: content });
+  return path.join(tmpDir, rel);
 }
 
 /** A minimal project: one library entry ("main") with a .cl.yaml item, a companion .md
@@ -155,7 +152,7 @@ describe('syncLibrary — the freeze', () => {
   });
 });
 
-describe('requiresRoles — computed by elimination (Decision 2, Phase 8)', () => {
+describe('requiresRoles — computed by elimination', () => {
   test('a {$X} token that resolves to no item id anywhere in the set is published as a required role', () => {
     writeFile('main-lib/thing.cl.yaml', 'id: Thing\nname: Thing\nbody:\n  Tagline: "{$LI} arrives."\n');
     const cfgPath = path.join(tmpDir, 'compile.cl.yaml');

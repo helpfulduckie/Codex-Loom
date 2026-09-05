@@ -16,24 +16,15 @@
  * compile.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { compile } = require('../../src/compile');
 const { Diagnostics, CODES } = require('../../src/diag');
-
-const dirs = [];
-afterAll(() => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }); });
+const { withTmpDir, writeTree } = require('../helpers/project');
 
 /** Compile a one-off project and return every diagnostic it raised. */
 function run(files) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-limits-'));
-  dirs.push(dir);
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(dir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content, 'utf8');
-  }
+  const dir = writeTree(withTmpDir(), files);
   fs.mkdirSync(path.join(dir, 'templates'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'templates', 'Character.template'), '{$body.Tagline}\n', 'utf8');
 

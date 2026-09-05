@@ -166,7 +166,7 @@ describe('drift notice at compile time', () => {
   });
 });
 
-describe('snapshot-preferring resolution (Phase 7 Session B, --live escape hatch)', () => {
+describe('snapshot-preferring resolution (--live escape hatch)', () => {
   const read = (tmp, ...parts) => fs.readFileSync(path.join(tmp, 'output', ...parts), 'utf8');
 
   test('a non-`--live` compile reads the frozen snapshot copy, not a live edit', () => {

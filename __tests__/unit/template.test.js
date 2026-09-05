@@ -97,34 +97,15 @@ describe('isTruthy', () => {
 describe('evaluateJoin', () => {
   const data = { body: { a: 'alpha', c: 'gamma' } };
 
-  test('joins present values with separator (double quotes)', () => {
-    const result = evaluateJoin('join("; ", $body.a, $body.c)', data);
-    expect(result).toBe('alpha; gamma');
-  });
-
-  test('joins present values with separator (single quotes)', () => {
-    const result = evaluateJoin("join('; ', $body.a, $body.c)", data);
-    expect(result).toBe('alpha; gamma');
-  });
-
-  test('joins present values with separator (backtick quotes)', () => {
-    const result = evaluateJoin('join(`; `, $body.a, $body.c)', data);
-    expect(result).toBe('alpha; gamma');
-  });
-
-  test('skips null/missing fields', () => {
-    const result = evaluateJoin('join(", ", $body.a, $body.missing, $body.c)', data);
-    expect(result).toBe('alpha, gamma');
-  });
-
-  test('single value with no separator', () => {
-    const result = evaluateJoin('join("; ", $body.a)', data);
-    expect(result).toBe('alpha');
-  });
-
-  test('all missing returns empty string', () => {
-    const result = evaluateJoin('join("; ", $body.x, $body.y)', data);
-    expect(result).toBe('');
+  test.each([
+    ['joins present values with separator (double quotes)', 'join("; ", $body.a, $body.c)', 'alpha; gamma'],
+    ['joins present values with separator (single quotes)', "join('; ', $body.a, $body.c)", 'alpha; gamma'],
+    ['joins present values with separator (backtick quotes)', 'join(`; `, $body.a, $body.c)', 'alpha; gamma'],
+    ['skips null/missing fields', 'join(", ", $body.a, $body.missing, $body.c)', 'alpha, gamma'],
+    ['single value with no separator', 'join("; ", $body.a)', 'alpha'],
+    ['all missing returns empty string', 'join("; ", $body.x, $body.y)', ''],
+  ])('%s', (_label, expr, expected) => {
+    expect(evaluateJoin(expr, data)).toBe(expected);
   });
 
   test('spreads array field into join', () => {
@@ -139,23 +120,17 @@ describe('evaluateJoin', () => {
 });
 
 describe('evaluateList', () => {
-  test('renders multi-element array as bullet lines with leading newline', () => {
-    const d = { body: { items: ['alpha', 'beta', 'gamma'] } };
-    expect(evaluateList('list($body.items)', d)).toBe('\n- alpha\n- beta\n- gamma');
-  });
-
-  test('passes string value through unchanged', () => {
-    const d = { body: { text: '- already\n- bulleted' } };
-    expect(evaluateList('list($body.text)', d)).toBe('- already\n- bulleted');
-  });
-
-  test('returns empty string for missing field', () => {
-    expect(evaluateList('list($body.missing)', {})).toBe('');
-  });
-
-  test('single-element array → renders inline as bare value (no bullet, no newline)', () => {
-    const d = { body: { items: ['solo'] } };
-    expect(evaluateList('list($body.items)', d)).toBe('solo');
+  test.each([
+    ['renders multi-element array as bullet lines with leading newline',
+      'list($body.items)', { body: { items: ['alpha', 'beta', 'gamma'] } }, '\n- alpha\n- beta\n- gamma'],
+    ['passes string value through unchanged',
+      'list($body.text)', { body: { text: '- already\n- bulleted' } }, '- already\n- bulleted'],
+    ['returns empty string for missing field',
+      'list($body.missing)', {}, ''],
+    ['single-element array → renders inline as bare value (no bullet, no newline)',
+      'list($body.items)', { body: { items: ['solo'] } }, 'solo'],
+  ])('%s', (_label, expr, d, expected) => {
+    expect(evaluateList(expr, d)).toBe(expected);
   });
 });
 
@@ -417,40 +392,18 @@ describe('render — template context tokens', () => {
     id:       'roshan',
   };
 
-  test('{$name.display} → display name', () => {
-    expect(render('{$name.display}', richData)).toBe('Roshan');
-  });
-
-  test('{$name.full} → full name string', () => {
-    expect(render('{$name.full}', richData)).toBe('Elder Roshan');
-  });
-
-  test('{$aid.title} → aid title field', () => {
-    expect(render('{$aid.title}', richData)).toBe('Elder Roshan');
-  });
-
-  test('{$aid.type} → aid type field', () => {
-    expect(render('{$aid.type}', richData)).toBe('Character');
-  });
-
-  test('{$aid.known} → "false" for boolean false', () => {
-    expect(render('{$aid.known}', richData)).toBe('false');
-  });
-
-  test('{$aid.encapsulate} → "true" for boolean true', () => {
-    expect(render('{$aid.encapsulate}', richData)).toBe('true');
-  });
-
-  test('{$render.template} → render template field', () => {
-    expect(render('{$render.template}', richData)).toBe('Character');
-  });
-
-  test('{$pronouns} → pronoun set string', () => {
-    expect(render('{$pronouns}', richData)).toBe('male');
-  });
-
-  test('{$v.affiliation} → v block field', () => {
-    expect(render('{$v.affiliation}', richData)).toBe('guild');
+  test.each([
+    ['{$name.display}',    'Roshan'],
+    ['{$name.full}',       'Elder Roshan'],
+    ['{$aid.title}',       'Elder Roshan'],
+    ['{$aid.type}',        'Character'],
+    ['{$aid.known}',       'false'],
+    ['{$aid.encapsulate}', 'true'],
+    ['{$render.template}', 'Character'],
+    ['{$pronouns}',        'male'],
+    ['{$v.affiliation}',   'guild'],
+  ])('%s → %s', (token, expected) => {
+    expect(render(token, richData)).toBe(expected);
   });
 });
 
@@ -527,21 +480,17 @@ const evalData = {
 };
 
 describe('evaluateProse', () => {
-  test('string value → capitalized with period', () => {
-    expect(evaluateProse('prose($body.Tagline)', evalData)).toBe('The archivist.');
+  test.each([
+    ['string value → capitalized with period', 'prose($body.Tagline)', 'The archivist.'],
+    ['array → each item sentence-cased and joined with spaces', 'prose($body.Keywords)', 'Brave. Wise.'],
+    ['null field → empty string', 'prose($body.Missing)', ''],
+  ])('%s', (_label, expr, expected) => {
+    expect(evaluateProse(expr, evalData)).toBe(expected);
   });
 
   test('trailing punctuation replaced with period', () => {
     const d = { ...evalData, body: { ...evalData.body, Note: 'done!' } };
     expect(evaluateProse('prose($body.Note)', d)).toBe('Done.');
-  });
-
-  test('array → each item sentence-cased and joined with spaces', () => {
-    expect(evaluateProse('prose($body.Keywords)', evalData)).toBe('Brave. Wise.');
-  });
-
-  test('null field → empty string', () => {
-    expect(evaluateProse('prose($body.Missing)', evalData)).toBe('');
   });
 
   test('malformed syntax → throws', () => {
@@ -550,16 +499,12 @@ describe('evaluateProse', () => {
 });
 
 describe('evaluateBlock', () => {
-  test('string value → returned as-is', () => {
-    expect(evaluateBlock('block($body.Tagline)', evalData)).toBe('the archivist');
-  });
-
-  test('array → joined with newlines', () => {
-    expect(evaluateBlock('block($body.Keywords)', evalData)).toBe('brave\nwise');
-  });
-
-  test('null field → empty string', () => {
-    expect(evaluateBlock('block($body.Missing)', evalData)).toBe('');
+  test.each([
+    ['string value → returned as-is', 'block($body.Tagline)', 'the archivist'],
+    ['array → joined with newlines', 'block($body.Keywords)', 'brave\nwise'],
+    ['null field → empty string', 'block($body.Missing)', ''],
+  ])('%s', (_label, expr, expected) => {
+    expect(evaluateBlock(expr, evalData)).toBe(expected);
   });
 
   test('malformed syntax → throws', () => {
@@ -568,12 +513,11 @@ describe('evaluateBlock', () => {
 });
 
 describe('evaluateKeys', () => {
-  test('object field → - key: value per line', () => {
-    expect(evaluateKeys('keys($body.Traits)', evalData)).toBe('- hair: silver\n- eyes: grey');
-  });
-
-  test('null field → empty string', () => {
-    expect(evaluateKeys('keys($body.Missing)', evalData)).toBe('');
+  test.each([
+    ['object field → - key: value per line', 'keys($body.Traits)', '- hair: silver\n- eyes: grey'],
+    ['null field → empty string', 'keys($body.Missing)', ''],
+  ])('%s', (_label, expr, expected) => {
+    expect(evaluateKeys(expr, evalData)).toBe(expected);
   });
 
   test('malformed syntax → throws', () => {
@@ -582,20 +526,13 @@ describe('evaluateKeys', () => {
 });
 
 describe('evaluateInline', () => {
-  test('object field → space-joined values', () => {
-    expect(evaluateInline('inline($body.Traits)', evalData)).toBe('silver grey');
-  });
-
-  test('array field → space-joined', () => {
-    expect(evaluateInline('inline($body.Keywords)', evalData)).toBe('brave wise');
-  });
-
-  test('string field → returned as string', () => {
-    expect(evaluateInline('inline($body.Tagline)', evalData)).toBe('the archivist');
-  });
-
-  test('null field → empty string', () => {
-    expect(evaluateInline('inline($body.Missing)', evalData)).toBe('');
+  test.each([
+    ['object field → space-joined values', 'inline($body.Traits)', 'silver grey'],
+    ['array field → space-joined', 'inline($body.Keywords)', 'brave wise'],
+    ['string field → returned as string', 'inline($body.Tagline)', 'the archivist'],
+    ['null field → empty string', 'inline($body.Missing)', ''],
+  ])('%s', (_label, expr, expected) => {
+    expect(evaluateInline(expr, evalData)).toBe(expected);
   });
 
   test('malformed syntax → throws', () => {

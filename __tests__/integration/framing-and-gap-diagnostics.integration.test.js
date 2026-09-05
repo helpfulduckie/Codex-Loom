@@ -13,29 +13,10 @@
  * shaped wrongly on purpose, and the `CL0634` one aborts the compile by design.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { compile } = require('../../src/compile');
-const { Diagnostics, CODES } = require('../../src/diag');
-
-/** Build a throwaway project from `{relPath: content}` and compile it, capturing the bus. */
-function compileProject(files) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-bus-'));
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(dir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content, 'utf8');
-  }
-  const diagnostics = new Diagnostics();
-  try {
-    compile(path.join(dir, 'compile.yaml'), { diagnostics });
-  } catch (err) {
-    // Both subjects are diagnostics; a throw carries only a count.
-  }
-  fs.rmSync(dir, { recursive: true, force: true });
-  return { diagnostics };
-}
+const { CODES } = require('../../src/diag');
+const { compileProject } = require('../helpers/project');
 
 const ITEMS = [
   '- id: Aness',
@@ -125,21 +106,6 @@ describe('CL0634 — a requested component that produced no output', () => {
 describe('inline opening: — role tokens resolve, the {%…} guard stays', () => {
   const read = (dir, ...p) => fs.readFileSync(path.join(dir, 'out', ...p), 'utf8');
 
-  /** Compile `{relPath: content}` and keep the tree so `out/` can be read. */
-  function compileKeeping(files) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-inline-open-'));
-    for (const [rel, content] of Object.entries(files)) {
-      const full = path.join(dir, rel);
-      fs.mkdirSync(path.dirname(full), { recursive: true });
-      fs.writeFileSync(full, content, 'utf8');
-    }
-    const diagnostics = new Diagnostics();
-    try {
-      compile(path.join(dir, 'compile.yaml'), { diagnostics });
-    } catch (err) { /* diagnostics are the subject */ }
-    return { dir, diagnostics };
-  }
-
   const project = (openingLine) => ({
     'templates/Character.template': '{$name}\n',
     'Codex/items.yaml': [
@@ -171,27 +137,24 @@ describe('inline opening: — role tokens resolve, the {%…} guard stays', () =
   });
 
   test('a declared role in an inline opening resolves, with no CL0634 and no CL0430', () => {
-    const { dir, diagnostics } = compileKeeping(project('"You wake, and {$rival} is already gone."'));
+    const { tmpDir, diagnostics } = compileProject(project('"You wake, and {$rival} is already gone."'));
     expect(diagnostics.all.filter((d) => d.code === CODES.COMPONENT_NO_OUTPUT)).toEqual([]);
     expect(diagnostics.all.filter((d) => d.code === CODES.LEAKED_FIELD_TOKEN)).toEqual([]);
-    expect(read(dir, 'Branches', 'subject', 'Components', 'Opening.md'))
+    expect(read(tmpDir, 'Branches', 'subject', 'Components', 'Opening.md'))
       .toBe('You wake, and Voss is already gone.\n');
-    fs.rmSync(dir, { recursive: true, force: true });
   });
 
   test('an unknown {$token} in an inline opening leaks to CL0430, not CL0634', () => {
-    const { dir, diagnostics } = compileKeeping(project('"You wake, and {$ghost} is gone."'));
+    const { diagnostics } = compileProject(project('"You wake, and {$ghost} is gone."'));
     expect(diagnostics.all.filter((d) => d.code === CODES.COMPONENT_NO_OUTPUT)).toEqual([]);
     expect(diagnostics.all.some((d) => d.code === CODES.LEAKED_FIELD_TOKEN)).toBe(true);
-    fs.rmSync(dir, { recursive: true, force: true });
   });
 
   test('an unresolved {%var} in an inline opening is still CL0634', () => {
-    const { dir, diagnostics } = compileKeeping(project('"{%missingPath}"'));
+    const { diagnostics } = compileProject(project('"{%missingPath}"'));
     const found = diagnostics.all.filter((d) => d.code === CODES.COMPONENT_NO_OUTPUT);
     expect(found.length).toBeGreaterThan(0);
     expect(found[0].severity).toBe('error');
     expect(found.some((d) => /\{%/.test(d.message))).toBe(true);
-    fs.rmSync(dir, { recursive: true, force: true });
   });
 });

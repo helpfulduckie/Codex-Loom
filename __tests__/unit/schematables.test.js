@@ -80,7 +80,7 @@ describe('provenance line', () => {
   });
 });
 
-describe('Role and tier templates (§13.4)', () => {
+describe('Role and tier templates', () => {
   test('the section is absent when no templateFor is declared', () => {
     expect(md).not.toMatch(/## Role and tier templates/);
     expect(generateSchemaTables(TABLE, { title: 'T', tierTemplates: [] }))

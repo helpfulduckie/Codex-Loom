@@ -21,11 +21,11 @@
  *     which is where library names are folded in)
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { compile } = require('../../src/compile');
 const { Diagnostics, CODES } = require('../../src/diag');
+const { withTmpDir, writeTree, compileProject } = require('../helpers/project');
 
 let tmpDir;
 let diagnostics;
@@ -34,16 +34,11 @@ const outPath = (...parts) => path.join(tmpDir, 'out', ...parts);
 const read = (...parts) => fs.readFileSync(outPath(...parts), 'utf8');
 
 beforeAll(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-root-framing-'));
-  const write = (rel, content) => {
-    const full = path.join(tmpDir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content, 'utf8');
-  };
+  tmpDir = withTmpDir();
+  writeTree(tmpDir, {
+    'templates/Character.template': '{$name}\n',
 
-  write('templates/Character.template', '{$name}\n');
-
-  write('Codex/items.yaml', [
+    'Codex/items.yaml': [
     '- id: Aness',
     '  name: Aness',
     '  pronouns: female',
@@ -56,21 +51,21 @@ beforeAll(() => {
     '  aid: {type: Character, triggers: [Kaiden]}',
     '  render: {template: Character, wrapper: none}',
     '',
-  ].join('\n'));
+    ].join('\n'),
 
-  // The sections document root framing now renders through. A bare {$LI} substitutes the
-  // role's item display name; {%main} is a library name exposed as a variable (§6.1),
-  // present only in the effective `_variables` set the root visit seeds with, not in the
-  // author's declared `variables:` — which is what the old root rung expanded against.
-  write('components/root-framing.yaml', [
+    // The sections document root framing now renders through. A bare {$LI} substitutes the
+    // role's item display name; {%main} is a library name exposed as a variable (§6.1),
+    // present only in the effective `_variables` set the root visit seeds with, not in the
+    // author's declared `variables:` — which is what the old root rung expanded against.
+    'components/root-framing.yaml': [
     'sections:',
     '  choice:',
     '    text: |',
     '      Your bond, {$LI}, is waiting near {%main}. Which road do you take?',
     '',
-  ].join('\n'));
+    ].join('\n'),
 
-  write('compile.yaml', [
+    'compile.yaml': [
     'version: 4',
     'title: Root Framing Probe',
     'structure:',
@@ -92,7 +87,8 @@ beforeAll(() => {
     'branches:',
     '  subject: {}',
     '',
-  ].join('\n'));
+    ].join('\n'),
+  });
 
   fs.mkdirSync(path.join(tmpDir, 'canon'), { recursive: true });
 
@@ -100,10 +96,6 @@ beforeAll(() => {
   try {
     compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
   } catch (err) { /* ERRORs are the subject; the throw carries only a count */ }
-});
-
-afterAll(() => {
-  if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 test('no error-level diagnostic — the project compiles cleanly', () => {
@@ -140,53 +132,40 @@ describe('root branchFraming — inline sentence arm', () => {
   const readOut = (...p) => fs.readFileSync(path.join(dir, 'out', ...p), 'utf8');
 
   beforeAll(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-root-framing-inline-'));
-    const write = (rel, content) => {
-      const full = path.join(dir, rel);
-      fs.mkdirSync(path.dirname(full), { recursive: true });
-      fs.writeFileSync(full, content, 'utf8');
-    };
-    write('templates/Character.template', '{$name}\n');
-    write('Codex/items.yaml', [
-      '- id: Aness',
-      '  name: Aness',
-      '  pronouns: female',
-      '  aid: {type: Character, triggers: [Aness]}',
-      '  render: {template: Character, wrapper: none}',
-      '',
-      '- id: Kaiden',
-      '  name: Kaiden',
-      '  pronouns: male',
-      '  aid: {type: Character, triggers: [Kaiden]}',
-      '  render: {template: Character, wrapper: none}',
-      '',
-    ].join('\n'));
-    write('compile.yaml', [
-      'version: 4',
-      'title: Inline Root Framing Probe',
-      'structure:',
-      '  input:',
-      "    items: ['./Codex']",
-      "    templates: ['./templates']",
-      "  output: './out'",
-      'roles:',
-      '  protagonist: Aness',
-      '  LI: Kaiden',
-      'components:',
-      '  branchFraming: "Your bond, {$LI}, is already at the gate. Which road?"',
-      'branches:',
-      '  subject: {}',
-      '',
-    ].join('\n'));
-
-    diag = new Diagnostics();
-    try {
-      compile(path.join(dir, 'compile.yaml'), { diagnostics: diag });
-    } catch (err) { /* none expected */ }
-  });
-
-  afterAll(() => {
-    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+    ({ tmpDir: dir, diagnostics: diag } = compileProject({
+      'templates/Character.template': '{$name}\n',
+      'Codex/items.yaml': [
+        '- id: Aness',
+        '  name: Aness',
+        '  pronouns: female',
+        '  aid: {type: Character, triggers: [Aness]}',
+        '  render: {template: Character, wrapper: none}',
+        '',
+        '- id: Kaiden',
+        '  name: Kaiden',
+        '  pronouns: male',
+        '  aid: {type: Character, triggers: [Kaiden]}',
+        '  render: {template: Character, wrapper: none}',
+        '',
+      ].join('\n'),
+      'compile.yaml': [
+        'version: 4',
+        'title: Inline Root Framing Probe',
+        'structure:',
+        '  input:',
+        "    items: ['./Codex']",
+        "    templates: ['./templates']",
+        "  output: './out'",
+        'roles:',
+        '  protagonist: Aness',
+        '  LI: Kaiden',
+        'components:',
+        '  branchFraming: "Your bond, {$LI}, is already at the gate. Which road?"',
+        'branches:',
+        '  subject: {}',
+        '',
+      ].join('\n'),
+    }));
   });
 
   test('compiles with no error-level diagnostic', () => {
@@ -208,50 +187,36 @@ describe('root branchFraming — inline sentence arm', () => {
  * count is what guards against the same token being reported per expansion pass.
  */
 describe('root branchFraming — undeclared variable in the inline arm', () => {
-  let dir;
   let diag;
 
   beforeAll(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-root-framing-undeclared-'));
-    const write = (rel, content) => {
-      const full = path.join(dir, rel);
-      fs.mkdirSync(path.dirname(full), { recursive: true });
-      fs.writeFileSync(full, content, 'utf8');
-    };
-    write('templates/Character.template', '{$name}\n');
-    write('Codex/items.yaml', [
-      '- id: Aness',
-      '  name: Aness',
-      '  pronouns: female',
-      '  aid: {type: Character, triggers: [Aness]}',
-      '  render: {template: Character, wrapper: none}',
-      '',
-    ].join('\n'));
-    write('compile.yaml', [
-      'version: 4',
-      'title: Undeclared Framing Variable Probe',
-      'structure:',
-      '  input:',
-      "    items: ['./Codex']",
-      "    templates: ['./templates']",
-      "  output: './out'",
-      'roles:',
-      '  protagonist: Aness',
-      'components:',
-      '  branchFraming: "The road to {%nowhere} is open."',
-      'branches:',
-      '  subject: {}',
-      '',
-    ].join('\n'));
-
-    diag = new Diagnostics();
-    try {
-      compile(path.join(dir, 'compile.yaml'), { diagnostics: diag });
-    } catch (err) { /* the ERROR is the subject */ }
-  });
-
-  afterAll(() => {
-    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+    ({ diagnostics: diag } = compileProject({
+      'templates/Character.template': '{$name}\n',
+      'Codex/items.yaml': [
+        '- id: Aness',
+        '  name: Aness',
+        '  pronouns: female',
+        '  aid: {type: Character, triggers: [Aness]}',
+        '  render: {template: Character, wrapper: none}',
+        '',
+      ].join('\n'),
+      'compile.yaml': [
+        'version: 4',
+        'title: Undeclared Framing Variable Probe',
+        'structure:',
+        '  input:',
+        "    items: ['./Codex']",
+        "    templates: ['./templates']",
+        "  output: './out'",
+        'roles:',
+        '  protagonist: Aness',
+        'components:',
+        '  branchFraming: "The road to {%nowhere} is open."',
+        'branches:',
+        '  subject: {}',
+        '',
+      ].join('\n'),
+    }));
   });
 
   test('CL0510 is raised exactly once for the one undeclared token', () => {

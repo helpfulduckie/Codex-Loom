@@ -345,7 +345,7 @@ describe('findSwallowedTokens', () => {
   });
 });
 
-describe('%key% placeholders in leading value position (§12, Phase 4)', () => {
+describe('%key% placeholders in leading value position', () => {
   // `%` is YAML's directive indicator, so a plain scalar may not begin with one at all.
   // Unrescued, `opening: %heroName% woke up.` is a hard parse error naming neither
   // placeholders nor the fix — the paper cut §4.1 exists to remove.

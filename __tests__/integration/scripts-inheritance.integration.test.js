@@ -18,31 +18,9 @@
  *     guard is `branchTreeDeclares`, not just "are the specs equal"
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { compile } = require('../../src/compile');
-const { Diagnostics } = require('../../src/diag');
-
-const dirs = [];
-
-afterAll(() => {
-  for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
-});
-
-/** Write `files` into a fresh temp dir, compile `compile.yaml`, return the temp path. */
-function compileProject(files) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-scripts-lift-'));
-  dirs.push(tmpDir);
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(tmpDir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content, 'utf8');
-  }
-  const diagnostics = new Diagnostics();
-  compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
-  return { tmpDir, diagnostics };
-}
+const { compileProject } = require('../helpers/project');
 
 const exists = (...parts) => fs.existsSync(path.join(...parts));
 const read = (...parts) => fs.readFileSync(path.join(...parts), 'utf8');

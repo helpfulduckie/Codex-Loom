@@ -28,7 +28,7 @@ describe('resolveItemRef — plain Map (no sidecars)', () => {
     expect(resolveItemRef(registry, 'Kaiden')).toEqual({ item: { id: 'kaiden' } });
   });
 
-  test('a miss reports REF_NOT_FOUND with the pre-§17 wording', () => {
+  test('a miss reports REF_NOT_FOUND with the plain-registry wording', () => {
     const registry = new Map();
     const result = resolveItemRef(registry, 'x');
     expect(result.item).toBeNull();

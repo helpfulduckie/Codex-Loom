@@ -1,7 +1,6 @@
 'use strict';
 
 const fs   = require('fs');
-const os   = require('os');
 const path = require('path');
 
 const {
@@ -13,9 +12,10 @@ const {
   scanNativePlaceholders,
 } = require('../../src/lint');
 const { SEVERITY, Diagnostics } = require('../../src/diag');
+const { withTmpDir } = require('../helpers/project');
 
 function makeTmp() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'cl-lint-test-'));
+  return withTmpDir();
 }
 
 /**
@@ -253,7 +253,7 @@ A harbor town.
 
 // ── findLintableFiles ─────────────────────────────────────────────────────────
 
-describe('scanNativePlaceholders — the §12.4 confusability check', () => {
+describe('scanNativePlaceholders — the confusability check', () => {
   test('identifier-shaped content warns — that is the transposition', () => {
     // `{$she}` mistyped as `${she}` reaches the player as a prompt asking them to
     // type the word "she".
@@ -306,7 +306,7 @@ describe('scanNativePlaceholders — the §12.4 confusability check', () => {
   });
 });
 
-describe('the compiler / lint split in the offline scanner (§12.5)', () => {
+describe('the compiler / lint split in the offline scanner', () => {
   // The ceiling moved from a filter over a returned list to `Diagnostics.add`, so these
   // assert on what a levelled bus *accepted* rather than on what a filter removed. The
   // silenced diagnostic is never on the bus at all, which is the property worth having: the

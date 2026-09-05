@@ -174,7 +174,7 @@ describe('checkLimit', () => {
 });
 
 describe('module purity', () => {
-  test('limits.js requires neither fs nor console (§3.3)', () => {
+  test('limits.js requires neither fs nor console', () => {
     const fs = require('fs');
     const path = require('path');
     const source = fs.readFileSync(path.join(__dirname, '../../src/limits.js'), 'utf8');

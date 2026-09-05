@@ -45,11 +45,8 @@ const fs = require('fs');
 const path = require('path');
 const YAML = require('yaml');
 const { CODES } = require('../diag');
-const { resolveVariables, checkUnexpandedVariables } = require('../util');
+const { resolveVariables, checkUnexpandedVariables, PLACEHOLDER_RE } = require('../util');
 const { applyTokenPass } = require('../model/pronouns');
-
-/** VL's own pattern, so detection cannot drift from what it will substitute. */
-const PLACEHOLDER_RE = /%(\w+)%/g;
 
 const FILENAME = 'Placeholders.yaml';
 
@@ -540,7 +537,6 @@ function writeNodePlaceholders(nodeDir, node, mergedTable, variables, {
 
 module.exports = {
   FILENAME,
-  PLACEHOLDER_RE,
   checkUndeclaredPlaceholders,
   checkPlaceholderContext,
   reportUnusedPlaceholders,

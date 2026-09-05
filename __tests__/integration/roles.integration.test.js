@@ -9,35 +9,9 @@
  * compile run, not of any one module.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { compile } = require('../../src/compile');
-const { Diagnostics } = require('../../src/diag');
-
-const dirs = [];
-
-/** Compile a one-off project and hand back what it said (see placement-diagnostics for why). */
-function compileProject(files) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-roles-'));
-  dirs.push(tmpDir);
-  const slash = (p) => p.replace(/\\/g, '/');
-
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(tmpDir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content.replace(/%TMP%/g, slash(tmpDir)), 'utf8');
-  }
-
-  const diagnostics = new Diagnostics();
-  let threw = null;
-  try {
-    compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
-  } catch (err) {
-    threw = err;
-  }
-  return { output: diagnostics.all.map((d) => d.format()).join('\n'), threw, tmpDir };
-}
+const { compileProject, formatAll } = require('../helpers/project');
 
 /**
  * Every diagnostic carrying `code`, each rejoined with its message line — `Diagnostic.format()`
@@ -60,10 +34,6 @@ function cardFile(tmpDir, branch, type) {
 const BASE = {
   'templates/Full.template': '{$name.full} - {$body.Tagline}',
 };
-
-afterAll(() => {
-  for (const d of dirs) fs.rmSync(d, { recursive: true, force: true });
-});
 
 describe('a branch-level roles: block reaches the token pass', () => {
   const files = {
@@ -93,7 +63,8 @@ describe('a branch-level roles: block reaches the token pass', () => {
   };
 
   test('{$LI} resolves against the declared role, with no CL0540/CL0430 noise', () => {
-    const { threw, output, tmpDir } = compileProject(files);
+    const { threw, diagnostics, tmpDir } = compileProject(files);
+    const output = formatAll(diagnostics);
     expect(threw).toBeNull();
     expect(occurrences(output, 'CL0540')).toEqual([]);
     expect(occurrences(output, 'CL0430')).toEqual([]);
@@ -145,7 +116,8 @@ describe('{$Role.body.Field} resolves through the role, like the plain-id cross-
   };
 
   test('both the role form and the id form resolve, with no CL0430 leak', () => {
-    const { threw, output, tmpDir } = compileProject(files);
+    const { threw, diagnostics, tmpDir } = compileProject(files);
+    const output = formatAll(diagnostics);
     expect(threw).toBeNull();
     expect(occurrences(output, 'CL0430')).toEqual([]);
     expect(occurrences(output, 'CL0540')).toEqual([]);
@@ -185,7 +157,8 @@ describe('~ unbinds a role rather than resolving to a null binding', () => {
   };
 
   test('CL0540 fires under the unbound branch, and nothing renders a null binding', () => {
-    const { output, tmpDir } = compileProject(files);
+    const { diagnostics, tmpDir } = compileProject(files);
+    const output = formatAll(diagnostics);
     expect(occurrences(output, 'CL0540').length).toBeGreaterThan(0);
     const content = fs.readFileSync(cardFile(tmpDir, 'unbound', 'Character'), 'utf8');
     expect(content).not.toContain('null');
@@ -224,7 +197,8 @@ describe('an undeclared role collects across the branch rather than aborting on 
   };
 
   test('four cards referencing an undeclared role produce four CL0540 diagnostics from one compile', () => {
-    const { output } = compileProject(files);
+    const { diagnostics } = compileProject(files);
+    const output = formatAll(diagnostics);
     // §9.4.3's collection requirement: one run, one report per occurrence, not an abort on
     // the first — the compile bus never aborts mid-run (compile.js:1318's own claim).
     expect(occurrences(output, 'CL0540').length).toBe(4);
@@ -259,7 +233,8 @@ describe('CL0545 — a role declared and never referenced', () => {
   };
 
   test('a role no text ever references warns CL0545, naming the role', () => {
-    const { output } = compileProject(files);
+    const { diagnostics } = compileProject(files);
+    const output = formatAll(diagnostics);
     const hits = occurrences(output, 'CL0545');
     expect(hits.length).toBe(1);
     expect(hits[0]).toMatch(/LI/);
@@ -321,7 +296,8 @@ describe('the roles gap — branchFraming and the root Description', () => {
   };
 
   test('a branchFraming component at an interior node resolves a role reference', () => {
-    const { output, tmpDir } = compileProject(files);
+    const { diagnostics, tmpDir } = compileProject(files);
+    const output = formatAll(diagnostics);
     expect(occurrences(output, 'CL0540')).toEqual([]);
     const framing = fs.readFileSync(
       path.join(tmpDir, 'output', 'Branches', 'act1', 'Components', 'Opening.md'), 'utf8',
@@ -330,7 +306,8 @@ describe('the roles gap — branchFraming and the root Description', () => {
   });
 
   test('the root Description resolves a role reference the same way', () => {
-    const { output, tmpDir } = compileProject(files);
+    const { diagnostics, tmpDir } = compileProject(files);
+    const output = formatAll(diagnostics);
     expect(occurrences(output, 'CL0540')).toEqual([]);
     const description = fs.readFileSync(
       path.join(tmpDir, 'output', 'Description.md'), 'utf8',
@@ -339,7 +316,8 @@ describe('the roles gap — branchFraming and the root Description', () => {
   });
 
   test('both sites calling onRoleUsed means CL0545 does not fire for a role only they reference', () => {
-    const { output } = compileProject(files);
+    const { diagnostics } = compileProject(files);
+    const output = formatAll(diagnostics);
     expect(occurrences(output, 'CL0545')).toEqual([]);
   });
 });
@@ -382,7 +360,8 @@ describe('an undeclared {%var} in roles.protagonist is one CL0510, not one per l
   };
 
   test('three leaves, one CL0510 naming the token, and the build fails', () => {
-    const { threw, output } = compileProject(files);
+    const { threw, diagnostics } = compileProject(files);
+    const output = formatAll(diagnostics);
     const found = occurrences(output, 'CL0510');
     expect(found).toHaveLength(1);
     expect(found[0]).toContain('{%hero}');
@@ -428,7 +407,8 @@ describe('a {$Role} token in a title resolves before Label.md is written', () =>
   };
 
   test('the scenario title resolves the role token', () => {
-    const { threw, output, tmpDir } = compileProject(files);
+    const { threw, diagnostics, tmpDir } = compileProject(files);
+    const output = formatAll(diagnostics);
     expect(threw).toBeNull();
     expect(occurrences(output, 'CL0540')).toEqual([]);
     const label = fs.readFileSync(path.join(tmpDir, 'output', 'Label.md'), 'utf8').trim();
@@ -479,7 +459,8 @@ describe('a branch that declares the missing variable resolves its own protagoni
   };
 
   test('the bound subtree renders "you", the unbound one renders the name, and CL0510 fires once', () => {
-    const { output, tmpDir } = compileProject(files);
+    const { diagnostics, tmpDir } = compileProject(files);
+    const output = formatAll(diagnostics);
     expect(occurrences(output, 'CL0510')).toHaveLength(1);
     const bound = fs.readFileSync(cardFile(tmpDir, 'bound', 'Character'), 'utf8');
     expect(bound).toContain('Seen: you.');

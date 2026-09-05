@@ -1,10 +1,10 @@
 'use strict';
 
 const fs   = require('fs');
-const os   = require('os');
 const path = require('path');
 
 const { runLeafReviewMode } = require('../../src/overview');
+const { withTmpDir } = require('../helpers/project');
 
 function write(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -17,7 +17,7 @@ describe('runLeafReviewMode on two-branch fixture', () => {
   let tmp, outDir;
 
   beforeAll(() => {
-    tmp    = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-ov-int-'));
+    tmp    = withTmpDir();
     outDir = path.join(tmp, 'overview');
     fs.mkdirSync(outDir);
 
@@ -40,26 +40,11 @@ describe('runLeafReviewMode on two-branch fixture', () => {
     runLeafReviewMode(tmp, outDir);
   });
 
-  afterAll(() => {
-    fs.rmSync(tmp, { recursive: true, force: true });
-  });
-
-  test('writes one file per leaf', () => {
-    const files = fs.readdirSync(outDir);
-    expect(files).toHaveLength(2);
-  });
-
-  test('all output files have .leaf.md extension', () => {
-    const files = fs.readdirSync(outDir);
-    expect(files.every(f => f.endsWith('.leaf.md'))).toBe(true);
-  });
-
-  test('subject.leaf.md is created', () => {
-    expect(fs.existsSync(path.join(outDir, 'subject.leaf.md'))).toBe(true);
-  });
-
-  test('researcher.leaf.md is created', () => {
-    expect(fs.existsSync(path.join(outDir, 'researcher.leaf.md'))).toBe(true);
+  test('writes exactly one .leaf.md per leaf, named for the leaf', () => {
+    expect(fs.readdirSync(outDir).sort()).toEqual([
+      'researcher.leaf.md',
+      'subject.leaf.md',
+    ]);
   });
 
   test('subject.leaf.md contains its own card content', () => {
@@ -76,11 +61,6 @@ describe('runLeafReviewMode on two-branch fixture', () => {
     const content = fs.readFileSync(path.join(outDir, 'researcher.leaf.md'), 'utf8');
     expect(content).not.toContain('Subject character content');
   });
-
-  test('no non-.leaf.md files are written to outputDir', () => {
-    const files = fs.readdirSync(outDir);
-    expect(files.filter(f => !f.endsWith('.leaf.md'))).toHaveLength(0);
-  });
 });
 
 // ── single-leaf fixture ───────────────────────────────────────────────────────
@@ -89,17 +69,13 @@ describe('runLeafReviewMode on single-leaf fixture', () => {
   let tmp, outDir;
 
   beforeAll(() => {
-    tmp    = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-ov-single-'));
+    tmp    = withTmpDir();
     outDir = path.join(tmp, 'overview');
     fs.mkdirSync(outDir);
 
     write(path.join(tmp, 'Story Cards', 'Char', 'Card.md'), 'Single branch card');
 
     runLeafReviewMode(tmp, outDir);
-  });
-
-  afterAll(() => {
-    fs.rmSync(tmp, { recursive: true, force: true });
   });
 
   test('single file uses root folder name', () => {

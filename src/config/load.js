@@ -125,7 +125,6 @@ function checkVariableGraph(config, diagnostics, sourceMap, names) {
   for (const lower of lowerToName.keys()) visit(lower, []);
 }
 
-/** Same normalization `golden.test.js`'s `normalizeManifest` uses, for consistency. */
 function normalize(p) {
   return String(p).replace(/\\/g, '/').toLowerCase();
 }

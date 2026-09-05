@@ -1,7 +1,6 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const {
   SLOTTED_COMPONENTS,
@@ -9,10 +8,10 @@ const {
   renderSectionedComponent, writeSectionedComponent, renderFrontmatter,
 } = require('../../src/emit/components');
 const { normalizeComponent } = require('../../src/model/component');
+const { withTmpDir } = require('../helpers/project');
 
 let tmpDir;
-beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-emit-')); });
-afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+beforeEach(() => { tmpDir = withTmpDir(); });
 
 const AIN = SLOTTED_COMPONENTS.find((d) => d.key === 'aiInstructions');
 
@@ -223,7 +222,7 @@ describe('renderSectionedComponent — text sections', () => {
   // §9.7: the call site most likely to be skipped, since `applyTokenPass` runs against
   // `item: {}` here — a role resolving in component prose is the half of the feature
   // that reaches AI Instructions and Author's Note, not only character card bodies.
-  test('a role token resolves in section text (§9.7)', () => {
+  test('a role token resolves in section text', () => {
     const malcolm = { id: 'malcolm', name: 'Malcolm', pronouns: 'male' };
     const registry = new Map([['malcolm', malcolm]]);
     const { text } = renderSectionedComponent(
@@ -237,7 +236,7 @@ describe('renderSectionedComponent — text sections', () => {
     expect(text).toBe('History with Malcolm is unresolved. He does not raise it.');
   });
 
-  test('an undeclared role in section text raises CL0540 through onWarn (§9.7)', () => {
+  test('an undeclared role in section text raises CL0540 through onWarn', () => {
     const onWarn = jest.fn();
     renderSectionedComponent(
       component({ relationship: { text: '{$Nope} is unresolved.' } }), [], new Map(),

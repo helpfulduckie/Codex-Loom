@@ -14,10 +14,10 @@
  * an AI Instructions `.md` that declares no slots to report.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { compile } = require('../../src/compile');
+const { withTmpDir, writeTree } = require('../helpers/project');
 
 let tmpDir;
 
@@ -29,16 +29,11 @@ const plotEssentials = (branch) => fs.readFileSync(
 );
 
 beforeAll(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-inventory-'));
-  const write = (rel, content) => {
-    const full = path.join(tmpDir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content, 'utf8');
-  };
+  tmpDir = withTmpDir();
+  writeTree(tmpDir, {
+    'templates/Brief.template': '{$name.full}',
 
-  write('templates/Brief.template', '{$name.full}');
-
-  write('Codex/items.yaml', [
+    'Codex/items.yaml': [
     // `order:` is deliberately the reverse of alphabetical, so a report that re-sorted
     // by id would disagree with the file rather than merely look different.
     '- id: Zara',
@@ -57,9 +52,9 @@ beforeAll(() => {
     '  aid: {type: Character, triggers: [Guest]}',
     '  render: {template: Brief, plotEssential: {slot: cast, order: 3}}',
     '  branches: {duo: ~}',
-  ].join('\n'));
+    ].join('\n'),
 
-  write('components/plot-essentials.yaml', [
+    'components/plot-essentials.yaml': [
     'sections:',
     '  genre:',
     '    text: "Genre: Test"',
@@ -74,27 +69,24 @@ beforeAll(() => {
     '    heading: Hints',
     '    render: {position: 3}',
     '    branches: {duo: ~}',
-  ].join('\n'));
+    ].join('\n'),
 
-  write('compile.yaml', [
-    'version: 4',
-    'structure:',
-    '  input:',
-    `    items: [${tmpDir.replace(/\\/g, '/')}/Codex]`,
-    `    templates: [${tmpDir.replace(/\\/g, '/')}/templates]`,
-    `  output: ${tmpDir.replace(/\\/g, '/')}/output`,
-    'components:',
-    '  plotEssential: ./components/plot-essentials.yaml',
-    'branches:',
-    '  solo: {}',
-    '  duo: {}',
-  ].join('\n'));
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'components:',
+      '  plotEssential: ./components/plot-essentials.yaml',
+      'branches:',
+      '  solo: {}',
+      '  duo: {}',
+    ].join('\n'),
+  });
 
   compile(path.join(tmpDir, 'compile.yaml'), { inventory: true });
-});
-
-afterAll(() => {
-  if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 describe('--inventory reports what the slots hold', () => {

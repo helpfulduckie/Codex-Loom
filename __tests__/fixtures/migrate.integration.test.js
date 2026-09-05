@@ -31,17 +31,9 @@ const YAML = require('yaml');
 
 const { compile } = require('../../src/compile');
 const { migrateProjectFully } = require('../../src/migrate');
+const { GOLDEN_DIR, HAVE_GOLDENS } = require('../helpers/baselineHarness');
 
-const GOLDEN_DIR = path.resolve(__dirname, '..', '..', 'goldenFixtures');
-
-/**
- * The fixtures are a separate private repo cloned into the gitignored `goldenFixtures/` —
- * see `.gitignore`. This file migrates the real v3 sources, so it has nothing to do without
- * them; the same guard and reasoning as `golden.test.js`, which carries the long version.
- */
-const HAVE_FIXTURES = fs.existsSync(path.join(GOLDEN_DIR, 'projects.js'));
-
-const { PROJECTS, OUTPUT_SUBDIR, BASELINE_SUBDIR } = HAVE_FIXTURES
+const { PROJECTS, OUTPUT_SUBDIR, BASELINE_SUBDIR } = HAVE_GOLDENS
   // eslint-disable-next-line global-require
   ? require('../../goldenFixtures/projects')
   : { PROJECTS: [{ name: 'goldenFixtures/ is not cloned — see .gitignore', dir: '' }], OUTPUT_SUBDIR: '', BASELINE_SUBDIR: '' };
@@ -74,7 +66,7 @@ function migrateAndCompile(tmpDir, project) {
   return { outputDir: path.join(tmpDir, project.dir, OUTPUT_SUBDIR), notes, reviewQueue, configPath };
 }
 
-(HAVE_FIXTURES ? describe : describe.skip)('migrating a real v3 project reproduces the hand conversion\'s output', () => {
+(HAVE_GOLDENS ? describe : describe.skip)('migrating a real v3 project reproduces the hand conversion\'s output', () => {
   let tmpDir;
   const results = new Map();
 
@@ -162,7 +154,7 @@ function migrateAndCompile(tmpDir, project) {
     });
   }
 
-  describe('Phase 4 — a migration step that converts nothing, proven rather than assumed', () => {
+  describe('a migration step that converts nothing, proven rather than assumed', () => {
     // §15: a phase that changes syntax and does not name its migration step has not
     // finished planning. Phase 4 changes syntax and genuinely has nothing to convert —
     // there is no v3 spelling of `placeholders:` and no v3 project holds the data in
@@ -211,7 +203,7 @@ function migrateAndCompile(tmpDir, project) {
     });
   });
 
-  describe('Phase 7 — the snapshot key has no v3 spelling to migrate, proven rather than assumed', () => {
+  describe('the snapshot key has no v3 spelling to migrate, proven rather than assumed', () => {
     // §14.2: a phase that changes syntax and does not name its migration step has not
     // finished planning. Phase 7 adds `structure.input.snapshot`, and the reason
     // `migrate/v3.js` gains no stage for it is that `structure.input.vault` — its
@@ -239,7 +231,7 @@ function migrateAndCompile(tmpDir, project) {
     });
   });
 
-  describe('Phase 14 — lint.conventions has no v3 spelling to migrate, proven rather than assumed', () => {
+  describe('lint.conventions has no v3 spelling to migrate, proven rather than assumed', () => {
     // §8.2.2 / §14.2: v4 replaces v3's `lint.conventions:` list with a `lint.packs:`
     // mapping. The migration row is "no v3 projects use it yet" — `lint:` never shipped in
     // the v3 config surface, so there is nothing to fold. Same discipline as Phase 4 and
@@ -262,7 +254,7 @@ function migrateAndCompile(tmpDir, project) {
     });
   });
 
-  describe('Phase 8 Step 3 — the pseudo-role conversion, checked against the real corpus', () => {
+  describe('the pseudo-role conversion, checked against the real corpus', () => {
     // §14.2's proven-empty rule, the other direction: Phase 8 changes syntax and this time
     // the corpus genuinely has one case to convert. The Institute's `li: Malcolm` — §9.1's
     // motivating defect — is the only pseudo-role in any of the three golden projects;
@@ -303,13 +295,13 @@ function migrateAndCompile(tmpDir, project) {
       expect(config.variables.openingFile).toContain('{%liname}');
     });
 
-    test('the review queue lists §9.1\'s own case — a converted role beside a hardcoded pronoun', () => {
+    test('the review queue lists a converted role beside a hardcoded pronoun', () => {
       const queue = results.get('The Institute').reviewQueue;
       const hit = queue.find((e) => e.file.includes('TI.Veryn.yaml') && e.text.includes('his betrayal'));
       expect(hit).toBeDefined();
     });
 
-    test('the review queue covers component sections too, not only item bodies (§9.7)', () => {
+    test('the review queue covers component sections too, not only item bodies', () => {
       // No golden project's component files carry a role token beside a pronoun today —
       // the empty result below is a fact about the corpus, not a gap in the scan. Proven
       // by construction: `migratePseudoRoles` walks every .yaml/.md/.template/.partial

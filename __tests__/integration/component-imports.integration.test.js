@@ -14,37 +14,9 @@
  * whether it can is whether a converted component still writes the same file.
  */
 
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { compile } = require('../../src/compile');
-const { Diagnostics } = require('../../src/diag');
-
-const dirs = [];
-
-afterAll(() => {
-  for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
-});
-
-function compileProject(files) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-imports-'));
-  dirs.push(tmpDir);
-  const slash = (p) => p.replace(/\\/g, '/');
-
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(tmpDir, rel);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, content.replace(/%TMP%/g, slash(tmpDir)), 'utf8');
-  }
-
-  const diagnostics = new Diagnostics();
-  try {
-    compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
-  } catch (err) {
-    // Several of these projects raise ERRORs by construction.
-  }
-  return { diagnostics, tmpDir };
-}
+const { compileProject, withTmpDir } = require('../helpers/project');
 
 const codes = (diagnostics, code) => diagnostics.all.filter((d) => d.code === code);
 
@@ -458,8 +430,7 @@ describe('the dependency-coverage check (CL0522)', () => {
   // must *not* flag, so it is no good for proving the out-of-base case fires.
 
   function makeOutsideShared() {
-    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-outside-'));
-    dirs.push(outsideDir);
+    const outsideDir = withTmpDir();
     fs.writeFileSync(path.join(outsideDir, 'base.cl.yaml'), SHARED, 'utf8');
     return outsideDir.replace(/\\/g, '/');
   }
