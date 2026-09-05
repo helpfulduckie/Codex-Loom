@@ -18,7 +18,7 @@ const { resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, 
 const { validateCardType, buildCardTypeAudit } = require('./cardType');
 const {
   checkConfigNotesTemplates, renderNotesText, resolveTemplateForMaps, gatherTierTemplates,
-  lookupSlotList, lookupNamedTemplate, isTemplateChoice, resolveBodyRender,
+  resolveRenderLadder, resolveBodyRender,
 } = require('./templateResolve');
 const { cleanAndArchive } = require('./outputPaths');
 const { resolveCrossItemRenderFunctions } = require('./crossItem');
@@ -407,31 +407,19 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
   const context = itemContext(item, { render: { ...(item.render || {}), wrapper: 'none' } });
   const label = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
 
-  // The component-target ladder: a *chosen* target `template:` (a named text or field-list
-  // template, or a Pattern-2 name in a slot file) → `templateFor.<component>` keyed on
-  // `aid.type` → `templateFor.base` keyed on `aid.type` → `aid.type` as a template name →
-  // verbatim. A per-item `render.<component>.template` reaches here as `target.template`,
-  // so a real choice keeps winning over the branch's slot — but the fill of
-  // `target.template` from `aid.type` in `model/item.js` is not a choice, and honoring it
-  // at rung 1 would shadow `templateFor.<component>` / `templateFor.base` for the whole
-  // corpus, which is what `isTemplateChoice` guards against.
+  // The component-target ladder, walked by `resolveRenderLadder` — the same rungs the
+  // story-card body ladder walks, with a component slot map searched ahead of the base one.
+  // A per-item `render.<component>.template` reaches here as `target.template`, so a real
+  // choice keeps winning over the branch's slot — but the fill of `target.template` from
+  // `aid.type` in `model/item.js` is not a choice, and honoring it at rung 1 would shadow
+  // `templateFor.<component>` / `templateFor.base` for the whole corpus, which is what
+  // `isTemplateChoice` guards against inside the ladder.
   const type = item.aid && item.aid.type;
-  const compMap = templateFor[target.component] || {};
-  const baseMap = templateFor.base || {};
-
-  let hit = null;
-  if (isTemplateChoice(target.template, type)) {
-    const slot = lookupSlotList(target.template, compMap) || lookupSlotList(target.template, baseMap);
-    hit = slot
-      ? { kind: 'fieldList', list: slot, name: String(target.template) }
-      : lookupNamedTemplate(target.template, templates, fieldTable);
-  }
-  if (!hit && type) {
-    // Case-insensitive, matching rung 1 above and the body/notes ladders.
-    const list = lookupSlotList(type, compMap) || lookupSlotList(type, baseMap);
-    if (list) hit = { kind: 'fieldList', list, name: `${target.component}:${type}` };
-  }
-  if (!hit && type) hit = lookupNamedTemplate(type, templates, fieldTable);
+  const hit = resolveRenderLadder(item, templates, fieldTable, {
+    choice: target.template,
+    maps: [templateFor[target.component] || {}, templateFor.base || {}],
+    typeSlotName: `${target.component}:${type}`,
+  });
 
   if (hit) {
     try {

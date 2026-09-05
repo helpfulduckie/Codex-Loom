@@ -96,6 +96,14 @@ function findFiles(dir, ext, { sort = false } = {}) {
   return results;
 }
 
+function readFileTrim(filePath) {
+  try {
+    return fs.readFileSync(filePath, 'utf8').trim();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Every file under `dir`, as sorted paths relative to it — not suffix-filtered, so a
  * companion file beside a matched one (a `.md` beside a `.yaml`) survives alongside it.
@@ -473,7 +481,7 @@ function checkMechanicalArtifacts(text, label, sink) {
 }
 
 module.exports = {
-  findFiles, listFilesRelative, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
+  findFiles, readFileTrim, listFilesRelative, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
   ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
   YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix, PATH_UNSAFE_CHARS, isPlainObject,
   resolveVariables, checkUnexpandedVariables, walkItemTextFields, walkTextRecursive, itemContext, ITEM_CONTEXT_KEYS, checkUnresolvedFieldTokens,

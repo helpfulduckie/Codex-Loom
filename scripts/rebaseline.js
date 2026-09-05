@@ -56,16 +56,15 @@
  */
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
 const { compile } = require('../src/compile');
-const { loadCompileConfig } = require('../src/config/load');
-const { Diagnostics } = require('../src/diag');
 const { listFilesRelative } = require('../src/util');
 const { classifyDiff, OPAQUE } = require('../__tests__/helpers/diffShape');
 
-const { DEFAULT_REPORT_MODES } = require('../__tests__/helpers/baselineHarness');
+const {
+  DEFAULT_REPORT_MODES, prepareTempTree, resolvedReportsDir, collectCompileReports,
+} = require('../__tests__/helpers/baselineHarness');
 
 /**
  * The two baseline fixture sets, keyed by `--set`. Each names a tree and the manifest
@@ -157,26 +156,9 @@ function copyFile(from, to) {
 /** Compile every project into a temp copy of the fixture tree and run its frozen reports. */
 function buildTempTree(projects, set) {
   const {
-    root, OUTPUT_SUBDIR, BASELINE_SUBDIR, REPORTS_SUBDIR, SOURCE_SUBDIR, CONFIG_NAME,
-    REPORT_MODES, REPORTS_IN_PLACE,
+    OUTPUT_SUBDIR, REPORTS_SUBDIR, SOURCE_SUBDIR, CONFIG_NAME, REPORT_MODES, REPORTS_IN_PLACE,
   } = set;
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-rebaseline-'));
-  fs.cpSync(root, tmpDir, {
-    recursive: true,
-    // Both committed baselines are the comparison target, not an input — and the report
-    // baseline shares its path with where fresh reports are about to be written.
-    // OUTPUT_SUBDIR ("Velvet Lattice/") is compiler output, gitignored: absent on a clean
-    // clone, but on a checkout where someone ran the CLI against a fixture directly it
-    // survives the copy, and compile does not run with --clean here — so a stale per-leaf
-    // dir the current compiler no longer writes would linger as an orphan and break the
-    // "emits exactly the baseline file set" assertion. Phase 12 Session D hit this with
-    // the Scripts/ lift and deleted the local dirs by hand; excluding it here is the fix.
-    filter: (src) => {
-      const segments = path.relative(root, src).split(path.sep);
-      return !segments.includes(BASELINE_SUBDIR) && !segments.includes(REPORTS_SUBDIR)
-        && !segments.includes(OUTPUT_SUBDIR);
-    },
-  });
+  const tmpDir = prepareTempTree(set, 'codex-loom-rebaseline-');
 
   for (const project of projects) {
     process.stdout.write(`compiling ${project.name}… `);
@@ -208,42 +190,6 @@ function buildTempTree(projects, set) {
   }
 
   return tmpDir;
-}
-
-/**
- * Where `structure.reports` resolves for a config, read back via `loadCompileConfig` — a
- * second, side-effect-free parse of the same file. `compile()` writes reports there and
- * returns nothing that names the path.
- */
-function resolvedReportsDir(configPath) {
-  const config = loadCompileConfig(configPath, { diagnostics: new Diagnostics() });
-  return config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
-}
-
-/**
- * Copy `diff`/`annotate`/`inventory` output into `v3-reports/<mode>/`. Mirrors
- * `golden.test.js`'s helper of the same job — `compile()` writes those three wherever
- * `structure.reports` resolves and returns nothing that names that path, so it is read
- * back via `loadCompileConfig`, a second side-effect-free parse of the same `compile.yaml`.
- */
-function collectCompileReports(project, configPath, tmpDir, set) {
-  const { REPORTS_SUBDIR, COMPILE_REPORT_LAYOUT } = set;
-  const reportBase = resolvedReportsDir(configPath);
-  for (const mode of project.compileReports || []) {
-    const layout = COMPILE_REPORT_LAYOUT[mode];
-    if (!layout) continue;
-    const dir = path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
-    fs.mkdirSync(dir, { recursive: true });
-    if (layout.files) {
-      for (const f of layout.files) {
-        const src = path.join(reportBase, f);
-        if (fs.existsSync(src)) fs.copyFileSync(src, path.join(dir, f));
-      }
-    } else if (layout.subdir) {
-      const src = path.join(reportBase, layout.subdir);
-      if (fs.existsSync(src)) fs.cpSync(src, dir, { recursive: true });
-    }
-  }
 }
 
 // ── diffing ──────────────────────────────────────────────────────────────────

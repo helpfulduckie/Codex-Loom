@@ -138,8 +138,9 @@ describe('a render.storyCards entry emits a trigger-less kind: reference card', 
 
   test('the empty-triggers lint does not fire on it', () => {
     const text = read(cardFile(built().tmpDir, 'AI Instructions'));
-    const findings = scanStoryCardStructure(text);
-    expect(findings.filter((f) => f.category === 'empty-triggers')).toEqual([]);
+    const diagnostics = new Diagnostics();
+    scanStoryCardStructure(text, { diagnostics });
+    expect(diagnostics.all.filter((d) => d.code === 'CL0635')).toEqual([]);
   });
 
   test('the component field still ships, unaffected', () => {

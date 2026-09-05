@@ -168,6 +168,7 @@ const REGISTRY = Object.freeze({
   ROLE_INDIRECTION:             { id: 'CL0543', severity: ERROR, summary: 'A role is bound to another role name rather than directly to an item id.' },
   ROLE_UNBIND_UNKNOWN:          { id: 'CL0544', severity: WARN,  summary: 'A role is unbound with ~ but was never inherited at that node.' },
   ROLE_UNUSED:                  { id: 'CL0545', severity: WARN,  summary: 'A role is declared and never referenced by a resolved token anywhere in the compile.' },
+  NATIVE_PLACEHOLDER_SHAPE:     { id: 'CL0546', severity: WARN,  layer: 'opinion', summary: 'A ${...} holds identifier-shaped content, so it reads as a transposed {$token}.' },
 
   // ── CL06xx  components ────────────────────────────────────────────────────
   SECTION_TEXT_AND_SLOT:        { id: 'CL0601', severity: ERROR, summary: 'A section declares both text: and slot: true.' },
@@ -203,6 +204,7 @@ const REGISTRY = Object.freeze({
   CARD_TYPE_INVALID:            { id: 'CL0632', severity: ERROR, summary: 'aid.type fails path-legality: empty, an illegal path character, . / .., or a trailing space/period.' },
   BRANCH_FRAMING_IGNORED:       { id: 'CL0633', severity: WARN,  summary: 'branchFraming on a node with nothing below it to frame — the root with no branches, or a leaf.' },
   COMPONENT_NO_OUTPUT:          { id: 'CL0634', severity: ERROR, summary: 'A requested component produced no output anywhere in the compile.' },
+  CARD_NO_TRIGGERS:             { id: 'CL0635', severity: WARN,  layer: 'opinion', summary: 'A story card has an empty or missing trigger list, so it can never be pulled into context.' },
 
   // ── CL07xx  emit ─────────────────────────────────────────────────────────
   TRIGGER_CONTAINS_COMMA:       { id: 'CL0701', severity: ERROR, summary: 'A trigger value contains a comma, which Velvet Lattice would split into two triggers.' },

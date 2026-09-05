@@ -236,38 +236,70 @@ function isTemplateChoice(name, type) {
 }
 
 /**
- * The body ladder (§13.4): a *chosen* item `render.template` → `templateFor.base` keyed on
- * `aid.type` → `aid.type` as a template name → verbatim (null).
+ * The body ladder (§13.4), and the one implementation of it. Two callers walk it: this
+ * module's `resolveBodyRender` for an item's own story-card body, and `compile.js`'s
+ * `renderPlacementBody` for an item placed in a component slot. They differ only in the
+ * three things named below, and every rung they share used to exist twice.
  *
- * Returns `{ kind: 'text', entry, name } | { kind: 'fieldList', list, name } | null`. With
- * no field table and no `templateFor`, only the first and last rungs can fire — the two
- * extra rungs only ever fire once a project declares one or the other.
+ * The rungs: a *chosen* template name → a `templateFor` slot list keyed on `aid.type` →
+ * `aid.type` as a template name → verbatim (null). Returns
+ * `{ kind: 'text', entry, name } | { kind: 'fieldList', list, name } | null`. With no field
+ * table and no `templateFor`, only the first and last rungs can fire.
  *
- * **A `render.template` equal to `aid.type` is not a choice** — see `isTemplateChoice`. It is
- * treated as absent, so rung 3 renders the type's default and a tiered branch's rung 2 takes
- * effect.
+ * **A chosen name equal to `aid.type` is not a choice** — see `isTemplateChoice`. It is
+ * treated as absent, so the type rungs render the type's default and a tiered branch's slot
+ * takes effect.
+ *
+ * What the callers vary:
+ *
+ * - `choice` — the candidate name. `item.render.template` for a story-card body,
+ *   `target.template` for a component target, which `model/item.js` may have filled from
+ *   `aid.type` (hence `isTemplateChoice`).
+ * - `maps` — the `templateFor` slot maps to search, in order, first hit winning. The body
+ *   ladder searches `templateFor.base` alone; a component target searches
+ *   `templateFor.<component>` ahead of it.
+ * - `typeSlotName` — the `name` a type-slot hit carries. **This cannot be derived here and
+ *   the two callers genuinely disagree**: the body ladder reports the bare `aid.type`, the
+ *   component-target ladder reports `<component>:<type>`. The name reaches `renderFieldList`
+ *   and is printed in its diagnostics, so picking one would reword messages corpus-wide.
  */
-function resolveBodyRender(item, templates, fieldTable, templateForMaps) {
+function resolveRenderLadder(item, templates, fieldTable, { choice, maps, typeSlotName }) {
   const type = item.aid && item.aid.type;
-  const baseMap = (templateForMaps && templateForMaps.base) || {};
 
-  const explicit = item.render && item.render.template;
-  if (isTemplateChoice(explicit, type)) {
-    const slot = lookupSlotList(explicit, baseMap);
-    if (slot) return { kind: 'fieldList', list: slot, name: String(explicit) };
-    const hit = lookupNamedTemplate(explicit, templates, fieldTable);
-    if (hit) return hit;
-  }
   // Case-insensitively, like every other name lookup here. `aid.type` is matched against a
   // slot file's `templates:` keys, while `cardType.js` folds a built-in type to lowercase —
   // so a raw index here made a project that wrote `character` silently miss its tier.
-  const byType = type ? lookupSlotList(type, baseMap) : null;
-  if (byType) return { kind: 'fieldList', list: byType, name: type };
+  const lookupSlot = (name) => {
+    for (const map of maps) {
+      const hit = lookupSlotList(name, map);
+      if (hit) return hit;
+    }
+    return null;
+  };
+
+  if (isTemplateChoice(choice, type)) {
+    const slot = lookupSlot(choice);
+    if (slot) return { kind: 'fieldList', list: slot, name: String(choice) };
+    const hit = lookupNamedTemplate(choice, templates, fieldTable);
+    if (hit) return hit;
+  }
   if (type) {
+    const slot = lookupSlot(type);
+    if (slot) return { kind: 'fieldList', list: slot, name: typeSlotName };
     const hit = lookupNamedTemplate(type, templates, fieldTable);
     if (hit) return hit;
   }
   return null;
+}
+
+/** The body ladder for an item's own story-card body. See `resolveRenderLadder`. */
+function resolveBodyRender(item, templates, fieldTable, templateForMaps) {
+  const type = item.aid && item.aid.type;
+  return resolveRenderLadder(item, templates, fieldTable, {
+    choice: item.render && item.render.template,
+    maps: [(templateForMaps && templateForMaps.base) || {}],
+    typeSlotName: type,
+  });
 }
 
 /**
@@ -306,6 +338,7 @@ module.exports = {
   lookupSlotList,
   lookupNamedTemplate,
   isTemplateChoice,
+  resolveRenderLadder,
   resolveBodyRender,
   resolveNotesRender,
 };

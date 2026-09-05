@@ -3,7 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { Diagnostics, LINT_LEVELS, SEVERITY, SEVERITY_LABEL } = require('./diag');
+const { Diagnostics, LINT_LEVELS, SEVERITY } = require('./diag');
 const { loadCompileConfig } = require('./config/load');
 const { syncLibrary } = require('./snapshot');
 const { findConfigEntry } = require('./loader/registry');
@@ -442,17 +442,14 @@ if (require.main === module) {
           log, lintLevel: effectiveLintLevel, config: lintConfig, configPath,
           diagnostics: lintDiagnostics,
         });
+        // Every finding is on `lintDiagnostics`, so `printDiagnostics` is the whole terminal
+        // rendering — there is no second, lint-shaped echo of the same list. It has to run
+        // after `runLintMode` rather than before it for that reason: the bus is empty until
+        // the scan has raised onto it.
         printDiagnostics(lintDiagnostics);
         if (result.written.length > 0) {
           lintErrors = result.errorCount;
           summaryParts.push(`a lint report (${result.errorCount} error(s), ${result.warnCount} warning(s))`);
-          for (const f of result.findings) {
-            let loc;
-            if (f.leaf) loc = `leaf "${f.leaf}"`;
-            else if (f.card) loc = `card "${f.card}" in ${f.relPath}`;
-            else loc = `${f.relPath}:${f.lines[0]}`;
-            console.warn(`  ${SEVERITY_LABEL[f.severity]} [${f.category}]: ${loc} — ${f.hint}`);
-          }
           console.log(`\nLint: ${result.errorCount} error(s), ${result.warnCount} warning(s) across ${result.fileCount} file(s).`);
         } else {
           console.warn('No Story Cards/Components .md files found — nothing to lint.');

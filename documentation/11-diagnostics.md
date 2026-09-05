@@ -327,6 +327,13 @@ already-compiled tree.
 ordinary prose was meant: `[does]` may be a deliberate bracket, and "undefined" is an
 English word. They stay WARN, they are tagged opinion-layer, and `lint.level` reaches them.
 
+`CL0546` and `CL0635` are the offline scanner's other two opinions, and they are filed in
+the bands their subject belongs to rather than here — a confusable `${...}` is a token
+question and a trigger-less card is a story-card one, whatever pass happens to notice them.
+Both were reported by category label alone until Package 3 put every lint finding on the
+diagnostic bus; they were the only two checks in the tool with no code, which is also why
+they have the highest ids in their bands rather than sitting beside their neighbors.
+
 ### CL0422–CL0428 in detail — the field table
 
 `CL0422` is the load-time check on a field-table document as a whole: it did not parse, or
@@ -422,6 +429,7 @@ interpolated value, and the property belongs to the template, not to each field.
 | `CL0632` | ERROR | `aid.type` fails path-legality: empty/whitespace, an illegal path character, `.`/`..`, or a trailing space/period. |
 | `CL0633` | WARN | `branchFraming` on a node with nothing below it to frame — the root with no branches, or a leaf. |
 | `CL0634` | ERROR | A requested component produced no output anywhere in the compile. |
+| `CL0635` | WARN | A story card has an empty or missing trigger list, so it can never be pulled into context. `kind: reference` is exempt. |
 
 `CL0601` is an error rather than a resolved precedence because the two readings differ in
 output and neither is obviously right: text inside a slot could sit before or after the
@@ -693,6 +701,7 @@ exactly at the cap warns rather than erroring — the cap is inclusive.
 | `CL0543` | ERROR | A role is bound to another role name rather than directly to an item id. |
 | `CL0544` | WARN | A role is unbound with `~` but was never inherited at that node. |
 | `CL0545` | WARN | A role is declared and never referenced by a resolved token anywhere in the compile. |
+| `CL0546` | WARN | A `${...}` holds identifier-shaped content, so it reads as a `{$token}` with the brace and the dollar transposed. |
 
 `CL0530` exists for a specific footgun rather than for careless authors. A bare `heroName:` with
 nothing after it parses as null, and null is `~` — so the most natural-looking way to

@@ -10,12 +10,12 @@ const {
 } = require('./util');
 const { parseCards } = require('./emit/vl');
 const {
-  CODES: DIAG_CODES, LINT_LEVELS, applyLintLevel, Diagnostics, SEVERITY, SEVERITY_LABEL,
+  CODES: DIAG_CODES, Diagnostics, SEVERITY, SEVERITY_LABEL,
 } = require('./diag');
 const {
   loadPack, evaluatePack, evaluatePackExistence, clampFinding,
 } = require('./lint/packs');
-const { buildTree, leafNodes } = require('./compiledTree');
+const { buildTree, leafNodes, collectMdFiles } = require('./compiledTree');
 const { NULL_LOG } = require('./log');
 
 // ── mechanical syntax checks ────────────────────────────────────────────────
@@ -27,77 +27,61 @@ const { NULL_LOG } = require('./log');
 // scanner can never drift out of sync with them (or be guessed independently,
 // which is how the wrong-token-syntax bug happened in the first place).
 //
-// **`layer` is what §12.5's compiler/lint split actually means here, and the six ERROR
-// checks stay in this table rather than leaving it.** The split is about what a check
-// *claims* — a leaked `{$she}` is a fact about the output, `[does]` is a guess about
-// prose — and not about which half of the tool runs it. Deleting the facts from this
-// table would have made `--lint` useless on a tree someone else compiled, which is the
-// one job an offline scanner has. So they are tagged `compiler`, they keep their CL codes
-// from `diag.js`, and `lint.level` cannot reach them; the opinions are tagged `opinion`
-// and it can. That is the same shape as `CL0535`/`CL0536`, which are opinions computed
-// inside the compile because they need the branch-merged placeholder table.
+// **§12.5's compiler/lint split is a property of the code, not a column in this table.**
+// The split is about what a check *claims* — a leaked `{$she}` is a fact about the output,
+// `[does]` is a guess about prose — and not about which half of the tool runs it. So the six
+// ERROR checks stay here rather than leaving: deleting the facts from this table would have
+// made `--lint` useless on a tree someone else compiled, which is the one job an offline
+// scanner has. Which of them `lint.level` can reach is answered by `diag.js`'s `isOpinion`,
+// off the `layer: 'opinion'` tag in `REGISTRY` — this table used to restate that per entry
+// and the two could disagree. That is the same shape as `CL0535`/`CL0536`, which are opinions
+// computed inside the compile because they need the branch-merged placeholder table.
 
 const CHECKS = [
   {
-    category: 'unresolved-field-token',
     severity: SEVERITY.ERROR,
-    layer: 'compiler',
     code: DIAG_CODES.LEAKED_FIELD_TOKEN,
     re: FIELD_TOKEN_RE,
     hint: 'pronoun/character-ID/field-ref token ({$she}, {$Aria}, {$Aria.she}, {$body.Field}) left unresolved',
   },
   {
-    category: 'unexpanded-variable',
     severity: SEVERITY.ERROR,
-    layer: 'compiler',
     code: DIAG_CODES.LEAKED_VARIABLE,
     re: VAR_TOKEN_RE,
     hint: 'compile.yaml variable token ({%key}) left unexpanded',
   },
   {
-    category: 'template-function',
     severity: SEVERITY.ERROR,
-    layer: 'compiler',
     code: DIAG_CODES.LEAKED_RENDER_FUNCTION,
     re: TEMPLATE_FN_RE,
     hint: 'render function ({join}, {list}, {and}, {prose}, {block}, {keys}, {inline}) leaked into output',
   },
   {
-    category: 'template-tag',
     severity: SEVERITY.ERROR,
-    layer: 'compiler',
     code: DIAG_CODES.LEAKED_TEMPLATE_TAG,
     re: TEMPLATE_TAG_RE,
     hint: 'template control tag ({if}/{/if}, {wrapper}/{/wrapper}, {preserve}/{/preserve}, {include}) leaked into output',
   },
   {
-    category: 'verb-conjugation-marker',
     severity: SEVERITY.ERROR,
-    layer: 'compiler',
     code: DIAG_CODES.LEAKED_VERB_MARKER,
     re: VERB_MARKER_RE,
     hint: 'verb conjugation marker ([s]/[es]/[is]/[was]/[has]) left unresolved — needs a preceding {$Id} or {$Id.pronoun} scope',
   },
   {
-    category: 'suspect-verb-marker',
     severity: SEVERITY.WARN,
-    layer: 'opinion',
     code: DIAG_CODES.SUSPECT_VERB_MARKER,
     re: SUSPECT_VERB_MARKER_RE,
     hint: "bracketed lowercase word that isn't a recognized verb-conjugation marker ([s]/[es]/[is]/[was]/[has]) or the [e] marker — likely a typo (e.g. [does] instead of [s]/[is])",
   },
   {
-    category: 'js-interpolation-artifact',
     severity: SEVERITY.ERROR,
-    layer: 'compiler',
     code: DIAG_CODES.LEAKED_JS_ARTIFACT,
     re: JS_ARTIFACT_RE,
     hint: 'JS interpolation failure artifact',
   },
   {
-    category: 'js-interpolation-word',
     severity: SEVERITY.WARN,
-    layer: 'opinion',
     code: DIAG_CODES.SUSPECT_JS_WORD,
     re: JS_WORD_RE,
     hint: 'bare "undefined"/"NaN" — usually a JS interpolation failure, but verify it is not intentional prose',
@@ -113,22 +97,12 @@ const CHECKS = [
  */
 function findLintableFiles(dir) {
   const results = [];
-  if (!fs.existsSync(dir)) return results;
-  function walk(current) {
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })
-        .sort((a, b) => a.name.localeCompare(b.name))) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-      } else if (entry.isFile() && entry.name.endsWith('.md')) {
-        const parts = full.split(path.sep);
-        if (parts.includes('Story Cards') || parts.includes('Components')) {
-          results.push(full);
-        }
-      }
+  for (const full of collectMdFiles(dir)) {
+    const parts = full.split(path.sep);
+    if (parts.includes('Story Cards') || parts.includes('Components')) {
+      results.push(full);
     }
   }
-  walk(dir);
   return results;
 }
 
@@ -145,33 +119,33 @@ function lineAt(text, index) {
 // ── raw-text scan ────────────────────────────────────────────────────────────
 
 /**
- * Run every mechanical CHECKS pattern against text. Occurrences of the same
- * (category, matched string) are grouped, recording every line they appear on.
- * Returns an array of { category, severity, layer, code, hint, match, lines }.
+ * Run every mechanical CHECKS pattern against text, raising one diagnostic per occurrence
+ * onto `diagnostics`.
+ *
+ * One per occurrence rather than one per distinct match with a line list: `Diagnostic.line`
+ * is scalar, and one-per-occurrence is what every other check in the compiler does. It costs
+ * a longer report on a file with a repeated leak, which is the right trade — a leak on six
+ * lines is six things to fix.
+ *
+ * Raised through `diagnostics.add` and never by constructing a `Diagnostic` for the caller
+ * to merge: `add` is where the `lint.level` ceiling is applied (`diag.js`), and `merge` does
+ * no filtering. Building them outside the bus would silence nothing and no fixture would say
+ * so — the committed lint baselines carry one finding between them.
  */
-function scanText(text) {
-  const findings = [];
+function scanText(text, { diagnostics, file = null } = {}) {
   const maskedText = maskFencedRegions(text);
-  for (const { category, severity, layer, code, re, hint } of CHECKS) {
-    // suspect-verb-marker ignores the triggers:/encapsulate: fence — a
+  for (const { severity, code, re, hint } of CHECKS) {
+    // The suspect-verb-marker check ignores the triggers:/encapsulate: fence — a
     // single-word trigger like `triggers: [door]` is a real trigger, not a
     // mistyped conjugation marker.
-    const scanTarget = category === 'suspect-verb-marker' ? maskedText : text;
-    const grouped = new Map(); // match string -> lines[]
+    const scanTarget = code === DIAG_CODES.SUSPECT_VERB_MARKER ? maskedText : text;
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(scanTarget)) !== null) {
-      const key = m[0];
-      const line = lineAt(text, m.index);
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key).push(line);
+      diagnostics.add(severity, code, `\`${m[0]}\` — ${hint}`, { file, line: lineAt(text, m.index) });
       if (m[0].length === 0) re.lastIndex++; // guard against zero-width matches
     }
-    for (const [match, lines] of grouped) {
-      findings.push({ category, severity, layer, code, hint, match, lines });
-    }
   }
-  return findings;
 }
 
 // ── the ${...} confusability check (§12.4) ───────────────────────────────────
@@ -213,9 +187,7 @@ const AID_SPECIAL_PREFIX = 'character.';
  * non-greedy `[^}]*` reads `${What is ${Their name?} like?}` as one truncated match plus a
  * stray tail — which would then be judged on the wrong content.
  */
-function scanNativePlaceholders(text) {
-  const grouped = new Map();
-
+function scanNativePlaceholders(text, { diagnostics, file = null } = {}) {
   for (let i = 0; i < text.length - 1; i += 1) {
     if (text[i] !== '$' || text[i + 1] !== '{') continue;
     let depth = 0;
@@ -234,25 +206,16 @@ function scanNativePlaceholders(text) {
     if (!TOKEN_SHAPED.test(inner)) continue;
     if (inner.toLowerCase().startsWith(AID_SPECIAL_PREFIX)) continue;
 
-    if (!grouped.has(whole)) grouped.set(whole, []);
-    grouped.get(whole).push(lineAt(text, i));
+    // The message says what the author wrote and what it will do; the hint says what to
+    // write instead. That is the split `Diagnostic.hint` exists for, and this check is the
+    // one in this file with a genuine fix to name.
+    diagnostics.add(
+      SEVERITY.WARN, DIAG_CODES.NATIVE_PLACEHOLDER_SHAPE,
+      `\`${whole}\` reads as an AID placeholder that would prompt the player to type "${inner}".`,
+      { file, line: lineAt(text, i) },
+      { hint: `If a Codex Loom token was meant, it is written {$${inner}} — the brace and the dollar the other way round.` },
+    );
   }
-
-  const findings = [];
-  for (const [match, lines] of grouped) {
-    const inner = match.slice(2, -1);
-    findings.push({
-      category: 'native-placeholder-shape',
-      severity: SEVERITY.WARN,
-      layer: 'opinion',
-      match,
-      lines,
-      hint: `"${match}" reads as an AID placeholder that would prompt the player to type `
-        + `"${inner}". If a Codex Loom token was meant, it is written {$${inner}} — the `
-        + 'brace and the dollar the other way round.',
-    });
-  }
-  return findings;
 }
 
 // ── story-card structural checks ─────────────────────────────────────────────
@@ -271,8 +234,7 @@ function scanNativePlaceholders(text) {
 // What is left is a fact about the platform rather than an opinion about content: a card
 // with no triggers can never be pulled into context.
 
-function scanStoryCardStructure(content) {
-  const findings = [];
+function scanStoryCardStructure(content, { diagnostics, file = null } = {}) {
   // The shared parser (§8.6). Fenceless sections are still skipped: a heading with no
   // fence beneath it is prose in a component file, not a malformed story card, and
   // reporting it would fire this check on every AI Instructions section.
@@ -287,17 +249,15 @@ function scanStoryCardStructure(content) {
   for (const card of parseCards(content).filter((c) => c.hasFence)) {
     if (card.kind === 'reference') continue;
     if (card.triggers.length === 0) {
-      // `(untitled)` rather than the parser's `null`: both renderings branch on `card` to
-      // pick the location form, and a null here fell through to the line-numbered form
-      // with no line numbers to read.
-      findings.push({
-        category: 'empty-triggers', severity: SEVERITY.WARN, layer: 'opinion',
-        card: card.title || '(untitled)',
-        hint: 'card has an empty or missing trigger list',
-      });
+      // `(untitled)` rather than the parser's `null`: the card name is part of the message
+      // now, and a null in it would print the word "null" as the card's name.
+      diagnostics.add(
+        SEVERITY.WARN, DIAG_CODES.CARD_NO_TRIGGERS,
+        `card "${card.title || '(untitled)'}" has an empty or missing trigger list`,
+        { file },
+      );
     }
   }
-  return findings;
 }
 
 // ── convention packs (§8.2.2), the offline arm ──────────────────────────────
@@ -327,85 +287,60 @@ function loadDeclaredPacks(config, configPath, diagnostics) {
 }
 
 /**
- * Run each loaded pack over one compiled Story Cards file. Findings match
- * `scanStoryCardStructure`'s shape — `card`/`hint` carry the message — plus a namespaced
- * `code` and `layer: 'opinion'`, so `applyLevel` and the report formatter treat them
- * like any other opinion finding. Per-pack `level:` is applied here; the global ceiling
- * is `applyLevel`'s job.
+ * Run each loaded pack over one compiled Story Cards file, raising onto the same bus every
+ * other check uses. A pack code is `CL-<pack>/NNNN`, which `diag.js`'s `isOpinion` recognizes
+ * by its prefix rather than by a registry entry, so the bus applies the `lint.level` ceiling
+ * to these without their needing to be declared. Per-pack `level:` is applied here first —
+ * the two ceilings compose, narrowest last.
  */
-function scanPacks(content, type, loadedPacks) {
-  const findings = [];
-  if (!loadedPacks || loadedPacks.length === 0) return findings;
+function scanPacks(content, type, loadedPacks, { diagnostics, file = null } = {}) {
+  if (!loadedPacks || loadedPacks.length === 0) return;
   const cards = parseCards(content, { type });
   for (const { pack, packLevel } of loadedPacks) {
     for (const f of evaluatePack(pack, cards)) {
       const severity = clampFinding(f.severity, packLevel, null);
       if (severity === null) continue;
-      findings.push({
-        category: `pack:${pack.name}`,
-        severity,
-        layer: 'opinion',
-        code: f.code,
-        card: f.card,
-        hint: f.detail,
-      });
+      diagnostics.add(severity, f.code, `card "${f.card}": ${f.detail}`, { file });
     }
   }
-  return findings;
-}
-
-// ── the opinion-layer ceiling (§12.5) ────────────────────────────────────────
-
-/**
- * Apply a `lint.level` to a finding list, dropping and demoting the opinion layer.
- *
- * Delegates the arithmetic to `diag.js` so the offline scanner and the compile bus cannot
- * answer the same question differently — the same reason `CHECKS` imports its patterns from
- * `util.js` rather than restating them. Findings carry the same `SEVERITY` values the bus
- * does now, so there is no case conversion left to do here.
- *
- * Compiler-layer findings pass through untouched. An author cannot silence a fact.
- */
-function applyLevel(findings, level) {
-  if (!level) return findings;
-  const out = [];
-  for (const f of findings) {
-    if (f.layer !== 'opinion') { out.push(f); continue; }
-    const severity = applyLintLevel(f.severity, level);
-    if (severity === null) continue;
-    out.push({ ...f, severity });
-  }
-  return out;
 }
 
 // ── report formatting ────────────────────────────────────────────────────────
+//
+// The written report and the CLI's terminal output are two renderings of one bus. There is
+// no `applyLevel` here any more: `Diagnostics.add` applies the §12.5 ceiling at add time via
+// `isOpinion`, so a silenced diagnostic is never on the bus to be filtered out twice — which
+// is also why the exit code can be `bus.errors.length` rather than a count assembled while
+// the report is written and then adjusted by hand for the pack loader's errors.
 
-function formatLines(lines) {
-  const shown = lines.slice(0, 5).join(', ');
-  return lines.length > 5 ? `${shown}, +${lines.length - 5} more` : shown;
-}
+/** The heading for diagnostics with no file — the per-leaf `requireCard` existence pass. */
+const NO_FILE_GROUP = '(convention packs)';
 
-function formatReport(rootDirName, fileResults) {
+function formatReport(rootDirName, diagnostics) {
   const out = [`# Codex Loom Syntax Lint — ${rootDirName}`, ''];
-  let errorCount = 0, warnCount = 0;
 
-  for (const { relPath, findings } of fileResults) {
-    if (findings.length === 0) continue;
-    out.push(`## ${relPath}`, '');
-    for (const f of findings) {
-      if (f.severity === SEVERITY.ERROR) errorCount++; else warnCount++;
-      const label = SEVERITY_LABEL[f.severity];
-      if (f.leaf) {
-        out.push(`- [${label}] (${f.category}) leaf "${f.leaf}": ${f.hint}`);
-      } else if (f.card) {
-        out.push(`- [${label}] (${f.category}) card "${f.card}": ${f.hint}`);
-      } else {
-        out.push(`- [${label}] (${f.category}) \`${f.match}\` at line ${formatLines(f.lines)} — ${f.hint}`);
-      }
+  const groups = new Map();
+  for (const d of diagnostics.all) {
+    const key = d.file || NO_FILE_GROUP;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(d);
+  }
+
+  for (const [heading, items] of groups) {
+    out.push(`## ${heading}`, '');
+    for (const d of items) {
+      const where = [
+        d.line !== null ? `line ${d.line}` : null,
+        d.branch ? `leaf "${d.branch}"` : null,
+      ].filter(Boolean).join(' ');
+      out.push(`- [${SEVERITY_LABEL[d.severity]}] ${d.code}${where ? ` ${where}` : ''}: ${d.message}`);
+      if (d.hint) out.push(`  ${d.hint}`);
     }
     out.push('');
   }
 
+  const errorCount = diagnostics.errors.length;
+  const warnCount = diagnostics.warnings.length;
   out.unshift(`<!-- ${errorCount} error(s), ${warnCount} warning(s) -->`);
   return { text: out.join('\n').trimEnd() + '\n', errorCount, warnCount };
 }
@@ -415,50 +350,48 @@ function formatReport(rootDirName, fileResults) {
 /**
  * Run syntax-lint mode on a scenario output root: scans every compiled
  * Story Cards/Components .md file for unresolved template artifacts and
- * VL structural errors. Writes a `<root>.lint.md` report to outputDir and returns what it
- * wrote plus the findings, so the caller can echo them. Prints nothing.
- * Returns { written, reportPath, errorCount, warnCount, fileCount, findings }, with
- * `written: []`, `reportPath: null`, and the counts/findings zeroed when no lintable files
- * were found.
+ * VL structural errors. Writes a `<root>.lint.md` report to outputDir. Prints nothing —
+ * every finding is raised onto the diagnostic bus, which the caller already holds and can
+ * print, so nothing is handed back for the caller to re-render.
+ * Returns { written, reportPath, errorCount, warnCount, fileCount }, with `written: []`,
+ * `reportPath: null` and the counts zeroed when no lintable files were found.
  */
 function runLintMode(scenarioRoot, outputDir, options = {}) {
   const { log = NULL_LOG } = options;
-  const level = options.lintLevel || null;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
   const files        = findLintableFiles(rootAbs);
 
   if (files.length === 0) {
-    return {
-      written: [], reportPath: null, errorCount: 0, warnCount: 0, fileCount: 0, findings: [],
-    };
+    return { written: [], reportPath: null, errorCount: 0, warnCount: 0, fileCount: 0 };
   }
 
   // §8.2.2 — project-root convention packs, loaded once. A malformed pack raises a
-  // `CL0117` here; it lands on the bus, not swallowed.
+  // `CL0117` here; it lands on the bus, not swallowed. It is a load failure rather than a
+  // finding, but it is an ERROR on the same bus, so it reaches the exit code by the same
+  // route everything else does instead of being counted separately and added on at the end.
   const bus = options.diagnostics || new Diagnostics();
-  const errorsBefore = bus.errors.length;
+  if (options.lintLevel) bus.setLintLevel(options.lintLevel);
   const loadedPacks = options.config
     ? loadDeclaredPacks(options.config, options.configPath || null, bus)
     : [];
-  const packLoadErrors = bus.errors.length - errorsBefore;
 
-  const fileResults = [];
   for (const file of files) {
     const content  = fs.readFileSync(file, 'utf8');
     const relPath  = path.relative(rootAbs, file);
     const segs = relPath.split(path.sep);
     const scIdx = segs.indexOf('Story Cards');
     const cardType = scIdx >= 0 && segs[scIdx + 1] ? segs[scIdx + 1] : null;
-    const raw = scanText(content);
-    raw.push(...scanNativePlaceholders(content));
+    const before = bus.length;
+    const ctx = { diagnostics: bus, file: relPath };
+    scanText(content, ctx);
+    scanNativePlaceholders(content, ctx);
     if (path.dirname(file).split(path.sep).includes('Story Cards')) {
-      raw.push(...scanStoryCardStructure(content));
-      raw.push(...scanPacks(content, cardType, loadedPacks));
+      scanStoryCardStructure(content, ctx);
+      scanPacks(content, cardType, loadedPacks, ctx);
     }
-    const findings = applyLevel(raw, level);
-    fileResults.push({ relPath, findings });
-    if (findings.length > 0) log.verbose(`  linted: ${relPath} (${findings.length} finding(s))`);
+    const raised = bus.length - before;
+    if (raised > 0) log.verbose(`  linted: ${relPath} (${raised} finding(s))`);
   }
 
   // §8.2.2 — a `requireCard` rule is a per-leaf existence check, not a per-file one: a
@@ -468,43 +401,30 @@ function runLintMode(scenarioRoot, outputDir, options = {}) {
   // Offline still applies the root `lint.packs` to every leaf — it does not walk
   // `config.branches`, so a branch that unbound the pack still gets the finding. The
   // inline compile pass is branch-merge-aware and authoritative (see `## Watch`).
-  const existenceResults = [];
+  //
+  // These carry a `branch` and no `file`, which is what puts them under the report's
+  // `(convention packs)` heading rather than under a path.
   if (loadedPacks.some(({ pack }) => (pack.rules || []).some((r) => r.requireCard))) {
-    const findings = [];
     for (const leaf of leafNodes(buildTree(rootAbs))) {
       const label = leaf.branchNames.join('/') || '(root)';
       for (const { pack, packLevel } of loadedPacks) {
         for (const f of evaluatePackExistence(pack, leaf.resolved.cards, { branchLabel: label })) {
           const severity = clampFinding(f.severity, packLevel, null);
           if (severity === null) continue;
-          findings.push({
-            category: `pack:${pack.name}`,
-            severity,
-            layer: 'opinion',
-            code: f.code,
-            leaf: f.leaf,
-            hint: f.detail,
-          });
+          bus.add(severity, f.code, f.detail, { branch: f.leaf });
         }
       }
     }
-    const leveled = applyLevel(findings, level);
-    if (leveled.length > 0) existenceResults.push({ relPath: '(convention packs)', findings: leveled });
   }
 
-  const allResults = [...fileResults, ...existenceResults];
-  const { text, errorCount, warnCount } = formatReport(rootDirName, allResults);
+  const { text, errorCount, warnCount } = formatReport(rootDirName, bus);
   const reportPath = path.join(outputDir, `${rootDirName}.lint.md`);
   fs.writeFileSync(reportPath, text, 'utf8');
 
-  const totalErrors = errorCount + packLoadErrors;
-  const findings = allResults.flatMap(({ relPath, findings }) => findings.map((f) => ({ relPath, ...f })));
-  return {
-    written: [reportPath], reportPath, errorCount: totalErrors, warnCount, fileCount: files.length, findings,
-  };
+  return { written: [reportPath], reportPath, errorCount, warnCount, fileCount: files.length };
 }
 
 module.exports = {
   runLintMode, findLintableFiles, scanText, scanStoryCardStructure,
-  scanNativePlaceholders, applyLevel,
+  scanNativePlaceholders,
 };

@@ -267,12 +267,12 @@ describe('every CL code raised in src/ is in the registry', () => {
 describe('the compiler / lint split (§12.5)', () => {
   const { isOpinion, applyLintLevel, LINT_LEVELS } = require('../../src/diag');
 
-  test('the opinion layer is exactly the four codes tagged layer: opinion', () => {
+  test('the opinion layer is exactly the six codes tagged layer: opinion', () => {
     const opinionIds = Object.values(REGISTRY)
       .filter((e) => e.layer === 'opinion')
       .map((e) => e.id)
       .sort();
-    expect(opinionIds).toEqual(['CL0436', 'CL0437', 'CL0535', 'CL0536']);
+    expect(opinionIds).toEqual(['CL0436', 'CL0437', 'CL0535', 'CL0536', 'CL0546', 'CL0635']);
     for (const id of opinionIds) expect(isOpinion(id)).toBe(true);
   });
 

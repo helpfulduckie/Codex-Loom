@@ -38,17 +38,9 @@ const YAML = require('yaml');
 
 const { parseCards } = require('./emit/vl');
 const { FILENAME: PLACEHOLDERS_FILE } = require('./emit/placeholders');
-const { findFiles } = require('./util');
+const { findFiles, readFileTrim } = require('./util');
 
 // ── filesystem primitives ───────────────────────────────────────────────────
-
-function readFileTrim(filePath) {
-  try {
-    return fs.readFileSync(filePath, 'utf8').trim();
-  } catch {
-    return null;
-  }
-}
 
 /** Every `.md` file under `dir`, depth-first, sorted. This walks compiled output, not
  * source, so `findFiles`'s symlink-following is harmless here. */

@@ -12,11 +12,28 @@ const {
   runLintMode,
   scanNativePlaceholders,
 } = require('../../src/lint');
-const { SEVERITY } = require('../../src/diag');
+const { SEVERITY, Diagnostics } = require('../../src/diag');
 
 function makeTmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cl-lint-test-'));
 }
+
+/**
+ * Run a scanner against a fresh bus and return what it raised.
+ *
+ * The scanners raise rather than return since Package 3, and they raise through
+ * `Diagnostics.add` rather than constructing diagnostics, because `add` is where the
+ * `lint.level` ceiling is applied. So a test for the ceiling constructs the bus *with* the
+ * level and asserts on what survived — there is no longer a filter function to call on a
+ * list, and asserting on a returned list would test nothing about the ceiling.
+ */
+function collect(scan, { lintLevel = null, file = null } = {}) {
+  const bus = new Diagnostics({ lintLevel });
+  scan({ diagnostics: bus, file });
+  return bus.all;
+}
+
+const codes = (diags) => diags.map((d) => d.code);
 
 function write(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -27,52 +44,56 @@ function write(filePath, content) {
 
 describe('scanText', () => {
   test('flags unresolved field tokens', () => {
-    const findings = scanText('one of the top mages, has built {$her~} reputation');
-    expect(findings).toHaveLength(1);
-    expect(findings[0]).toMatchObject({ category: 'unresolved-field-token', severity: SEVERITY.ERROR, match: '{$her~}' });
-    expect(findings[0].lines).toEqual([1]);
+    const diags = collect((ctx) => scanText('one of the top mages, has built {$her~} reputation', ctx));
+    expect(diags).toHaveLength(1);
+    expect(diags[0]).toMatchObject({ code: 'CL0430', severity: SEVERITY.ERROR, line: 1 });
+    expect(diags[0].message).toContain('{$her~}');
   });
 
   test('flags unexpanded compile variables', () => {
-    const findings = scanText('Setting: {%setting}');
-    expect(findings).toHaveLength(1);
-    expect(findings[0]).toMatchObject({ category: 'unexpanded-variable', match: '{%setting}' });
+    const diags = collect((ctx) => scanText('Setting: {%setting}', ctx));
+    expect(diags).toHaveLength(1);
+    expect(diags[0].code).toBe('CL0431');
+    expect(diags[0].message).toContain('{%setting}');
   });
 
   test('flags leaked template render functions', () => {
-    const findings = scanText('Physical Traits: {join("; ", $body.Physical Traits.gender)}');
-    expect(findings.some(f => f.category === 'template-function')).toBe(true);
+    const diags = collect((ctx) => scanText('Physical Traits: {join("; ", $body.Physical Traits.gender)}', ctx));
+    expect(codes(diags)).toContain('CL0432');
   });
 
   test('flags leaked template control tags', () => {
-    const findings = scanText('{if $body.Background}\nBackground:\n{/if}');
-    const categories = findings.map(f => f.category);
-    expect(categories).toContain('template-tag');
+    const diags = collect((ctx) => scanText('{if $body.Background}\nBackground:\n{/if}', ctx));
+    expect(codes(diags)).toContain('CL0433');
   });
 
   test('flags unresolved verb conjugation markers', () => {
-    const findings = scanText('Aness love[s] magic research');
-    expect(findings.some(f => f.category === 'verb-conjugation-marker' && f.match === '[s]')).toBe(true);
+    const diags = collect((ctx) => scanText('Aness love[s] magic research', ctx));
+    expect(diags.some((d) => d.code === 'CL0434' && d.message.includes('[s]'))).toBe(true);
   });
 
   test('flags a made-up verb marker like [does] as a suspect marker, not silently', () => {
-    const findings = scanText('Aness love[does] magic research');
-    expect(findings).toContainEqual(expect.objectContaining({ category: 'suspect-verb-marker', severity: SEVERITY.WARN, match: '[does]' }));
+    const diags = collect((ctx) => scanText('Aness love[does] magic research', ctx));
+    expect(diags).toContainEqual(expect.objectContaining({
+      code: 'CL0436', severity: SEVERITY.WARN, message: expect.stringContaining('[does]'),
+    }));
   });
 
   test('flags other guessed verb-marker typos ([have], [do])', () => {
-    expect(scanText('Aness [have] the ring').some(f => f.category === 'suspect-verb-marker' && f.match === '[have]')).toBe(true);
-    expect(scanText('Aness [do] not know').some(f => f.category === 'suspect-verb-marker' && f.match === '[do]')).toBe(true);
+    expect(collect((ctx) => scanText('Aness [have] the ring', ctx))
+      .some((d) => d.code === 'CL0436' && d.message.includes('[have]'))).toBe(true);
+    expect(collect((ctx) => scanText('Aness [do] not know', ctx))
+      .some((d) => d.code === 'CL0436' && d.message.includes('[do]'))).toBe(true);
   });
 
   test('does not flag the real markers or [e] as suspect', () => {
-    const findings = scanText('[e] Aness love[s] magic, love[es], love[is], love[was], love[has]');
-    expect(findings.some(f => f.category === 'suspect-verb-marker')).toBe(false);
+    const diags = collect((ctx) => scanText('[e] Aness love[s] magic, love[es], love[is], love[was], love[has]', ctx));
+    expect(diags.some((d) => d.code === 'CL0436')).toBe(false);
   });
 
   test('does not flag [Secret: ...] or other non-lowercase-word bracket usage as suspect', () => {
-    const findings = scanText('[Secret: hidden detail the AI should not reveal]');
-    expect(findings.some(f => f.category === 'suspect-verb-marker')).toBe(false);
+    const diags = collect((ctx) => scanText('[Secret: hidden detail the AI should not reveal]', ctx));
+    expect(diags.some((d) => d.code === 'CL0436')).toBe(false);
   });
 
   test('does not flag a single-word AID trigger in the fence as a suspect marker', () => {
@@ -85,8 +106,8 @@ encapsulate: true
 
 [e] A plain wooden door leading to the cellar.
 `;
-    const findings = scanText(card);
-    expect(findings.some(f => f.category === 'suspect-verb-marker')).toBe(false);
+    const diags = collect((ctx) => scanText(card, ctx));
+    expect(diags.some((d) => d.code === 'CL0436')).toBe(false);
   });
 
   test('still flags a suspect marker in the body even when the fence has a single-word trigger', () => {
@@ -99,29 +120,28 @@ encapsulate: true
 
 [e] Aness love[does] magic research.
 `;
-    const findings = scanText(card);
-    expect(findings).toContainEqual(expect.objectContaining({ category: 'suspect-verb-marker', match: '[does]' }));
+    const diags = collect((ctx) => scanText(card, ctx));
+    expect(diags).toContainEqual(expect.objectContaining({ code: 'CL0436', message: expect.stringContaining('[does]') }));
   });
 
   test('flags JS interpolation artifacts', () => {
-    const findings = scanText('Background: [object Object]');
-    expect(findings.some(f => f.category === 'js-interpolation-artifact')).toBe(true);
+    const diags = collect((ctx) => scanText('Background: [object Object]', ctx));
+    expect(diags.some((d) => d.code === 'CL0435')).toBe(true);
   });
 
   test('flags bare undefined/NaN as warnings', () => {
-    const findings = scanText('Age: undefined');
-    expect(findings[0]).toMatchObject({ category: 'js-interpolation-word', severity: SEVERITY.WARN });
+    const diags = collect((ctx) => scanText('Age: undefined', ctx));
+    expect(diags[0]).toMatchObject({ code: 'CL0437', severity: SEVERITY.WARN });
   });
 
-  test('groups repeated occurrences of the same token with all line numbers', () => {
-    const text = '{$her~}\nsecond line\n{$her~}';
-    const findings = scanText(text);
-    expect(findings).toHaveLength(1);
-    expect(findings[0].lines).toEqual([1, 3]);
+  test('flags a repeated token once per occurrence, with its own line number', () => {
+    const diags = collect((ctx) => scanText('{$her~}\nsecond line\n{$her~}', ctx));
+    expect(diags).toHaveLength(2);
+    expect(diags.map((d) => d.line)).toEqual([1, 3]);
   });
 
   test('clean text produces no findings', () => {
-    expect(scanText('Aness loves magic research — she leaps to conclusions.')).toEqual([]);
+    expect(collect((ctx) => scanText('Aness loves magic research — she leaps to conclusions.', ctx))).toEqual([]);
   });
 });
 
@@ -152,25 +172,24 @@ describe('structural checks read through the shared parser', () => {
   test('a heading with no fence beneath it is not a story card', () => {
     // AI Instructions and Author's Note are headed sections without fences. Treating
     // one as a card would fire every structural check on every section of them.
-    expect(scanStoryCardStructure('## Tone\n\nWrite in close third person.')).toEqual([]);
+    expect(collect((ctx) => scanStoryCardStructure('## Tone\n\nWrite in close third person.', ctx))).toEqual([]);
   });
 
   test('a trigger list inside the body does not satisfy the fence check', () => {
     // The check reads the parsed fence, not the text: prose that happens to contain
     // `triggers: [A]` below the fence must not make an empty card look populated.
     const card = '## A\n~~~\n~~~\ntriggers: [A]\n';
-    expect(scanStoryCardStructure(card).map((f) => f.category))
-      .toContain('empty-triggers');
+    expect(codes(collect((ctx) => scanStoryCardStructure(card, ctx)))).toContain('CL0635');
   });
 });
 
 describe('scanStoryCardStructure', () => {
   test('valid [e] card produces no findings', () => {
-    expect(scanStoryCardStructure(CARD_WITH_E)).toEqual([]);
+    expect(collect((ctx) => scanStoryCardStructure(CARD_WITH_E, ctx))).toEqual([]);
   });
 
   test('valid discovery-marker card produces no findings', () => {
-    expect(scanStoryCardStructure(CARD_DISCOVERED)).toEqual([]);
+    expect(collect((ctx) => scanStoryCardStructure(CARD_DISCOVERED, ctx))).toEqual([]);
   });
 
   test('flags empty trigger list', () => {
@@ -183,8 +202,8 @@ encapsulate: true
 
 [e] NoTriggers has no triggers
 `;
-    const findings = scanStoryCardStructure(bad);
-    expect(findings).toContainEqual(expect.objectContaining({ category: 'empty-triggers', card: 'NoTriggers' }));
+    const diags = collect((ctx) => scanStoryCardStructure(bad, ctx));
+    expect(diags).toContainEqual(expect.objectContaining({ code: 'CL0635', message: expect.stringContaining('NoTriggers') }));
   });
 
   /**
@@ -203,7 +222,7 @@ encapsulate: false
 
 startDate: 06/28/1320
 `;
-    expect(scanStoryCardStructure(card)).toEqual([]);
+    expect(collect((ctx) => scanStoryCardStructure(card, ctx))).toEqual([]);
   });
 
   /**
@@ -221,14 +240,13 @@ encapsulate: false
 
 A harbor town.
 `;
-    expect(scanStoryCardStructure(card))
-      .toContainEqual(expect.objectContaining({ category: 'empty-triggers', card: 'Lian Quay' }));
+    expect(collect((ctx) => scanStoryCardStructure(card, ctx)))
+      .toContainEqual(expect.objectContaining({ code: 'CL0635', message: expect.stringContaining('Lian Quay') }));
   });
 
   test('empty-triggers is opinion-layer, so lint.level can reach it', () => {
-    const { applyLevel } = require('../../src/lint');
     const card = '## X\n\n~~~\ntriggers: []\n~~~\n\nbody\n';
-    expect(applyLevel(scanStoryCardStructure(card), 'off')).toEqual([]);
+    expect(collect((ctx) => scanStoryCardStructure(card, ctx), { lintLevel: 'off' })).toEqual([]);
   });
 
 });
@@ -236,75 +254,99 @@ A harbor town.
 // ── findLintableFiles ─────────────────────────────────────────────────────────
 
 describe('scanNativePlaceholders — the §12.4 confusability check', () => {
-  const matches = (text) => scanNativePlaceholders(text).map((f) => f.match);
-
   test('identifier-shaped content warns — that is the transposition', () => {
     // `{$she}` mistyped as `${she}` reaches the player as a prompt asking them to
     // type the word "she".
-    expect(matches('The wind caught ${she} hair.')).toEqual(['${she}']);
+    const diags = collect((ctx) => scanNativePlaceholders('The wind caught ${she} hair.', ctx));
+    expect(diags).toHaveLength(1);
+    expect(diags[0].code).toBe('CL0546');
+    expect(diags[0].message).toContain('${she}');
   });
 
   test('dotted token shapes warn too', () => {
-    expect(matches('${Aria.she} and ${body.Field}'))
-      .toEqual(['${Aria.she}', '${body.Field}']);
+    const diags = collect((ctx) => scanNativePlaceholders('${Aria.she} and ${body.Field}', ctx));
+    expect(diags).toHaveLength(2);
+    expect(diags[0].message).toContain('${Aria.she}');
+    expect(diags[1].message).toContain('${body.Field}');
   });
 
   test('a question is a real placeholder and stays silent', () => {
     // The whole reason this is a shape test rather than §12.4's blanket WARN: three live
     // projects author native placeholders on purpose, and a blanket check opens with
     // thirteen false positives.
-    expect(matches('${What is your name?}')).toEqual([]);
-    expect(matches('${Date: (MM/DD/YYYY)}')).toEqual([]);
-    expect(matches('${Opening:}')).toEqual([]);
+    expect(collect((ctx) => scanNativePlaceholders('${What is your name?}', ctx))).toEqual([]);
+    expect(collect((ctx) => scanNativePlaceholders('${Date: (MM/DD/YYYY)}', ctx))).toEqual([]);
+    expect(collect((ctx) => scanNativePlaceholders('${Opening:}', ctx))).toEqual([]);
   });
 
   test("Latitude's premade specials stay silent", () => {
     // Identifier-shaped by construction, and unavoidable: VL's substitution produces a
     // question from a declared key and cannot produce a special, so every project wanting
     // them writes them raw forever.
-    expect(matches('${character.name} and ${character.gender}')).toEqual([]);
-    expect(matches('${character.pronoun.themselves}')).toEqual([]);
+    expect(collect((ctx) => scanNativePlaceholders('${character.name} and ${character.gender}', ctx))).toEqual([]);
+    expect(collect((ctx) => scanNativePlaceholders('${character.pronoun.themselves}', ctx))).toEqual([]);
   });
 
   test('a nested placeholder is judged as one occurrence', () => {
     // Codex Loom emits nesting (§12.2), so a non-greedy matcher would split its own output
     // and then judge the fragments on the wrong content.
-    expect(matches('${What is ${Their name?} like?}')).toEqual([]);
+    expect(collect((ctx) => scanNativePlaceholders('${What is ${Their name?} like?}', ctx))).toEqual([]);
   });
 
-  test('groups repeats and records every line', () => {
-    const [finding] = scanNativePlaceholders('${she}\nfiller\n${she}');
-    expect(finding.lines).toHaveLength(2);
-    expect(finding.severity).toBe(SEVERITY.WARN);
+  test('records a diagnostic per occurrence, each with its own line', () => {
+    const diags = collect((ctx) => scanNativePlaceholders('${she}\nfiller\n${she}', ctx));
+    expect(diags).toHaveLength(2);
+    expect(diags.map((d) => d.line)).toEqual([1, 3]);
+    expect(diags.every((d) => d.severity === SEVERITY.WARN)).toBe(true);
   });
 
   test('the hint shows the token spelling that was probably meant', () => {
-    const [finding] = scanNativePlaceholders('${she}');
-    expect(finding.hint).toContain('{$she}');
+    const [diag] = collect((ctx) => scanNativePlaceholders('${she}', ctx));
+    expect(diag.hint).toContain('{$she}');
   });
 });
 
 describe('the compiler / lint split in the offline scanner (§12.5)', () => {
-  const { applyLevel } = require('../../src/lint');
+  // The ceiling moved from a filter over a returned list to `Diagnostics.add`, so these
+  // assert on what a levelled bus *accepted* rather than on what a filter removed. The
+  // silenced diagnostic is never on the bus at all, which is the property worth having: the
+  // report, the exit code and the terminal all read the same bus, and a filter applied to
+  // one of them is how a silenced diagnostic still fails a build.
+  const SAMPLE = '{$she} love[does] it {if $x}{/if} undefined';
 
   test('level: off silences the opinions and leaves every fact standing', () => {
-    const findings = scanText('{$she} love[does] it {if $x}{/if} undefined');
-    const kept = applyLevel(findings, 'off').map((f) => f.category);
-    expect(kept).toEqual(expect.arrayContaining(['unresolved-field-token', 'template-tag']));
-    expect(kept).not.toContain('suspect-verb-marker');
-    expect(kept).not.toContain('js-interpolation-word');
+    const kept = codes(collect((ctx) => scanText(SAMPLE, ctx), { lintLevel: 'off' }));
+    expect(kept).toEqual(expect.arrayContaining(['CL0430', 'CL0433']));
+    expect(kept).not.toContain('CL0436'); // suspect verb marker
+    expect(kept).not.toContain('CL0437'); // bare undefined/NaN
   });
 
   test('level: warn keeps the opinions at WARN and does not touch the facts', () => {
-    const findings = scanText('{$she} love[does] it');
-    const kept = applyLevel(findings, 'warn');
-    expect(kept.find((f) => f.category === 'unresolved-field-token').severity).toBe(SEVERITY.ERROR);
-    expect(kept.find((f) => f.category === 'suspect-verb-marker').severity).toBe(SEVERITY.WARN);
+    const kept = collect((ctx) => scanText('{$she} love[does] it', ctx), { lintLevel: 'warn' });
+    expect(kept.find((d) => d.code === 'CL0430').severity).toBe(SEVERITY.ERROR);
+    expect(kept.find((d) => d.code === 'CL0436').severity).toBe(SEVERITY.WARN);
   });
 
-  test('no level leaves the list exactly as scanned', () => {
-    const findings = scanText('{$she} love[does] it');
-    expect(applyLevel(findings, null)).toBe(findings);
+  test('no level raises everything the scan found', () => {
+    const kept = codes(collect((ctx) => scanText(SAMPLE, ctx)));
+    expect(kept).toEqual(expect.arrayContaining(['CL0430', 'CL0433', 'CL0436', 'CL0437']));
+  });
+
+  test('the two codes minted for the offline scanner are opinion-layer too', () => {
+    // CL0546 and CL0635 had no code before Package 3 and so could not be reached through
+    // `isOpinion`. Their reachability by `lint.level` is the thing the registry entry buys.
+    const card = '## X\n\n~~~\ntriggers: []\n~~~\n\n${she}\n';
+    const off = codes(collect((ctx) => {
+      scanStoryCardStructure(card, ctx);
+      scanNativePlaceholders(card, ctx);
+    }, { lintLevel: 'off' }));
+    expect(off).toEqual([]);
+
+    const on = codes(collect((ctx) => {
+      scanStoryCardStructure(card, ctx);
+      scanNativePlaceholders(card, ctx);
+    }));
+    expect(on).toEqual(expect.arrayContaining(['CL0635', 'CL0546']));
   });
 });
 
@@ -334,7 +376,7 @@ describe('runLintMode', () => {
     const outDir = makeTmp();
     const result = runLintMode(tmp, outDir);
     expect(result).toEqual({
-      written: [], reportPath: null, errorCount: 0, warnCount: 0, fileCount: 0, findings: [],
+      written: [], reportPath: null, errorCount: 0, warnCount: 0, fileCount: 0,
     });
     fs.rmSync(tmp, { recursive: true });
     fs.rmSync(outDir, { recursive: true });
@@ -351,7 +393,7 @@ describe('runLintMode', () => {
     expect(result.errorCount).toBeGreaterThan(0);
     expect(fs.existsSync(result.reportPath)).toBe(true);
     const reportText = fs.readFileSync(result.reportPath, 'utf8');
-    expect(reportText).toContain('unresolved-field-token');
+    expect(reportText).toContain('CL0430');
 
     fs.rmSync(tmp, { recursive: true });
     fs.rmSync(outDir, { recursive: true });
@@ -365,10 +407,12 @@ describe('runLintMode', () => {
     const outDir = makeTmp();
     write(path.join(tmp, 'Story Cards', 'Character', 'bare.md'), ['~~~', 'She walks in.', '~~~', ''].join('\n'));
 
-    const result = runLintMode(tmp, outDir);
+    const bus = new Diagnostics();
+    const result = runLintMode(tmp, outDir, { diagnostics: bus });
     expect(result.written.length).toBeGreaterThan(0);
-    const untitled = result.findings.find((f) => f.category === 'empty-triggers');
-    expect(untitled).toMatchObject({ card: '(untitled)', relPath: path.join('Story Cards', 'Character', 'bare.md') });
+    const untitled = bus.all.find((d) => d.code === 'CL0635');
+    expect(untitled).toMatchObject({ file: path.join('Story Cards', 'Character', 'bare.md') });
+    expect(untitled.message).toContain('card "(untitled)"');
     expect(fs.readFileSync(result.reportPath, 'utf8')).toContain('card "(untitled)"');
 
     fs.rmSync(tmp, { recursive: true });
@@ -389,7 +433,7 @@ describe('runLintMode', () => {
     const result = runLintMode(tmp, outDir, { config: { lint: { packs: { wtg: {} } } } });
     const reportText = fs.readFileSync(result.reportPath, 'utf8');
 
-    const hits = reportText.split('\n').filter((l) => l.includes('CL-wtg/0002') || l.includes('(pack:wtg)'));
+    const hits = reportText.split('\n').filter((l) => l.includes('CL-wtg/0002'));
     expect(hits).toHaveLength(1);
     expect(hits[0]).toContain('leaf "B"');
     expect(hits[0]).not.toContain('leaf "A"');
@@ -412,7 +456,7 @@ describe('runLintMode', () => {
 
     const result = runLintMode(tmp, outDir, { config: { lint: { packs: { duckieConv: {} } } } });
     const reportText = fs.readFileSync(result.reportPath, 'utf8');
-    const packLines = reportText.split('\n').filter((l) => l.includes('(pack:duckieConv)'));
+    const packLines = reportText.split('\n').filter((l) => l.includes('CL-duckieConv/'));
 
     // budget fired (fell back to standard), and the meta role rule flagged the bad value.
     expect(packLines.some((l) => /role "standard" targets 400/.test(l))).toBe(true);

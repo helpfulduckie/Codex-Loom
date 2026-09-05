@@ -89,6 +89,74 @@ function normalizeManifest(raw, rootDir) {
 }
 
 /**
+ * Copy a set's tree into a temp directory, skipping the committed baselines — they are the
+ * comparison target, not an input. The reports baseline must be excluded for a second reason:
+ * fresh reports get written to that same relative path inside the temp tree, and a copied
+ * baseline would survive there as a stale file the file-set assertion could not tell from a
+ * real one. OUTPUT_SUBDIR ("Velvet Lattice/") is excluded for a third: it is compiler output,
+ * gitignored and absent on a clean clone, but on a checkout where someone ran the CLI against
+ * a project directly it survives the copy — and compile does not run with --clean here — so a
+ * stale per-leaf dir the current compiler no longer writes would linger as an orphan and break
+ * the file-set assertion. Phase 12 Session D hit this with the Scripts/ lift and deleted the
+ * local dirs by hand; excluding it here is the fix.
+ *
+ * `prefix` is the mkdtemp prefix — how someone reading `os.tmpdir()` tells a stuck test run
+ * from a stuck regeneration, so the two callers keep their own.
+ */
+function prepareTempTree(set, prefix) {
+  const {
+    root, BASELINE_SUBDIR, REPORTS_SUBDIR, OUTPUT_SUBDIR,
+  } = set;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  fs.cpSync(root, tmpDir, {
+    recursive: true,
+    filter: (src) => {
+      const segments = path.relative(root, src).split(path.sep);
+      return !segments.includes(BASELINE_SUBDIR) && !segments.includes(REPORTS_SUBDIR)
+        && !segments.includes(OUTPUT_SUBDIR);
+    },
+  });
+  return tmpDir;
+}
+
+/**
+ * Where `structure.reports` resolves for a config, read back via `loadCompileConfig` — a
+ * second, side-effect-free parse of the same file. `compile()` writes reports there and
+ * returns nothing that names the path.
+ */
+function resolvedReportsDir(configPath) {
+  const config = loadCompileConfig(configPath, { diagnostics: new Diagnostics() });
+  return config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
+}
+
+/**
+ * Copy `diff`/`annotate`/`inventory`/`schemaTables` output into `<REPORTS_SUBDIR>/<mode>/`.
+ * `compile()` writes those wherever `structure.reports` resolves and returns nothing that
+ * names that path, so it is read back via `loadCompileConfig` — a second, side-effect-free
+ * parse of the same config. Not called when reports are frozen in place: there the files
+ * are already where the baseline expects them.
+ */
+function collectCompileReports(project, configPath, tmpDir, set) {
+  const { REPORTS_SUBDIR, COMPILE_REPORT_LAYOUT } = set;
+  const reportBase = resolvedReportsDir(configPath);
+  for (const mode of project.compileReports || []) {
+    const layout = COMPILE_REPORT_LAYOUT[mode];
+    if (!layout) continue;
+    const dir = path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
+    fs.mkdirSync(dir, { recursive: true });
+    if (layout.files) {
+      for (const f of layout.files) {
+        const src = path.join(reportBase, f);
+        if (fs.existsSync(src)) fs.copyFileSync(src, path.join(dir, f));
+      }
+    } else if (layout.subdir) {
+      const src = path.join(reportBase, layout.subdir);
+      if (fs.existsSync(src)) fs.cpSync(src, dir, { recursive: true });
+    }
+  }
+}
+
+/**
  * `describe.each` rejects an empty array, so an absent set supplies one placeholder rather
  * than an empty project list. `reports` and `compileReports` are non-empty for the same
  * reason — a nested `describe.each` is still evaluated to collect test names even when the
@@ -131,6 +199,10 @@ function describeBaselineSet(options) {
     COMPILE_REPORT_LAYOUT = {},
   } = manifest;
   const PROJECTS = present ? manifest.PROJECTS : absentProjects(absentReason);
+  const set = {
+    root, OUTPUT_SUBDIR, BASELINE_SUBDIR, REPORTS_SUBDIR, SOURCE_SUBDIR, CONFIG_NAME,
+    REPORT_MODES, REPORTS_IN_PLACE, COMPILE_REPORT_LAYOUT,
+  };
 
   let tmpDir;
 
@@ -141,36 +213,7 @@ function describeBaselineSet(options) {
    */
   function reportsDirFor(project, configPath, mode) {
     if (!REPORTS_IN_PLACE) return path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
-    const config = loadCompileConfig(configPath, { diagnostics: new Diagnostics() });
-    const base = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
-    return path.join(base, mode);
-  }
-
-  /**
-   * Copy `diff`/`annotate`/`inventory`/`schemaTables` output into `<REPORTS_SUBDIR>/<mode>/`.
-   * `compile()` writes those wherever `structure.reports` resolves and returns nothing that
-   * names that path, so it is read back via `loadCompileConfig` — a second, side-effect-free
-   * parse of the same config. Not called when reports are frozen in place: there the files
-   * are already where the baseline expects them.
-   */
-  function collectCompileReports(project, configPath) {
-    const config = loadCompileConfig(configPath, { diagnostics: new Diagnostics() });
-    const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
-    for (const mode of project.compileReports || []) {
-      const layout = COMPILE_REPORT_LAYOUT[mode];
-      if (!layout) continue;
-      const dir = path.join(tmpDir, project.dir, REPORTS_SUBDIR, mode);
-      fs.mkdirSync(dir, { recursive: true });
-      if (layout.files) {
-        for (const f of layout.files) {
-          const src = path.join(reportBase, f);
-          if (fs.existsSync(src)) fs.copyFileSync(src, path.join(dir, f));
-        }
-      } else if (layout.subdir) {
-        const src = path.join(reportBase, layout.subdir);
-        if (fs.existsSync(src)) fs.cpSync(src, dir, { recursive: true });
-      }
-    }
+    return path.join(resolvedReportsDir(configPath), mode);
   }
 
   beforeAll(() => {
@@ -178,23 +221,7 @@ function describeBaselineSet(options) {
     // is what actually stops an absent set from compiling a tree that is not there.
     if (!present) return;
 
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-baseline-'));
-
-    // Copy the set tree, skipping the committed baselines — they are the comparison target,
-    // not an input. The reports baseline must be excluded for a second reason: the harness
-    // writes fresh reports to that same relative path inside the temp tree, and a copied
-    // baseline would survive there as a stale file the file-set assertion could not tell
-    // from a real one. OUTPUT_SUBDIR is excluded for a third: on a checkout where the CLI
-    // was run against a project directly it holds output this harness does not clean, so an
-    // orphan the current compiler no longer writes would break the file-set assertion.
-    fs.cpSync(root, tmpDir, {
-      recursive: true,
-      filter: (src) => {
-        const segments = path.relative(root, src).split(path.sep);
-        return !segments.includes(BASELINE_SUBDIR) && !segments.includes(REPORTS_SUBDIR)
-          && !segments.includes(OUTPUT_SUBDIR);
-      },
-    });
+    tmpDir = prepareTempTree(set, 'codex-loom-baseline-');
 
     // compile() prints nothing; progress goes to an `options.log` the harness does not pass,
     // and the drift notice goes to that same log, so the snapshot check that follows is
@@ -224,7 +251,7 @@ function describeBaselineSet(options) {
         REPORT_MODES[mode]()(scenarioRoot, dir);
       }
 
-      if (!REPORTS_IN_PLACE) collectCompileReports(project, configPath);
+      if (!REPORTS_IN_PLACE) collectCompileReports(project, configPath, tmpDir, set);
     }
   }, 600000);
 
@@ -402,5 +429,5 @@ function describeBaselineSet(options) {
 }
 
 module.exports = {
-  describeBaselineSet, DEFAULT_REPORT_MODES,
+  describeBaselineSet, DEFAULT_REPORT_MODES, prepareTempTree, resolvedReportsDir, collectCompileReports,
 };

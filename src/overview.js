@@ -3,38 +3,10 @@
 const fs   = require('fs');
 const path = require('path');
 
-const { buildTree, flattenNodes, leafNodes } = require('./compiledTree');
+const { buildTree, flattenNodes, leafNodes, collectMdFiles } = require('./compiledTree');
+const { readFileTrim } = require('./util');
 const { NULL_LOG } = require('./log');
 const { sanitizeFilename, shiftHeadings, leafFileName } = require('./report');
-
-// ── private helpers ──────────────────────────────────────────────────────────
-
-function readFile(filePath) {
-  try {
-    return fs.readFileSync(filePath, 'utf8').trim();
-  } catch {
-    return null;
-  }
-}
-
-function collectMarkdownFiles(dir) {
-  const results = [];
-  if (!fs.existsSync(dir)) return results;
-
-  function walk(current) {
-    const entries = fs.readdirSync(current, { withFileTypes: true });
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-      } else if (entry.isFile() && entry.name.endsWith('.md')) {
-        results.push(full);
-      }
-    }
-  }
-  walk(dir);
-  return results;
-}
 
 // ── exported building blocks ─────────────────────────────────────────────────
 
@@ -44,7 +16,7 @@ function collectMarkdownFiles(dir) {
  * headingLevel controls the markdown heading depth for group names.
  */
 function buildStoryCardsBlock(storyCardsDir, headingLevel) {
-  const files = collectMarkdownFiles(storyCardsDir);
+  const files = collectMdFiles(storyCardsDir);
   if (files.length === 0) return null;
 
   const hashes     = '#'.repeat(headingLevel);
@@ -66,7 +38,7 @@ function buildStoryCardsBlock(storyCardsDir, headingLevel) {
   for (const groupName of groupOrder) {
     if (groupName) lines.push(`${hashes} ${groupName}`);
     for (const file of groups[groupName]) {
-      const content = readFile(file);
+      const content = readFileTrim(file);
       if (content) lines.push(shiftHeadings(content, headingLevel - 1));
     }
   }
@@ -90,10 +62,10 @@ function buildMergedStoryCardsBlock(storyCardsDirs, headingLevel) {
 
   for (const dir of storyCardsDirs) {
     if (!fs.existsSync(dir)) continue;
-    for (const file of collectMarkdownFiles(dir)) {
+    for (const file of collectMdFiles(dir)) {
       const parts = path.relative(dir, file).split(path.sep);
       const type = parts.length > 1 ? parts[0] : '';
-      const content = readFile(file);
+      const content = readFileTrim(file);
       if (!content) continue;
       for (const raw of content.split(/(?=^## )/m)) {
         const chunk = raw.trim();
@@ -194,10 +166,10 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log = NULL_LOG)
   while (true) {
     const compDir = path.join(dir, 'Components');
     if (fs.existsSync(compDir)) {
-      if (opening === null) opening = readFile(path.join(compDir, 'Opening.md'));
-      if (plotEss === null) plotEss = readFile(path.join(compDir, 'Plot Essentials.md'));
-      if (ainText === null) ainText = readFile(path.join(compDir, 'AI Instructions.md'));
-      if (anText  === null) anText  = readFile(path.join(compDir, "Author Notes.md"));
+      if (opening === null) opening = readFileTrim(path.join(compDir, 'Opening.md'));
+      if (plotEss === null) plotEss = readFileTrim(path.join(compDir, 'Plot Essentials.md'));
+      if (ainText === null) ainText = readFileTrim(path.join(compDir, 'AI Instructions.md'));
+      if (anText  === null) anText  = readFileTrim(path.join(compDir, "Author Notes.md"));
     }
     if (opening !== null && plotEss !== null && ainText !== null && anText !== null) break;
     const parent     = path.dirname(dir);

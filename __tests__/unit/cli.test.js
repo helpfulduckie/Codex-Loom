@@ -435,8 +435,8 @@ describe('CLI --lint-level flag', () => {
     expect(result.status).toBe(1);
     const report = fs.readFileSync(
       path.join(tmp, 'overview', 'lint', 'scenario.lint.md'), 'utf8');
-    expect(report).toContain('unresolved-field-token');
-    expect(report).not.toContain('suspect-verb-marker');
+    expect(report).toContain('CL0430');
+    expect(report).not.toContain('CL0436');
   });
 
   test('the space-separated spelling works too, and does not eat the path', () => {
@@ -454,7 +454,7 @@ describe('CLI --lint-level flag', () => {
     expect(result.status).toBe(1);
     const report = fs.readFileSync(
       path.join(tmp, 'overview', 'lint', 'scenario.lint.md'), 'utf8');
-    expect(report).toContain('suspect-verb-marker');
+    expect(report).toContain('CL0436');
   });
 
   test('--lint exits 1 on an ERROR finding and 0 on a tree that only has WARNs', () => {
@@ -488,8 +488,8 @@ describe('CLI --lint-level flag', () => {
     expect(result.status).toBe(1);
     const report = fs.readFileSync(
       path.join(tmp, 'proj', 'output', 'Overview', 'lint', 'output.lint.md'), 'utf8');
-    expect(report).toContain('unresolved-field-token');
-    expect(report).not.toContain('suspect-verb-marker');
+    expect(report).toContain('CL0430');
+    expect(report).not.toContain('CL0436');
   });
 
   test('the flag wins over the config key, being what someone typed for this run', () => {
@@ -504,7 +504,7 @@ describe('CLI --lint-level flag', () => {
     expect(result.status).toBe(0);
     const report = fs.readFileSync(
       path.join(tmp, 'proj', 'output', 'Overview', 'lint', 'output.lint.md'), 'utf8');
-    expect(report).toContain('suspect-verb-marker');
+    expect(report).toContain('CL0436');
   });
 
   test('an unknown level exits nonzero and names the three legal ones', () => {
