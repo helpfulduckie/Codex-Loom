@@ -213,6 +213,8 @@ Used in a template as: `The year is {%year}.`
 
 `{%key}` is expanded consistently across item bodies, templates, opening prose, component specs, branch `title`/`roles`, and the config path fields (`structure.input.items`, `structure.input.library`, and `structure.input.templates`), making variables useful both as content values and as shared path prefixes across the config (see the `structure.input.library` section above for an example). The one exception is `include:`/`import:` paths, which resolve once before branches are enumerated and therefore see **root** variables only, not per-branch overrides.
 
+A branch `title:` and the root scenario `title:` also resolve role and pronoun tokens (`{$Role}`, `{$Role.pronoun}` — see [Roles](13-roles.md)), the same as any other rendered text, and `{%key}` still expands first.
+
 ### `components`
 
 Specifies what content to write for root-level component files. Each value is an inline string, a relative file path, or a `{%variable}` / `{%libraryName}` token that expands to one (component specs go through the same single `{%…}` expander as every other path — there is no separate component namespace).

@@ -77,10 +77,10 @@ function writeComponentFile(outputDir, filename, content, sink) {
 }
 
 /**
- * The three computations every `walkBranchTree` visitor in this file opens with: the
- * node's output directory, its variables merged over the parent's, and its placeholder
- * table merged over the parent's. Framing layers two more keys (`roles`, `rolesDeclared`)
- * on top of what this returns; labels and placeholders use exactly these three.
+ * The five computations every `walkBranchTree` visitor in this file opens with: the
+ * node's output directory, its variables merged over the parent's, its placeholder table
+ * merged over the parent's, and its role table (with the `rolesDeclared` sticky flag)
+ * merged over the parent's. All three walkers use exactly these five.
  */
 function nodeVisitPrologue(name, node, isRoot, state) {
   const outputBase = isRoot ? state.outputBase : path.join(state.outputBase, 'Branches', name);
@@ -88,7 +88,19 @@ function nodeVisitPrologue(name, node, isRoot, state) {
     ? Object.assign({}, state.variables, node.variables)
     : state.variables;
   const table = mergePlaceholders(state.table, node);
-  return { outputBase, variables, table };
+  // Key-wise, `~`-deleting merge, the same one `walkBranchChain` uses for roles in the leaf
+  // loop, reused rather than reimplemented so the two cannot disagree. `rolesDeclared` is
+  // sticky once any ancestor (including the project root) declares a `roles:` key at all,
+  // even if every binding it declared unbinds to nothing (§9.3's CL0540 gating cares about
+  // that distinction, not just whether the merged table is non-empty). No `onWarn`: these
+  // walkers have never surfaced per-node unbind warnings.
+  const rolesDeclared = state.rolesDeclared || !!(node && node.roles);
+  const roles = mergeUnbindable(state.roles, node && node.roles, {
+    code: DIAG_CODES.ROLE_UNBIND_UNKNOWN, kind: 'role', onWarn: null,
+  });
+  return {
+    outputBase, variables, table, roles, rolesDeclared,
+  };
 }
 
 /**
@@ -161,22 +173,14 @@ function writeFramingRecursive(rootNode, outputBase, opts = {}) {
   };
 
   walkBranchTree(rootNode, ({ name, node, path: nodePath, isLeaf, isRoot, state }) => {
-    const { outputBase: nodeOutput, variables: branchVars, table } = nodeVisitPrologue(name, node, isRoot, state);
+    const {
+      outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
+    } = nodeVisitPrologue(name, node, isRoot, state);
 
     const framing = node && node.components && node.components.branchFraming !== undefined
       ? node.components.branchFraming
       : null;
 
-    // Roles merge the same way `walkBranchChain` merges them for the leaf loop — key-wise,
-    // `~` deleting, `rolesDeclared` sticky once any ancestor (including the project root)
-    // declares a `roles:` key at all, even if every binding it declared unbinds to nothing
-    // (§9.3's CL0540 gating cares about that distinction, not just whether the merged table
-    // is non-empty). No `onWarn` here, matching `mergePlaceholders` two lines above: this
-    // walker has never surfaced per-node unbind warnings and Step 4 does not start now.
-    const rolesDeclared = state.rolesDeclared || !!(node && node.roles);
-    const roles = mergeUnbindable(state.roles, node && node.roles, {
-      code: DIAG_CODES.ROLE_UNBIND_UNKNOWN, kind: 'role', onWarn: null,
-    });
     // The same value the leaf loop reads for this node: an inherited protagonist is a real
     // binding whether or not *this* node is the one that declared `roles:`, which is why the
     // map is read directly rather than gated on `rolesDeclared`.
@@ -239,8 +243,7 @@ function writeFramingRecursive(rootNode, outputBase, opts = {}) {
 }
 
 /**
- * Write Label.md at every node in the branch tree, the project root included
- * (Phase 11 Step 0).
+ * Write Label.md at every node in the branch tree, the project root included.
  *
  * Node-level, not leaf-level, which is why it uses the tree visitor rather than the
  * leaf loop: a branch label belongs to the node the player is choosing.
@@ -248,9 +251,15 @@ function writeFramingRecursive(rootNode, outputBase, opts = {}) {
 function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
   const {
     variables, rootVariables, log, diagnostics, configPath = null, usage = null,
+    registry = null, onRoleUsed = null, protagonistByPath = null,
   } = opts;
   walkBranchTree(rootNode, ({ name, node, path: path_, isRoot, state }) => {
-    const { outputBase: nodeOutput, variables: branchVars, table } = nodeVisitPrologue(name, node, isRoot, state);
+    const {
+      outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
+    } = nodeVisitPrologue(name, node, isRoot, state);
+    const branchProtagonist = protagonistByPath
+      ? (protagonistByPath.get(path_.join('/')) || null)
+      : null;
 
     if (isRoot) {
       // The scenario title, written once at the project root. Two things stay different
@@ -259,9 +268,19 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
       // in, exactly as the old rung did — and it gets the "AID never substitutes a
       // scenario title" warn where a branch title only half-works.
       if (node.title == null) {
-        return { outputBase: nodeOutput, variables: branchVars, table };
+        return {
+          outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
+        };
       }
-      const rootLabel = resolveVariables(String(node.title), rootVariables, { diagnostics, file: configPath });
+      const rootLabel = applyTokenPass(
+        resolveVariables(String(node.title), rootVariables, { diagnostics, file: configPath }),
+        {
+          item: {}, registry, branchProtagonist,
+          roles: rolesDeclared ? roles : null,
+          onRoleUsed,
+          onWarn: busWarner(diagnostics, { file: configPath }),
+        },
+      );
       const labelPath = path.join(nodeOutput, 'Label.md');
       checkUndeclaredPlaceholders(rootLabel, table, {
         diagnostics, file: configPath, where: 'the project title',
@@ -279,17 +298,27 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
       });
       fs.writeFileSync(labelPath, rootLabel + '\n', 'utf8');
       log.verbose(`  OK: Label → ${labelPath}`);
-      return { outputBase: nodeOutput, variables: branchVars, table };
+      return {
+        outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
+      };
     }
 
     const rawTitle = (node && node.title) || name;
     fs.mkdirSync(nodeOutput, { recursive: true });
     const outPath = path.join(nodeOutput, 'Label.md');
-    const labelText = resolveVariables(rawTitle, branchVars, { diagnostics, file: configPath });
+    const labelText = applyTokenPass(
+      resolveVariables(rawTitle, branchVars, { diagnostics, file: configPath }),
+      {
+        item: {}, registry, branchProtagonist,
+        roles: rolesDeclared ? roles : null,
+        onRoleUsed,
+        onWarn: busWarner(diagnostics, { file: configPath }),
+      },
+    );
     // A branch title is the one destination where a placeholder half-works: AID fills
     // the prompt correctly, then keeps the raw text in the saved adventure's title.
     // Undeclared is still simply broken, so it errors here like anywhere else; the
-    // half-working case is Step 4's WARN.
+    // half-working case is a WARN, below.
     checkUndeclaredPlaceholders(labelText, table, {
       diagnostics, file: configPath, where: `the title of branch "${name}"`,
       usage, usagePath: path_.join('/'),
@@ -307,9 +336,9 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
     // directory name when the file is absent (`scenario.py:37`, `self._load_file("Label.md")
     // or self.name`). A label that renders to its own branch key is therefore written for
     // nothing — 60 of The Institute's 61 label files are exactly that. Write only where the
-    // rendered label differs from the segment VL would default to (Phase 11 Step 3,
-    // Decision 2). The diagnostics above still run either way: a broken placeholder in a
-    // title the author wrote is reportable whether or not the file lands.
+    // rendered label differs from the segment VL would default to. The diagnostics above
+    // still run either way: a broken placeholder in a title the author wrote is reportable
+    // whether or not the file lands.
     if (labelText !== name) {
       fs.writeFileSync(outPath, labelText + '\n', 'utf8');
       log.verbose(`    OK: Label → ${outPath}`);
@@ -321,8 +350,12 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
       fs.rmSync(outPath);
     }
 
-    return { outputBase: nodeOutput, variables: branchVars, table };
-  }, { outputBase, variables, table: {} });
+    return {
+      outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
+    };
+  }, {
+    outputBase, variables, table: {}, roles: {}, rolesDeclared: false,
+  });
 }
 
 /**
@@ -345,13 +378,14 @@ function writePlaceholdersRecursive(rootNode, outputBase, opts = {}) {
     severityOf(code), code, message, { file: file || configPath },
   );
 
-  // The walker's root visit replaces the old hand-rolled root rung (Phase 11 Step 0):
-  // the root's own `placeholders:` live on the root node itself, the merged table starts
-  // empty and gains them at the root exactly the way a branch node gains its own, and
-  // the declarations entry keeps the root's `at the project root` label and its
-  // unconditional-on-`placeholders` push.
+  // The walker's root visit covers the project root itself: the root's own `placeholders:`
+  // live on the root node, the merged table starts empty and gains them at the root exactly
+  // the way a branch node gains its own, and the declarations entry keeps the root's `at
+  // the project root` label and its unconditional-on-`placeholders` push.
   walkBranchTree(rootNode, ({ name, node, path: path_, isRoot, state }) => {
-    const { outputBase: nodeOutput, variables: branchVars, table } = nodeVisitPrologue(name, node, isRoot, state);
+    const {
+      outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
+    } = nodeVisitPrologue(name, node, isRoot, state);
 
     if (declarations) {
       const keys = localKeysOf(node);
@@ -367,8 +401,12 @@ function writePlaceholdersRecursive(rootNode, outputBase, opts = {}) {
     });
     if (outPath) log.verbose(`    OK: Placeholders → ${outPath}`);
 
-    return { outputBase: nodeOutput, variables: branchVars, table };
-  }, { outputBase, variables, table: {} });
+    return {
+      outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
+    };
+  }, {
+    outputBase, variables, table: {}, roles: {}, rolesDeclared: false,
+  });
 }
 
 /**
@@ -402,6 +440,9 @@ function writeTreeFiles({
     diagnostics,
     configPath,
     usage: placeholderState.usage,
+    registry,
+    onRoleUsed: roleState.onUsed,
+    protagonistByPath,
   });
 
   writePlaceholdersRecursive(config, config._resolvedOutput, {

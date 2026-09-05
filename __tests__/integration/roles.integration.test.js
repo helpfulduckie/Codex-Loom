@@ -391,6 +391,59 @@ describe('an undeclared {%var} in roles.protagonist is one CL0510, not one per l
   });
 });
 
+/**
+ * A `{$Role}` token in a branch `title:` or the scenario `title:` used to be written
+ * verbatim into `Label.md` — `writeLabelsRecursive` resolved `{%var}` but never ran the
+ * token pass, and `Label.md` sits outside `--lint`'s covered directories, so nothing caught
+ * it. Proven on the rendered `Label.md`, not the call site.
+ */
+describe('a {$Role} token in a title resolves before Label.md is written', () => {
+  const files = {
+    ...BASE,
+    'Codex/items.yaml': [
+      '- id: Malcolm',
+      '  name: {display: Malcolm, full: Malcolm Vale}',
+      '  pronouns: male',
+      '  aid: {type: Character, triggers: [Malcolm]}',
+      '  render: {template: Full}',
+      '  body:',
+      '    Tagline: Malcolm walked in',
+    ].join('\n'),
+    'compile.yaml': [
+      'version: 4',
+      'title: "A tale of {$LI}"',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'roles:',
+      '  LI: Malcolm',
+      'branches:',
+      '  meet:',
+      '    title: "Meeting {$LI}"',
+      '    components: {opening: Which way?}',
+      '',
+    ].join('\n'),
+  };
+
+  test('the scenario title resolves the role token', () => {
+    const { threw, output, tmpDir } = compileProject(files);
+    expect(threw).toBeNull();
+    expect(occurrences(output, 'CL0540')).toEqual([]);
+    const label = fs.readFileSync(path.join(tmpDir, 'output', 'Label.md'), 'utf8').trim();
+    expect(label).toBe('A tale of Malcolm');
+  });
+
+  test('a branch title resolves the role token', () => {
+    const { tmpDir } = compileProject(files);
+    const label = fs.readFileSync(
+      path.join(tmpDir, 'output', 'Branches', 'meet', 'Label.md'), 'utf8',
+    ).trim();
+    expect(label).toBe('Meeting Malcolm');
+  });
+});
+
 describe('a branch that declares the missing variable resolves its own protagonist', () => {
   const files = {
     ...BASE,

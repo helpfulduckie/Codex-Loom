@@ -98,6 +98,10 @@ the component is a `sections:` document, a prose `.md` file, or an inline string
   `roles:`, gated the same way the leaf loop gates it: a project that never declares
   `roles:` passes `null` rather than an empty table, so `CL0540` treats it as role-unaware
   territory rather than a project with zero bindings.
+- **A branch `title:` and the root scenario `title:`** — both write `Label.md`, and both
+  resolve `{$Role}`/`{$Role.pronoun}` tokens against the roles table in scope at that node,
+  the same `~`-deleting merge as everywhere else, with the node's own resolved protagonist,
+  so `{$protagonist}` can become "you" in either.
 
 **What differs between sites is only whether `{$protagonist}` can become "you".** Every
 `{$role}` token resolves to its bound item everywhere; turning the protagonist into "you"
