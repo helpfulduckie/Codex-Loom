@@ -46,6 +46,7 @@ const path = require('path');
 const YAML = require('yaml');
 const { CODES } = require('../diag');
 const { resolveVariables, checkUnexpandedVariables } = require('../util');
+const { applyTokenPass } = require('../model/pronouns');
 
 /** VL's own pattern, so detection cannot drift from what it will substitute. */
 const PLACEHOLDER_RE = /%(\w+)%/g;
@@ -147,7 +148,9 @@ function checkPlaceholderContext(text, { diagnostics, file, where, branch, sever
  * file — which looks worse than a partial expansion and is better, because a partially
  * expanded question reads as an intentional nest while carrying a literal `%key%` inside it.
  */
-function expandQuestions(table, variables, { onWarn, file, diagnostics } = {}) {
+function expandQuestions(table, variables, {
+  onWarn, file, diagnostics, registry, roles, branchProtagonist, onRoleUsed,
+} = {}) {
   const keys = Object.keys(table).filter((k) => table[k] !== null && table[k] !== undefined);
 
   // `{%vars}` first and once. Every later step reads these strings, so a variable that
@@ -230,6 +233,19 @@ function expandQuestions(table, variables, { onWarn, file, diagnostics } = {}) {
     return text;
   };
   for (const key of keys) expand(key);
+
+  // A role or pronoun token resolves after `%key%` nesting, so a nested question's tokens
+  // are already inline text by the time this runs and are resolved exactly once. Gated on
+  // `registry`: the 8 call sites predating role-aware questions pass none of these options,
+  // and `registry` is the one every threading caller supplies, so its absence is what tells
+  // this function no token pass was asked for.
+  if (registry) {
+    for (const key of keys) {
+      expanded[key] = applyTokenPass(expanded[key], {
+        item: {}, registry, branchProtagonist, roles, onRoleUsed, onWarn,
+      });
+    }
+  }
 
   return expanded;
 }
@@ -450,7 +466,10 @@ function localKeysOf(node) {
  * longer does would otherwise keep an orphan file that VL still reads and still inherits
  * down the subtree, so the declaration would outlive its deletion from the source.
  */
-function writeNodePlaceholders(nodeDir, node, mergedTable, variables, { onWarn, file, diagnostics, usage, usagePath, duplicates } = {}) {
+function writeNodePlaceholders(nodeDir, node, mergedTable, variables, {
+  onWarn, file, diagnostics, usage, usagePath, duplicates,
+  registry, roles, branchProtagonist, onRoleUsed,
+} = {}) {
   const keys = localKeysOf(node);
   const outPath = path.join(nodeDir, FILENAME);
 
@@ -482,7 +501,9 @@ function writeNodePlaceholders(nodeDir, node, mergedTable, variables, { onWarn, 
   // Expanded against the *merged* table: a local question may nest a key declared at an
   // ancestor, and the emitted value has to carry that ancestor's question inline because
   // VL will not resolve the reference itself.
-  const expanded = expandQuestions(mergedTable, variables, { onWarn, file, diagnostics });
+  const expanded = expandQuestions(mergedTable, variables, {
+    onWarn, file, diagnostics, registry, roles, branchProtagonist, onRoleUsed,
+  });
 
   // Against the merged table rather than the emitted subset: a branch key colliding with an
   // inherited one is the interesting case, and the inherited key is not in what this node

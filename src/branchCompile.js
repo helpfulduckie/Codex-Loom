@@ -365,7 +365,9 @@ function renderBranchItems(resolvedItems, registry, templates, partials, branchP
 
   // The length check measures what AID stores, which is the *substituted* string, so it
   // needs the questions rather than the keys. Expanded once per branch and handed down.
-  const questions = questionsForMeasurement(placeholders, variables);
+  const questions = questionsForMeasurement(placeholders, variables, {
+    registry, roles, branchProtagonist, onRoleUsed,
+  });
 
   // §9.3: normalize `{$Role…}` to `{$id…}` across every item before `applyCrossItemRefs`
   // runs, so a cross-item ref reached through a role (`{$LI.body.Tagline}`) arrives as

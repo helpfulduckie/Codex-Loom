@@ -57,9 +57,13 @@ function resolveComponentSpec(spec, base, variables, sink) {
  * with the bus attached, so passing one here would report every cycle and every undeclared
  * nested reference a second time. This call wants the strings, not the findings.
  */
-function questionsForMeasurement(table, variables) {
+function questionsForMeasurement(table, variables, {
+  registry, roles, branchProtagonist, onRoleUsed,
+} = {}) {
   if (!table || Object.keys(table).length === 0) return null;
-  return expandQuestions(table, variables);
+  return expandQuestions(table, variables, {
+    registry, roles, branchProtagonist, onRoleUsed,
+  });
 }
 
 /**
@@ -219,7 +223,9 @@ function writeFramingRecursive(rootNode, outputBase, opts = {}) {
           // Framing lands in the same `Opening.md` filename at an interior node, and VL caps
           // the file rather than the chain — components merge per filename, so a leaf's
           // opening replaces this rather than adding to it (§8.5).
-          checkLimit(framingText, questionsForMeasurement(table, branchVars), LIMITS.opening, {
+          checkLimit(framingText, questionsForMeasurement(table, branchVars, {
+            registry, roles: rolesDeclared ? roles : null, branchProtagonist, onRoleUsed,
+          }), LIMITS.opening, {
             diagnostics, label: isRoot ? 'the project root (framing)' : `branch "${name}" (framing)`,
           });
           const outPath = writeComponentFile(nodeOutput, 'Opening.md', framingText, { diagnostics });
@@ -373,6 +379,7 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
 function writePlaceholdersRecursive(rootNode, outputBase, opts = {}) {
   const {
     variables, configPath, diagnostics, log, usage = null, declarations = null, duplicates = null,
+    registry = null, onRoleUsed = null, protagonistByPath = null,
   } = opts;
   const onWarn = (code, message, file) => diagnostics.add(
     severityOf(code), code, message, { file: file || configPath },
@@ -386,6 +393,9 @@ function writePlaceholdersRecursive(rootNode, outputBase, opts = {}) {
     const {
       outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
     } = nodeVisitPrologue(name, node, isRoot, state);
+    const branchProtagonist = protagonistByPath
+      ? (protagonistByPath.get(path_.join('/')) || null)
+      : null;
 
     if (declarations) {
       const keys = localKeysOf(node);
@@ -398,6 +408,7 @@ function writePlaceholdersRecursive(rootNode, outputBase, opts = {}) {
 
     const outPath = writeNodePlaceholders(nodeOutput, node, table, branchVars, {
       onWarn, file: configPath, diagnostics, usage, usagePath: path_.join('/'), duplicates,
+      registry, roles: rolesDeclared ? roles : null, branchProtagonist, onRoleUsed,
     });
     if (outPath) log.verbose(`    OK: Placeholders → ${outPath}`);
 
@@ -453,6 +464,9 @@ function writeTreeFiles({
     usage: placeholderState.usage,
     declarations: placeholderState.declarations,
     duplicates: placeholderState.duplicates,
+    registry,
+    onRoleUsed: roleState.onUsed,
+    protagonistByPath,
   });
 }
 

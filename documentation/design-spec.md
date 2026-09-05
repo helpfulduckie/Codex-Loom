@@ -808,6 +808,14 @@ Instructions, Author's Note, a leaf's own `opening:`) resolves roles; `branchFra
 any branch node — the project root included — inherits the roles table down the tree and
 resolves them too; the root `Description` reads the project's own `roles:`.
 
+**Titles and placeholder questions resolve roles on the same terms.** A branch `title:`,
+the root scenario `title:` and the text of every `placeholders:` question resolve
+`{$role}` tokens against the roles table merged at that node, with that node's resolved
+protagonist — no site that renders text exempts itself. Question text resolves inside
+`expandQuestions`, the one function behind both the emitted `Placeholders.yaml` and the
+string §8.5's caps measure, so the shipped question and the measured one cannot resolve a
+role differently.
+
 **Shape does not gate it.** An `opening:` or `branchFraming:` written as an inline
 sentence or a prose `.md` runs the same token pass a `sections:` document does, so a
 `{$role}` in an inline opening resolves — a stray `{$token}` that matches nothing still

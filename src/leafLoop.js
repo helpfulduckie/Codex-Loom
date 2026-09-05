@@ -191,7 +191,9 @@ function compileLeaf(branchPath, ctx) {
     if (descriptor.limitKey && text) {
       checkLimit(
         text,
-        questionsForMeasurement(cctx.placeholders, cctx.variables),
+        questionsForMeasurement(cctx.placeholders, cctx.variables, {
+          registry, roles: cctx.roles, branchProtagonist, onRoleUsed: roleState.onUsed,
+        }),
         LIMITS[descriptor.limitKey],
         {
           diagnostics,
@@ -263,7 +265,9 @@ function compileLeaf(branchPath, ctx) {
         variables: cctx.variables, registry, branchProtagonist,
         roles: cctx.roles, onRoleUsed: roleState.onUsed,
         diagnostics,
-        questions: questionsForMeasurement(cctx.placeholders, cctx.variables),
+        questions: questionsForMeasurement(cctx.placeholders, cctx.variables, {
+          registry, roles: cctx.roles, branchProtagonist, onRoleUsed: roleState.onUsed,
+        }),
         storyCardType: config.storyCardType,
         spec, branchLabel: label, cardTypeAudit,
       });

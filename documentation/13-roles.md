@@ -102,6 +102,11 @@ the component is a `sections:` document, a prose `.md` file, or an inline string
   resolve `{$Role}`/`{$Role.pronoun}` tokens against the roles table in scope at that node,
   the same `~`-deleting merge as everywhere else, with the node's own resolved protagonist,
   so `{$protagonist}` can become "you" in either.
+- **A `placeholders:` question's text, at every node** — resolved inside `expandQuestions`,
+  after its `%key%` nesting expands, against that node's merged roles table and resolved
+  protagonist. The one function backs both `Placeholders.yaml` and the text §8.5's length
+  caps measure, so the shipped question and the measured one cannot resolve a role
+  differently.
 
 **What differs between sites is only whether `{$protagonist}` can become "you".** Every
 `{$role}` token resolves to its bound item everywhere; turning the protagonist into "you"

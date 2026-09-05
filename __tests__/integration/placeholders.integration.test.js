@@ -37,8 +37,11 @@ const ITEM = [
   '',
 ].join('\n');
 
-/** Compile a one-off project and return every diagnostic it raised. */
-function run(files) {
+/**
+ * Compile a one-off project and set up its directory. Returns the directory as well as the
+ * diagnostics, so a test can also read back what the compile wrote.
+ */
+function runProject(files) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-ph-int-'));
   dirs.push(dir);
   for (const [rel, content] of Object.entries(files)) {
@@ -57,7 +60,12 @@ function run(files) {
   try {
     compile(path.join(dir, 'compile.cl.yaml'), { diagnostics });
   } catch (err) { /* ERRORs are the subject; the throw carries only a count */ }
-  return diagnostics.all;
+  return { dir, diagnostics: diagnostics.all };
+}
+
+/** Compile a one-off project and return every diagnostic it raised. */
+function run(files) {
+  return runProject(files).diagnostics;
 }
 
 const undeclared = (diags) => diags
@@ -440,5 +448,33 @@ describe('lint.level reaches the opinion layer and nothing else', () => {
       .filter((d) => d.code === CODES.PLACEHOLDER_UNUSED);
     expect(unused).toHaveLength(1);
     expect(unused[0].severity).toBe('warn');
+  });
+});
+
+/**
+ * A role token in a placeholder's question text (session 3b-ii).
+ *
+ * `expandQuestions` is the one function both `Placeholders.yaml` and the length-check
+ * measurement go through, so a role token resolving there reaches both by construction.
+ * This asserts the shipped file; there is no separate test for the measurement path
+ * because there is no separate code path left for it to diverge through.
+ */
+describe('a role token in placeholder question text', () => {
+  test('resolves to the bound role name in Placeholders.yaml', () => {
+    const { dir } = runProject({
+      'compile.cl.yaml': [
+        HEAD,
+        'roles:',
+        '  LI: Anchor',
+        'placeholders:',
+        '  liName: What should we call {$LI}?',
+        'components:',
+        '  opening: You travel with %liName%.',
+        '',
+      ].join('\n'),
+    });
+    const content = fs.readFileSync(path.join(dir, 'out', 'Placeholders.yaml'), 'utf8');
+    expect(content).toContain('Anchor');
+    expect(content).not.toContain('{$LI}');
   });
 });

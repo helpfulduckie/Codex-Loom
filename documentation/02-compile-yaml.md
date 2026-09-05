@@ -215,6 +215,8 @@ Used in a template as: `The year is {%year}.`
 
 A branch `title:` and the root scenario `title:` also resolve role and pronoun tokens (`{$Role}`, `{$Role.pronoun}` — see [Roles](13-roles.md)), the same as any other rendered text, and `{%key}` still expands first.
 
+A `placeholders:` question's text resolves role and pronoun tokens too, after its `%key%` nesting expands — a question that reads `What is {$LI}'s name?` ships to `Placeholders.yaml` with the bound role's name in place, and the same resolved text is what the platform length caps measure.
+
 ### `components`
 
 Specifies what content to write for root-level component files. Each value is an inline string, a relative file path, or a `{%variable}` / `{%libraryName}` token that expands to one (component specs go through the same single `{%…}` expander as every other path — there is no separate component namespace).
