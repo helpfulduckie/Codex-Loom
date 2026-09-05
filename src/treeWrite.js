@@ -7,7 +7,10 @@ const {
 } = require('./util');
 const { busWarner, severityOf, CODES: DIAG_CODES } = require('./diag');
 const { walkBranchTree, mergePlaceholders, mergeUnbindable } = require('./model/branches');
-const { FRAMING_DESCRIPTOR, isPassthrough, renderSectionedComponent } = require('./emit/components');
+const {
+  FRAMING_DESCRIPTOR, DESCRIPTION_DESCRIPTOR, isPassthrough, readPassthrough,
+  renderSectionedComponent, writeSectionedComponent,
+} = require('./emit/components');
 const { applyTokenPass } = require('./model/pronouns');
 const {
   checkUndeclaredPlaceholders, checkPlaceholderContext, writeNodePlaceholders, localKeysOf,
@@ -60,15 +63,6 @@ function questionsForMeasurement(table, variables) {
 }
 
 /**
- * Copy scripts directory to target branch Scripts/ folder.
- */
-function copyScripts(srcDir, targetDir) {
-  if (!srcDir || !fs.existsSync(srcDir)) return;
-  const dest = path.join(targetDir, 'Scripts');
-  fs.cpSync(srcDir, dest, { recursive: true });
-}
-
-/**
  * Write Opening.md or Opening Choice.md to a branch node's Components folder.
  */
 function writeComponentFile(outputDir, filename, content, sink) {
@@ -80,6 +74,21 @@ function writeComponentFile(outputDir, filename, content, sink) {
   checkMechanicalArtifacts(content, `component ${filename}`, sink);
   fs.writeFileSync(outPath, content + '\n', 'utf8');
   return outPath;
+}
+
+/**
+ * The three computations every `walkBranchTree` visitor in this file opens with: the
+ * node's output directory, its variables merged over the parent's, and its placeholder
+ * table merged over the parent's. Framing layers two more keys (`roles`, `rolesDeclared`)
+ * on top of what this returns; labels and placeholders use exactly these three.
+ */
+function nodeVisitPrologue(name, node, isRoot, state) {
+  const outputBase = isRoot ? state.outputBase : path.join(state.outputBase, 'Branches', name);
+  const variables = (node && node.variables)
+    ? Object.assign({}, state.variables, node.variables)
+    : state.variables;
+  const table = mergePlaceholders(state.table, node);
+  return { outputBase, variables, table };
 }
 
 /**
@@ -100,7 +109,11 @@ function writeComponentFile(outputDir, filename, content, sink) {
  * `onRoleUsed` arrives as a parameter rather than a closure because this is a top-level
  * function with no closure over `compile()`'s scope.
  */
-function writeFramingRecursive(rootNode, outputBase, configBase, configPath, variables, log, diagnostics, usage = null, loadSectioned = null, registry = null, onRoleUsed = null, protagonistByPath = null) {
+function writeFramingRecursive(rootNode, outputBase, opts = {}) {
+  const {
+    configBase, configPath, variables, log, diagnostics, usage = null, loadSectioned = null,
+    registry = null, onRoleUsed = null, protagonistByPath = null,
+  } = opts;
   // The walker visits the project root as a node (Phase 11 Step 0), so an unbranched
   // project still receives its root visit — that is where the "no branches" warn lands.
   if (!rootNode || typeof rootNode !== 'object') return;
@@ -148,16 +161,11 @@ function writeFramingRecursive(rootNode, outputBase, configBase, configPath, var
   };
 
   walkBranchTree(rootNode, ({ name, node, path: nodePath, isLeaf, isRoot, state }) => {
-    const nodeOutput = isRoot ? state.outputBase : path.join(state.outputBase, 'Branches', name);
-    const branchVars = (node && node.variables)
-      ? Object.assign({}, state.variables, node.variables)
-      : state.variables;
+    const { outputBase: nodeOutput, variables: branchVars, table } = nodeVisitPrologue(name, node, isRoot, state);
 
     const framing = node && node.components && node.components.branchFraming !== undefined
       ? node.components.branchFraming
       : null;
-
-    const table = mergePlaceholders(state.table, node);
 
     // Roles merge the same way `walkBranchChain` merges them for the leaf loop — key-wise,
     // `~` deleting, `rolesDeclared` sticky once any ancestor (including the project root)
@@ -237,14 +245,12 @@ function writeFramingRecursive(rootNode, outputBase, configBase, configPath, var
  * Node-level, not leaf-level, which is why it uses the tree visitor rather than the
  * leaf loop: a branch label belongs to the node the player is choosing.
  */
-function writeLabelsRecursive(rootNode, outputBase, variables, rootVariables, log, diagnostics, configPath = null, usage = null) {
+function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
+  const {
+    variables, rootVariables, log, diagnostics, configPath = null, usage = null,
+  } = opts;
   walkBranchTree(rootNode, ({ name, node, path: path_, isRoot, state }) => {
-    const nodeOutput = isRoot ? state.outputBase : path.join(state.outputBase, 'Branches', name);
-    const branchVars = (node && node.variables)
-      ? Object.assign({}, state.variables, node.variables)
-      : state.variables;
-
-    const table = mergePlaceholders(state.table, node);
+    const { outputBase: nodeOutput, variables: branchVars, table } = nodeVisitPrologue(name, node, isRoot, state);
 
     if (isRoot) {
       // The scenario title, written once at the project root. Two things stay different
@@ -331,7 +337,10 @@ function writeLabelsRecursive(rootNode, outputBase, variables, rootVariables, lo
  * key carries that key's question inline — see `emit/placeholders.js` for why the nesting
  * cannot be left to VL.
  */
-function writePlaceholdersRecursive(rootNode, outputBase, variables, configPath, diagnostics, log, usage = null, declarations = null, duplicates = null) {
+function writePlaceholdersRecursive(rootNode, outputBase, opts = {}) {
+  const {
+    variables, configPath, diagnostics, log, usage = null, declarations = null, duplicates = null,
+  } = opts;
   const onWarn = (code, message, file) => diagnostics.add(
     severityOf(code), code, message, { file: file || configPath },
   );
@@ -342,15 +351,7 @@ function writePlaceholdersRecursive(rootNode, outputBase, variables, configPath,
   // the declarations entry keeps the root's `at the project root` label and its
   // unconditional-on-`placeholders` push.
   walkBranchTree(rootNode, ({ name, node, path: path_, isRoot, state }) => {
-    const nodeOutput = isRoot ? state.outputBase : path.join(state.outputBase, 'Branches', name);
-    const branchVars = (node && node.variables)
-      ? Object.assign({}, state.variables, node.variables)
-      : state.variables;
-
-    // The merged table at this node, by the same rules `walkBranchChain` applies along a
-    // path: local keys override inherited ones, `~` deletes. Accumulated here rather than
-    // looked up because the tree walk already has the chain in hand as `state`.
-    const table = mergePlaceholders(state.table, node);
+    const { outputBase: nodeOutput, variables: branchVars, table } = nodeVisitPrologue(name, node, isRoot, state);
 
     if (declarations) {
       const keys = localKeysOf(node);
@@ -370,11 +371,159 @@ function writePlaceholdersRecursive(rootNode, outputBase, variables, configPath,
   }, { outputBase, variables, table: {} });
 }
 
+/**
+ * The recursive tree writers. `opening:` is written by the leaf loop as an ordinary
+ * inherited component; what is left for the tree visitor is framing, labels and
+ * placeholder questions, each of which belongs to interior nodes the leaf loop never
+ * visits. Root-level `branchFraming` and the root `Label` land in these walkers' own
+ * root visits.
+ */
+function writeTreeFiles({
+  config, configPath, log, diagnostics,
+  placeholderState, componentLoader, registry, roleState, protagonistByPath,
+}) {
+  writeFramingRecursive(config, config._resolvedOutput, {
+    configBase: config._base,
+    configPath,
+    variables: config._variables || config.variables || {},
+    log,
+    diagnostics,
+    usage: placeholderState.usage,
+    loadSectioned: componentLoader.load,
+    registry,
+    onRoleUsed: roleState.onUsed,
+    protagonistByPath,
+  });
+
+  writeLabelsRecursive(config, config._resolvedOutput, {
+    variables: config._variables || config.variables || {},
+    rootVariables: config.variables || {},
+    log,
+    diagnostics,
+    configPath,
+    usage: placeholderState.usage,
+  });
+
+  writePlaceholdersRecursive(config, config._resolvedOutput, {
+    variables: config._variables || config.variables || {},
+    configPath,
+    diagnostics,
+    log,
+    usage: placeholderState.usage,
+    declarations: placeholderState.declarations,
+    duplicates: placeholderState.duplicates,
+  });
+}
+
+/**
+ * The scenario blurb, written once to the output root alongside `Branches/`. An ordinary
+ * component document: `body:` is a section with `file:` and `script:` is one with
+ * `from: {script:, extract: scriptBanner}`. It renders through `renderSectionedComponent`
+ * with an empty occupant map — the same render path called with nothing to place, because
+ * a scenario has one blurb and items are branch-scoped. Gaps and the unbranched-root key
+ * collision are recorded on the buses passed in.
+ */
+function writeScenarioBlurb({
+  config, configPath, log, diagnostics,
+  rootVariables, registry, placeholderState, roleState, componentLoader, gaps, descriptionLeaves,
+}) {
+  const descRequested = config.components && config.components.description != null;
+  const descSpec = descRequested
+    ? resolveComponentSpec(
+        config.components.description, config._base,
+        config._variables || config.variables || null, { diagnostics, file: configPath },
+      )
+    : null;
+  if (descRequested && !(descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec))) {
+    gaps.record('(project)', 'Description', descSpec, 'source not found');
+  } else if (descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec)) {
+    let combined = null;
+    let descMetadata = null;
+    const rootRolesDeclared = !!(config.roles && Object.keys(config.roles).length);
+
+    if (isPassthrough(descSpec)) {
+      // A prose `.md`/`.txt` blurb still resolves role and pronoun tokens, matching the
+      // `sections:` arm below and the leaf loop. `branchProtagonist` stays null — the blurb
+      // belongs to the project, not any branch — and `roles` is gated the same way that arm
+      // gates it: passed only when some node declared `roles:`, so `CL0540` treats a project
+      // that never mentions roles as role-unaware rather than one with zero bindings.
+      const raw = readPassthrough(descSpec);
+      if (raw === null) {
+        combined = null;
+      } else {
+        combined = applyTokenPass(raw, {
+          item: {}, registry, branchProtagonist: null,
+          roles: rootRolesDeclared ? config.roles : null, onRoleUsed: roleState.onUsed,
+          onWarn: busWarner(diagnostics, { file: String(descSpec) }),
+        }) || null;
+      }
+    } else {
+      const descComponent = componentLoader.load(descSpec, DESCRIPTION_DESCRIPTOR);
+      if (descComponent) {
+        descMetadata = descComponent.metadata;
+        // `branchProtagonist` stays null: the blurb belongs to the project, not to any
+        // branch, so there is no chain to take a protagonist from. `roles` still reaches
+        // the render, gated the same way the leaf loop gates it (pass the table only when
+        // some node declared `roles:`), so a `{$role}` token in the root description
+        // resolves instead of reading as an undeclared placeholder, and `onRoleUsed` marks
+        // it used so `CL0545` agrees.
+        ({ text: combined } = renderSectionedComponent(
+          descComponent, [], new Map(),
+          {
+            defaultHeadingLevel: DESCRIPTION_DESCRIPTOR.defaultHeadingLevel,
+            variables: rootVariables || {}, registry, branchProtagonist: null,
+            roles: rootRolesDeclared ? config.roles : null, onRoleUsed: roleState.onUsed,
+            onWarn: busWarner(diagnostics, { file: String(descSpec) }),
+            diagnostics, file: String(descSpec),
+          },
+        ));
+      }
+    }
+
+    // Checked against the root placeholder table: the blurb belongs to the project. The
+    // per-node case is carried by `adventureDescription:` — a different key, resolved
+    // inside the leaf loop against the branch-merged table.
+    checkUndeclaredPlaceholders(combined, config.placeholders, {
+      diagnostics, file: descSpec, where: 'the Description',
+      usage: placeholderState.usage, usagePath: '',
+    });
+    checkPlaceholderContext(combined, {
+      diagnostics,
+      file: descSpec,
+      where: 'the Description',
+      reason: 'AID does not fill placeholders in the Description. It is shown before any '
+        + 'adventure exists to answer them, so the raw text is what a reader sees.',
+    });
+    const descPath = writeSectionedComponent(
+      config._resolvedOutput, DESCRIPTION_DESCRIPTOR, combined,
+      { diagnostics }, descMetadata,
+    );
+    if (descPath) {
+      log.verbose(`  OK: Description → ${descPath}`);
+      // Both description keys write `Description.md`, and at an unbranched root they write
+      // the same one — the root is its own leaf there, so the leaf loop has already been
+      // through. Reported rather than silently resolved, because which of the two an author
+      // meant to survive is not recoverable from the file that is left.
+      if (descriptionLeaves.has('(root)')) {
+        diagnostics.warn(
+          DIAG_CODES.DESCRIPTION_KEYS_COLLIDE,
+          'this project declares both description: and adventureDescription: and has no '
+          + 'branches, so the root is its own leaf and both write the same Description.md. '
+          + 'The scenario blurb is what survives. Drop one, or add the branch the '
+          + 'adventure description was written for.',
+          { file: configPath },
+        );
+      }
+    } else gaps.record('(project)', 'Description', descSpec, 'compiled to empty content');
+  }
+}
+
 module.exports = {
   resolveComponentSpec,
   questionsForMeasurement,
-  copyScripts,
   writeFramingRecursive,
   writeLabelsRecursive,
   writePlaceholdersRecursive,
+  writeTreeFiles,
+  writeScenarioBlurb,
 };

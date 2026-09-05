@@ -1,12 +1,21 @@
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const { branchTreeDeclares } = require('./model/branches');
 const { writeSectionedComponent } = require('./emit/components');
-const { copyScripts } = require('./treeWrite');
 const {
   writeOutput, buildBranchOutputDir, resolveBranchFolderPath,
 } = require('./outputPaths');
+
+/**
+ * Copy scripts directory to target branch Scripts/ folder.
+ */
+function copyScripts(srcDir, targetDir) {
+  if (!srcDir || !fs.existsSync(srcDir)) return;
+  const dest = path.join(targetDir, 'Scripts');
+  fs.cpSync(srcDir, dest, { recursive: true });
+}
 
 /**
  * Component/script inheritance and story-card frontier placement.

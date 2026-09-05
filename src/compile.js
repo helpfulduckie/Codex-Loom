@@ -27,7 +27,7 @@ const { checkDrift } = require('./snapshot');
 const { loadCompileConfig } = require('./config/load');
 const { placeInheritedFiles } = require('./inherit');
 const { runLeafLoop } = require('./leafLoop');
-const { writeTreeFiles, writeScenarioBlurb } = require('./treeFiles');
+const { writeTreeFiles, writeScenarioBlurb } = require('./treeWrite');
 const { finalizeDiagnostics } = require('./reportDispatch');
 const {
   PlaceholderTracker, RoleTracker, GapList, ComponentLoader,
