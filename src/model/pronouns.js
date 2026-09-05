@@ -429,9 +429,12 @@ function applyTokenPass(str, opts) {
  * every item's body resolved simultaneously, regardless of source order).
  *
  * @param {object[]} resolvedItems - all items compiled for this branch
- * @param {Map} registry - full item registry (for fallback to canonical base)
+ * @param {object} opts
+ *   opts.registry      - full item registry (for fallback to canonical base)
+ *   opts.onWarn        - (code, message) => void
+ *   opts.resolvedById  - Map of post-variant resolved items by lowercase id
  */
-function applyCrossItemRefs(resolvedItems, registry, onWarn, resolvedById) {
+function applyCrossItemRefs(resolvedItems, { registry, onWarn, resolvedById }) {
   // Callers that already have an id→item map (the compiler does) pass it in; standalone
   // callers get one built here.
   if (!resolvedById) {
@@ -482,13 +485,14 @@ function applyCrossItemRefs(resolvedItems, registry, onWarn, resolvedById) {
  * @param {Map} registry
  * @param {string|null} branchProtagonist - lowercase protagonist ID
  * @param {Map} resolvedById
- * @param {object|null} roles - this branch's merged role table (§9.2)
- * @param {function|null} onWarn - (code, message) => void, for §9.3's role diagnostics
- * @param {function|null} onRoleUsed - (roleKey) => void, for CL0545's usage tracking
+ * @param {object} opts
+ *   opts.roles       - this branch's merged role table (§9.2), or null
+ *   opts.onWarn      - (code, message) => void, for §9.3's role diagnostics
+ *   opts.onRoleUsed  - (roleKey) => void, for CL0545's usage tracking
  */
-function applyPronounPasses(item, registry, branchProtagonist, resolvedById, roles, onWarn, onRoleUsed) {
-  const opts = { item, registry, branchProtagonist, resolvedById, roles, onWarn, onRoleUsed };
-  walkItemTextFields(item, s => applyTokenPass(s, opts));
+function applyPronounPasses(item, { registry, branchProtagonist, resolvedById, roles, onWarn, onRoleUsed } = {}) {
+  const tokenOpts = { item, registry, branchProtagonist, resolvedById, roles, onWarn, onRoleUsed };
+  walkItemTextFields(item, s => applyTokenPass(s, tokenOpts));
 }
 
 module.exports = {

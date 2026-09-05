@@ -443,7 +443,7 @@ describe('applyCrossItemRefs', () => {
       { id: 'aria',   body: { Tagline: '{$mentor.body.Tagline}' } },
       { id: 'mentor', body: { Tagline: 'Archivist' } },
     ];
-    applyCrossItemRefs(items, new Map());
+    applyCrossItemRefs(items, { registry: new Map() });
     expect(items[0].body.Tagline).toBe('Archivist');
   });
 
@@ -452,7 +452,7 @@ describe('applyCrossItemRefs', () => {
       { id: 'aria',   body: { Tagline: '{$Mentor.body.Tagline}' } },
       { id: 'mentor', body: { Tagline: 'Archivist' } },
     ];
-    applyCrossItemRefs(items, new Map());
+    applyCrossItemRefs(items, { registry: new Map() });
     expect(items[0].body.Tagline).toBe('Archivist');
   });
 
@@ -461,7 +461,7 @@ describe('applyCrossItemRefs', () => {
       { id: 'aria',   body: { Tagline: '{$mentor.body.tagline}' } },
       { id: 'mentor', body: { Tagline: 'Archivist' } },
     ];
-    applyCrossItemRefs(items, new Map());
+    applyCrossItemRefs(items, { registry: new Map() });
     expect(items[0].body.Tagline).toBe('Archivist');
   });
 
@@ -470,7 +470,7 @@ describe('applyCrossItemRefs', () => {
       { id: 'aria',   body: { Hair: '{$mentor.body.Traits.hair}' } },
       { id: 'mentor', body: { Traits: { hair: 'silver' } } },
     ];
-    applyCrossItemRefs(items, new Map());
+    applyCrossItemRefs(items, { registry: new Map() });
     expect(items[0].body.Hair).toBe('silver');
   });
 
@@ -478,7 +478,7 @@ describe('applyCrossItemRefs', () => {
     // model/ is pure (§3.3): it reports through the caller's onWarn rather than printing.
     const onWarn = jest.fn();
     const items = [{ id: 'aria', body: { Tagline: '{$nobody.body.Field}' } }];
-    applyCrossItemRefs(items, new Map(), onWarn);
+    applyCrossItemRefs(items, { registry: new Map(), onWarn });
     expect(items[0].body.Tagline).toBe('{$nobody.body.Field}');
     expect(onWarn).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('item not found'));
   });
@@ -488,7 +488,7 @@ describe('applyCrossItemRefs', () => {
       { id: 'aria',   body: { Tagline: '{$mentor.body.Missing}' } },
       { id: 'mentor', body: { Tagline: 'Archivist' } },
     ];
-    applyCrossItemRefs(items, new Map());
+    applyCrossItemRefs(items, { registry: new Map() });
     expect(items[0].body.Tagline).toBe('{$mentor.body.Missing}');
   });
 
@@ -497,7 +497,7 @@ describe('applyCrossItemRefs', () => {
       { id: 'aria',   body: { Traits: { hair: '{$mentor.body.Hair}' } } },
       { id: 'mentor', body: { Hair: 'white' } },
     ];
-    applyCrossItemRefs(items, new Map());
+    applyCrossItemRefs(items, { registry: new Map() });
     expect(items[0].body.Traits.hair).toBe('white');
   });
 
@@ -506,7 +506,7 @@ describe('applyCrossItemRefs', () => {
       { id: 'aria',   body: { Keywords: ['{$mentor.body.Title}', 'brave'] } },
       { id: 'mentor', body: { Title: 'Elder' } },
     ];
-    applyCrossItemRefs(items, new Map());
+    applyCrossItemRefs(items, { registry: new Map() });
     expect(items[0].body.Keywords[0]).toBe('Elder');
     expect(items[0].body.Keywords[1]).toBe('brave');
   });
@@ -516,7 +516,7 @@ describe('applyCrossItemRefs', () => {
       { id: 'aria',   aid: { title: '{$mentor.body.Tagline}' }, body: {} },
       { id: 'mentor', body: { Tagline: 'Archivist' } },
     ];
-    applyCrossItemRefs(items, new Map());
+    applyCrossItemRefs(items, { registry: new Map() });
     expect(items[0].aid.title).toBe('Archivist');
   });
 
@@ -524,7 +524,7 @@ describe('applyCrossItemRefs', () => {
     const registryItem = { id: 'mentor', body: { Tagline: 'Sage' } };
     const registry = new Map([['mentor', registryItem]]);
     const items = [{ id: 'aria', body: { Tagline: '{$mentor.body.Tagline}' } }];
-    applyCrossItemRefs(items, registry);
+    applyCrossItemRefs(items, { registry });
     expect(items[0].body.Tagline).toBe('Sage');
   });
 });
@@ -604,18 +604,18 @@ describe('applyTokenPass — {$Id.display} and {$Id.full} tokens', () => {
 
 describe('applyPronounPasses', () => {
   test('no item.body → returns without error', () => {
-    expect(() => applyPronounPasses({ id: 'hero' }, new Map(), null)).not.toThrow();
+    expect(() => applyPronounPasses({ id: 'hero' }, { registry: new Map(), branchProtagonist: null })).not.toThrow();
   });
 
   test('resolves {$token} in string body fields', () => {
     const item = { id: 'hero', pronouns: 'female', body: { Tagline: '{$she} fights' } };
-    applyPronounPasses(item, new Map(), null);
+    applyPronounPasses(item, { registry: new Map(), branchProtagonist: null });
     expect(item.body.Tagline).toBe('she fights');
   });
 
   test('walks nested body objects', () => {
     const item = { id: 'hero', pronouns: 'male', body: { Traits: { desc: '{$she} stands tall' } } };
-    applyPronounPasses(item, new Map(), null);
+    applyPronounPasses(item, { registry: new Map(), branchProtagonist: null });
     expect(item.body.Traits.desc).toBe('he stands tall');
   });
 
@@ -624,7 +624,7 @@ describe('applyPronounPasses', () => {
       id: 'hero', pronouns: 'female',
       body: { Keywords: ['{$she} fights', 'brave'] },
     };
-    applyPronounPasses(item, new Map(), null);
+    applyPronounPasses(item, { registry: new Map(), branchProtagonist: null });
     expect(item.body.Keywords[0]).toBe('she fights');
     expect(item.body.Keywords[1]).toBe('brave');
   });
@@ -632,7 +632,7 @@ describe('applyPronounPasses', () => {
   test('mutates item.body in place', () => {
     const body = { Tagline: '{$she} leads' };
     const item = { id: 'hero', pronouns: 'female', body };
-    applyPronounPasses(item, new Map(), null);
+    applyPronounPasses(item, { registry: new Map(), branchProtagonist: null });
     expect(item.body).toBe(body);
     expect(body.Tagline).toBe('she leads');
   });
@@ -644,7 +644,7 @@ describe('applyPronounPasses', () => {
       aid: { title: '{$she} the Bold', triggers: ['{$she}', 'Hero'] },
       body: {},
     };
-    applyPronounPasses(item, new Map(), null);
+    applyPronounPasses(item, { registry: new Map(), branchProtagonist: null });
     expect(item.aid.title).toBe('she the Bold');
     expect(item.aid.triggers).toEqual(['she', 'Hero']);
   });
@@ -652,7 +652,7 @@ describe('applyPronounPasses', () => {
   test('resolves {$Id} character ref in an aid field', () => {
     const registry = new Map([['mentor', { id: 'mentor', name: { display: 'Roshan' } }]]);
     const item = { id: 'hero', aid: { title: "{$Mentor}'s student" }, body: {} };
-    applyPronounPasses(item, registry, null);
+    applyPronounPasses(item, { registry, branchProtagonist: null });
     expect(item.aid.title).toBe("Roshan's student");
   });
 });

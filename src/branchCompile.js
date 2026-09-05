@@ -375,7 +375,9 @@ function renderBranchItems(resolvedItems, registry, templates, partials, branchP
   // when the branch declares no roles.
   applyRolePass(resolvedItems, { registry, roles, resolvedById, onRoleUsed });
 
-  applyCrossItemRefs(resolvedItems, registry, busWarner(diagnostics, { branch: branchLabel }), resolvedById);
+  applyCrossItemRefs(resolvedItems, {
+    registry, onWarn: busWarner(diagnostics, { branch: branchLabel }), resolvedById,
+  });
 
   // Expand render functions in body field values now that cross-item refs are resolved.
   // Dependency-ordered: a scan-build-sort-evaluate sequence over the same graph a chain
@@ -401,253 +403,30 @@ function renderBranchItems(resolvedItems, registry, templates, partials, branchP
   const reportedCollisions = new Set(); // name
 
   for (const item of resolvedItems) {
-    applyPronounPasses(
-      item, registry, branchProtagonist, resolvedById, roles,
-      busWarner(diagnostics, { branch: branchLabel }), onRoleUsed,
-    );
+    applyPronounPasses(item, {
+      registry, branchProtagonist, resolvedById,
+      roles, onWarn: busWarner(diagnostics, { branch: branchLabel }), onRoleUsed,
+    });
 
     // The item says where it goes. Read once, here, and used for both outputs.
     const placement = resolvePlacements(item);
     const itemId = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
 
-    // Two counts, because the no-output invariant and the empty-render check below ask
-    // different questions. `liveTargets` is targets that reached a real slot on this
-    // branch — a gated-off slot is not one. `outputs` is the subset of those that put
-    // visible text there. CL0610 fires when nothing reached a slot; CL0609 when something
-    // did and rendered blank.
-    let liveTargets = 0;
-    let outputs = 0;
-
-    for (const target of placement.targets) {
-      if (!checkTargetSlot(target, itemId, slotIndex, branchLabel, diagnostics, item._source)) continue;
-      const known = slotIndex.get(target.component);
-      // A slot the component declares but this branch excludes: nothing is placed, and
-      // nothing is said here. Whether that silence matters is the no-output invariant's
-      // question, below, and it is the only one with enough context to answer it.
-      if (known && !known.slots.has(String(target.slot).toLowerCase())) continue;
-      liveTargets++;
-      const text = renderPlacementBody(item, target, templates, partials, variables, diagnostics, {
-        fieldTable, templateFor,
-        // Only for a card-emitting item: the audit collects the union of an item's render
-        // lists but its item set stays "items that produce a story card" this session.
-        fieldAudit: placement.storyCard ? fieldAudit : null,
-      });
-      if (text === null) continue;
-      // A live target that rendered to nothing (CL0609). `renderPlacementBody` already
-      // reported and returned null for a missing template or a render failure; this is the
-      // other way a placement goes silent — a field-list or `.template` that is all
-      // non-firing conditionals against an item that carries none of the keys. The slot
-      // filters the empty occupant back out at emit, so without this the item vanishes
-      // from the branch with nothing said. `~` on the branch dispatch or `branches:` is
-      // the intended way to drop an item from a branch.
-      if (String(text).trim() === '') {
-        diagnostics.error(
-          DIAG_CODES.ITEM_RENDERS_EMPTY,
-          `item "${itemId}" reaches ${target.component} slot "${target.slot}" on branch `
-          + `"${branchLabel}" but its body renders to nothing there. Exclude it from the `
-          + 'branch with "branches:" if that is what was meant.',
-          { file: item._source },
-        );
-        continue;
-      }
-      // Scanned per placement rather than once on the assembled component, because the
-      // same item body can land in two components on one branch and the author needs to
-      // be told which routing carried the mistake.
-      const reported = checkUndeclaredPlaceholders(text, placeholders, {
-        diagnostics,
-        file: item._source,
-        where: `item "${itemId}" rendering into ${target.component} slot "${target.slot}"`,
-        branch: branchLabel,
-        usage,
-        usagePath,
-      });
-      if (reported.length) {
-        if (!placeholderNoise.has(target.component)) placeholderNoise.set(target.component, new Set());
-        for (const name of reported) placeholderNoise.get(target.component).add(name);
-      }
-      if (!occupants.has(target.component)) occupants.set(target.component, new Map());
-      const slots = occupants.get(target.component);
-      const slotKey = String(target.slot || '').toLowerCase();
-      if (!slots.has(slotKey)) slots.set(slotKey, []);
-      slots.get(slotKey).push({ id: itemId, order: target.order, text, slot: target.slot });
-      outputs++;
-    }
-
-    // The no-output invariant: an item that resolved into this branch must leave a mark on
-    // it. Scoped by consequence rather than by mechanism — gating a slot off at the
-    // component level stays a legitimate way to drop a whole slot's contents from one
-    // branch, and only becomes an error when it would make an item vanish from every
-    // output it declared. Keyed on `liveTargets`, not `outputs`: a target that reached a
-    // slot and rendered blank is CL0609's to report, and raising CL0610 too would
-    // describe one mistake twice.
-    if (!placement.storyCard && liveTargets === 0) {
-      diagnostics.error(
-        DIAG_CODES.ITEM_NO_OUTPUT,
-        `item "${itemId}" resolves on branch "${branchLabel}" but produces no output there: `
-        + 'storyCard is false and no declared target placed it. Exclude it from the branch '
-        + 'with "branches:" if that is what was meant.',
-        { file: item._source },
-      );
-    }
+    renderTargets(item, placement, itemId, {
+      templates, partials, variables, diagnostics, slotIndex, branchLabel,
+      fieldTable, templateFor, fieldAudit, placeholders, usage, usagePath,
+      occupants, placeholderNoise,
+    });
 
     // `storyCard: false` is the only thing that suppresses a card. An item that renders
     // only into a component never produces one, so there is nothing to suppress.
     if (!placement.storyCard) continue;
 
-    // Before the template ladder, deliberately. `aid.type` selects the template when no
-    // explicit one is named, so a placeholder in it also fails to match a template — and
-    // that failure `continue`s past every later check. Reported here, the author is told
-    // the cause; reported after, they get CL0420 about a template they never wrote.
-    //
-    // Per branch rather than once per item, because a variant can change `aid.type` and
-    // only some branches may apply it.
-    checkPlaceholderContext(item.aid && item.aid.type, {
-      diagnostics,
-      file: item._source,
-      where: `the type of story card "${itemId}"`,
-      branch: branchLabel,
-      reason: 'AID does not fill placeholders in a card’s type. It is a category, and '
-        + 'Codex Loom also makes it a folder and file name in the compiled tree, so the '
-        + 'raw text would become part of a path.',
+    renderStoryCard(item, itemId, questions, {
+      templates, partials, variables, diagnostics, branchLabel, projectNotesTemplate,
+      fieldTable, templateFor, fieldAudit, cardTypeAudit, placeholders, usage, usagePath,
+      grouped, renderedById, seenNames, reportedCollisions,
     });
-
-    // Validate the fully-resolved aid.type (it becomes a folder/file name). Runs here,
-    // after all {%}/{$} passes, so it sees the final on-disk type. Raises CL0632 and
-    // continues on invalid — the leaf loop moves to the next item rather than aborting,
-    // so a run reports every bad type instead of only the first.
-    validateCardType(item, { diagnostics });
-
-
-    const bodyRender = resolveBodyRender(item, templates, fieldTable, templateFor);
-    if (!bodyRender) {
-      const type = (item.aid && item.aid.type) || (item.render && item.render.template) || '?';
-      diagnostics.error(
-        DIAG_CODES.TEMPLATE_NOT_FOUND,
-        `no template found for item "${itemId}" (type: ${type})`,
-        { file: item._source },
-      );
-      continue;
-    }
-
-    // The unread-field audit: does the resolved template read every key this item's body
-    // carries? Runs on the field-list body only — a `.template` text body names nothing to
-    // check against. Findings are deduped compile-wide and emitted once, after every leaf.
-    if (fieldAudit && bodyRender.kind === 'fieldList') {
-      fieldAudit.collectForItem(item, bodyRender.list, { templateFor, refRoot: 'body' });
-    }
-
-    // Build render context: top-level item fields + body for {$body.X} access
-    const context = itemContext(item);
-
-    let rendered;
-    try {
-      const errorsBeforeBody = diagnostics.errors.length;
-      const bodyText = bodyRender.kind === 'fieldList'
-        ? renderFieldList(bodyRender.list, fieldTable, context, {
-          diagnostics, file: null, name: bodyRender.name, partials, variables,
-        })
-        : render(bodyRender.entry.content, context, partials, variables, {
-          diagnostics, file: bodyRender.entry._source, name: bodyRender.name,
-        });
-      // A resolved template that rendered the card body to nothing (CL0609). `reference`
-      // cards are exempt — §4.8 puts their payload in `notes:` and an empty body there is
-      // the normal shape. For a `story` card it means the template reads keys this item
-      // does not carry, and the card would ship to AID as a name with a blank value.
-      // Suppressed when the render itself just reported an error (a malformed `join()`,
-      // an unclosed `{if}`): that is CL0413/CL0415's finding, and the empty body is its
-      // symptom, not a second mistake.
-      if (
-        item.kind !== 'reference'
-        && String(bodyText).trim() === ''
-        && diagnostics.errors.length === errorsBeforeBody
-      ) {
-        diagnostics.error(
-          DIAG_CODES.ITEM_RENDERS_EMPTY,
-          `story card "${itemId}" on branch "${branchLabel}" renders an empty body: `
-          + `template "${bodyRender.name}" reads no key this item carries. Use `
-          + '"kind: reference" if the card is triggers and notes only.',
-          { file: item._source },
-        );
-        continue;
-      }
-      // The body arrives already wrapped — `render` applies render.wrapper — which is
-      // what the length check needs when it measures the final string.
-      rendered = renderCard({
-        item,
-        bodyText,
-        notesText: renderNotesText(item, context, templates, partials, variables, projectNotesTemplate, diagnostics, {
-          fieldTable, templateFor,
-        }),
-        diagnostics,
-        loc: { file: item._source },
-        questions,
-      }).text;
-    } catch (err) {
-      diagnostics.error(
-        DIAG_CODES.RENDER_FAILED,
-        `item "${itemId}" failed to render: ${err.message}`,
-        { file: item._source },
-      );
-      continue;
-    }
-
-    // The written type, normalized (CL0626–CL0628). Applied here rather than to
-    // `item.aid.type` itself, because that value is also the *selector* the template ladder
-    // and `templateFor` key on, and those maps carry the author's casing from the config —
-    // folding the item would silently deselect a type's tier. Everything downstream of this
-    // line is on the writing side: the grouping key, the file path, the collision message,
-    // and the reports, which read the compiled tree from disk and so see this value anyway.
-    const type = cardTypeAudit
-      ? cardTypeAudit.resolve((item.aid && item.aid.type) || 'Uncategorized', { file: item._source })
-      : (item.aid && item.aid.type) || 'Uncategorized';
-
-    // Two cards on one leaf that share a display name are an error. Velvet Lattice's
-    // `_merge_story_cards` keys on name alone, so only one of them ever reaches AID — the
-    // later declaration wins, and once cards are inherited rather than copied to every
-    // leaf that winner is position-dependent. Two cards meant to coexist must have
-    // distinct names; one card declared twice is a duplicate id (CL0325), not this.
-    // Cross-type or same-type makes no difference to VL, so neither does it here.
-    // Reported once per name per leaf.
-    const cardName = cardTitle(item);
-    const existing = seenNames.get(cardName);
-    if (existing && !reportedCollisions.has(cardName)) {
-      reportedCollisions.add(cardName);
-      const where = existing.type === type
-        ? `both as ${type}`
-        : `${existing.type} in ${path.basename(existing.file)} and ${type} in ${path.basename(item._source)}`;
-      diagnostics.error(
-        DIAG_CODES.CARD_NAME_COLLISION,
-        `story cards named "${cardName}" collide on branch "${branchLabel}" (${where}). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.`,
-        { file: item._source },
-      );
-    }
-    if (!existing) {
-      seenNames.set(cardName, { type, file: item._source });
-    }
-
-    const leakSink = { diagnostics, file: item._source };
-    checkUnexpandedVariables(rendered, `item "${itemId}" (${type})`, leakSink);
-    checkUnresolvedFieldTokens(rendered, `item "${itemId}" (${type})`, leakSink);
-    checkMechanicalArtifacts(rendered, `item "${itemId}" (${type})`, leakSink);
-    // The whole rendered card, so one call covers name, triggers, notes and body — every
-    // story-card field AID accepts a placeholder in.
-    checkUndeclaredPlaceholders(rendered, placeholders, {
-      diagnostics, file: item._source, where: `story card "${itemId}"`, branch: branchLabel,
-      usage, usagePath,
-    });
-    if (!grouped.has(type)) grouped.set(type, []);
-    // Carry a sort key (the item's real id, lowercased) so output order is
-    // deterministic regardless of authoring order in the source YAML. `id`/`name` ride
-    // along so the caller's inheritance pass can match this card to the same card on
-    // other leaves — `name` is what Velvet Lattice's card merge keys on.
-    grouped.get(type).push({
-      sortKey: String(itemId).toLowerCase(),
-      rendered,
-      id: item.id ? String(item.id) : null,
-      name: cardTitle(item),
-    });
-    // Capture the rendered block per item id for cross-branch diff/annotate reports.
-    if (renderedById && item.id) renderedById.set(item.id.toLowerCase(), { type, rendered });
   }
 
   // The per-(node, type) file write is deferred to `compileRun`'s post-loop inheritance
@@ -656,6 +435,268 @@ function renderBranchItems(resolvedItems, registry, templates, partials, branchP
   // down. `grouped` is returned raw — types unsorted, cards unsorted within a type —
   // because that pass re-groups by node before sorting.
   return { grouped, occupants, placeholderNoise };
+}
+
+/**
+ * Placement half of the per-item loop: routes an item's declared targets into component
+ * slots and raises CL0609 (empty render at a live target) and CL0610 (no output at all).
+ * `placement` is a parameter — CL0610 also tests `!placement.storyCard`, since a target
+ * miss only matters when nothing else is going to speak for this item either.
+ */
+function renderTargets(item, placement, itemId, ctx) {
+  const {
+    templates, partials, variables, diagnostics, slotIndex, branchLabel,
+    fieldTable, templateFor, fieldAudit, placeholders, usage, usagePath,
+    occupants, placeholderNoise,
+  } = ctx;
+
+  // `liveTargets` is targets that reached a real slot on this branch — a gated-off slot
+  // is not one. CL0610 fires when nothing reached a slot; CL0609 when something did and
+  // rendered blank.
+  let liveTargets = 0;
+
+  for (const target of placement.targets) {
+    if (!checkTargetSlot(target, itemId, slotIndex, branchLabel, diagnostics, item._source)) continue;
+    const known = slotIndex.get(target.component);
+    // A slot the component declares but this branch excludes: nothing is placed, and
+    // nothing is said here. Whether that silence matters is the no-output invariant's
+    // question, below, and it is the only one with enough context to answer it.
+    if (known && !known.slots.has(String(target.slot).toLowerCase())) continue;
+    liveTargets++;
+    const text = renderPlacementBody(item, target, templates, partials, variables, diagnostics, {
+      fieldTable, templateFor,
+      // Only for a card-emitting item: the audit collects the union of an item's render
+      // lists but its item set stays "items that produce a story card" this session.
+      fieldAudit: placement.storyCard ? fieldAudit : null,
+    });
+    if (text === null) continue;
+    // A live target that rendered to nothing (CL0609). `renderPlacementBody` already
+    // reported and returned null for a missing template or a render failure; this is the
+    // other way a placement goes silent — a field-list or `.template` that is all
+    // non-firing conditionals against an item that carries none of the keys. The slot
+    // filters the empty occupant back out at emit, so without this the item vanishes
+    // from the branch with nothing said. `~` on the branch dispatch or `branches:` is
+    // the intended way to drop an item from a branch.
+    if (String(text).trim() === '') {
+      diagnostics.error(
+        DIAG_CODES.ITEM_RENDERS_EMPTY,
+        `item "${itemId}" reaches ${target.component} slot "${target.slot}" on branch `
+        + `"${branchLabel}" but its body renders to nothing there. Exclude it from the `
+        + 'branch with "branches:" if that is what was meant.',
+        { file: item._source },
+      );
+      continue;
+    }
+    // Scanned per placement rather than once on the assembled component, because the
+    // same item body can land in two components on one branch and the author needs to
+    // be told which routing carried the mistake.
+    const reported = checkUndeclaredPlaceholders(text, placeholders, {
+      diagnostics,
+      file: item._source,
+      where: `item "${itemId}" rendering into ${target.component} slot "${target.slot}"`,
+      branch: branchLabel,
+      usage,
+      usagePath,
+    });
+    if (reported.length) {
+      if (!placeholderNoise.has(target.component)) placeholderNoise.set(target.component, new Set());
+      for (const name of reported) placeholderNoise.get(target.component).add(name);
+    }
+    if (!occupants.has(target.component)) occupants.set(target.component, new Map());
+    const slots = occupants.get(target.component);
+    const slotKey = String(target.slot || '').toLowerCase();
+    if (!slots.has(slotKey)) slots.set(slotKey, []);
+    slots.get(slotKey).push({ id: itemId, order: target.order, text, slot: target.slot });
+  }
+
+  // The no-output invariant: an item that resolved into this branch must leave a mark on
+  // it. Scoped by consequence rather than by mechanism — gating a slot off at the
+  // component level stays a legitimate way to drop a whole slot's contents from one
+  // branch, and only becomes an error when it would make an item vanish from every
+  // output it declared. Keyed on `liveTargets`: a target that reached a slot and
+  // rendered blank is CL0609's to report, and raising CL0610 too would describe one
+  // mistake twice.
+  if (!placement.storyCard && liveTargets === 0) {
+    diagnostics.error(
+      DIAG_CODES.ITEM_NO_OUTPUT,
+      `item "${itemId}" resolves on branch "${branchLabel}" but produces no output there: `
+      + 'storyCard is false and no declared target placed it. Exclude it from the branch '
+      + 'with "branches:" if that is what was meant.',
+      { file: item._source },
+    );
+  }
+}
+
+/**
+ * Card half of the per-item loop: runs the template ladder, renders the card, and
+ * accumulates it into `grouped` for the post-loop inheritance pass. Only called once
+ * `placement.storyCard` is known true.
+ */
+function renderStoryCard(item, itemId, questions, ctx) {
+  const {
+    templates, partials, variables, diagnostics, branchLabel, projectNotesTemplate,
+    fieldTable, templateFor, fieldAudit, cardTypeAudit, placeholders, usage, usagePath,
+    grouped, renderedById, seenNames, reportedCollisions,
+  } = ctx;
+
+  // Before the template ladder, deliberately. `aid.type` selects the template when no
+  // explicit one is named, so a placeholder in it also fails to match a template — and
+  // that failure returns past every later check. Reported here, the author is told
+  // the cause; reported after, they get CL0420 about a template they never wrote.
+  //
+  // Per branch rather than once per item, because a variant can change `aid.type` and
+  // only some branches may apply it.
+  checkPlaceholderContext(item.aid && item.aid.type, {
+    diagnostics,
+    file: item._source,
+    where: `the type of story card "${itemId}"`,
+    branch: branchLabel,
+    reason: 'AID does not fill placeholders in a card’s type. It is a category, and '
+      + 'Codex Loom also makes it a folder and file name in the compiled tree, so the '
+      + 'raw text would become part of a path.',
+  });
+
+  // Validate the fully-resolved aid.type (it becomes a folder/file name). Runs here,
+  // after all {%}/{$} passes, so it sees the final on-disk type. Raises CL0632 and
+  // returns on invalid — the leaf loop moves to the next item rather than aborting,
+  // so a run reports every bad type instead of only the first.
+  validateCardType(item, { diagnostics });
+
+  const bodyRender = resolveBodyRender(item, templates, fieldTable, templateFor);
+  if (!bodyRender) {
+    const type = (item.aid && item.aid.type) || (item.render && item.render.template) || '?';
+    diagnostics.error(
+      DIAG_CODES.TEMPLATE_NOT_FOUND,
+      `no template found for item "${itemId}" (type: ${type})`,
+      { file: item._source },
+    );
+    return;
+  }
+
+  // The unread-field audit: does the resolved template read every key this item's body
+  // carries? Runs on the field-list body only — a `.template` text body names nothing to
+  // check against. Findings are deduped compile-wide and emitted once, after every leaf.
+  if (fieldAudit && bodyRender.kind === 'fieldList') {
+    fieldAudit.collectForItem(item, bodyRender.list, { templateFor, refRoot: 'body' });
+  }
+
+  // Build render context: top-level item fields + body for {$body.X} access
+  const context = itemContext(item);
+
+  let rendered;
+  try {
+    const errorsBeforeBody = diagnostics.errors.length;
+    const bodyText = bodyRender.kind === 'fieldList'
+      ? renderFieldList(bodyRender.list, fieldTable, context, {
+        diagnostics, file: null, name: bodyRender.name, partials, variables,
+      })
+      : render(bodyRender.entry.content, context, partials, variables, {
+        diagnostics, file: bodyRender.entry._source, name: bodyRender.name,
+      });
+    // A resolved template that rendered the card body to nothing (CL0609). `reference`
+    // cards are exempt — §4.8 puts their payload in `notes:` and an empty body there is
+    // the normal shape. For a `story` card it means the template reads keys this item
+    // does not carry, and the card would ship to AID as a name with a blank value.
+    // Suppressed when the render itself just reported an error (a malformed `join()`,
+    // an unclosed `{if}`): that is CL0413/CL0415's finding, and the empty body is its
+    // symptom, not a second mistake.
+    if (
+      item.kind !== 'reference'
+      && String(bodyText).trim() === ''
+      && diagnostics.errors.length === errorsBeforeBody
+    ) {
+      diagnostics.error(
+        DIAG_CODES.ITEM_RENDERS_EMPTY,
+        `story card "${itemId}" on branch "${branchLabel}" renders an empty body: `
+        + `template "${bodyRender.name}" reads no key this item carries. Use `
+        + '"kind: reference" if the card is triggers and notes only.',
+        { file: item._source },
+      );
+      return;
+    }
+    // The body arrives already wrapped — `render` applies render.wrapper — which is
+    // what the length check needs when it measures the final string.
+    rendered = renderCard({
+      item,
+      bodyText,
+      notesText: renderNotesText(item, context, templates, partials, variables, projectNotesTemplate, diagnostics, {
+        fieldTable, templateFor,
+      }),
+      diagnostics,
+      loc: { file: item._source },
+      questions,
+    }).text;
+  } catch (err) {
+    diagnostics.error(
+      DIAG_CODES.RENDER_FAILED,
+      `item "${itemId}" failed to render: ${err.message}`,
+      { file: item._source },
+    );
+    return;
+  }
+
+  // The written type, normalized (CL0626–CL0628). Applied here rather than to
+  // `item.aid.type` itself, because that value is also the *selector* the template ladder
+  // and `templateFor` key on, and those maps carry the author's casing from the config —
+  // folding the item would silently deselect a type's tier. Everything downstream of this
+  // line is on the writing side: the grouping key, the file path, the collision message,
+  // and the reports, which read the compiled tree from disk and so see this value anyway.
+  const type = cardTypeAudit
+    ? cardTypeAudit.resolve((item.aid && item.aid.type) || 'Uncategorized', { file: item._source })
+    : (item.aid && item.aid.type) || 'Uncategorized';
+
+  checkCardNameCollision(item, type, branchLabel, diagnostics, seenNames, reportedCollisions);
+
+  const leakSink = { diagnostics, file: item._source };
+  checkUnexpandedVariables(rendered, `item "${itemId}" (${type})`, leakSink);
+  checkUnresolvedFieldTokens(rendered, `item "${itemId}" (${type})`, leakSink);
+  checkMechanicalArtifacts(rendered, `item "${itemId}" (${type})`, leakSink);
+  // The whole rendered card, so one call covers name, triggers, notes and body — every
+  // story-card field AID accepts a placeholder in.
+  checkUndeclaredPlaceholders(rendered, placeholders, {
+    diagnostics, file: item._source, where: `story card "${itemId}"`, branch: branchLabel,
+    usage, usagePath,
+  });
+  if (!grouped.has(type)) grouped.set(type, []);
+  // Carry a sort key (the item's real id, lowercased) so output order is
+  // deterministic regardless of authoring order in the source YAML. `id`/`name` ride
+  // along so the caller's inheritance pass can match this card to the same card on
+  // other leaves — `name` is what Velvet Lattice's card merge keys on.
+  grouped.get(type).push({
+    sortKey: String(itemId).toLowerCase(),
+    rendered,
+    id: item.id ? String(item.id) : null,
+    name: cardTitle(item),
+  });
+  // Capture the rendered block per item id for cross-branch diff/annotate reports.
+  if (renderedById && item.id) renderedById.set(item.id.toLowerCase(), { type, rendered });
+}
+
+/**
+ * Two cards on one leaf that share a display name are an error (CL0622). Velvet Lattice's
+ * `_merge_story_cards` keys on name alone, so only one of them ever reaches AID — the
+ * later declaration wins, and once cards are inherited rather than copied to every leaf
+ * that winner is position-dependent. Two cards meant to coexist must have distinct names;
+ * one card declared twice is a duplicate id (CL0325), not this. Cross-type or same-type
+ * makes no difference to VL, so neither does it here. Reported once per name per leaf.
+ */
+function checkCardNameCollision(item, type, branchLabel, diagnostics, seenNames, reportedCollisions) {
+  const cardName = cardTitle(item);
+  const existing = seenNames.get(cardName);
+  if (existing && !reportedCollisions.has(cardName)) {
+    reportedCollisions.add(cardName);
+    const where = existing.type === type
+      ? `both as ${type}`
+      : `${existing.type} in ${path.basename(existing.file)} and ${type} in ${path.basename(item._source)}`;
+    diagnostics.error(
+      DIAG_CODES.CARD_NAME_COLLISION,
+      `story cards named "${cardName}" collide on branch "${branchLabel}" (${where}). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.`,
+      { file: item._source },
+    );
+  }
+  if (!existing) {
+    seenNames.set(cardName, { type, file: item._source });
+  }
 }
 
 module.exports = {
