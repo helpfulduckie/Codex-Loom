@@ -29,7 +29,7 @@ function printDiagnostics(bus) {
  * compiling one and ignoring the other.
  *
  * @param {string|undefined} positional
- * @returns {{ configPath: string|null, scenarioRoot: string|null, outputDir: string|null, hasConfig: boolean }}
+ * @returns {{ configPath: string|null, scenarioRoot: string|null, outputDir: string|null, hasConfig: boolean, config: object|null }}
  */
 function resolveArgs(positional) {
   let cfgPath = null;
@@ -59,13 +59,14 @@ function resolveArgs(positional) {
       // is in hand; without passing it out, `--lint` would answer differently from the
       // compile that wrote the tree it is reading, on the same project's own setting.
       configLintLevel: (cfg.lint && cfg.lint.level) || null,
+      config: cfg,
     };
   }
 
   if (!positional) {
     return {
       configPath: null, scenarioRoot: null, outputDir: null, hasConfig: false,
-      configLintLevel: null,
+      configLintLevel: null, config: null,
     };
   }
 
@@ -77,6 +78,7 @@ function resolveArgs(positional) {
     // No config to read one from. `--lint` on a bare output tree has only the CLI flag,
     // which is the honest answer rather than a gap.
     configLintLevel: null,
+    config: null,
   };
 }
 
@@ -143,9 +145,13 @@ function renderMigrationReport(result) {
 
 // ── CLI entry point ───────────────────────────────────────────────────────────
 
-if (require.main === module) {
-  const rawArgs = process.argv.slice(2);
-
+/**
+ * Run the CLI for a given argument array and return its exit code.
+ *
+ * Exported so tests can call it in-process; the `require.main` guard below is the
+ * only caller that also calls `process.exit`.
+ */
+function main(rawArgs) {
   const knownFlags = [
     ['compile',    ['--compile',    '-C']],
     ['leafReview', ['--leafReview', '-l']],
@@ -198,7 +204,7 @@ if (require.main === module) {
         console.error(
           `--lint-level takes one of ${LINT_LEVELS.join(', ')}; got ${JSON.stringify(lintLevel || '')}.`
         );
-        process.exit(1);
+        return 1;
       }
     }
   }
@@ -232,7 +238,7 @@ if (require.main === module) {
       '  No mode flag compiles. Report modes read the existing output tree; compile options force a compile.\n' +
       '  --migrate converts a v3 project in place and does not compile — run it again once migrated.'
     );
-    process.exit(1);
+    return 1;
   }
 
   // ── Migrate (§14.2, Decision 4) ──
@@ -247,7 +253,7 @@ if (require.main === module) {
     const migrateConfigPath = resolveMigrateConfigPath(positional[0]);
     if (!migrateConfigPath) {
       console.error(`No v3 compile.yaml found at ${path.resolve(positional[0] || '.')}.`);
-      process.exit(1);
+      return 1;
     }
     try {
       const { migrateProjectFully } = require('./migrate');
@@ -263,9 +269,9 @@ if (require.main === module) {
       console.log(`Wrote ${reportPath}`);
     } catch (err) {
       console.error(`\nFatal: ${err.message}`);
-      process.exit(1);
+      return 1;
     }
-    process.exit(0);
+    return 0;
   }
 
   let resolved;
@@ -274,9 +280,9 @@ if (require.main === module) {
   } catch (err) {
     // findConfigEntry throws when a directory holds more than one config entry point.
     console.error(`\nFatal: ${err.message}`);
-    process.exit(1);
+    return 1;
   }
-  const { configPath, scenarioRoot, outputDir, hasConfig, configLintLevel } = resolved;
+  const { configPath, scenarioRoot, outputDir, hasConfig, configLintLevel, config: projectConfig } = resolved;
 
   // The flag is what someone typed for this run; the config is what the project says every
   // run. Same precedence the compile applies internally, stated once here so the report
@@ -288,13 +294,13 @@ if (require.main === module) {
     if (!hasConfig) {
       if (!scenarioRoot) {
         console.error('No compile.yaml in current directory and no path given.');
-        process.exit(1);
+        return 1;
       }
       if (doLeafReview || doOverview) {
         console.warn('Warning: compile.yaml not found; skipping compile.');
       } else {
         console.error(`No compile.yaml found at ${path.resolve(positional[0] || '.')}.`);
-        process.exit(1);
+        return 1;
       }
     } else {
       const compileDiagnostics = new Diagnostics();
@@ -313,7 +319,7 @@ if (require.main === module) {
       printDiagnostics(compileDiagnostics);
       if (failure) {
         console.error(`\nFatal: ${failure.message}`);
-        process.exit(1);
+        return 1;
       }
     }
   }
@@ -322,18 +328,21 @@ if (require.main === module) {
   if (doSnapshot) {
     if (!hasConfig) {
       console.error(`No compile.yaml found at ${path.resolve(positional[0] || '.')}.`);
-      process.exit(1);
+      return 1;
     } else {
       try {
         const snapshotDiagnostics = new Diagnostics();
+        // `live: true` makes this a different load than the one `resolveArgs` performed —
+        // not a duplicate of it — so it stays a second call to `loadCompileConfig` rather
+        // than reusing `projectConfig`.
         const config = loadCompileConfig(configPath, { diagnostics: snapshotDiagnostics, live: true });
         if (!config) {
           printDiagnostics(snapshotDiagnostics);
-          process.exit(1);
+          return 1;
         }
         if (!config._resolvedSnapshot) {
           console.error('structure.input.snapshot is not set in compile.yaml; nothing to sync.');
-          process.exit(1);
+          return 1;
         }
         const result = syncLibrary(config, { log, diagnostics: snapshotDiagnostics });
         printDiagnostics(snapshotDiagnostics);
@@ -344,10 +353,10 @@ if (require.main === module) {
         );
         // The manifest and copied files are still written above — sync itself succeeded —
         // but a `requiresRoles` refusal (Decision 2, Phase 8) means the run is not clean.
-        if (snapshotDiagnostics.hasErrors()) process.exit(1);
+        if (snapshotDiagnostics.hasErrors()) return 1;
       } catch (err) {
         console.error(`\nFatal: ${err.message}`);
-        process.exit(1);
+        return 1;
       }
     }
   }
@@ -356,11 +365,11 @@ if (require.main === module) {
   if (doLeafReview || doOverview || doSeedMap || doCardSizes || doLint) {
     if (!scenarioRoot) {
       console.error('No compile.yaml in current directory and no path given.');
-      process.exit(1);
+      return 1;
     }
     if (!fs.existsSync(scenarioRoot)) {
       console.error(`Scenario root not found: ${scenarioRoot}`);
-      process.exit(1);
+      return 1;
     }
 
     if (flags.verbose) {
@@ -424,19 +433,7 @@ if (require.main === module) {
         // A compiled tree carries no branch context, so `--lint` runs the project-root
         // `lint.packs` against every file (§8.2.2). With no `compile.yaml` to find, it has
         // no packs to run — the same honest gap `--lint` already has for `lint.level`.
-        let lintConfig = null;
-        if (configPath) {
-          const lintConfigDiagnostics = new Diagnostics();
-          try {
-            lintConfig = loadCompileConfig(configPath, { diagnostics: lintConfigDiagnostics });
-          } catch (err) {
-            lintConfig = null;
-          }
-          if (lintConfigDiagnostics.hasErrors()) {
-            printDiagnostics(lintConfigDiagnostics);
-            lintConfig = null;
-          }
-        }
+        const lintConfig = projectConfig;
         const lintDiagnostics = new Diagnostics();
         const result = runLintMode(scenarioRoot, dir, {
           log, lintLevel: effectiveLintLevel, config: lintConfig, configPath,
@@ -462,10 +459,18 @@ if (require.main === module) {
           : summaryParts.slice(0, -1).join(', ') + ', and ' + summaryParts.at(-1);
         console.log(`\nWrote ${joined} to:\n  ${outputDir}\n`);
       }
-      if (lintErrors > 0) process.exit(1);
+      if (lintErrors > 0) return 1;
     } catch (err) {
       console.error(`\nFatal: ${err.message}`);
-      process.exit(1);
+      return 1;
     }
   }
+
+  return 0;
+}
+
+module.exports = { main };
+
+if (require.main === module) {
+  process.exit(main(process.argv.slice(2)));
 }
