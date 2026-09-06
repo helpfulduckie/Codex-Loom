@@ -9,6 +9,7 @@ conventions (`SCHEMA.md` sections 1 and 7) are hand-written and not reproduced h
 
 | Field | Label | Renders | Reads |
 |---|---|---|---|
+| `Tagline` | Tagline | bare | `Tagline` |
 | `vibe` | Vibe | join "; " | `vibe` _(wrap [])_ |
 | `appearance` | Current Appearance / Appearance _(conditional)_ | join "; " | `Physical Traits.gender`, `Physical Traits.age`, `Physical Traits.hair`, `Physical Traits.other` |
 | `originalAppearance` | Original Appearance | join "; " | `originalAppearance` |

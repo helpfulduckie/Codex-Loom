@@ -1,13 +1,8 @@
 # The shared field table. Exercises every declaration key in the chapter below.
 # doc: 10-field-declarations.md#declaration-keys
 
-# Every rendered body leads with the item's own name — the Story Card title is invisible
-# to the AI storyteller. `cardName.partial` (`{$aid.title} - {tagline}`) carries it, and
-# `youLine.partial` (`You: {tagline}`) carries the player block. `Tagline` is consumed by
-# those partials rather than declared as its own stanza; field operations act on the raw
-# body value, which needs no declaration.
-
 fields:
+  Tagline:     { label: Tagline }
   vibe:        { label: Vibe, join: "; ", wrap: "[]" }
   appearance:  { label: Appearance,
                  from: [Physical Traits.gender, Physical Traits.age,
@@ -19,9 +14,6 @@ fields:
   personalityExpanded: { from: Personality.expanded }
   Magic:       { label: Magic, from: [Magic.affinity, Magic.effect], join: "; " }
   pantheon:    { label: Pantheon, render: keys, block: true }
-  # NOTE: the declaration key must match the body key's case. The renderer matches body
-  # fields case-insensitively, but CL0426's audit does not — declaring `background` against
-  # a `Background:` body key renders correctly and still warns.
   Background:  { label: Background, render: list }
   relationships: { label: Relationships, render: list }
   secret:      { label: Hidden Info, wrap: "[]", wrapLabel: true }

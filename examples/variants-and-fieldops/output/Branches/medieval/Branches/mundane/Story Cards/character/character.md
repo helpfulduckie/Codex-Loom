@@ -4,7 +4,6 @@ triggers: [Aness, Kolar]
 encapsulate: false
 ~~~
 Aness Kolar - Fixer; knows who owes whom; sworn to a house; strictly unmagical
-Role: Fixer
 Vibe: [dry; unhurried; well-connected]
 Appearance: female; mid 30s; black hair, cropped short
 Personality: dry, patient, transactional
@@ -18,7 +17,6 @@ triggers: [Kaiden, Ross]
 encapsulate: false
 ~~~
 Kaiden Ross - Outrider without a house
-Role: Outrider
 Vibe: [wry; watchful; steady]
 Appearance: male; early 30s; dark, close-cropped
 Personality: wry, watchful
@@ -30,7 +28,6 @@ triggers: [Zephon, Adrel]
 encapsulate: false
 ~~~
 Zephon Adrel - Courier; former archivist
-Role: Courier
 Vibe: [precise; restless; evasive]
 Appearance: nonbinary; late 20s; long brown hair, tied back
 Personality: precise, restless
