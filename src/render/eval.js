@@ -31,13 +31,27 @@ function resolveField(ref, data) {
     value = value[actualKey];
   }
 
+  return normalizeValue(value);
+}
+
+function normalizeValue(value, preserveScalar = false) {
   if (value === null || value === undefined) return null;
   if (typeof value === 'boolean') return value ? 'true' : 'false';
-  if (Array.isArray(value)) return value.length > 0 ? value : null;
-  if (typeof value === 'object') return value;
+  if (Array.isArray(value)) {
+    const kept = value.map(member => normalizeValue(member, true)).filter(member => member !== null);
+    return kept.length > 0 ? kept : null;
+  }
+  if (typeof value === 'object') {
+    const kept = Object.fromEntries(
+      Object.entries(value)
+        .map(([key, member]) => [key, normalizeValue(member, true)])
+        .filter(([, member]) => member !== null),
+    );
+    return Object.keys(kept).length > 0 ? kept : null;
+  }
 
-  const str = String(value).trim();
-  return str === '' ? null : str;
+  const str = String(value);
+  return str.trim() === '' ? null : (preserveScalar ? value : str.trim());
 }
 
 function isTruthy(ref, data) {

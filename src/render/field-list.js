@@ -61,7 +61,7 @@ function inlineGuard(refs, body) {
 
 function buildPartNode(entry, refRoot) {
   if (isRefEntry(entry)) {
-    return { kind: 'ref', source: `{${entry}}`, refs: [entry] };
+    return { kind: 'ref', source: `{${entry}}`, refs: [entry], presenceRefs: [entry] };
   }
   if (typeof entry === 'string') {
     return { kind: 'literal', text: entry };
@@ -69,50 +69,52 @@ function buildPartNode(entry, refRoot) {
   if (entry && typeof entry === 'object') {
     const { body, refs } = declBody(undefined, entry, refRoot);
     const source = (entry.always || refs.length === 0) ? body : inlineGuard(refs, body);
-    return { kind: 'decl', source, refs };
+    return { kind: 'decl', source, refs, presenceRefs: entry.always ? [] : refs };
   }
   return { kind: 'literal', text: '' };
 }
 
-function assembleParts(nodes) {
+function assembleParts(nodes, { always = false } = {}) {
   const pieces = nodes.map((node, i) => {
     if (node.kind !== 'literal') return node.source;
+    if (always) return node.text;
     let text = node.text;
     const left = i > 0 ? nodes[i - 1] : null;
     const right = i < nodes.length - 1 ? nodes[i + 1] : null;
-    if (left && left.kind !== 'literal') text = inlineGuard(left.refs, text);
-    if (right && right.kind !== 'literal') text = inlineGuard(right.refs, text);
+    if (left && left.kind !== 'literal') text = inlineGuard(left.presenceRefs, text);
+    if (right && right.kind !== 'literal') text = inlineGuard(right.presenceRefs, text);
     return text;
   });
   const refs = nodes.filter((n) => n.kind !== 'literal').flatMap((n) => n.refs);
   return { source: pieces.join(''), refs };
 }
 
-function buildParts(list, refRoot) {
+function buildParts(list, refRoot, policy) {
   const nodes = (list || []).map((e) => buildPartNode(e, refRoot));
-  return assembleParts(nodes);
+  return assembleParts(nodes, policy);
 }
 
 function buildTryNode(entry, decl, refRoot) {
   if (entry && typeof entry === 'object') {
-    return declBody(undefined, entry, refRoot); // { body, refs }
+    const nested = declBody(undefined, entry, refRoot);
+    return { ...nested, presenceRefs: entry.always ? [] : nested.refs };
   }
   const refs = [bodyRef(entry, refRoot)];
-  return { body: valueExpr(decl, refs), refs };
+  return { body: valueExpr(decl, refs), refs, presenceRefs: refs };
 }
 
 function tryChain(nodes) {
   if (nodes.length === 0) return '';
   const build = (i) => {
-    const { body, refs } = nodes[i];
-    if (i === nodes.length - 1 || refs.length === 0) return body;
+    const { body, presenceRefs } = nodes[i];
+    if (i === nodes.length - 1 || presenceRefs.length === 0) return body;
     const fallback = build(i + 1);
     const orGuard = (rs) => {
       const [first, ...rest] = rs;
       if (rest.length === 0) return `{if ${first}}${body}{else}${fallback}{/if}`;
       return `{if ${first}}${body}{else}${orGuard(rest)}{/if}`;
     };
-    return orGuard(refs);
+    return orGuard(presenceRefs);
   };
   return build(0);
 }
@@ -128,10 +130,6 @@ function litNode(text) {
 
 function valueNode(source, refs) {
   return { kind: 'ref', source, refs };
-}
-
-function concatParts(nodes) {
-  return nodes.map((n) => (n.kind === 'literal' ? n.text : n.source)).join('');
 }
 
 function valueExpr(decl, refs) {
@@ -179,7 +177,7 @@ function declBody(name, decl, refRoot) {
     refs = built.refs;
     value = built.source;
   } else if (decl.parts !== undefined) {
-    const built = buildParts(decl.parts, refRoot);
+    const built = buildParts(decl.parts, refRoot, { always: decl.always });
     refs = built.refs;
     value = built.source;
   } else {
@@ -191,7 +189,10 @@ function declBody(name, decl, refRoot) {
   }
   const label = labelExpr(decl, refRoot);
 
-  const body = concatParts(sugarPartsList(decl, label, valueNode(value, refs)));
+  const body = assembleParts(
+    sugarPartsList(decl, label, valueNode(value, refs)),
+    { always: decl.always },
+  ).source;
 
   return { body, refs };
 }

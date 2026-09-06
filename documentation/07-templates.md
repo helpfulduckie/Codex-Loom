@@ -289,7 +289,7 @@ With optional else:
 Nothing hidden here.
 ```
 
-**Falsy values:** a field is falsy if it is missing, an empty string, the string `"false"`, the string `"0"`, an empty array, or an empty mapping. Everything else is truthy.
+**Falsy values:** a field is falsy if it is missing, empty or whitespace-only, the string `"false"`, the string `"0"`, or an array or mapping whose members are recursively empty. Empty aggregate members are omitted before rendering; a non-empty aggregate remains present, including one containing `false` or `0`. Everything else is truthy.
 
 Conditionals nest to any depth. The template is parsed into a tree, so each `{if}` is matched to its own `{/if}` by the parser rather than by repeated text substitution; an `{if}` whose closer never arrives is `CL0415`, and the unmatched tag renders as literal text.
 

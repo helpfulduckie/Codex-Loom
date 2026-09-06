@@ -230,12 +230,10 @@ describe('renderFieldList', () => {
     });
   });
 
-  // Composition primitive, step 3a (2026-09-03 handoff, Decisions 1, 2, 4, 9, 10). `always:
-  // true` isolates the literal-drop adjacency rule from the outer stanza guard (Decision 5),
-  // which is exercised separately above and in the nesting tests below.
+  // `always` makes literal scaffolding deliberate; the default policy applies adjacency guards.
   describe('parts: composition', () => {
-    const render1 = (parts, body, opts) => {
-      const table = { fields: { x: { parts, always: true } }, groups: {}, templates: {} };
+    const render1 = (parts, body, opts = {}) => {
+      const table = { fields: { x: { parts, always: opts.always } }, groups: {}, templates: {} };
       const ctx = itemContext({ id: 'T', name: { full: 'Tam' }, aid: { type: 'X' }, body });
       return renderFieldList([{ field: 'x' }], table, ctx, opts || {});
     };
@@ -294,6 +292,35 @@ describe('renderFieldList', () => {
         // is nested two levels down inside the part.
         const out = renderFieldList([{ field: 'x' }], table, ctx, {});
         expect(out).toBe('T1');
+      });
+    });
+
+    describe('always policy applies equally to sugar and parts', () => {
+      test.each([
+        ['sugar', { label: 'Status' }, 'Status:'],
+        ['parts', { parts: ['Status: ', '$body.status'] }, 'Status:'],
+      ])('%s keeps blank-form literals when always is true', (_shape, decl, expected) => {
+        const table = { fields: { x: { ...decl, always: true } }, groups: {}, templates: {} };
+        const ctx = itemContext({ id: 'T', name: 'T', aid: { type: 'X' }, body: {} });
+        expect(renderFieldList([{ field: 'x' }], table, ctx, {})).toBe(expected);
+      });
+
+      test.each([
+        ['sugar', { label: 'Status' }],
+        ['parts', { parts: ['Status: ', '$body.status'] }],
+      ])('%s drops blank-form literals by default', (_shape, decl) => {
+        const table = { fields: { x: decl }, groups: {}, templates: {} };
+        const ctx = itemContext({ id: 'T', name: 'T', aid: { type: 'X' }, body: {} });
+        expect(renderFieldList([{ field: 'x' }], table, ctx, {})).toBe('');
+      });
+
+      test('a nested always declaration counts as present to its parent literals', () => {
+        const table = {
+          fields: { x: { parts: ['[', { parts: ['Status: ', '$body.status'], always: true }, ']'], always: true } },
+          groups: {}, templates: {},
+        };
+        const ctx = itemContext({ id: 'T', name: 'T', aid: { type: 'X' }, body: {} });
+        expect(renderFieldList([{ field: 'x' }], table, ctx, {})).toBe('[Status: ]');
       });
     });
 

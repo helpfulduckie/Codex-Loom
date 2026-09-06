@@ -26,6 +26,16 @@ describe('conditionals', () => {
     expect(render(tmpl, { a: 'x' }, new Map())).toBe('');
     expect(render(tmpl, {}, new Map())).toBe('');
   });
+
+  test('recursively empty aggregates take the false branch', () => {
+    expect(render('{if $body.items}yes{else}no{/if}', { body: { items: [''] } }, new Map())).toBe('no');
+    expect(render('{if $body.values}yes{else}no{/if}', { body: { values: { entry: ' ' } } }, new Map())).toBe('no');
+  });
+
+  test('false and zero retain their existing false conditional branch', () => {
+    expect(render('{if $body.flag}yes{else}no{/if}', { body: { flag: false } }, new Map())).toBe('no');
+    expect(render('{if $body.count}yes{else}no{/if}', { body: { count: 0 } }, new Map())).toBe('no');
+  });
 });
 
 describe('wrapper blocks', () => {

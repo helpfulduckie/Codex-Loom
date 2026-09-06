@@ -66,6 +66,27 @@ describe('resolveField', () => {
     const d = { name: '' };
     expect(resolveField('$name', d)).toBeNull();
   });
+
+  test('returns null for whitespace-only scalar values', () => {
+    expect(resolveField('$name', { name: ' \t ' })).toBeNull();
+  });
+
+  test('returns null for recursively empty arrays and mappings', () => {
+    const d = { body: { array: ['', ['  ']], mapping: { first: '', nested: { value: ' ' } } } };
+    expect(resolveField('$body.array', d)).toBeNull();
+    expect(resolveField('$body.mapping', d)).toBeNull();
+  });
+
+  test('drops empty aggregate members without rewriting retained values', () => {
+    const d = { body: { array: ['', '  keep  ', { empty: '', value: ' value ' }], mapping: { blank: '', value: '  keep  ', nested: { blank: '', value: ' value ' } } } };
+    expect(resolveField('$body.array', d)).toEqual(['  keep  ', { value: ' value ' }]);
+    expect(resolveField('$body.mapping', d)).toEqual({ value: '  keep  ', nested: { value: ' value ' } });
+  });
+
+  test('keeps false and zero values present for direct rendering', () => {
+    expect(resolveField('$body.no', { body: { no: false } })).toBe('false');
+    expect(resolveField('$body.count', { body: { count: 0 } })).toBe('0');
+  });
 });
 
 describe('isTruthy', () => {
@@ -91,6 +112,14 @@ describe('isTruthy', () => {
 
   test('empty array is falsy', () => {
     expect(isTruthy('$body.tags', { body: { tags: [] } })).toBe(false);
+  });
+
+  test('recursively empty aggregates are falsy while false and zero keep their contract', () => {
+    const data = { body: { array: [''], mapping: { value: ' ' }, no: false, count: 0 } };
+    expect(isTruthy('$body.array', data)).toBe(false);
+    expect(isTruthy('$body.mapping', data)).toBe(false);
+    expect(isTruthy('$body.no', data)).toBe(false);
+    expect(isTruthy('$body.count', data)).toBe(false);
   });
 });
 

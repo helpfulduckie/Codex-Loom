@@ -1059,7 +1059,7 @@ and any per-field variation forces a duplicate file.
 carrying `label` (omit for a bare value), `render` (one of the seven functions, default
 bare), `join` separator, `wrap` around the value, `wrapLabel` to put the label inside the
 wrapper, `block` to put the value on its own line, `from` for a value assembled from more
-than one path, `always` for an unconditional line, and `labelWhen` for a conditional
+than one path, `always` for deliberate blank-form scaffolding when its refs are absent, and `labelWhen` for a conditional
 label — which exists because The Institute relabels `appearance` to `Current Appearance`
 when `originalAppearance` is also present, its before-and-after premise, and a static
 label cannot express it. **A field's declaration never varies by branch**; there is

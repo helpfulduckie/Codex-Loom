@@ -58,7 +58,7 @@ table's.
 | `wrapLabel` | Put the label *inside* the wrapper rather than outside it |
 | `block` | Put the value on its own line beneath the label |
 | `from` | Read a different body path, or several — `from: [magic.affinity, magic.effect]` |
-| `always` | Emit unconditionally. Without it the stanza is wrapped in `{if}` on the first ref |
+| `always` | Deliberately emit blank-form labels, separators and wrappers even when every ref is absent |
 | `labelWhen` | A conditional label: `{ originalAppearance: Current Appearance }` |
 
 **`labelWhen` exists for the before-and-after case.** A single mapping entry — when the
@@ -89,8 +89,11 @@ Vibe: [{join("; ", $body.vibe)}]
 {/if}
 ```
 
-The `{if}` guard tests the first ref, so **a field absent from an item's `body:` emits
-nothing** — no empty label, no stray separator. `always: true` drops the guard.
+**Empty values are absent by default.** An empty or whitespace-only scalar is absent, as is
+an array or mapping whose members are recursively empty; mixed aggregates omit empty members.
+A declaration with only absent refs emits nothing — no label, separator or wrapper.
+`always: true` is the explicit blank-form exception: it deliberately preserves that
+declaration's literal scaffolding, whether it uses ordinary declaration sugar or `parts:`.
 
 **`wrap` interacts with `wrapLabel` and `block` in three shapes:**
 

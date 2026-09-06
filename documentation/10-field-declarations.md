@@ -45,7 +45,7 @@ fields:
 | `wrapLabel` | Put the label *inside* the wrapper rather than outside it |
 | `block` | Put the value on its own line beneath the label |
 | `from` | Read a different body path, or several — `from: [magic.affinity, magic.effect]` |
-| `always` | Emit unconditionally. Without it the stanza is guarded by `{if}` on the first ref |
+| `always` | Deliberately emit blank-form labels, separators and wrappers even when every ref is absent |
 | `labelWhen` | A conditional label — `{ originalAppearance: Current Appearance }` |
 
 **`labelWhen` exists for the before-and-after case.** When the named body key is present, the alternate label replaces `label`. A project that relabels `appearance` to `Current Appearance` whenever `originalAppearance` is also set cannot express that with a static label.
@@ -72,7 +72,7 @@ Vibe: [{join("; ", $body.vibe)}]
 {/if}
 ```
 
-The `{if}` guard tests the first ref, so **a field absent from an item's `body:` emits nothing** — no empty label, no stray separator. `always: true` drops the guard:
+**An empty value is absent by default:** a scalar that is empty or whitespace-only is absent, and arrays and mappings lose empty members recursively before their presence is tested. A non-empty aggregate retains its non-empty members unchanged; `false` and `0` retain their direct-render and conditional behavior. A declaration whose refs are absent emits nothing — no empty label, separator or wrapper. `always: true` is the explicit blank-form exception: it renders that declaration's literal scaffolding deliberately, whether it is declaration sugar or explicit `parts:`:
 
 ```yaml transform=stanza-source id=stanza-always
 tagline: { label: Tagline, always: true }
@@ -152,7 +152,7 @@ fields:
 
 **A literal renders iff every adjacent ref that exists in the list renders.** A middle literal has two neighbors and needs both; a head or tail literal has one neighbor and needs that one. A nested declaration counts as one neighbor and is present when any of its own refs is, so a nested group drops together rather than per-ref.
 
-**"Present" is the same test `{if}` uses, which is not quite "produced non-empty text".** A missing key, an empty list, an empty mapping, `false` and `0` all count as absent, so the common cases behave as you would expect. **An empty-string value does not** — `x: ""` is present, so its adjacent literal renders and can leave a trailing separator. That is a property of `isTruthy` in `src/render/eval.js`, shared with every `{if}` in the system, rather than anything specific to `parts:`.
+**"Present" is the same test `{if}` uses.** A missing key; an empty or whitespace-only scalar; a recursively empty list or mapping; `false`; and `0` all count as absent. Mixed aggregates omit their empty members before this test. `always: true` is the narrow override: its own literal scaffolding is deliberately present even when its refs are absent, including when that declaration is nested inside another `parts:` list.
 
 | Shape | Ref present? | Output |
 |---|---|---|
@@ -170,7 +170,7 @@ fields:
   triple: { parts: [$a, { parts: ["-", $b, "-"] }] }
 ```
 
-— now the whole nested group drops together when `$b` is absent, because a nested declaration's own presence is "did it render anything", not "is each of its refs individually present".
+— now the whole nested group drops together when `$b` is absent, because a nested declaration's own presence is "did it render anything", not "is each of its refs individually present". A nested `always: true` declaration is the explicit exception: its deliberate literal output counts as present to its parent.
 
 ### Literals are template source, not escaped text
 
