@@ -152,6 +152,8 @@ aid:
 
 String values in `aid:` (e.g. `title`, `triggers`) support `{%variable}` expansion, the same as `body:`. **`aid.type` is validated after expansion** — since it becomes a folder and filename, an illegal path segment (`< > : " / \ | ? *`, control chars, `.`/`..`, or a trailing space/period) aborts the compile.
 
+Every semantic item string value expands, including nested values in `body:`, `v:`, `notes:`, `meta:`, and `pronouns:`; mapping keys and branch/variant selectors remain literal.
+
 ---
 
 ## `render:` Block

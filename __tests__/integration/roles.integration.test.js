@@ -322,14 +322,8 @@ describe('the roles gap — branchFraming and the root Description', () => {
   });
 });
 
-/**
- * A `{%var}` in `roles.protagonist` is expanded once per node where the answer can change
- * (`resolveProtagonists` in compile.js), not once per leaf. Before the hoist the leaf loop
- * and the framing walker each expanded it themselves with no bus, so an undeclared name was
- * an uncoded `console.warn` and the build passed with a protagonist that matched nothing.
- * Now it is the same `CL0510` every other undeclared-variable site raises, exactly once, and
- * the run fails.
- */
+// `resolveRoles` expands a role table once at each node where its variables or roles change;
+// an undeclared inherited value must therefore emit one CL0510, not one per descendant leaf.
 describe('an undeclared {%var} in roles.protagonist is one CL0510, not one per leaf', () => {
   const files = {
     ...BASE,
@@ -365,6 +359,46 @@ describe('an undeclared {%var} in roles.protagonist is one CL0510, not one per l
     const found = occurrences(output, 'CL0510');
     expect(found).toHaveLength(1);
     expect(found[0]).toContain('{%hero}');
+    expect(threw).not.toBeNull();
+    expect(threw.message).toMatch(/while compiling/);
+  });
+});
+
+describe('an undeclared {%var} in an ordinary root role is one CL0510, not one per leaf', () => {
+  const files = {
+    ...BASE,
+    'Codex/items.yaml': [
+      '- id: Malcolm',
+      '  name: {display: Malcolm, full: Malcolm Vale}',
+      '  pronouns: male',
+      '  aid: {type: Character, triggers: [Malcolm]}',
+      '  render: {template: Full}',
+      '  body: {Tagline: Seen.}',
+    ].join('\n'),
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'roles:',
+      '  LI: "{%love}"',
+      'branches:',
+      '  a: {}',
+      '  b:',
+      '    branches:',
+      '      x: {}',
+      '      y: {}',
+      '',
+    ].join('\n'),
+  };
+
+  test('four leaves, one CL0510 naming the role value, and the build fails', () => {
+    const { threw, diagnostics } = compileProject(files);
+    const found = occurrences(formatAll(diagnostics), 'CL0510');
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain('{%love}');
     expect(threw).not.toBeNull();
     expect(threw.message).toMatch(/while compiling/);
   });
@@ -468,5 +502,50 @@ describe('a branch that declares the missing variable resolves its own protagoni
     // `unbound` node rather than at either leaf.
     const unbound = fs.readFileSync(cardFile(tmpDir, 'unbound', 'Character'), 'utf8');
     expect(unbound).toContain('Seen: Malcolm.');
+  });
+});
+
+describe('variables resolve every role binding in the active branch scope', () => {
+  const files = {
+    ...BASE,
+    'Codex/items.yaml': [
+      '- id: Malcolm',
+      '  name: {display: Malcolm, full: Malcolm Vale}',
+      '  pronouns: male',
+      '  aid: {type: Character, triggers: [Malcolm]}',
+      '  render: {template: Full}',
+      '  body: {Tagline: "With {$LI}, {$Malcolm} wait[s]."}',
+      '- id: Ree',
+      '  name: {display: Ree, full: Ree Sol}',
+      '  pronouns: female',
+      '  aid: {type: Character, triggers: [Ree]}',
+      '  render: {template: Full}',
+      '  body: {Tagline: "With {$LI}, {$Ree} wait[s]."}',
+    ].join('\n'),
+    'compile.yaml': [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [%TMP%/Codex]',
+      '    templates: [%TMP%/templates]',
+      '  output: %TMP%/output',
+      'variables: {love: Malcolm, hero: Ree}',
+      'roles: {LI: "{%love}", protagonist: "{%hero}"}',
+      'branches:',
+      '  inherited: {}',
+      '  rebound:',
+      '    variables: {love: Ree, hero: Malcolm}',
+      '',
+    ].join('\n'),
+  };
+
+  test('ordinary roles and protagonist re-resolve after a branch variable override', () => {
+    const { threw, diagnostics, tmpDir } = compileProject(files);
+    expect(threw).toBeNull();
+    expect(occurrences(formatAll(diagnostics), 'CL0510')).toEqual([]);
+    expect(fs.readFileSync(cardFile(tmpDir, 'inherited', 'Character'), 'utf8'))
+      .toContain('With Malcolm, Malcolm waits.');
+    expect(fs.readFileSync(cardFile(tmpDir, 'rebound', 'Character'), 'utf8'))
+      .toContain('With Ree, you wait.');
   });
 });

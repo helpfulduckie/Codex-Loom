@@ -78,6 +78,8 @@ Item files are YAML sequences. A single file can mix local item definitions, `im
 | `branches` | optional | Maps branch names to variant names for dispatch |
 | `kind` | optional | `story` (default) or `reference` |
 
+Every semantic item string value expands `{%variable}`, including nested values in `body`, `v`, `notes`, `meta`, and `pronouns`; mapping keys and branch/variant selectors remain literal.
+
 **`kind: reference`** marks an item that exists to be read by a script or by a human in the story-card editor rather than by the AI. It exempts the item from the prose heuristics and from nothing else. It reaches AID nowhere — Velvet Lattice forwards only title, type, keys, value and description.
 
 **`meta:` is for convention packs, not for content.** Never validated by the loader, never proposed as a relocation target for a typo'd key. A pack reads `meta.<packName>.<key>`, so `meta.duckieConv.role` and a `stat-tracker` pack's keys never collide. The compiler writes it into the card's `~~~` fence so the offline `--lint` arm can read it back, and it is branch-addressable like any other whole-value field. See `references/convention-packs.md`.

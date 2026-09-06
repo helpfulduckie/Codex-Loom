@@ -40,6 +40,10 @@ unbind any of them; siblings are independent. `~` deletes the inherited key rath
 setting it null — a role read as "not there" behaves identically to one never declared,
 rather than resolving to the literal word `null`.
 
+**A role-binding value accepts `{%variable}` from its active branch scope.** The compiler
+re-resolves the role table when local variables or roles change, while role names remain
+literal structural keys.
+
 **`protagonist` is the built-in role** — an ordinary entry in `roles:`. `{$Aness}` resolves
 to `"you"` when `Aness` is bound as `protagonist` on the active branch; it otherwise
 behaves like any other role.

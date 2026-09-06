@@ -32,7 +32,10 @@ function buildCompileContext(config, branchPath, options = {}) {
     onWarn: options.onWarn || null,
   });
   const variables = chain.variables;
-  const roles = chain.rolesDeclared ? chain.roles : null;
+  const roleInfo = options.roleStateByPath
+    ? options.roleStateByPath.get(branchPath.join('/'))
+    : null;
+  const roles = roleInfo ? (roleInfo.declared ? roleInfo.resolved : null) : (chain.rolesDeclared ? chain.roles : null);
   const components = Object.assign({}, config.components || {}, chain.components);
   const render = Object.assign({}, config.render || {}, chain.render);
 
@@ -68,6 +71,7 @@ function buildCompileContext(config, branchPath, options = {}) {
 
   return {
     variables, componentRefs, render, templateFor, placeholders: chain.placeholders, roles,
+    branchProtagonist: roleInfo ? roleInfo.protagonist : null,
     lint: chain.lint,
   };
 }

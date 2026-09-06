@@ -176,6 +176,9 @@ Per-branch name → item id bindings, merged down the branch chain like `variabl
 `placeholders:`. `protagonist` is the built-in role — a global default is set at root and
 a branch overrides or unbinds (`~`) it like any other role.
 
+Role-binding values are semantic strings, so `{%variable}` expands against the active branch
+scope before role lookup; role names remain literal structural keys.
+
 ```yaml surface=config
 roles:
   protagonist: Aness
@@ -201,7 +204,7 @@ title: The Royal Academy
 
 ### `variables`
 
-Key-value pairs available in templates and field values as `{%key}`. Variables at the branch level override root-level variables for that branch's subtree.
+Key-value pairs available in templates and field values as `{%key}`. Variables at the branch level override root-level variables for that branch's subtree. `{%key}` expands in semantic string values; mapping keys, branch names, and selectors remain literal.
 
 ```yaml surface=config
 variables:

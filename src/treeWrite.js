@@ -67,7 +67,7 @@ function nodeVisitPrologue(name, node, isRoot, state) {
 function writeFramingRecursive(rootNode, outputBase, opts = {}) {
   const {
     configBase, configPath, variables, log, diagnostics, usage = null, loadSectioned = null,
-    registry = null, onRoleUsed = null, protagonistByPath = null,
+    registry = null, onRoleUsed = null, roleStateByPath = null,
   } = opts;
   if (!rootNode || typeof rootNode !== 'object') return;
 
@@ -101,17 +101,20 @@ function writeFramingRecursive(rootNode, outputBase, opts = {}) {
   };
 
   walkBranchTree(rootNode, ({ name, node, path: nodePath, isLeaf, isRoot, state }) => {
-    const {
+    let {
       outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
     } = nodeVisitPrologue(name, node, isRoot, state);
+    const roleInfo = roleStateByPath ? roleStateByPath.get(nodePath.join('/')) : null;
+    if (roleInfo) {
+      roles = roleInfo.resolved;
+      rolesDeclared = roleInfo.declared;
+    }
 
     const framing = node && node.components && node.components.branchFraming !== undefined
       ? node.components.branchFraming
       : null;
 
-    const branchProtagonist = protagonistByPath
-      ? (protagonistByPath.get(nodePath.join('/')) || null)
-      : null;
+    const branchProtagonist = roleInfo ? roleInfo.protagonist : null;
 
     if (framing != null) {
       if (isLeaf) {
@@ -154,15 +157,18 @@ function writeFramingRecursive(rootNode, outputBase, opts = {}) {
 function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
   const {
     variables, rootVariables, log, diagnostics, configPath = null, usage = null,
-    registry = null, onRoleUsed = null, protagonistByPath = null,
+    registry = null, onRoleUsed = null, roleStateByPath = null,
   } = opts;
   walkBranchTree(rootNode, ({ name, node, path: path_, isRoot, state }) => {
-    const {
+    let {
       outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
     } = nodeVisitPrologue(name, node, isRoot, state);
-    const branchProtagonist = protagonistByPath
-      ? (protagonistByPath.get(path_.join('/')) || null)
-      : null;
+    const roleInfo = roleStateByPath ? roleStateByPath.get(path_.join('/')) : null;
+    if (roleInfo) {
+      roles = roleInfo.resolved;
+      rolesDeclared = roleInfo.declared;
+    }
+    const branchProtagonist = roleInfo ? roleInfo.protagonist : null;
 
     if (isRoot) {
       if (node.title == null) {
@@ -244,19 +250,22 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
 function writePlaceholdersRecursive(rootNode, outputBase, opts = {}) {
   const {
     variables, configPath, diagnostics, log, usage = null, declarations = null, duplicates = null,
-    registry = null, onRoleUsed = null, protagonistByPath = null,
+    registry = null, onRoleUsed = null, roleStateByPath = null,
   } = opts;
   const onWarn = (code, message, file) => diagnostics.add(
     severityOf(code), code, message, { file: file || configPath },
   );
 
   walkBranchTree(rootNode, ({ name, node, path: path_, isRoot, state }) => {
-    const {
+    let {
       outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
     } = nodeVisitPrologue(name, node, isRoot, state);
-    const branchProtagonist = protagonistByPath
-      ? (protagonistByPath.get(path_.join('/')) || null)
-      : null;
+    const roleInfo = roleStateByPath ? roleStateByPath.get(path_.join('/')) : null;
+    if (roleInfo) {
+      roles = roleInfo.resolved;
+      rolesDeclared = roleInfo.declared;
+    }
+    const branchProtagonist = roleInfo ? roleInfo.protagonist : null;
 
     if (declarations) {
       const keys = localKeysOf(node);
@@ -283,7 +292,7 @@ function writePlaceholdersRecursive(rootNode, outputBase, opts = {}) {
 
 function writeTreeFiles({
   config, configPath, log, diagnostics,
-  placeholderState, componentLoader, registry, roleState, protagonistByPath,
+  placeholderState, componentLoader, registry, roleState, roleStateByPath,
 }) {
   writeFramingRecursive(config, config._resolvedOutput, {
     configBase: config._base,
@@ -295,7 +304,7 @@ function writeTreeFiles({
     loadSectioned: componentLoader.load,
     registry,
     onRoleUsed: roleState.onUsed,
-    protagonistByPath,
+    roleStateByPath,
   });
 
   writeLabelsRecursive(config, config._resolvedOutput, {
@@ -307,7 +316,7 @@ function writeTreeFiles({
     usage: placeholderState.usage,
     registry,
     onRoleUsed: roleState.onUsed,
-    protagonistByPath,
+    roleStateByPath,
   });
 
   writePlaceholdersRecursive(config, config._resolvedOutput, {
@@ -320,13 +329,13 @@ function writeTreeFiles({
     duplicates: placeholderState.duplicates,
     registry,
     onRoleUsed: roleState.onUsed,
-    protagonistByPath,
+    roleStateByPath,
   });
 }
 
 function writeScenarioBlurb({
   config, configPath, log, diagnostics,
-  rootVariables, registry, placeholderState, roleState, componentLoader, gaps, descriptionLeaves,
+  rootVariables, registry, placeholderState, roleState, roleStateByPath, componentLoader, gaps, descriptionLeaves,
 }) {
   const descRequested = config.components && config.components.description != null;
   const descSpec = descRequested
@@ -340,7 +349,9 @@ function writeScenarioBlurb({
   } else if (descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec)) {
     let combined = null;
     let descMetadata = null;
-    const rootRolesDeclared = !!(config.roles && Object.keys(config.roles).length);
+    const rootRoleInfo = roleStateByPath ? roleStateByPath.get('') : null;
+    const rootRoles = rootRoleInfo ? rootRoleInfo.resolved : config.roles;
+    const rootRolesDeclared = rootRoleInfo ? rootRoleInfo.declared : !!(config.roles && Object.keys(config.roles).length);
 
     if (isPassthrough(descSpec)) {
       const raw = readPassthrough(descSpec);
@@ -349,7 +360,7 @@ function writeScenarioBlurb({
       } else {
         combined = applyTokenPass(raw, {
           item: {}, registry, branchProtagonist: null,
-          roles: rootRolesDeclared ? config.roles : null, onRoleUsed: roleState.onUsed,
+          roles: rootRolesDeclared ? rootRoles : null, onRoleUsed: roleState.onUsed,
           onWarn: busWarner(diagnostics, { file: String(descSpec) }),
         }) || null;
       }
@@ -362,7 +373,7 @@ function writeScenarioBlurb({
           {
             defaultHeadingLevel: DESCRIPTION_DESCRIPTOR.defaultHeadingLevel,
             variables: rootVariables || {}, registry, branchProtagonist: null,
-            roles: rootRolesDeclared ? config.roles : null, onRoleUsed: roleState.onUsed,
+            roles: rootRolesDeclared ? rootRoles : null, onRoleUsed: roleState.onUsed,
             onWarn: busWarner(diagnostics, { file: String(descSpec) }),
             diagnostics, file: String(descSpec),
           },

@@ -100,6 +100,8 @@ miss inside a template renders empty and is not flagged.
 
 ## Variable Interpolation
 
+`{%variable}` expands every semantic item string value, including nested values in `body`, `aid`, `render`, `v`, `notes`, `meta`, and `pronouns`. Mapping keys, selectors, and non-string scalars remain literal.
+
 ```
 {$name}                             full name; {$name.display} for the short form
 {$body.Tagline}                     body field
@@ -219,7 +221,7 @@ so an item's own `wrapper:` cannot double-brace a component occupant.
 ```
 
 Matched case-insensitively against the `.partial` filename. A partial sees the same item
-data as its host. Circular includes are detected and raise an error.
+data as its host. `{%variable}` expands before that partial's own includes are parsed, so an include name may be variable-driven. Circular includes are detected and raise an error.
 
 ---
 

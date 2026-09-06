@@ -30,6 +30,8 @@ branches:
 `placeholders:`. A branch inherits every ancestor binding and may rebind or unbind any of
 them; siblings are independent.
 
+**Role-binding values accept `{%variable}` from the active branch scope; role names remain literal structural keys.** The compiler re-resolves the role table where variables or roles change.
+
 **`~` deletes the inherited key** rather than setting it null, so an unbound role behaves
 identically to one never declared rather than resolving to the literal word `null`.
 

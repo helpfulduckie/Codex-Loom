@@ -1,6 +1,8 @@
 'use strict';
 
-const { resolveVariables, walkItemTextFields, walkTextRecursive, itemContext } = require('./util');
+const {
+  resolveVariables, walkItemTextFields, walkTextRecursive, transformStringValues, itemContext,
+} = require('./util');
 const { CODES } = require('./diag');
 const { tokenize, parse, FUNCTION_NAMES } = require('./render/parse');
 const evalMod = require('./render/eval');
@@ -63,15 +65,11 @@ function applyFieldRenderFunctions(card, itemMap, options) {
 
 function applyVariableInterpolation(card, variables, sink) {
   if (!variables) return;
-  if (card.name && typeof card.name === 'object' && !Array.isArray(card.name)) {
-    walkTextRecursive(card.name, (s) => resolveVariables(s, variables, sink));
-  } else if (typeof card.name === 'string') {
-    card.name = resolveVariables(card.name, variables, sink);
+  for (const key of ['id', 'name', 'body', 'aid', 'render', 'v', 'notes', 'meta', 'pronouns']) {
+    if (card[key] !== undefined) {
+      card[key] = transformStringValues(card[key], (value) => resolveVariables(value, variables, sink));
+    }
   }
-  if (typeof card.id === 'string') card.id = resolveVariables(card.id, variables, sink);
-  if (card.body)   walkTextRecursive(card.body, (s) => resolveVariables(s, variables, sink));
-  if (card.aid)    walkTextRecursive(card.aid, (s) => resolveVariables(s, variables, sink));
-  if (card.render) walkTextRecursive(card.render, (s) => resolveVariables(s, variables, sink));
 }
 
 const RENDER_FN_DISPATCH = FUNCTION_NAMES.map((n) => [n + '(', FUNCTIONS[n]]);
@@ -114,7 +112,7 @@ function render(template, data, partials, variables, options) {
       }
     : () => {};
 
-  source = expandIncludes(source, partials, report);
+  source = expandIncludes(source, partials, report, variables, diagnostics, file);
 
   const preserved = [];
   const flags = { wrapperUsed: false };
@@ -132,7 +130,7 @@ function render(template, data, partials, variables, options) {
   return result;
 }
 
-function expandIncludes(source, partials, report, stack) {
+function expandIncludes(source, partials, report, variables, diagnostics, file, stack) {
   stack = stack || [];
   return source.replace(/\{include\s+(\S+)\}/g, function(match, includeName, offset, whole) {
     const key = includeName.toLowerCase();
@@ -146,7 +144,10 @@ function expandIncludes(source, partials, report, stack) {
       report(CODES.PARTIAL_NOT_FOUND, `Unknown partial "${includeName}" (no .partial file found).`, { line });
       return '';
     }
-    return expandIncludes(partial.content, partials, report, [...stack, key]);
+    const partialSource = variables
+      ? resolveVariables(partial.content, variables, { diagnostics, file: partial._source || file })
+      : partial.content;
+    return expandIncludes(partialSource, partials, report, variables, diagnostics, partial._source || file, [...stack, key]);
   });
 }
 

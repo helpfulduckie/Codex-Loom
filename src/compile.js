@@ -35,27 +35,34 @@ const {
 const { NULL_LOG } = require('./log');
 
 
-function resolveProtagonists(config, configPath, diagnostics) {
+function resolveRoles(config, configPath, diagnostics) {
   const byPath = new Map();
   walkBranchTree(config, ({ node, path: nodePath, isRoot, state }) => {
     const variables = mergeUnbindable(state.variables, node && node.variables, {
       code: DIAG_CODES.VARIABLE_UNBIND_UNKNOWN, kind: 'variable', onWarn: null,
     });
-    const roles = mergeUnbindable(state.roles, node && node.roles, {
+    const raw = mergeUnbindable(state.raw, node && node.roles, {
       code: DIAG_CODES.ROLE_UNBIND_UNKNOWN, kind: 'role', onWarn: null,
     });
-    const raw = roles.protagonist || '';
-    const canChange = isRoot || raw !== state.raw || !!(node && node.variables);
-    const resolved = canChange
-      ? (resolveVariables(raw, variables, { diagnostics, file: configPath }).toLowerCase() || null)
+    const declared = state.declared || !!(node && node.roles);
+    const changed = isRoot || !!(node && node.variables && Object.keys(node.variables).length)
+      || !!(node && node.roles && Object.keys(node.roles).length);
+    const resolved = changed
+      ? Object.fromEntries(Object.entries(raw).map(([key, value]) => [
+        key, resolveVariables(value, variables, { diagnostics, file: configPath }),
+      ]))
       : state.resolved;
-    byPath.set(nodePath.join('/'), resolved);
-    return { variables, roles, raw, resolved };
+    const protagonist = resolved.protagonist
+      ? String(resolved.protagonist).toLowerCase()
+      : null;
+    const roleInfo = { raw, resolved, declared, protagonist };
+    byPath.set(nodePath.join('/'), roleInfo);
+    return { variables, raw, resolved, declared };
   }, {
     variables: config._variables || config.variables || {},
-    roles: {},
-    raw: '',
-    resolved: null,
+    raw: {},
+    resolved: {},
+    declared: false,
   });
   return byPath;
 }
@@ -196,7 +203,7 @@ function compileRun(configPath, options, buses) {
     }
   });
 
-  const protagonistByPath = resolveProtagonists(config, configPath, compileDiagnostics);
+  const roleStateByPath = resolveRoles(config, configPath, compileDiagnostics);
 
   const leaves = enumerateLeaves(config.branches);
 
@@ -238,7 +245,7 @@ function compileRun(configPath, options, buses) {
     allItemDefs, registry, templates, partials,
     fieldTable, fieldAudit, cardTypeAudit,
     rootDirName, captureReports,
-    placeholderState, roleState, gaps, componentLoader, protagonistByPath,
+    placeholderState, roleState, gaps, componentLoader, roleStateByPath,
     deferredComponents, deferredScripts, deferredCardLeaves,
     descriptionLeaves, openingLeaves,
     leafData, inventoryData, leafSummaries, allItemIds,
@@ -253,12 +260,12 @@ function compileRun(configPath, options, buses) {
 
   writeTreeFiles({
     config, configPath, log, diagnostics: compileDiagnostics,
-    placeholderState, componentLoader, registry, roleState, protagonistByPath,
+    placeholderState, componentLoader, registry, roleState, roleStateByPath,
   });
 
   writeScenarioBlurb({
     config, configPath, log, diagnostics: compileDiagnostics,
-    rootVariables, registry, placeholderState, roleState, componentLoader, gaps, descriptionLeaves,
+    rootVariables, registry, placeholderState, roleState, roleStateByPath, componentLoader, gaps, descriptionLeaves,
   });
 
   finalizeDiagnostics({

@@ -328,7 +328,7 @@ Partials are reusable fragments included into templates (or other partials) with
 {include Appearance}
 ```
 
-Partial content sees the same item data as the outer template. Partials can include other partials to any depth; circular includes are detected and raise an error.
+Partial content sees the same item data as the outer template. `{%variable}` expands in each template or partial before that source's own `{include ...}` directives are parsed, so include names may be variable-driven. Partials can include other partials to any depth; circular includes are detected and raise an error.
 
 ```
 # Appearance.partial
@@ -370,14 +370,14 @@ Codex Loom has two compile-time token families. `{%}` is the *path/value* family
 
 | Token | Name | Declared in | Resolves to | Available in |
 |---|---|---|---|---|
-| `{%key}` | Compile variable | `compile.yaml` `variables:` (root + per-branch), and every `structure.input.library` name | a string value (recursive, cycle-detected; ERROR if undeclared) | item `id`/`name`/`body`/`aid`/`render` (string values), templates, opening prose, component specs, config paths, `include:` paths, branch `title`/`protagonist` |
+| `{%key}` | Compile variable | `compile.yaml` `variables:` (root + per-branch), and every `structure.input.library` name | a string value (recursive, cycle-detected; ERROR if undeclared) | semantic item string values (`id`/`name`/`body`/`aid`/`render`/`v`/`notes`/`meta`/`pronouns`), templates, opening prose, component specs, config paths, `include:` paths, branch `title`/role values |
 | `{$v.key}` / `{$Id.body.field}` | Field reference | an item's `v:` block / another item's fields | an item field value | templates, and item `body`/`aid`/`render`/`name` fields (the `{$…}` interpolation + cross-item + pronoun passes) |
 
 **Library names are auto-exposed as `{%}` variables**, so `{%characters}/Aness.yaml` resolves against a path declared under `structure.input`. That is the only naming system for these references. A library name colliding with a declared variable is an ERROR (`CL0521`), since the two share a namespace.
 
 **Scope caveat:** `{%}` in `include:`/`import:` paths uses **root** `variables:` only — includes resolve once, before branches are enumerated, so per-branch variable overrides are not in scope there. Everywhere else `{%}` uses the full root → branch merge.
 
-**`aid`/`render` expansion:** `{%}` expands in `aid` (e.g. `title`, `triggers`) and `render` (e.g. `template`, `wrapper`) string values, so template/type selection can be variable-driven. Only strings are touched — numeric and boolean fields such as `render.position` are left as-is.
+**Semantic-string expansion:** `{%}` expands every string value in an item, including nested mappings and arrays in `body`, `aid`, `render`, `v`, `notes`, `meta`, and `pronouns`. Only values are touched — mapping keys, branch/variant selectors, numeric fields, and boolean fields such as `render.position` remain literal.
 
 **`aid.type` validation:** because `aid.type` becomes both a folder and a filename (`Story Cards/{type}/{type}.md`), it is validated *after* expansion. An illegal path segment (`< > : " / \ | ? *`, control chars, `.`/`..`, or a trailing space/period) **aborts the compile** with an error naming the item and type. Spaces elsewhere are fine.
 

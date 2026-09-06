@@ -84,6 +84,25 @@ describe('includes', () => {
     expect(render('{include cond}', { show: 'false' }, partials)).toBe('');
   });
 
+  test('expands variables in outer, nested, and dynamically selected partials before parsing includes', () => {
+    const partials = new Map([
+      ['outer', { content: '{%greeting} {include {%next}}' }],
+      ['inner', { content: '{%subject} {include tail}' }],
+      ['tail', { content: '{%ending}' }],
+    ]);
+    expect(render('{include outer}', {}, partials, {
+      greeting: 'Hello', next: 'inner', subject: 'world', ending: '!',
+    })).toBe('Hello world !');
+  });
+
+  test('an undeclared partial variable reports the partial source', () => {
+    const diagnostics = new Diagnostics();
+    const partials = new Map([['outer', { content: '{%missing}', _source: 'outer.partial' }]]);
+    render('{include outer}', {}, partials, {}, { diagnostics, file: 'main.template' });
+    expect(diagnostics.all).toHaveLength(1);
+    expect(diagnostics.all[0]).toMatchObject({ code: 'CL0510', file: 'outer.partial' });
+  });
+
   test('literal braces in partial survive render', () => {
     const partials = new Map([['lit', { content: '{{curly}}' }]]);
     expect(render('{include lit}', {}, partials)).toBe('{curly}');

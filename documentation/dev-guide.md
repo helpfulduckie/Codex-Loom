@@ -34,7 +34,7 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/model/refs.js` | Item reference resolution, plain and library-qualified (§17.2) |
 | `src/model/pronouns.js` | Pronoun and verb conjugation passes; cross-item reference resolution |
 | `src/model/component.js` | Component documents: sections, slots, section variants, branch gating (§7.2) |
-| `src/util.js` | `{%variable}` expansion (`resolveVariables` — the single expander, §5.1); file enumeration, YAML loading, deep clone, case-insensitive object utilities |
+| `src/util.js` | `{%variable}` expansion (`resolveVariables` — the single expander, §5.1), recursive string-value transformation; file enumeration, YAML loading, deep clone, case-insensitive object utilities |
 | `src/template.js` | The render entry point: `{%}` expansion, `{include}` splicing, whitespace normalization, field interpolation |
 | `src/templateResolve.js` | The template-selection ladders (§13.4): `templateFor` per rendering role, the branch-merged type→template map, the load-time `notesTemplate` check |
 | `src/render/parse.js`, `src/render/eval.js` | The template lexer and parser (the whole tag grammar, not just render functions), and the AST evaluator |
@@ -234,7 +234,7 @@ The `'__DELETE__'` sentinel is propagated up the call chain so callers can delet
 `render(template, data, partials, variables, options)` in `template.js` runs five stages:
 
 1. **Expand `{%variable}` tokens** — `resolveVariables` over the template source, before anything else looks at it (§5.1)
-2. **Splice in partials** — `expandIncludes` expands `{include Name}` depth-first, with circular-include detection via a stack
+2. **Splice in partials** — `expandIncludes` expands each partial's `{%variable}` values before parsing its own `{include Name}` directives, then splices depth-first with circular-include detection via a stack
 3. **Tokenize** — `tokenize()` (`render/parse.js`) walks the source once into a flat token stream, each token carrying a 1-based `{line, column, length}` span
 4. **Parse** — `parse()` builds a document tree of `Text`, `FieldRef`, `FuncCall`, `If`, `Wrapper` and `Preserve` nodes
 5. **Evaluate** — `renderProgram()` (`render/eval.js`) walks that tree against `data`, then `normalizeWhitespace` strips tabs, drops blank lines, deduplicates spaces and trims
@@ -341,7 +341,7 @@ Progress lines are not `SEVERITY.INFO` diagnostics on purpose. The bus is data �
 
 **Token expansion — one family, one expander**
 
-All `{%variable}` expansion routes through `resolveVariables()` in `src/util.js` — recursive, cycle-detecting, and reporting undeclared names through a caller-supplied sink. There is no second implementation.
+All `{%variable}` expansion routes through `resolveVariables()` in `src/util.js` — recursive, cycle-detecting, and reporting undeclared names through a caller-supplied sink. `transformStringValues()` applies it to nested semantic values without changing mapping keys or non-string scalars. There is no second implementation.
 
 There is no second `{@name}` family (§6.1): library names are exposed as ordinary `{%}` variables, so one expander covers every case. Don't reintroduce a parallel resolver for a new context — add a call site to `resolveVariables` instead.
 
@@ -350,7 +350,7 @@ Call sites are thin wrappers: `config/load.js`'s `structure:` and `library:` pat
 Config paths pass two sink keys the content call sites do not: `location`, a source-map position preferred over `file`, and `branchOnly`, the set of names only a branch declares, which turns an undeclared name into `CL0520` rather than `CL0510`.
 
 Coverage notes:
-- `{%}` is expanded in item bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and config paths. In `include:`/`import:` paths it uses **root** `config.variables` only, because `resolveIncludes` runs once before branch enumeration — branch-merged variables do not exist yet.
+- `{%}` is expanded in every semantic item string value (`id`, `name`, `body`, `aid`, `render`, `v`, `notes`, `meta`, and `pronouns`), templates and partials, opening prose, component specs, branch `title`/role values, and config paths. Mapping keys and branch/variant selectors remain literal. In `include:`/`import:` paths it uses **root** `config.variables` only, because `resolveIncludes` runs once before branch enumeration — branch-merged variables do not exist yet.
 - The `{$…}` field-reference family (`{$v.field}`, `{$Id.body.field}`) is a separate system (field interpolation + pronoun passes) and is **not** part of `resolveVariables`. It covers `body`/`aid`/`render`/`name` via `walkItemTextFields`, accepts dotted field refs in item data, and reports via `checkUnresolvedFieldTokens` on any token that survives to output; collapsing its four resolvers into one dispatcher is still deferred. See `07-templates.md` "Token Systems at a Glance".
 
 Library path resolution no longer needs a bespoke two-pass. v3 resolved plain-path library entries first to build a lookup table, then resolved entries referencing sibling library names against it. Now that library names are ordinary variables (§6.1), a library entry naming a sibling is just a variable naming a variable, and `resolveVariables` handles it like any other — recursively, by key lookup, so declaration order is irrelevant. (§6.2 proposed a dependency graph and a topological sort on the premise that v3 resolved in declaration order. It did not, and neither does v4; the sort was never needed and never built.) Unresolved tokens pass through unchanged, so the standard missing-path warning fires with the unexpanded token visible in the path string.

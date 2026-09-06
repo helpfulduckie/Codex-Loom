@@ -82,6 +82,19 @@ function deepClone(obj) {
   return out;
 }
 
+function transformStringValues(value, transform) {
+  if (typeof value === 'string') return transform(value);
+  if (Array.isArray(value)) return value.map((entry) => transformStringValues(entry, transform));
+  if (isPlainObject(value)) {
+    const out = {};
+    for (const [key, entry] of Object.entries(value)) {
+      out[key] = transformStringValues(entry, transform);
+    }
+    return out;
+  }
+  return value;
+}
+
 function findKey(obj, key) {
   if (obj === null || typeof obj !== 'object') return null;
   const lower = key.toLowerCase();
@@ -256,7 +269,7 @@ function checkMechanicalArtifacts(text, label, sink) {
 }
 
 module.exports = {
-  findFiles, readFileTrim, listFilesRelative, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
+  findFiles, readFileTrim, listFilesRelative, loadYaml, deepClone, transformStringValues, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
   ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
   YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix, PATH_UNSAFE_CHARS, PLACEHOLDER_RE, isPlainObject,
   resolveVariables, checkUnexpandedVariables, walkItemTextFields, walkTextRecursive, itemContext, ITEM_CONTEXT_KEYS, checkUnresolvedFieldTokens,

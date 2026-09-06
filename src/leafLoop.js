@@ -25,7 +25,7 @@ function compileLeaf(branchPath, ctx) {
     allItemDefs, registry, templates, partials,
     fieldTable, fieldAudit, cardTypeAudit,
     rootDirName, captureReports,
-    placeholderState, roleState, gaps, componentLoader, protagonistByPath,
+    placeholderState, roleState, gaps, componentLoader, roleStateByPath,
     deferredComponents, deferredScripts, deferredCardLeaves,
     descriptionLeaves, openingLeaves,
     leafData, inventoryData, leafSummaries, allItemIds,
@@ -42,8 +42,9 @@ function compileLeaf(branchPath, ctx) {
     onWarn: busWarner(diagnostics, { file: configPath, branch: label }),
     diagnostics,
     configPath,
+    roleStateByPath,
   });
-  const branchProtagonist = protagonistByPath.get(branchPath.join('/')) || null;
+  const branchProtagonist = cctx.branchProtagonist;
 
   const resolvedItems = resolveBranchItems(allItemDefs, registry, branchPath, cctx.variables, diagnostics);
 

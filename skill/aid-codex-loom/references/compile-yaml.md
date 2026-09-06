@@ -125,10 +125,10 @@ Must be `4`. Required.
 Global default protagonist ID, overridable per branch. Matched case-insensitively against item `id`.
 
 ### `variables`
-Key-value pairs available in templates and field values as `{%key}`. Variables resolve against other variables, so `shared: '{%loom}/Library'` works. Branch variables merge on top of parent variables.
+Key-value pairs available in templates and field values as `{%key}`. Variables resolve against other variables, so `shared: '{%loom}/Library'` works. Branch variables merge on top of parent variables. `{%}` expands semantic string values; mapping keys and selectors remain literal.
 
 ### `roles`
-Name-to-item-id bindings, referenced in prose as `{$LI}`. Merges down the branch chain key by key; `~` unbinds. `protagonist` is an ordinary entry here rather than a separate mechanism. Full semantics in `references/roles.md`.
+Name-to-item-id bindings, referenced in prose as `{$LI}`. Binding values accept `{%variable}` from the active branch scope; role names remain literal structural keys. Merges down the branch chain key by key; `~` unbinds. `protagonist` is an ordinary entry here rather than a separate mechanism. Full semantics in `references/roles.md`.
 
 ### `templateFor`
 A template-selection file per rendering role — `base`, `notes`, and one key per component. Each value names a `.cl.yaml` carrying a `templates:` namespace, or a list of them merged left to right. Branch-addressable, and the mechanism behind context tiering. See `references/field-declarations.md`.

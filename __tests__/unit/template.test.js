@@ -694,12 +694,13 @@ describe('applyVariableInterpolation', () => {
     expect(card.aid.title).toBe('{@main} Codex');
   });
 
-  test('mutates body in place', () => {
+  test('replaces semantic values without mutating their nested source mappings', () => {
     const body = { Tagline: '{%x}' };
     const card = { body };
     applyVariableInterpolation(card, { x: 'y' });
-    expect(card.body).toBe(body);
-    expect(body.Tagline).toBe('y');
+    expect(card.body).not.toBe(body);
+    expect(body.Tagline).toBe('{%x}');
+    expect(card.body.Tagline).toBe('y');
   });
 
   // card.name is normalized to {display, full} by resolveCard before applyVariableInterpolation runs
@@ -734,6 +735,22 @@ describe('applyVariableInterpolation', () => {
     const card = { name: 42, body: {} };
     applyVariableInterpolation(card, { x: 'y' });
     expect(card.name).toBe(42);
+  });
+
+  test('expands every semantic string value without changing keys or non-string scalars', () => {
+    const card = {
+      body: { '{%literalKey}': [{ detail: '{%value}', count: 3 }, false] },
+      v: { label: '{%value}', nested: [{ text: '{%value}' }] },
+      notes: { text: '{%value}', enabled: true },
+      meta: { source: '{%value}', entries: [{ text: '{%value}' }] },
+      pronouns: { subject: '{%pronoun}', flags: [null, 0] },
+    };
+    applyVariableInterpolation(card, { value: 'expanded', pronoun: 'they', literalKey: 'ignored' });
+    expect(card.body).toEqual({ '{%literalKey}': [{ detail: 'expanded', count: 3 }, false] });
+    expect(card.v).toEqual({ label: 'expanded', nested: [{ text: 'expanded' }] });
+    expect(card.notes).toEqual({ text: 'expanded', enabled: true });
+    expect(card.meta).toEqual({ source: 'expanded', entries: [{ text: 'expanded' }] });
+    expect(card.pronouns).toEqual({ subject: 'they', flags: [null, 0] });
   });
 });
 
