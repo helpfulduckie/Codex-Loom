@@ -1,22 +1,5 @@
 'use strict';
 
-/**
- * The diagnostic bus.
- *
- * Every diagnostic carries a stable code, a severity, and — where the loader could
- * supply one — a source span. Codes exist so that three things are possible that plain
- * message strings cannot support: documentation anchors, lint suppression, and test
- * assertions that survive rewording a message.
- *
- * This module is deliberately free of `fs` and `console`, so it can be imported from
- * anywhere — including the pure `model/` layer, which reports problems without printing
- * them. Collect diagnostics here; let the CLI decide what reaches a terminal.
- *
- * `REGISTRY` below is the one place every diagnostic code is declared. Modules that
- * raise a code import `CODES` (name → id string, derived from `REGISTRY`) and never
- * hold their own table. `documentation/11-diagnostics.md` carries the hand-written
- * prose for each code; `diag.test.js` asserts the two agree on id, severity and band.
- */
 
 const SEVERITY = Object.freeze({
   ERROR: 'error',
@@ -32,43 +15,7 @@ const SEVERITY_LABEL = Object.freeze({
 
 const { ERROR, WARN } = SEVERITY;
 
-/**
- * The diagnostic registry — every code, its severity, and a one-line summary.
- *
- * This is the single place a code is declared. Modules that raise codes import `CODES`
- * (below) and reference `CODES.SOME_NAME`; none carry a local table. The bands only
- * constrain the id number:
- *
- *   CL01xx  loading — file discovery, YAML parse, entry-point resolution
- *   CL02xx  schema — unknown keys, wrong types, relocation suggestions
- *   CL03xx  items — resolution, variants, imports, branch dispatch
- *   CL04xx  render — templates, render functions, the leaked-artifact sweep
- *   CL05xx  tokens — variables, roles, placeholders, scoping
- *   CL06xx  components — slots, sections, sources, card-type and prompt-coverage checks
- *   CL07xx  emit — output layout, platform field caps
- *
- * `CL0143` (duplicate Codex overlay) and `CL0310` (unresolvable branch dispatch) are
- * named by the design docs but not yet raised; they are reserved in
- * `documentation/11-diagnostics.md` and deliberately absent here until something mints
- * them.
- *
- * `severity` is authoritative for codes reported through `onWarn(code, message)`, which
- * carries no severity of its own (`severityOf` recovers it). Codes raised by a direct
- * `diagnostics.error()` / `.warn()` call pass their severity at the call site; the value
- * here still has to match, and `diag.test.js` checks every entry against the severity
- * column of `documentation/11-diagnostics.md`.
- *
- * `summary` is a terse gloss for readers of this file. The authored prose — why a code
- * is an ERROR not a WARN, what it replaced, what bites — lives in `11-diagnostics.md`
- * and at the raise site, not here.
- *
- * `layer: 'opinion'` marks a quality judgment that can be wrong — one a project may
- * silence with `lint.level`. Everything without it is a fact about the output that
- * `lint.level` cannot reach. Convention-pack findings (`CL-<pack>/NNNN`) are opinion-layer
- * too, by their prefix rather than an entry here. See `isOpinion`.
- */
 const REGISTRY = Object.freeze({
-  // ── CL01xx  loading ────────────────────────────────────────────────────────
   YAML_PARSE_FAILED:            { id: 'CL0101', severity: ERROR, summary: 'YAML document is malformed and could not be parsed.' },
   YAML_FILE_UNREADABLE:         { id: 'CL0102', severity: ERROR, summary: 'File could not be read.' },
   YAML_EMPTY_FILE:              { id: 'CL0103', severity: WARN,  summary: 'File is empty; skipped.' },
@@ -92,7 +39,6 @@ const REGISTRY = Object.freeze({
   MULTIPLE_VAR_ALIASES:         { id: 'CL0142', severity: WARN,  summary: 'An item declares more than one v: alias; they are merged.' },
   ID_CONTAINS_COLON:            { id: 'CL0144', severity: ERROR, summary: 'An item id contains ":", which is reserved as the library separator.' },
 
-  // ── CL02xx  schema ────────────────────────────────────────────────────────
   UNKNOWN_KEY:                  { id: 'CL0201', severity: ERROR, summary: 'Unknown key. Carries a spelling suggestion when one is close.' },
   WRONG_TYPE:                   { id: 'CL0202', severity: ERROR, summary: 'Key has the wrong value type.' },
   MISSING_REQUIRED:             { id: 'CL0203', severity: ERROR, summary: 'A required key is missing.' },
@@ -104,7 +50,6 @@ const REGISTRY = Object.freeze({
   UNSUPPORTED_VERSION:          { id: 'CL0209', severity: ERROR, summary: 'version: 4 is missing or wrong; a missing key or version: 3 names --migrate.' },
   MISPLACED_KEY:                { id: 'CL0210', severity: ERROR, summary: 'Key is valid, but at a different level — with the level named.' },
 
-  // ── CL03xx  items ─────────────────────────────────────────────────────────
   VARIANT_DELTA_VAR_ALIASES:    { id: 'CL0320', severity: WARN,  summary: 'A variant delta declares more than one v: alias; they are merged.' },
   VARIANT_NOT_FOUND:            { id: 'CL0321', severity: WARN,  summary: "A named variant does not exist in the item's variant tree." },
   NO_TYPE_OR_TEMPLATE:          { id: 'CL0322', severity: WARN,  summary: 'An item emitting a story card has neither aid.type nor render.template.' },
@@ -119,7 +64,6 @@ const REGISTRY = Object.freeze({
   UNKNOWN_CANON_SOURCE:         { id: 'CL0341', severity: ERROR, summary: 'A reference names a library set not declared in structure.input.library.' },
   REF_NOT_FOUND:                { id: 'CL0342', severity: ERROR, summary: 'A reference names an id that no library set defines.' },
 
-  // ── CL04xx  render ────────────────────────────────────────────────────────
   TEMPLATE_CONTAINS_FENCE:      { id: 'CL0410', severity: ERROR, summary: 'A .template or .partial still contains a ~~~ fence.' },
   NOTES_TEMPLATE_NOT_FOUND:     { id: 'CL0411', severity: ERROR, summary: 'A render.notesTemplate in compile.yaml names a template that is not loaded.' },
   ITEM_NOTES_TEMPLATE_NOT_FOUND:{ id: 'CL0412', severity: ERROR, summary: 'A render.notesTemplate on an item names a template that is not loaded.' },
@@ -148,7 +92,6 @@ const REGISTRY = Object.freeze({
   SUSPECT_VERB_MARKER:          { id: 'CL0436', severity: WARN,  layer: 'opinion', summary: 'A bracketed lowercase word is not a recognized verb-conjugation marker — likely a typo.' },
   SUSPECT_JS_WORD:              { id: 'CL0437', severity: WARN,  layer: 'opinion', summary: 'A bare undefined/NaN appears in rendered output.' },
 
-  // ── CL05xx  tokens ────────────────────────────────────────────────────────
   VARIABLE_UNDECLARED:          { id: 'CL0510', severity: ERROR, summary: 'A referenced variable is not declared anywhere.' },
   VARIABLE_CYCLE:               { id: 'CL0511', severity: ERROR, summary: 'Variables form a reference cycle; every key in the loop is named.' },
   VARIABLE_UNBIND_UNKNOWN:      { id: 'CL0512', severity: WARN,  summary: 'A variable is unbound with ~ but was never inherited at that node.' },
@@ -170,7 +113,6 @@ const REGISTRY = Object.freeze({
   ROLE_UNUSED:                  { id: 'CL0545', severity: WARN,  summary: 'A role is declared and never referenced by a resolved token anywhere in the compile.' },
   NATIVE_PLACEHOLDER_SHAPE:     { id: 'CL0546', severity: WARN,  layer: 'opinion', summary: 'A ${...} holds identifier-shaped content, so it reads as a transposed {$token}.' },
 
-  // ── CL06xx  components ────────────────────────────────────────────────────
   SECTION_TEXT_AND_SLOT:        { id: 'CL0601', severity: ERROR, summary: 'A section declares both text: and slot: true.' },
   SECTION_RENDERS_NOTHING:      { id: 'CL0602', severity: WARN,  summary: 'A section has no text, no heading and is not a slot, so it renders nothing.' },
   SECTION_WRAP_UNKNOWN:         { id: 'CL0603', severity: WARN,  summary: "A section's render.wrap is neither each nor all; each is used." },
@@ -206,7 +148,6 @@ const REGISTRY = Object.freeze({
   COMPONENT_NO_OUTPUT:          { id: 'CL0634', severity: ERROR, summary: 'A requested component produced no output anywhere in the compile.' },
   CARD_NO_TRIGGERS:             { id: 'CL0635', severity: WARN,  layer: 'opinion', summary: 'A story card has an empty or missing trigger list, so it can never be pulled into context.' },
 
-  // ── CL07xx  emit ─────────────────────────────────────────────────────────
   TRIGGER_CONTAINS_COMMA:       { id: 'CL0701', severity: ERROR, summary: 'A trigger value contains a comma, which Velvet Lattice would split into two triggers.' },
   TRIGGER_EMPTY:                { id: 'CL0702', severity: WARN,  summary: 'A trigger value is empty and will reach AID as an empty key.' },
   OPENING_OVER_LIMIT:           { id: 'CL0710', severity: ERROR, summary: "An Opening.md exceeds AID's 4,000-character limit." },
@@ -217,21 +158,14 @@ const REGISTRY = Object.freeze({
   NOTES_NEAR_LIMIT:             { id: 'CL0715', severity: WARN,  summary: "An item's notes: is within 10% of the 10,000-character limit." },
 });
 
-/** name → id string, derived from `REGISTRY`. This is what raise sites import and use. */
 const CODES = Object.freeze(
   Object.fromEntries(Object.entries(REGISTRY).map(([name, entry]) => [name, entry.id]))
 );
 
-/** id → severity, derived from `REGISTRY`, for `severityOf`. */
 const SEVERITY_BY_ID = Object.freeze(
   Object.fromEntries(Object.values(REGISTRY).map((entry) => [entry.id, entry.severity]))
 );
 
-/**
- * Recover a code's severity from its id alone — for diagnostics raised through
- * `onWarn(code, message)`, which carries none. Every code is in `REGISTRY`, so an
- * unknown one is a typo at the raise site and throws rather than defaulting.
- */
 function severityOf(code) {
   const severity = SEVERITY_BY_ID[code];
   if (severity === undefined) {
@@ -240,46 +174,20 @@ function severityOf(code) {
   return severity;
 }
 
-// ── the compiler / lint split ───────────────────────────────────────────────
 
-/** ids of the `layer: 'opinion'` entries, derived from `REGISTRY`. */
 const OPINION_IDS = Object.freeze(new Set(
   Object.values(REGISTRY).filter((e) => e.layer === 'opinion').map((e) => e.id)
 ));
 
-/**
- * True for a diagnostic `lint.level` is allowed to silence: the four `layer: 'opinion'`
- * codes, plus every convention-pack finding (`CL-<pack>/NNNN`, opinion-layer by the prefix
- * — pack codes are not in `REGISTRY`). Every other code is a fact about the output that
- * `lint.level` cannot reach, which is what makes `level: off` safe to write.
- *
- * Called on the raw code before anything validates it, so it must tolerate any string.
- */
 function isOpinion(code) {
   if (typeof code !== 'string') return false;
   return OPINION_IDS.has(code) || code.startsWith('CL-');
 }
 
-/** The three values `lint.level` and `--lint-level` accept, in the order they say less. */
 const LINT_LEVELS = Object.freeze(['off', 'error', 'warn']);
 
 const SEVERITY_RANK = Object.freeze({ [SEVERITY.INFO]: 0, [SEVERITY.WARN]: 1, [SEVERITY.ERROR]: 2 });
 
-/**
- * Apply a `lint.level` to one opinion-layer diagnostic. Returns the severity it reaches the
- * author at, or `null` if it does not reach them at all.
- *
- * **`level` names the one severity the opinion layer is allowed to speak at.** Clamp the
- * diagnostic to it, then drop whatever is left below it — one rule, and it is the only rule
- * that satisfies both things §12.5 asks for. Under `warn` an opinion ERROR demotes to WARN,
- * so nothing in the opinion layer can fail a build; under `error` the prose heuristics, all
- * of them WARN, disappear and pack findings about mod config survive at full severity. That
- * second case is the author-facing meaning the docs lead with: *validate my mod configs,
- * skip the prose heuristics*.
- *
- * Unset is not a level. A project that says nothing gets every opinion at the severity it
- * was raised with, which is what keeps a pack ERROR able to fail a build by default.
- */
 function applyLintLevel(severity, level) {
   if (!level) return severity;
   if (level === 'off') return null;
@@ -288,29 +196,10 @@ function applyLintLevel(severity, level) {
   return SEVERITY_RANK[clamped] < SEVERITY_RANK[ceiling] ? null : clamped;
 }
 
-/**
- * Adapt a `Diagnostics` bus to the `onWarn(code, message)` callback `model/` expects.
- *
- * The severity comes from the code, so an ERROR raised inside a pure module reaches the bus
- * as an ERROR and gates the exit code like any other — which is the whole point: the old
- * console adapter printed `WARN` for everything and gated nothing.
- */
 function busWarner(diagnostics, loc) {
   return (code, message) => diagnostics.add(severityOf(code), code, message, loc || {});
 }
 
-/**
- * One diagnostic. `file`/`line`/`col` are optional throughout: a diagnostic about a
- * whole project has no span, and template-level errors keep imprecise positions until
- * the render rewrite (§13). A missing span degrades the rendering, never the code.
- *
- * `branch` is the leaf a per-branch check was running for, as the `a/b` label or
- * `(root)`. The model layer raises through `onWarn(code, message)` and cannot name the
- * branch itself — `CL0542` says a role "does not resolve on this branch" — so the same
- * error on six leaves used to be six identical lines, told apart only by the `Branch:`
- * headers `--verbose` printed between them. Carried on the diagnostic, it reaches the
- * author on every run.
- */
 class Diagnostic {
   constructor({ code, severity, message, file, line, col, hint, branch }) {
     this.code = code;
@@ -323,7 +212,6 @@ class Diagnostic {
     this.branch = branch || null;
   }
 
-  /** `file:line:col`, degrading gracefully as position information runs out. */
   get location() {
     if (!this.file) return '';
     if (this.line === null) return this.file;
@@ -331,13 +219,6 @@ class Diagnostic {
     return `${this.file}:${this.line}:${this.col}`;
   }
 
-  /**
-   * The §4.4 shape, with the branch appended to the header when the diagnostic has one:
-   *
-   *   ERROR CL0310 codex/npcs.cl.yaml:112:9 (branch felix/hard)
-   *     Item "Kaiden" dispatches branch "felix" to variant "Felix", which is not
-   *     defined on this item or on library item "Kaiden" (library:main).
-   */
   format() {
     const head = [
       SEVERITY_LABEL[this.severity] || this.severity, this.code, this.location,
@@ -354,20 +235,12 @@ class Diagnostic {
   }
 }
 
-/** A collector. Nothing is printed; callers decide what to do with what accumulates. */
 class Diagnostics {
-  /**
-   * `lintLevel` is the §12.5 ceiling, and it is applied here — at `add` — rather than at
-   * print time. Everything downstream reads the bus: `hasErrors()` gates the exit code, the
-   * printer walks `all`, and the pathological fixture snapshots it. Filtering in one of
-   * those places and not the others is how a silenced diagnostic still fails a build.
-   */
   constructor(options = {}) {
     this._items = [];
     this._lintLevel = options.lintLevel || null;
   }
 
-  /** Set after construction, for the bus that exists before `compile.cl.yaml` is read. */
   setLintLevel(level) {
     this._lintLevel = level || null;
     return this;
@@ -405,7 +278,6 @@ class Diagnostics {
     return this.add(SEVERITY.WARN, code, message, loc, opts);
   }
 
-  /** Absorb another collector's diagnostics — for folding a sub-compile's results up. */
   merge(other) {
     if (!other) return this;
     const items = Array.isArray(other) ? other : other.all;

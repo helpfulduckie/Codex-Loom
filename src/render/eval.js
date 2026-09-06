@@ -4,24 +4,8 @@ const { normalizeVarKey } = require('../util');
 const { CODES } = require('../diag');
 const { FUNCTION_NAMES } = require('./parse');
 
-/**
- * The evaluation walk (v4 spec §13, Phase 9 Step 1).
- *
- * Semantics moved here essentially intact from `template.js`: field resolution, truthiness,
- * and the seven render functions read the same way they did under the regex engine (Decision
- * 1 of the Phase 9 plan). What changed is the tree they walk and what a malformed call does —
- * it reports a diagnostic instead of throwing into a `console.warn`.
- */
 
-// ── Field resolution ──────────────────────────────────────────────────────────
 
-/**
- * Case-insensitive deep field resolver.
- * Resolves paths like "body.Physical Traits.gender" against card data.
- *
- * Returns the value or null. Arrays and objects are returned as-is for render functions.
- * Plain scalars are returned as trimmed strings.
- */
 function resolveField(ref, data) {
   const path = ref.startsWith('$') ? ref.slice(1) : ref;
   const parts = path.split('.');
@@ -35,9 +19,6 @@ function resolveField(ref, data) {
     const lower = part.toLowerCase();
     const actualKey = Object.keys(value).find(k => k.toLowerCase() === lower);
     if (actualKey === undefined) {
-      // Cross-item ref fallback: if we're still at the root context and an itemMap is
-      // available, treat the unresolved segment as an item ID and pivot to that item.
-      // e.g. $Aness.body.magic.affinity → find 'aness' in itemMap, then navigate body.magic.affinity
       if (value === data && data.itemMap) {
         const sourceItem = data.itemMap.get(lower);
         if (sourceItem) {
@@ -52,7 +33,6 @@ function resolveField(ref, data) {
 
   if (value === null || value === undefined) return null;
   if (typeof value === 'boolean') return value ? 'true' : 'false';
-  // Return arrays and objects as-is so render functions can work with them
   if (Array.isArray(value)) return value.length > 0 ? value : null;
   if (typeof value === 'object') return value;
 
@@ -60,7 +40,6 @@ function resolveField(ref, data) {
   return str === '' ? null : str;
 }
 
-/** Evaluate boolean truthiness of a field reference. */
 function isTruthy(ref, data) {
   const val = resolveField(ref, data);
   if (val === null) return false;
@@ -71,11 +50,6 @@ function isTruthy(ref, data) {
   return true;
 }
 
-/**
- * Render a value as a string for inline output.
- * Arrays → elements joined with "; ".
- * Objects → not directly renderable, returns "".
- */
 function renderScalar(val) {
   if (val === null || val === undefined) return '';
   if (Array.isArray(val)) return val.join('; ');
@@ -83,7 +57,6 @@ function renderScalar(val) {
   return String(val);
 }
 
-// ── Render functions ──────────────────────────────────────────────────────────
 
 function evaluateInline(inner, data) {
   const refMatch = inner.match(/^inline\(\s*(\$[^)]+?)\s*\)$/s);
@@ -149,7 +122,6 @@ function evaluateProse(inner, data) {
     let s = String(item).trim();
     if (!s) return '';
     s = s[0].toUpperCase() + s.slice(1);
-    // Remove trailing punctuation then add period
     s = s.replace(/[.!?]+$/, '') + '.';
     return s;
   }).filter(Boolean).join(' ');
@@ -177,9 +149,6 @@ function evaluateKeys(inner, data) {
   return renderScalar(val);
 }
 
-// Kept as an explicit literal — a hand-audited row per render function reads better than
-// a generated map. The assert below is the drift guard: every name in `FUNCTION_NAMES`
-// (`./parse`, the one canonical list) must have a row here and vice versa.
 const FUNCTIONS = {
   inline: evaluateInline,
   join: evaluateJoin,
@@ -194,17 +163,7 @@ if (Object.keys(FUNCTIONS).sort().join() !== [...FUNCTION_NAMES].sort().join()) 
   throw new Error('FUNCTIONS keys and FUNCTION_NAMES disagree');
 }
 
-// ── Tree walk ──────────────────────────────────────────────────────────────────
 
-/**
- * Render one parsed document against `data`.
- *
- * `ctx` carries what the walk needs beyond the current node: `report(code, message, span)`
- * for diagnostics, and two shared mutable containers — `preserved` (evaluated `{preserve}`
- * bodies, as `\x00PRESERVE_n\x00` sentinels for `normalizeWhitespace` to restore) and
- * `flags.wrapperUsed`. `{include}` is expanded before this walk ever runs (see `parse.js`'s
- * header on why), so there is no `Include` node and no include-stack to carry here.
- */
 function renderProgram(program, data, ctx) {
   return program.children.map(node => renderNode(node, data, ctx)).join('');
 }
@@ -264,20 +223,12 @@ function renderIf(node, data, ctx) {
 }
 
 function renderWrapper(node, data, ctx) {
-  // Marks that a {wrapper} block actually fired during this walk — including one nested
-  // inside a taken {if} branch or an included partial — so `render()` knows not to apply
-  // the post-render auto-wrap fallback. A top-level-only check would miss that nested
-  // case; this one matches the old regex-over-the-post-conditional-string check exactly,
-  // because an untaken {if} branch never contributes its text (or its nested {wrapper})
-  // either way. `flags` is a shared object (not a plain ctx property) so the mutation is
-  // visible through the shallow copy `renderInclude` makes for its nested context.
   ctx.flags.wrapperUsed = true;
   const content = node.children.map(child => renderNode(child, data, ctx)).join('');
   const wrapper = (data.render && data.render.wrapper) || 'none';
   return applyWrapper(content.trim(), wrapper);
 }
 
-/** Apply wrapper to a string of content. */
 function applyWrapper(text, wrapper) {
   const w = (wrapper || 'none').toLowerCase();
   if (w === 'square') return `[\n${text}\n]`;
@@ -285,19 +236,8 @@ function applyWrapper(text, wrapper) {
   return text;
 }
 
-/**
- * Evaluate a `{preserve}` block's children, then hand `normalizeWhitespace` a sentinel
- * instead of re-inserting the literal tags. Re-inserting the tags and letting
- * `normalizeWhitespace` re-discover them by regex was tried and rejected: if the evaluated
- * content contains the literal text "{/preserve}" — which can arrive from data, e.g.
- * `{preserve}{$body.text}{/preserve}` — the regex would close on that text instead of the
- * source's real closing tag, which is the exact bug Decision 2 exists to retire. Finding the
- * boundary here, from the parsed source, is what keeps the fix real.
- */
 function renderPreserve(node, data, ctx) {
   const raw = node.children.map(child => renderNode(child, data, ctx)).join('');
-  // Trim one leading/trailing newline so tags on their own lines don't double up — the same
-  // trim `normalizeWhitespace` applied to its regex-captured group.
   const trimmed = raw.replace(/^\n/, '').replace(/\n$/, '');
   const idx = ctx.preserved.length;
   ctx.preserved.push(trimmed);

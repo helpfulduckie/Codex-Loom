@@ -49,8 +49,7 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/leafLoop.js` | The per-leaf compile loop: branch-chain merge, sectioned components, slot index, card + slot render in one pass |
 | `src/inherit.js` | Component and script inheritance down the branch tree; story-card frontier placement (§7.3a) |
 | `src/outputPaths.js` | Where a branch node's folder lands on disk; the pre-build sweep that wipes output folders and archives stale nodes |
-| `src/treeWrite.js` | Recursive writers for interior-node framing, labels and placeholders; `copyScripts`; component-spec resolution |
-| `src/treeFiles.js` | The tree-level files written after the leaf loop: root framing, labels, placeholders, descriptions |
+| `src/treeWrite.js` | Recursive writers for interior-node framing, labels, placeholders and descriptions; component-spec resolution |
 | `src/compiledTree.js` | The one compiled-output-tree traversal `seedmap`/`bodysize`/`overview` are built from — child lists, ancestor walk, per-node merge (§7.3a) |
 | `src/reportDispatch.js` | End-of-compile report dispatch and the load-diagnostic replay; the `CL0545` unused-role check |
 | `src/extract.js` | Named transforms for a section's `from:` source — `scriptBanner` (§7.7) |
@@ -66,6 +65,16 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/migrate/plot-essentials-apply.js` | Applies that decision — rewrites the component as `sections:`, adds render targets, moves inline blocks out into item files |
 
 `model/` is pure by contract (§3.3): no `fs`, no `console`. Warnings go to a caller-supplied `onWarn`, and failed lookups come back described rather than thrown, so the caller decides what reaches a terminal. A test enforces both the purity and the roster.
+
+---
+
+## Progress Logging and Limits
+
+Compilation progress is not a diagnostic. `cli.js` installs the console-backed `{ info, verbose }` log and library callers receive `NULL_LOG` unless they supply their own sink. Diagnostics remain structured data because they determine failure, are asserted by code, and appear in the pathological fixture snapshot; progress text must never enter that channel.
+
+`limits.js` measures the strings that AID receives after Velvet Lattice expands `%placeholder%` tokens. A card body excludes its heading, fence and `notes:` scalar. Each `Opening.md` is capped independently because branch inheritance replaces a component file by filename; story cards are measured at each leaf because their inherited placeholder tables can differ. The warning threshold is 90 percent of each cap, and a value over the cap produces only the error rather than a duplicate warning.
+
+`bodysize.js` reports openings per output node and cards per leaf. The distinction keeps a branch-framing opening from being counted once for each descendant while still accounting for placeholder expansion in a card inherited by several leaves.
 
 ---
 

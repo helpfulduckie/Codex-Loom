@@ -3,26 +3,7 @@
 const { walkItemTextFields } = require('../util');
 const { CODES } = require('../diag');
 
-// Pure by contract: warnings go to a caller-supplied onWarn(code, message), which carries
-// no severity — `diag.js` recovers it from the code.
 
-/**
- * Pronoun resolution for Codex Loom v4.
- *
- * Braced token forms in templates and field text:
- *   {$she} {$her~} etc.        - unscoped; resolves against item's own pronouns field
- *   {$Id}                      - character reference; "you" if Id is protagonist, else name.display
- *   {$Id's}                    - possessive name; "your" if Id is protagonist, else "Name's"
- *   {$Id.she} {$Id.her~} etc.  - scoped pronoun; resolves vs Id's pronouns, protagonist-aware
- *
- * Verb conjugation:
- *   [s] [es] [is] [was] [has]  - conjugate against the current scope, which the most
- *     recently referenced token sets: a scoped pronoun ({$Id.they}) or unscoped-but-
- *     scope-setting form sets it to a pronoun set, while a bare {$Id} that renders a
- *     proper name sets the NAME_SCOPE sentinel — a rendered name takes a singular verb
- *     ("Zephon answers") whatever the character's pronouns, and only the protagonist
- *     "you" swap makes a bare {$Id} conjugate plural.
- */
 
 const PRONOUN_SETS = {
   female: {
@@ -63,12 +44,8 @@ const PRONOUN_SETS = {
   },
 };
 
-// Pronoun sets that use plural verb forms (drop [s], [es])
 const PLURAL_SETS = new Set(['nonbinary', 'they', 'you']);
 
-// Conjugation scope set by a bare {$Id} that renders a proper name. Deliberately not in
-// PLURAL_SETS: a rendered name takes a third-person-singular verb regardless of the
-// character's pronoun set, so "{$Zephon} answer[s]" is "Zephon answers" even for they/them.
 const NAME_SCOPE = 'name';
 
 const PRONOUN_TOKEN_MAP = {
@@ -93,15 +70,10 @@ const PRONOUN_TOKEN_MAP = {
   'were':       'verb_was',
 };
 
-/**
- * Resolve a pronoun token keyword against a pronoun set name.
- * Preserves leading case of the original token.
- */
 function resolvePronounToken(token, setName) {
   const lower = token.toLowerCase();
   const role = PRONOUN_TOKEN_MAP[lower];
   const normalizedSet = (setName || '').toLowerCase();
-  // Map 'they' and 'nonbinary' to the nonbinary set
   const canonicalSet = (normalizedSet === 'they' || normalizedSet === 'nonbinary') ? 'nonbinary' : normalizedSet;
   const set = PRONOUN_SETS[canonicalSet];
   const bare = lower.endsWith('~') ? lower.slice(0, -1) : lower;
@@ -110,9 +82,6 @@ function resolvePronounToken(token, setName) {
   return matchCase(set[role], token);
 }
 
-/**
- * Preserve the case pattern of `original` onto `str`.
- */
 function matchCase(str, original) {
   if (!str) return str;
   if (original && original[0] === original[0].toUpperCase() &&
@@ -122,9 +91,6 @@ function matchCase(str, original) {
   return str.toLowerCase();
 }
 
-/**
- * Get the display name from an item (first word if scalar, name.display if mapping).
- */
 function getDisplayName(item) {
   const name = item.name;
   if (!name) return item.id || '';
@@ -133,9 +99,6 @@ function getDisplayName(item) {
   return String(name);
 }
 
-/**
- * Get the full name from an item.
- */
 function getFullName(item) {
   const name = item.name;
   if (!name) return item.id || '';
@@ -144,9 +107,6 @@ function getFullName(item) {
   return String(name);
 }
 
-/**
- * Get the pronoun set name for an item, accounting for protagonist status.
- */
 function getEffectivePronounSet(itemOrPronouns, itemId, branchProtagonist) {
   const isProtagonist = branchProtagonist && itemId &&
     branchProtagonist.toLowerCase() === itemId.toLowerCase();
@@ -155,20 +115,6 @@ function getEffectivePronounSet(itemOrPronouns, itemId, branchProtagonist) {
   return raw || null;
 }
 
-/**
- * Rewrite a token's leading identifier from a role name to its bound item id (§9.2, §9.3).
- *
- * Returns the bound item id, or `null` when `leading` is not a declared role — the caller
- * falls through to its existing item-id handling unchanged. A role that IS declared but
- * cannot resolve — collides with an item id, targets another role, or targets an item this
- * branch excludes — raises its own ERROR and also returns `null`: the token is left
- * unresolved on purpose, so `CL0430` catches it a second time at the output sweep (settled
- * 2026-08-22, the same two-reports trade Phase 7 Decision 5 made for `CL0602`).
- *
- * Gated on `roles` carrying at least one entry, so a branch that declares none behaves
- * exactly as it did before this existed — no new diagnostic on a corpus nothing here
- * touches yet.
- */
 function resolveRole(leading, { roles, registry, resolvedById, onWarn, onRoleUsed }) {
   if (!roles || Object.keys(roles).length === 0) return null;
   const leadingLower = leading.toLowerCase();
@@ -215,7 +161,6 @@ function resolveRole(leading, { roles, registry, resolvedById, onWarn, onRoleUse
   return boundId;
 }
 
-/** The message CL0540 raises — the compiler cannot tell an undeclared role from a misspelled item id (§9.3, both readings are named). */
 function roleUndeclaredMessage(name, roles) {
   const scope = roles && Object.keys(roles).length
     ? `Roles declared in scope: ${Object.keys(roles).join(', ')}.`
@@ -223,31 +168,6 @@ function roleUndeclaredMessage(name, roles) {
   return `"{$${name}}" does not resolve to a declared role or a known item id. ${scope}`;
 }
 
-/**
- * Normalize `{$Role…}` to `{$id…}` across all of a branch's resolved items, ahead of
- * `applyCrossItemRefs` (§9.3). This is the item path's fix for one ordering problem:
- * `applyCrossItemRefs` runs before the per-item token pass and understands only item ids,
- * so `{$LI.body.Tagline}` would never resolve unless the leading role name were an id by
- * the time it ran. One leading identifier is shared by `{$LI}`, `{$LI's}`, `{$LI.he}` and
- * `{$LI.body.X}`, so the rewrite covers every form, not just the `.body.` one.
- *
- * Deliberately silent: `applyTokenPass` remains the one place role diagnostics
- * (CL0540–CL0543) are raised — it is the shared token chokepoint for every render path,
- * and re-runs this same `resolveRole` rewrite, a no-op here on ids this pass already
- * resolved and the reporting site for the broken roles it left untouched. `onRoleUsed` is
- * threaded through so a role referenced only by an item `{$Role.body.X}` — consumed by
- * `applyCrossItemRefs` before `applyTokenPass` can see it — still counts against CL0545.
- *
- * A no-op when no role is in scope. Only `{$…}` brace tokens are visited; render-function
- * role refs like `{join($LI.body.x)}` were never role-aware and still are not.
- *
- * @param {object[]} resolvedItems - all items compiled for this branch
- * @param {object} opts
- *   opts.registry      - full item registry Map
- *   opts.roles         - this branch's merged role table (§9.2), or null
- *   opts.resolvedById  - Map of post-variant resolved items by lowercase id
- *   opts.onRoleUsed    - (roleKey) => void, for CL0545's usage tracking
- */
 function applyRolePass(resolvedItems, { registry, roles, resolvedById, onRoleUsed }) {
   if (!roles || Object.keys(roles).length === 0) return;
   const TOKEN_RE = /\{\$([^{}]+)\}/g;
@@ -257,7 +177,6 @@ function applyRolePass(resolvedItems, { registry, roles, resolvedById, onRoleUse
     const possessive = dot0 === -1 && inner.toLowerCase().endsWith("'s");
     const leading = dot0 !== -1 ? inner.slice(0, dot0) : possessive ? inner.slice(0, -2) : inner;
     const trailing = dot0 !== -1 ? inner.slice(dot0) : possessive ? "'s" : '';
-    // onWarn omitted on purpose — see the note above.
     const roleId = resolveRole(leading, { roles, registry, resolvedById, onRoleUsed });
     return roleId !== null ? `{$${roleId}${trailing}}` : match;
   });
@@ -266,43 +185,17 @@ function applyRolePass(resolvedItems, { registry, roles, resolvedById, onRoleUse
   }
 }
 
-/**
- * Combined pronoun and verb conjugation pass.
- *
- * Processes a string left-to-right, handling:
- *   {$PronounToken}      - unscoped pronoun; against item's own pronouns; does NOT set scope
- *   {$Id}                - character reference; sets scope to Id
- *   {$Id.pronoun}        - scoped pronoun; sets scope to Id
- *   {$Id.body.field}     - cross-item ref; re-emitted here, resolved by `applyCrossItemRefs`
- *   [s] [es] [is] [was] [has] - conjugate using current scope
- *
- * This is the shared token chokepoint for every render path — item bodies, sectioned
- * components, passthrough prose, tree-file literals — so it still rewrites a leading role
- * name to its bound item id (§9.3). The item path additionally runs `applyRolePass` first,
- * so that `{$Role.body.X}` is an ordinary `{$id.body.X}` by the time `applyCrossItemRefs`
- * (item-path only) reads it; here that rewrite is then a no-op on already-resolved ids.
- *
- * @param {string} str
- * @param {object} opts
- *   opts.item            - the item being processed
- *   opts.registry        - full item registry Map
- *   opts.branchProtagonist - lowercase protagonist ID or null
- *   opts.resolvedById    - optional Map of post-variant resolved items by lowercase id
- */
 function applyTokenPass(str, opts) {
   const { item, registry, branchProtagonist, resolvedById, roles, onWarn, onRoleUsed } = opts;
   const itemId = (item.id || '').toLowerCase();
   const itemPronounSet = getEffectivePronounSet(item, itemId, branchProtagonist);
 
-  // Current conjugation scope: pronoun set name of the most-recently-referenced {$Id}
   let currentScope = null;
 
-  // Combined regex: brace tokens OR conjugation markers
   const TOKEN_RE = /\{(\$[^{}]+)\}|\[(s|es|is|was|has)\]/g;
 
   return str.replace(TOKEN_RE, (match, braceContent, verbMarker) => {
     if (verbMarker) {
-      // Verb conjugation marker
       const scope = currentScope || itemPronounSet;
       const plural = scope ? PLURAL_SETS.has(scope.toLowerCase()) : false;
       switch (verbMarker) {
@@ -315,15 +208,8 @@ function applyTokenPass(str, opts) {
       return match;
     }
 
-    // Brace token: braceContent is the inner part (includes leading $)
     let inner = braceContent.trim().slice(1); // strip leading $
 
-    // Roles resolve first, always (§9.3): rewrite a leading role name to its bound item id
-    // so every check below sees an ordinary card reference. `{$LI}`, `{$LI's}`, `{$LI.he}`
-    // and `{$LI.body.X}` all share one leading identifier, so one substitution handles all
-    // four — everything past this point reads `inner`, never `braceContent`. On the item
-    // path `applyRolePass` has already done this, so the call is a no-op there; the other
-    // render paths (components, passthrough, tree-file literals) reach roles only here.
     {
       const dot0 = inner.indexOf('.');
       const possessive = dot0 === -1 && inner.toLowerCase().endsWith("'s");
@@ -333,56 +219,36 @@ function applyTokenPass(str, opts) {
       if (roleId !== null) inner = roleId + trailing;
     }
 
-    // Check for dot — either "Id.pronoun" or "Id.body.field"
     const dotIdx = inner.indexOf('.');
     if (dotIdx !== -1) {
       const prefix = inner.slice(0, dotIdx);
       const rest = inner.slice(dotIdx + 1);
       const prefixLower = prefix.toLowerCase();
 
-      // Is prefix a registry ID?
       if (registry.has(prefixLower)) {
         const refItem = (resolvedById && resolvedById.get(prefixLower)) || registry.get(prefixLower);
         const refPronounSet = getEffectivePronounSet(refItem, prefixLower, branchProtagonist);
 
-        // Is rest a pronoun token?
         const restLower = rest.toLowerCase();
         if (PRONOUN_TOKEN_MAP[restLower] !== undefined) {
-          // Scoped pronoun: {$Id.she} — sets scope
           currentScope = refPronounSet || 'nonbinary';
           return resolvePronounToken(rest, refPronounSet);
         }
 
-        // Check for {$Id.full} or {$Id.display}
         if (restLower === 'full') return matchCase(getFullName(refItem), inner);
         if (restLower === 'display') return matchCase(getDisplayName(refItem), inner);
 
-        // Otherwise it's a cross-item field ref like {$Id.body.field}. On the item path
-        // `applyCrossItemRefs` ran earlier and resolved every such ref whose field exists,
-        // so a survivor here means a missing field; on the other render paths there is no
-        // cross-item resolution at all. Either way, re-emit the token — reconstructed from
-        // `inner`, so a role rewrite above is preserved — and let the output sweep report
-        // it as CL0430.
         return `{$${inner}}`;
       }
 
-      // prefix not a registry ID — leave as-is. Role-aware (§9.3) and gated on `roles`
-      // being non-null — some node in the chain declared a `roles:` key, even if every
-      // binding it declared is now unbound — the compiler cannot tell an undeclared role
-      // from a misspelled item id, so on role-aware territory this reports both readings
-      // in addition to — not instead of — CL0430 catching the same leaked token later at
-      // the output sweep (settled 2026-08-22). A project that never mentions roles behaves
-      // exactly as it did before this existed.
       if (onWarn && roles) {
         onWarn(CODES.ROLE_UNDECLARED, roleUndeclaredMessage(prefix, roles));
       }
       return match;
     }
 
-    // No dot — single segment
     const innerLower = inner.toLowerCase();
 
-    // Possessive character reference: {$Aness's} → "Aness's" or "your" if protagonist
     if (innerLower.endsWith("'s")) {
       const baseId = innerLower.slice(0, -2);
       if (registry.has(baseId)) {
@@ -393,27 +259,18 @@ function applyTokenPass(str, opts) {
       }
     }
 
-    // Is it a registry ID? → character reference
     if (registry.has(innerLower)) {
       const refItem = (resolvedById && resolvedById.get(innerLower)) || registry.get(innerLower);
       const isProtagonist = branchProtagonist && branchProtagonist === innerLower;
-      // A bare {$Id} renders a proper name or "you", and a following verb marker agrees
-      // with what was rendered — not with the character's pronouns. A name is third-person
-      // singular (NAME_SCOPE); only the protagonist "you" swap conjugates plural. A scoped
-      // pronoun token ({$Id.they}) is the form that carries the pronoun set into scope.
       currentScope = isProtagonist ? 'you' : NAME_SCOPE;
       if (isProtagonist) return 'you';
       return matchCase(getDisplayName(refItem), inner);
     }
 
-    // Is it an unscoped pronoun token? → resolve against item's own pronouns
     if (PRONOUN_TOKEN_MAP[innerLower] !== undefined) {
-      // Does NOT set scope
       return resolvePronounToken(inner, itemPronounSet);
     }
 
-    // Unknown — leave as-is (see the dotted branch above for why CL0540 is gated the
-    // same way here).
     if (onWarn && roles) {
       onWarn(CODES.ROLE_UNDECLARED, roleUndeclaredMessage(inner, roles));
     }
@@ -421,22 +278,7 @@ function applyTokenPass(str, opts) {
   });
 }
 
-/**
- * Apply cross-item reference resolution: {$id.body.field} → resolved field value.
- *
- * Runs once over all of a branch's resolved items, after `applyRolePass` (so a leading role
- * name is already an item id) and before the per-item `applyPronounPasses` loop (so it needs
- * every item's body resolved simultaneously, regardless of source order).
- *
- * @param {object[]} resolvedItems - all items compiled for this branch
- * @param {object} opts
- *   opts.registry      - full item registry (for fallback to canonical base)
- *   opts.onWarn        - (code, message) => void
- *   opts.resolvedById  - Map of post-variant resolved items by lowercase id
- */
 function applyCrossItemRefs(resolvedItems, { registry, onWarn, resolvedById }) {
-  // Callers that already have an id→item map (the compiler does) pass it in; standalone
-  // callers get one built here.
   if (!resolvedById) {
     resolvedById = new Map();
     for (const item of resolvedItems) {
@@ -477,19 +319,6 @@ function applyCrossItemRefs(resolvedItems, { registry, onWarn, resolvedById }) {
   }
 }
 
-/**
- * Apply all pronoun processing passes to a resolved item's body fields.
- * Mutates item.body in place.
- *
- * @param {object} item
- * @param {Map} registry
- * @param {string|null} branchProtagonist - lowercase protagonist ID
- * @param {Map} resolvedById
- * @param {object} opts
- *   opts.roles       - this branch's merged role table (§9.2), or null
- *   opts.onWarn      - (code, message) => void, for §9.3's role diagnostics
- *   opts.onRoleUsed  - (roleKey) => void, for CL0545's usage tracking
- */
 function applyPronounPasses(item, { registry, branchProtagonist, resolvedById, roles, onWarn, onRoleUsed } = {}) {
   const tokenOpts = { item, registry, branchProtagonist, resolvedById, roles, onWarn, onRoleUsed };
   walkItemTextFields(item, s => applyTokenPass(s, tokenOpts));

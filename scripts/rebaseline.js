@@ -1,59 +1,6 @@
 #!/usr/bin/env node
 'use strict';
 
-/**
- * Regenerate a baseline fixture set (v4 spec §14.3).
- *
- * A change that moves output deliberately has to replace the committed baseline with what
- * the new compiler produces. §14.3 calls the result "a reviewed, committed artifact", and
- * the review is the part a script can protect: it classifies every changed line before
- * writing anything and refuses outright when a change lands outside the declared shape.
- *
- *   node scripts/rebaseline.js                 report only, writes nothing
- *   node scripts/rebaseline.js --write         write the baseline, if the shape allows
- *   node scripts/rebaseline.js --allow body    widen the allowed shape for this run
- *   node scripts/rebaseline.js --only "Plot Essentials.md"  restrict which files may move
- *   node scripts/rebaseline.js --set golden    the private fixtures rather than examples/
- *   node scripts/rebaseline.js showcase        one project rather than the whole set
- *
- * A first baseline needs one in-place compile to seed `library-dependencies.json`, which
- * this never writes (see below). `--write` against a project that has no committed baseline
- * yet refuses with that instruction rather than producing a baseline one file short;
- * everything else — the `.md` tree and every node's `Placeholders.yaml` — it regenerates.
- *
- * `--set` picks which fixture set to regenerate and defaults to `examples`, the committed
- * one. The two sets differ only in their manifests; see `examples/projects.js` for what
- * each field means and `__tests__/helpers/baselineHarness.js` for the reading half.
- *
- * The default allowed shape is `fence`, matching `EXPECTED_DIFF_CLASSES` in
- * `golden.test.js`. `--allow` exists because a later phase legitimately changes body text;
- * it takes an explicit argument every time rather than reading the constant, so widening
- * the shape is a decision someone typed rather than one they inherited.
- *
- * `--only` is the path-side half of the same guard, and exists for the same reason
- * `EXPECTED_DIFF_FILES` does in the harness: component output carries no envelope, so
- * every line in it classifies as `body` and `--allow body` alone would wave through a
- * rewritten story card. A phase whose diff lands in a component states both halves.
- *
- * Three things this deliberately does not do:
- *
- *   - It never copies `library-dependencies.json`. The manifest stamps the compile root, so
- *     a baseline written from a temp directory bakes that path in and defeats the
- *     harness's normalization on every later run.
- *   - It copies markdown only, with two exceptions. First: `Placeholders.yaml` (one per
- *     node) is non-`.md` but is derived, deterministic compiler output — pure scenario
- *     data, no paths or timestamps — so it is regenerated wholesale like a `.md` card,
- *     added/changed/removed via `report.derived`. Second: a non-markdown file under a
- *     `Scripts/` segment that left one path and reappeared byte-identically at another is
- *     *relocated* — Phase 12 Step 6 lifts a project's `Scripts/` dir root-ward when every
- *     leaf resolved the same one, and the re-baseline follows by moving the file, not
- *     re-contenting it. A shipped `.js` whose bytes changed, or one that vanished with no
- *     byte-identical counterpart, still aborts the run: scripts are copied input and a
- *     change to one has to be seen, not absorbed.
- *   - It compiles into a temp copy of the whole `goldenFixtures/` tree, because each
- *     project's compile.yaml writes to `../Velvet Lattice/` and reaches up three levels
- *     for shared canon, so neither the output nor the inputs can be redirected.
- */
 
 const fs = require('fs');
 const path = require('path');
@@ -66,13 +13,6 @@ const {
   DEFAULT_REPORT_MODES, prepareTempTree, resolvedReportsDir, collectCompileReports,
 } = require('../__tests__/helpers/baselineHarness');
 
-/**
- * The two baseline fixture sets, keyed by `--set`. Each names a tree and the manifest
- * inside it; the manifest's own fields say how that set is laid out. `examples` is the
- * default because it is committed and therefore always regenerable — asking for `golden`
- * on a checkout with no fixtures clone is an error worth stating plainly, but making it
- * the default would mean the common case fails for most people.
- */
 const SETS = {
   examples: { dir: path.resolve(__dirname, '..', 'examples'), manifest: 'projects.js' },
   golden: { dir: path.resolve(__dirname, '..', 'goldenFixtures'), manifest: 'projects.js' },
@@ -82,9 +22,6 @@ function loadSet(name) {
   const set = SETS[name];
   if (!set) throw new Error(`Unknown --set "${name}". Known: ${Object.keys(SETS).join(', ')}`);
 
-  // The goldens are a separate private repo cloned into the gitignored goldenFixtures/ (see
-  // .gitignore). Say so plainly rather than letting the require throw MODULE_NOT_FOUND,
-  // which names a file the reader has no reason to expect is missing.
   if (!fs.existsSync(path.join(set.dir, set.manifest))) {
     if (name === 'golden') {
       console.error('rebaseline: goldenFixtures/ is not present, so there is no baseline to regenerate.');
@@ -95,7 +32,6 @@ function loadSet(name) {
     throw new Error(`rebaseline: ${name} set has no manifest at ${path.join(set.dir, set.manifest)}`);
   }
 
-  // eslint-disable-next-line global-require, import/no-dynamic-require
   const manifest = require(path.join(set.dir, set.manifest));
   return {
     root: set.dir,
@@ -111,7 +47,6 @@ function loadSet(name) {
   };
 }
 
-// ── arguments ────────────────────────────────────────────────────────────────
 
 function parseArgs(argv) {
   const allowed = new Set(['fence']);
@@ -144,16 +79,13 @@ function parseArgs(argv) {
   };
 }
 
-// ── file walking ─────────────────────────────────────────────────────────────
 
 function copyFile(from, to) {
   fs.mkdirSync(path.dirname(to), { recursive: true });
   fs.copyFileSync(from, to);
 }
 
-// ── compile ──────────────────────────────────────────────────────────────────
 
-/** Compile every project into a temp copy of the fixture tree and run its frozen reports. */
 function buildTempTree(projects, set) {
   const {
     OUTPUT_SUBDIR, REPORTS_SUBDIR, SOURCE_SUBDIR, CONFIG_NAME, REPORT_MODES, REPORTS_IN_PLACE,
@@ -163,17 +95,10 @@ function buildTempTree(projects, set) {
   for (const project of projects) {
     process.stdout.write(`compiling ${project.name}… `);
     const configPath = path.join(tmpDir, project.dir, SOURCE_SUBDIR, CONFIG_NAME);
-    // `live: true` to match `baselineHarness.js` exactly — a baseline regenerated through
-    // a project's frozen snapshot while the harness checks it against the live sources is
-    // a baseline that passes for the wrong reason, which is the failure this whole file
-    // exists to avoid.
     const compileOptions = { live: true };
     for (const mode of project.compileReports || []) compileOptions[mode] = true;
     compile(configPath, compileOptions);
 
-    // When reports are frozen in place, every mode writes under wherever
-    // `structure.reports` resolved and nothing is collected afterward — see
-    // `REPORTS_IN_PLACE` in examples/projects.js.
     const reportBase = REPORTS_IN_PLACE
       ? resolvedReportsDir(configPath)
       : path.join(tmpDir, project.dir, REPORTS_SUBDIR);
@@ -192,15 +117,7 @@ function buildTempTree(projects, set) {
   return tmpDir;
 }
 
-// ── diffing ──────────────────────────────────────────────────────────────────
 
-/**
- * Classify every difference between a compiled tree and its committed baseline.
- *
- * Files present in one tree and not the other are reported as added/removed rather than
- * classified: a new or vanished card is a change to the file set, which the harness
- * asserts separately and which no line-class can describe.
- */
 function diffTree(actualDir, expectedDir, { markdownOnly }) {
   const actual = new Set(listFilesRelative(actualDir));
   const expected = new Set(listFilesRelative(expectedDir));
@@ -211,12 +128,6 @@ function diffTree(actualDir, expectedDir, { markdownOnly }) {
   for (const rel of expected) if (!actual.has(rel)) report.removed.push(rel);
   for (const rel of actual) if (!expected.has(rel)) report.added.push(rel);
 
-  // Phase 12 Step 6: a shipped `.js` under `Scripts/` moves when branch inheritance lifts a
-  // project's script dir root-ward. Pair a removed file with an added one by its path from
-  // `Scripts/` on *and* by bytes; a match is a relocation, re-baselined by moving the file
-  // (many removed per-leaf copies collapse onto one added root copy). Anything left over —
-  // bytes changed, or a script added or removed outright — is a real content change, and it
-  // classifies OPAQUE so the run refuses exactly as an unexplained non-markdown diff does.
   if (markdownOnly) {
     const underScripts = (rel) => !rel.endsWith('.md') && rel.split('/').includes('Scripts');
     const tail = (rel) => rel.slice(rel.indexOf('Scripts/'));
@@ -237,9 +148,6 @@ function diffTree(actualDir, expectedDir, { markdownOnly }) {
       report.relocated.push({ to: added, from: moved });
     }
 
-    // A script file that is added or removed but not part of a byte-identical move is a
-    // real content change: pull it out of the file-set lists and report it as an OPAQUE
-    // change so the shape check refuses.
     const strayScripts = [...removedScripts, ...addedScripts]
       .filter((rel) => !matchedRemoved.has(rel) && !matchedAdded.has(rel));
     report.removed = report.removed.filter((rel) => !matchedRemoved.has(rel) && !strayScripts.includes(rel));
@@ -252,13 +160,6 @@ function diffTree(actualDir, expectedDir, { markdownOnly }) {
     }
   }
 
-  // `Placeholders.yaml` (one per node) is non-`.md` but it is derived, deterministic
-  // compiler output — pure scenario data, no paths or timestamps — and is as safe to
-  // regenerate wholesale as a `.md` card, unlike a copied-input `Scripts/*.js`. Route its
-  // add/remove into `report.derived` so the `.md`-only write filter does not drop it (which
-  // left a first-seed baseline one file short) and so the OPAQUE non-markdown classification
-  // below never fires for a legitimate placeholder change. `library-dependencies.json` is
-  // the other derived output and stays excluded everywhere: it bakes in the compile root.
   const isDerivedOutput = (rel) => path.basename(rel) === 'Placeholders.yaml';
   if (markdownOnly) {
     for (const rel of report.added.filter(isDerivedOutput)) report.derived.push({ rel, kind: 'write' });
@@ -330,15 +231,7 @@ function printReport(label, report, { verbose }) {
   }
 }
 
-// ── main ─────────────────────────────────────────────────────────────────────
 
-/**
- * The report comparisons for one project, as `{ label, from, to }` triples.
- *
- * A collected set has one per mode, each in its own directory. A set frozen in place has
- * exactly one covering the whole reports directory — nothing was collected, so there is no
- * per-mode split to key on, and files no mode key names are inside it by construction.
- */
 function reportUnits(project, set, tmpDir) {
   const {
     root, REPORTS_SUBDIR, REPORTS_IN_PLACE,
@@ -362,11 +255,6 @@ function main() {
   console.log(`allowed diff shape: ${[...allowed].join(', ')}`);
   if (only.length > 0) console.log(`allowed only in: ${only.join(', ')}`);
 
-  // `--write` cannot seed a first baseline on its own: it never writes
-  // `library-dependencies.json` (that file bakes in the compile root — see the header), so a
-  // baseline built from an empty directory comes out one file short and the next
-  // `examples.test.js` run fails its file-set assertion. Refuse with the one instruction that
-  // fixes it — compile the project in place once — rather than producing the short baseline.
   if (write) {
     const unseeded = projects.filter((project) => {
       const dir = path.join(root, project.dir, BASELINE_SUBDIR);
@@ -449,16 +337,12 @@ function main() {
         written++;
       }
 
-      // Phase 12 Step 6: apply the `Scripts/` relocations — write the file at its new path,
-      // drop every old copy. Byte-identity was already proven when the move was recognized.
       for (const move of output.relocated || []) {
         copyFile(path.join(from, ...move.to.split('/')), path.join(to, ...move.to.split('/')));
         for (const old of move.from) fs.rmSync(path.join(to, ...old.split('/')), { force: true });
         written += 1 + move.from.length;
       }
 
-      // `Placeholders.yaml` and any other derived non-`.md` output: regenerate wholesale, the
-      // same as a `.md` card. The `.md`-only filters above skip it; this writes it.
       for (const d of output.derived || []) {
         const dest = path.join(to, ...d.rel.split('/'));
         if (d.kind === 'remove') fs.rmSync(dest, { force: true });

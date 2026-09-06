@@ -1,47 +1,15 @@
 'use strict';
 
-/**
- * Cross-item render-function resolution (v4 spec §13).
- *
- * Build the dependency graph the corpus's cross-item render functions imply, evaluate it in
- * one topological pass, and report a genuine cycle by name.
- */
 
 const { CODES: DIAG_CODES } = require('./diag');
 const { ITEM_CONTEXT_KEYS, normalizeVarKey } = require('./util');
 const { FUNCTION_NAMES } = require('./render/parse');
 const { applyFieldRenderFunctions } = require('./template');
 
-/**
- * The fixed keys `itemContext` (`util.js`) attaches to every item's render context, from
- * util.js's own `ITEM_CONTEXT_KEYS` rather than a hand-restated copy. A render function's
- * first path segment matching one of these resolves against the *current* item —
- * `resolveField`'s (`render/eval.js`) itemMap pivot only fires when the segment matches
- * neither this set nor the current item, so the dependency graph below must exclude them the
- * same way or it would draw an edge for every plain `$body.x` reference.
- */
 const ITEM_CONTEXT_KEY_SET = new Set(ITEM_CONTEXT_KEYS);
 
-/**
- * The render-function call syntax `processFieldRenderFunctions` (`template.js`) dispatches on.
- * Derived from the canonical `FUNCTION_NAMES` (`render/parse.js`) so a new render function
- * is registered in exactly one place.
- */
 const RENDER_FN_PREFIXES = FUNCTION_NAMES.map((n) => n + '(');
 
-/**
- * Scan one item's body for cross-item render-function references.
- *
- * An edge exists only when a render function's *first* path segment names another item —
- * exactly the case `resolveField`'s itemMap pivot resolves — so this scan has to mirror that
- * pivot's rule precisely rather than approximate it, or the graph would draw edges the
- * evaluator never actually chases (or miss ones it does). Plain `{$Other.body.X}` field
- * substitutions are `applyCrossItemRefs`'s pass, a different token family already resolved
- * before this runs, and are not scanned here.
- *
- * Returns `[{ target, field }]` — `target` the referenced item's lowercase id, `field` the
- * dotted body path the reference was found in, for `CL0418`'s message.
- */
 function scanCrossItemRefs(body, resolvedById, selfId) {
   const refs = [];
   const scanString = (str, fieldPath) => {
@@ -79,12 +47,6 @@ function scanCrossItemRefs(body, resolvedById, selfId) {
   return refs;
 }
 
-/**
- * Tarjan's SCC over the cross-item dependency graph. Returns only the multi-node groups —
- * every genuine cycle — because a single-node SCC is acyclic by construction once self-loops
- * are excluded from the graph (self-reference is tolerated, not a cycle, and
- * `scanCrossItemRefs` never records one).
- */
 function findCycles(graph) {
   let counter = 0;
   const index = new Map();
@@ -125,14 +87,6 @@ function findCycles(graph) {
   return groups;
 }
 
-/**
- * Post-order DFS topological order: a dependency is pushed onto `order` before the item that
- * depends on it, because it is fully visited (recursed into) first. Safe to run on a graph
- * that contains cycles — a node already on the current stack (`state === 1`) is skipped
- * rather than re-entered, so every node still resolves to exactly one position in `order`.
- * The caller excludes cyclic nodes from evaluation; their position in this order is otherwise
- * unused.
- */
 function topoOrder(graph) {
   const state = new Map();
   const order = [];
@@ -149,7 +103,6 @@ function topoOrder(graph) {
   return order;
 }
 
-/** `CL0418`, naming every item and field on the cycle's edges rather than the uncoded warning it replaces. */
 function reportCycle(group, edgeFields, resolvedById, diagnostics) {
   const groupSet = new Set(group);
   const parts = [];
@@ -171,19 +124,6 @@ function reportCycle(group, edgeFields, resolvedById, diagnostics) {
   );
 }
 
-/**
- * Dependency-ordered cross-item render-function resolution (v4 spec §13).
- *
- * Evaluate in topological order rather than iterating a fixpoint loop to convergence: build
- * the dependency graph the corpus's cross-item render functions imply, evaluate it in one
- * topological pass, and report a genuine cycle by name instead of an uncoded warning after
- * N passes.
- *
- * A render function that migrates from item `B` into item `A` is evaluated in `B`'s context —
- * where the author wrote it — because `B` is resolved (and its body mutated in place) before
- * `A` ever reads it. This is the one place in the phase whose compiled output may
- * legitimately move.
- */
 function resolveCrossItemRenderFunctions(resolvedItems, resolvedById, diagnostics) {
   const graph = new Map();
   const edgeFields = new Map();
@@ -209,9 +149,6 @@ function resolveCrossItemRenderFunctions(resolvedItems, resolvedById, diagnostic
   }
 
   for (const id of topoOrder(graph)) {
-    // Left unexpanded: the item's leaked render-function text is caught downstream by the
-    // output sweep's CL0432 LEAKED_RENDER_FUNCTION — two reports, both correct, rather than
-    // a guess at which side of the cycle to break.
     if (cyclic.has(id)) continue;
     const item = resolvedById.get(id);
     applyFieldRenderFunctions(item, resolvedById, { diagnostics, file: item._source });

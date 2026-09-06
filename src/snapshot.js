@@ -1,14 +1,5 @@
 'use strict';
 
-/**
- * Phase 7's freeze unit: `--snapshot` (sync + manifest write) and the compile-time drift
- * notice (`checkDrift`).
- *
- * Nothing existing owns copy+hash+manifest-write, so this is a new module rather than an
- * addition to `compile.js`'s `buildLibraryManifest` (a different artifact — a compile-time
- * dependency listing into the output tree, no hashes, no copying) or `src/diff.js` (branch-
- * leaf item diffing within one compile, no frozen-vs-live tree comparison at all).
- */
 
 const fs = require('fs');
 const path = require('path');
@@ -20,11 +11,8 @@ const { Diagnostics, CODES } = require('./diag');
 const { NULL_LOG } = require('./log');
 const { listFilesRelative } = require('./util');
 
-/** Matches an applyTokenPass-style brace token: `{$X}`, `{$X.pronoun}`, `{$X's}`, etc. */
 const ROLE_TOKEN_RE = /\{\$([^{}]+)\}/g;
 
-/** The leading identifier of a `{$X...}` token — the same split `applyTokenPass` makes
- * before checking whether it names a role or an item id (`model/pronouns.js:277`). */
 function leadingTokenId(inner) {
   const trimmed = inner.trim();
   const dot0 = trimmed.indexOf('.');
@@ -33,7 +21,6 @@ function leadingTokenId(inner) {
   return trimmed;
 }
 
-/** Every distinct `{$X...}` leading identifier in a library entry's frozen files, first-seen casing kept. */
 function scanRoleCandidates(sourcePath, files) {
   const seen = new Map(); // lowercase -> first-seen casing
   for (const rel of files) {
@@ -55,23 +42,6 @@ function scanRoleCandidates(sourcePath, files) {
   return seen;
 }
 
-/**
- * `requiresRoles` per library entry, computed by elimination (§9.4.4, Decision 2): a
- * `{$X}` prefix in the entry's own frozen files that resolves to no item id anywhere in
- * the snapshotted library — checked against every entry, not only its own, because a
- * legitimate cross-set reference (§9.4.2's `requires:`, not yet enforced) must not be
- * misreported as a role.
- *
- * A precondition guards the conflation Decision 2 accepts (a typo reads exactly like a
- * role requirement): elimination is only trusted for an entry whose own item content
- * validates cleanly. An entry that fails to build its own registry — a hard throw (a
- * duplicate id, an item missing identity) or an ERROR diagnostic (a schema violation) —
- * is refused rather than published as a role list; the caller raises `CL0116` for it and
- * writes no `requiresRoles` key.
- *
- * Returns a Map of entry name -> `{ roles: string[] }` or `{ refused: string }`, library
- * entries only — template entries carry no role contract.
- */
 function computeRequiresRoles(entries, allFileHashes) {
   const libraryEntries = entries.filter((e) => e.kind === 'library');
   const registries = new Map(); // name -> ItemRegistry, or null if refused
@@ -115,8 +85,6 @@ function computeRequiresRoles(entries, allFileHashes) {
   return result;
 }
 
-/** Remove every empty directory under `dir` (depth-first), leaving `dir` itself in place.
- * Used after a prune pass so a slot-file rename does not strand an empty subtree. */
 function removeEmptyDirs(dir) {
   if (!fs.existsSync(dir)) return;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -139,14 +107,6 @@ function hashTree(dir) {
   return out;
 }
 
-/**
- * Every `structure.input.library` entry (all of them) plus every out-of-base
- * `structure.input.templates` entry (Decision 2's template-only in-base/out-of-base rule).
- *
- * Reads the `*Source` fields — the always-live maps — so sync and drift keep hashing live
- * files regardless of whatever a given run's snapshot redirection (Phase 7 Session B)
- * decided for `_resolvedLibrary`/`_resolvedTemplates` themselves.
- */
 function collectEntries(config) {
   const entries = [];
   for (const [name, resolvedPath] of config._resolvedLibrarySource) {
@@ -165,7 +125,6 @@ function entryLabel(entry) {
   return `${entry.kind === 'library' ? 'Library' : 'Template'} "${entry.name}"`;
 }
 
-/** File-level change summary for one entry: added / removed / changed-by-hash. */
 function diffEntryLines(entry, prevSection, liveHashes) {
   const label = entryLabel(entry);
   if (!prevSection) {
@@ -193,11 +152,6 @@ function diffEntryLines(entry, prevSection, liveHashes) {
   return lines;
 }
 
-/**
- * Sync every library entry (and out-of-base template entry) into `snapshot/<name>/`, raw
- * bytes, and (re)write `snapshot/manifest.json`. Before overwriting, if a previous manifest
- * exists and parses, writes a file-level change summary to `<reports>/snapshot/sync-diff.txt`.
- */
 function syncLibrary(config, options = {}) {
   const { log = NULL_LOG, diagnostics } = options;
   const snapshotDir = config._resolvedSnapshot;
@@ -216,10 +170,6 @@ function syncLibrary(config, options = {}) {
   const reportLines = [];
   let filesWritten = 0;
 
-  // First pass: hash every entry's frozen file set. `requiresRoles` (Decision 2, Phase 8)
-  // needs every entry's file list and item registry available at once, to check whether a
-  // token unresolved in its own set resolves in another snapshotted one before elimination
-  // treats it as a role.
   const collected = entries.map((entry) => {
     const files = listFilesRelative(entry.sourcePath);
     const fileHashes = hashTree(entry.sourcePath);
@@ -243,12 +193,6 @@ function syncLibrary(config, options = {}) {
       filesWritten += 1;
     }
 
-    // Prune: delete any file a previous snapshot left in `destDir` that this run's source
-    // no longer has. `loadTemplates` reads the directory, not the manifest, so a removed or
-    // renamed slot file (a stale `.template` next to a new `fields.cl.yaml`, an old
-    // `terse.cl.yaml`) would shadow the live field table and silence the emitter. Phase 12
-    // Sessions B and C pruned the golden `snapshot/0/` trees by hand; this makes it
-    // automatic. Deletions are not counted in `filesWritten` — that tracks copies.
     if (fs.existsSync(destDir)) {
       const keep = new Set(files);
       for (const rel of listFilesRelative(destDir)) {
@@ -287,12 +231,6 @@ function syncLibrary(config, options = {}) {
   return { entries, filesWritten, manifestPath };
 }
 
-/**
- * Compile-time drift check. A complete no-op — no console output, no diagnostics — unless
- * `structure.input.snapshot` is set *and* `snapshot/manifest.json` exists and parses; that
- * covers every project until it opts in (§Decision 4: drift is expected and comfortable,
- * never a warning, never a non-zero exit).
- */
 function checkDrift(config, diagnostics, log) {
   const snapshotDir = config._resolvedSnapshot;
   if (!snapshotDir) return;
@@ -319,7 +257,6 @@ function checkDrift(config, diagnostics, log) {
       continue;
     }
 
-    // Live drift — informational only, never routed through the diagnostics bus.
     const liveHashes = hashTree(entry.sourcePath);
     let changedCount = 0;
     for (const rel of Object.keys(liveHashes)) {
@@ -335,7 +272,6 @@ function checkDrift(config, diagnostics, log) {
       );
     }
 
-    // Corruption check — the frozen copy itself, compared against its own manifest hashes.
     const snapEntryDir = path.join(snapshotDir, entry.name);
     if (!fs.existsSync(snapEntryDir)) {
       diagnostics.warn(

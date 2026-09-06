@@ -1,50 +1,13 @@
 'use strict';
 
-/**
- * The schema validation engine (v4 spec §4.3).
- *
- * Shared by `config/schema.js` (the compile.cl.yaml surface) and `loader/schema.js`
- * (the item surface), because §4.3's most valuable behavior is cross-level: it has to
- * know that `triggers:` written at an item's top level is a key belonging under `aid:`.
- * That requires one engine with a view of a whole declared key surface, not two
- * validators each checking their own level.
- *
- * Like `diag.js`, this module touches neither `fs` nor `console`. It takes a parsed
- * value and a schema, and returns diagnostics.
- *
- * ── Descriptor shape ────────────────────────────────────────────────────────
- *
- *   { type, keys, of, required, values, min, max, pattern, note, alias }
- *
- *   type      one of the TYPES below, or an array of them for a union
- *   keys      for 'map': the declared key set — anything else is an unknown-key ERROR.
- *             Also honored on 'record' (Phase 15): a declared key is validated against its
- *             child descriptor, an undeclared key passes with no CL0201 — the open-mapping
- *             counterpart to 'map', for a convention-pack rule that must check a few named
- *             fields and ignore the rest (§8.2.2).
- *   of        for 'seq' and 'record': the descriptor every element/value must match
- *   required  the key must be present
- *   values    a closed set — a value outside it is CL0206
- *   min/max   for 'number': inclusive bounds — a value outside them is CL0207. Added in
- *             Phase 14 for convention-pack schemas, whose mod-config cards carry
- *             open-ended positive rate settings (§8.2.2).
- *   pattern   for 'string': a regex the value must match, compiled case-insensitively — a
- *             value that does not match is CL0208. Added in Phase 15 for convention-pack
- *             schemas over human-typed mod-config fields (§8.2.2).
- *   note      the key is recognized but not yet implemented; presence is a WARN
- *   alias     the key is a superseded spelling; `alias` names its replacement
- */
 
 const TYPES = Object.freeze({
   STRING: 'string',
   NUMBER: 'number',
   BOOLEAN: 'boolean',
   SEQ: 'seq',
-  /** A closed mapping: every key must be declared in `keys`. */
   MAP: 'map',
-  /** An open mapping: keys are the author's to choose, values follow `of`. */
   RECORD: 'record',
-  /** An open namespace — `body:`, `notes:`, `v:`. Never validated, never suggested. */
   ANY: 'any',
 });
 
@@ -56,16 +19,7 @@ const NUMBER = { type: TYPES.NUMBER };
 const BOOLEAN = { type: TYPES.BOOLEAN };
 const ANY = { type: TYPES.ANY };
 
-// ── suggestions ──────────────────────────────────────────────────────────────
 
-/**
- * Damerau-Levenshtein distance — edit distance counting a transposition as one edit.
- *
- * Plain Levenshtein scores `titel` against `title` as 2, because it can only express a
- * swap as two substitutions. Transposing adjacent characters is the most common typo
- * there is, so under a tolerance tight enough to avoid nonsense suggestions, plain
- * Levenshtein misses exactly the case most worth catching.
- */
 function levenshtein(a, b) {
   if (a === b) return 0;
   const m = a.length;
@@ -92,19 +46,8 @@ function levenshtein(a, b) {
   return d[m][n];
 }
 
-/**
- * Index every declared key name to the dotted paths where it is declared.
- *
- * Only closed, schema-validated levels are indexed. `body:`, `notes:` and `v:` accept
- * arbitrary keys by design, so indexing them would make every key "valid somewhere" and
- * turn every relocation suggestion into a technically-true, useless one — *did you mean
- * to nest it under notes:?* for a block that accepts all keys. Open namespaces have no
- * declared key set and are therefore never proposed as a destination.
- */
 function buildKeyIndex(schema) {
   const index = new Map();
-  // The branch-node descriptor is self-referential — `branches:` holds more branch
-  // nodes — so the walk has to remember which descriptors it has already indexed.
   const seen = new Set();
 
   const walk = (node, path) => {
@@ -120,7 +63,6 @@ function buildKeyIndex(schema) {
         walk(child, [...path, key]);
       }
     }
-    // A record's values may themselves be closed maps (branch nodes, lint packs).
     if (types.includes(TYPES.RECORD) && node.of) walk(node.of, [...path, '*']);
     if (types.includes(TYPES.SEQ) && node.of) walk(node.of, [...path, '[]']);
   };
@@ -129,45 +71,13 @@ function buildKeyIndex(schema) {
   return index;
 }
 
-/**
- * Build the hint for an unknown key.
- *
- * Relocation is checked before spelling, and the order is deliberate: a misspelling
- * usually produces output that is obviously missing something, while a valid key in the
- * wrong position produces output that looks complete and is quietly wrong. Falling back
- * to edit distance only when no relocation match exists also keeps the two kinds of
- * suggestion from competing to explain the same key.
- */
-/**
- * Keys v4 renamed, with what replaced them.
- *
- * Edit distance cannot help here — `cards` and `items` share one letter — so without
- * this an author hand-migrating a project gets a bare "unknown key" for the change most
- * likely to trip them. §14.1 relies on a missing `version:` to route a v3 project to the
- * migrator, and that route does not fire once they have added it and are fixing the rest by
- * hand.
- *
- * **The hint names the `--migrate` command, which landed in Phase 8 (§15).**
- */
 const RENAMED = Object.freeze({
   cards: 'items',
   overview: 'reports',
   openingChoice: 'branchFraming',
-  // §7.7 split one description key into two, and only one of them is a render target: an
-  // item routes into `adventureDescription`, the per-leaf component, never into the
-  // scenario blurb, which has no branch and therefore no cast.
   description: 'adventureDescription',
 });
 
-/**
- * Keys v4 removed outright, with what replaces the capability.
- *
- * Distinct from `RENAMED` because there is no mechanical migration: `migrateProjectFully()`
- * has no path that reads a component `card:` block or a `branches: {x: {ain:, cards:}}`
- * mapping (the feature was release-facing and never triggered before the v4 rebuild), so a
- * hint pointing at the migrator would send the author somewhere that does nothing. The
- * replacement is re-authored by hand.
- */
 const REMOVED = Object.freeze({
   card: {
     hint: '"card:" is gone in v4. Its replacement is "render.storyCards" (§7.8) — a list of '
@@ -213,7 +123,6 @@ function suggestFor(key, ownPath, declaredHere, keyIndex) {
   return { code: CODES.UNKNOWN_KEY, hint: null };
 }
 
-// ── type checking ────────────────────────────────────────────────────────────
 
 function describeType(value) {
   if (value === null) return 'null';
@@ -222,7 +131,6 @@ function describeType(value) {
   return `a ${typeof value}`;
 }
 
-/** "at least 0", "at most 2", or "between 0 and 2" — for the CL0207 message. */
 function rangeText(descriptor) {
   const { min, max } = descriptor;
   if (min !== undefined && max !== undefined) return `between ${min} and ${max}`;
@@ -255,13 +163,6 @@ function matchesType(value, type) {
   }
 }
 
-/**
- * `{}` and `[]` are interchangeable wherever a collection is expected, and normalize to
- * the declared type at the boundary (§3.3). This is deliberately narrow: it covers two
- * spellings of *nothing*, never two shapes of content, so a non-empty value of the wrong
- * type is still an ERROR. It is also strictly distinct from `~`, which means "delete
- * this" — hence the explicit null check, which must not be swept into the same branch.
- */
 function normalizeEmpty(value, types) {
   if (Array.isArray(value) && value.length === 0
     && (types.includes(TYPES.MAP) || types.includes(TYPES.RECORD)) && !types.includes(TYPES.SEQ)) {
@@ -274,20 +175,10 @@ function normalizeEmpty(value, types) {
   return value;
 }
 
-// ── the walk ─────────────────────────────────────────────────────────────────
 
-/**
- * Validate `value` against `schema`, collecting diagnostics.
- *
- * Returns the value with empty collections normalized to their declared type. Nodes are
- * normalized in place, so the caller's object is updated.
- */
 function validate(value, schema, options = {}) {
   const {
     diagnostics, sourceMap, path = [], keyIndex = buildKeyIndex(schema),
-    // Positions and prose need different paths. A multi-item file addresses its second
-    // item as `1.aid.type` for lookup, but a reader should be told "under aid: in item
-    // Kaiden" — the array index is the compiler's business, not theirs.
     displayOffset = 0, context = null,
   } = options;
 
@@ -301,7 +192,6 @@ function validate(value, schema, options = {}) {
 
     if (types.includes(TYPES.ANY)) return node;
 
-    // `~` is an explicit deletion everywhere it appears (§6.4); never a type error.
     if (node === null || node === undefined) return node;
 
     const normalized = normalizeEmpty(node, types);
@@ -315,9 +205,6 @@ function validate(value, schema, options = {}) {
       return normalized;
     }
 
-    // A closed value set, checked after the type test so that a wrong-typed value reports
-    // as a type error rather than as an unlisted one — "must be a string" is the more
-    // actionable of the two messages when both are true.
     if (descriptor.values && !descriptor.values.includes(normalized)) {
       diagnostics.error(
         CODES.VALUE_NOT_ALLOWED,
@@ -328,8 +215,6 @@ function validate(value, schema, options = {}) {
       return normalized;
     }
 
-    // Inclusive numeric bounds. Checked after the type test, so a non-number reports as a
-    // type error rather than as an out-of-range one.
     if (typeof normalized === 'number'
       && (descriptor.min !== undefined || descriptor.max !== undefined)) {
       const below = descriptor.min !== undefined && normalized < descriptor.min;
@@ -344,10 +229,6 @@ function validate(value, schema, options = {}) {
       }
     }
 
-    // A regex a string value must match. Checked after the type test, so a non-string
-    // reports as a type error rather than a pattern miss. Compiled with the `i` flag
-    // unconditionally — the callers are convention-pack schemas over human-typed
-    // mod-config fields (§8.2.2), where case is never the thing being pinned.
     if (typeof normalized === 'string' && descriptor.pattern !== undefined) {
       let re;
       try {
@@ -380,9 +261,6 @@ function validate(value, schema, options = {}) {
         const declared = Object.keys(descriptor.keys);
 
         for (const key of Object.keys(normalized)) {
-          // Keys beginning with `_` are stamped by the loader, not written by an author
-          // — `_source`, `_include_variants`, `_resolvedCanon`. Validating them would
-          // report the compiler's own bookkeeping as the author's mistake.
           if (key.startsWith('_')) continue;
 
           const child = descriptor.keys[key];
@@ -427,11 +305,6 @@ function validate(value, schema, options = {}) {
         return normalized;
       }
 
-      // An open mapping with a few named keys to check (Phase 15). A declared key is
-      // validated against its child descriptor and its `required:` flag; an undeclared
-      // key passes untouched — no CL0201. This is the counterpart to the `map` branch
-      // above, which rejects the undeclared. A descriptor carries `keys` or `of`, not
-      // both; no current schema combines `record` with `keys`.
       if (types.includes(TYPES.RECORD) && descriptor.keys) {
         for (const [key, child] of Object.entries(descriptor.keys)) {
           if (normalized[key] !== undefined) {

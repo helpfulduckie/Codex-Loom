@@ -1,32 +1,8 @@
 'use strict';
 
-/**
- * The item key surface (v4 spec §7, §4.3).
- *
- * Written against the surface the compiler actually reads, established by grepping every
- * property access in `src/` and by a census of all 335 item definitions in the fixture and
- * test corpora — not from the spec's prose, which describes the intended v4 end state and
- * is wrong in at least one place (§4.8 says `kind:` "survives the item rename"; there is no
- * `kind` anywhere in v3, so it is new).
- *
- * ── Why this schema exists ──────────────────────────────────────────────────
- *
- * The canonical §4.3 failure is an item key that is spelled correctly and placed wrongly:
- *
- *     - id: Wyvern
- *       aid:
- *         type: Race
- *       triggers: Wyvern        # ← reads as an item key; the emitter reads aid.triggers
- *
- * Nothing reads `triggers` there, so the item compiles with no triggers and never fires.
- * That defect lived in shared canon, inherited by every project importing it. The shared
- * engine's relocation check exists for exactly this, which is why the item and config
- * surfaces are validated by one engine rather than two.
- */
 
 const { TYPES, STRING, ANY } = require('../schema');
 
-/** `aid:` — the AI Dungeon Story Card fields. Meaningful only for a story-card target. */
 const AID = {
   type: TYPES.MAP,
   keys: {
@@ -34,19 +10,9 @@ const AID = {
     title: STRING,
     triggers: { type: [TYPES.SEQ, TYPES.STRING], of: STRING },
 
-    // `known:` and `encapsulate:` are both gone, and both left with the envelope.
-    //
-    // §8.4 makes `encapsulate: false` unconditional — all four sites in the VL source
-    // default it to true — so there is nothing for an author to decide. `known:` existed
-    // only so `{if $aid.known}notes: '[e]'{/if}` could fire in a template, and §8.2.1
-    // forbids the compiler from knowing what `[e]` means; the marker is `notes:` text
-    // now, which the compiler carries without reading. Both are dropped by the migrator
-    // (§14.2), so a project that still declares one gets an unknown-key ERROR naming it
-    // rather than a key that is quietly read by nothing.
   },
 };
 
-/** `name:` — either a bare string or a display/full pair. */
 const NAME = {
   type: [TYPES.STRING, TYPES.MAP],
   keys: {
@@ -55,35 +21,12 @@ const NAME = {
   },
 };
 
-/**
- * One per-component render target (§7.2, §7.4) — where an item lands in a component.
- *
- * ── Why there is no `wrapper:` here ─────────────────────────────────────────
- *
- * §7.4 gives the slot ownership of wrapping everything placed in it, precisely so an item
- * with `wrapper: curly` in a curly slot cannot ship double-braced. A per-target wrapper
- * would be read by nothing, and a declared key that nothing reads is the §4.3 defect this
- * schema exists to catch — so the key is absent and writing one is an unknown-key ERROR
- * pointing at `render.wrapper`, which does still govern story-card output.
- *
- * `slot:` is not `required:`. A variant may override a single target key while inheriting
- * the slot from the item's base `render:`, and the schema validates one document node
- * without that merged view. A target that names no slot after merging is step 7's ERROR,
- * raised where the answer is actually known.
- */
 const RENDER_TARGET_KEYS = {
   slot: STRING,
   order: { type: TYPES.NUMBER },
   template: STRING,
 };
 
-/**
- * A target accepts the mapping above or a boolean, and the boolean arm is narrower than it
- * looks: `false` is a meaningful "not here", while `true` names no slot and cannot resolve.
- * The engine cannot express "boolean, but only false", so `true` is accepted here and
- * rejected in step 7 alongside the undeclared-slot ERROR — one place that reports on
- * targets rather than two that disagree.
- */
 const target = (note, noteFinal) => ({
   type: [TYPES.MAP, TYPES.BOOLEAN], keys: RENDER_TARGET_KEYS, note, noteFinal,
 });
@@ -96,28 +39,12 @@ const RENDER = {
     notesTemplate: STRING,
     storyCard: { type: TYPES.BOOLEAN },
 
-    // Per-component render targets (§7.4), one key per row of §7.3's component table.
-    // The `note` stays until the phase that reads the key, and its WARN says the key will
-    // be ignored — so it has to go the moment that stops being true. `noteFinal` marks the
-    // other case: a key that is recognized, permanently unread, and kept declared only so
-    // it draws a specific message instead of a bare unknown-key with a misleading
-    // relocation suggestion.
-    //
-    // `description` is gone as a target and `adventureDescription` replaces it (§7.7). The
-    // split is which of the two descriptions has a branch: the scenario blurb is written
-    // once at the root and there is no cast to place into it, while an adventure
-    // description is an ordinary per-leaf component that routes like the rest. The old
-    // spelling is in `RENAMED`, so writing it gets the rename rather than a bare
-    // unknown-key — it was never functional, so nothing is being broken, only redirected.
     plotEssential: target(),
     summary: target(),
     aiInstructions: target(),
     authorsNote: target(),
     adventureDescription: target(),
     opening: target(),
-    // Declared but never read, and it is not a scheduling note: branch framing sits at an
-    // interior node and items are resolved per leaf, so there is no cast at that node to
-    // route into it. Same reason the scenario blurb is not a target.
     branchFraming: target('branch framing sits at an interior node, where no items resolve', true),
   },
 };
@@ -130,45 +57,24 @@ const ITEM_SCHEMA = {
     aid: AID,
     render: RENDER,
 
-    // Open namespaces (§4.3). Never validated, and never proposed as a relocation
-    // destination — a block that accepts every key would match every typo.
-    //
-    // `notes:` is one of them, and `description:` is its accepted alias — collapsed to
-    // `notes` by `model/item.js` so nothing downstream sees which arrived. Declaring both
-    // on one item is an ERROR (CL0323), not a merge.
     body: ANY,
     v: ANY,
     pronouns: ANY,
     notes: ANY,
     description: ANY,
 
-    // `meta:` is an annotation channel for tooling (§8.2.2, Phase 16) — never validated
-    // by the loader, never proposed as a relocation target, and distinct from `v:`: a
-    // reviewer seeing `meta:` knows no template reads it. A convention pack keys rules off
-    // `meta.<packName>.<key>` via `over: meta`, and `emit/vl.js` writes it into the card
-    // fence so the offline `--lint` arm can read it back.
     meta: ANY,
 
-    // Composition.
     variants: ANY,
     branches: ANY,
     import: STRING,
     importVariants: { type: [TYPES.SEQ, TYPES.STRING], of: STRING },
     include: STRING,
 
-    // §4.8. `story` is the default and needs no declaration; `reference` marks an item
-    // that exists to be read by a script or by a human in the story-card editor rather
-    // than by the AI, which exempts it from the prose heuristics and from nothing else.
     kind: { type: TYPES.STRING, values: ['story', 'reference'] },
   },
 };
 
-/**
- * The `v:` block aliases (§4.7). Declared separately from the schema because
- * `normalizeCardVarField` collapses them to `v` before validation ever runs; they are
- * listed here so the relocation index does not mistake them for unknown keys if
- * validation is ever moved ahead of normalization.
- */
 for (const alias of ['var', 'vars', 'variable', 'variables']) {
   ITEM_SCHEMA.keys[alias] = ANY;
 }

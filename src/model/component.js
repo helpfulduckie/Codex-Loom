@@ -1,50 +1,18 @@
 'use strict';
 
-/**
- * The component model (v4 spec §7.2, §7.3).
- *
- * A component document becomes an ordered list of sections, each either text or a slot.
- * This module is the one place that knows what a section *is*; `emit/components.js` knows
- * how to write one, and `model/item.js` knows which items land in which slot. Keeping the
- * three apart is what stops v3's second-resolver problem from reappearing at the component
- * layer — nothing here resolves an item, and nothing here touches the filesystem.
- *
- * ── What this module does not decide ────────────────────────────────────────
- *
- * `headingLevel` is carried through exactly as written, never defaulted. v3's two formats
- * disagree — Plot Essentials treats a bare heading as level 0 and AI Instructions treats it
- * as level 2 — and both are correct for their own output. The default therefore belongs to
- * the component descriptor in `emit/components.js`, where the component is known, rather
- * than here, where it is not. Defaulting it in this module would silently restyle every
- * existing heading in one of the two formats.
- *
- * `position` is defaulted, because both formats already agree it is 5.
- */
 
 const { resolveBranchSpec } = require('./branches');
 const { applyFieldOp } = require('./fieldops');
 const { findKey, setCI } = require('../util');
 const { CODES } = require('../diag');
 
-/** How a slot's `wrapper:` applies to what lands in it. */
 const WRAP = Object.freeze({
-  /** Wrap every occupant on its own — The Institute's cast, four bracketed blocks. */
   EACH: 'each',
-  /** Wrap the joined collection once — Coinflip Company's party, one bracketed directory. */
   ALL: 'all',
 });
 
 const DEFAULT_POSITION = 5;
 
-/**
- * Normalize one parsed component document.
- *
- * Returns `{ sections, slots }` — `sections` ordered for output, `slots` indexed by name
- * so a render target naming a slot can be checked without re-scanning.
- *
- * @param {object|null} doc      parsed component document
- * @param {object}      options  `{ onWarn }` — `(code, message)`, severity from the code
- */
 function normalizeComponent(doc, options = {}) {
   const { onWarn = () => {} } = options;
 
@@ -60,71 +28,32 @@ function normalizeComponent(doc, options = {}) {
     if (section.isSlot) slots.set(section.name, section);
   }
 
-  // `branches:` is the §7.6.2a fan-out and is carried through unresolved because dispatch
-  // is a per-branch question and this runs once per file. It is resolved in
-  // `sectionsForBranch`, where the branch path exists.
-  //
-  // `render:` (§7.8) is carried through opaque for the same reason: `render.component.variant`
-  // and each `render.storyCards` entry are section-variant selectors, and which sections a
-  // selector resolves to is a per-branch question. `src/compile.js`'s leaf loop applies them
-  // against `rawSections` where the branch path exists.
   return {
     sections,
     slots,
     branches: (doc && doc.branches) || null,
     render: (doc && doc.render) || null,
-    // §7.7's frontmatter. Carried through opaque for the same reason `render:` is: the keys
-    // belong to Velvet Lattice and AID, and normalizing them here would pin a copy of a
-    // surface this project does not own.
     metadata: (doc && doc.metadata) || null,
   };
 }
 
-/**
- * One section, with its render options flattened onto it.
- *
- * Declaration order is kept as `index` and used as the sort tiebreak, so sections with no
- * `position:` come out in the order they were written. That is the intuitive reading of a
- * component file and it is what v3 does today — a stable sort over the document's own
- * order — so preserving it is a compatibility property, not only a preference.
- *
- * One caveat that belongs with the sort rather than in the docs: a section named with a
- * bare integer (`1:`) is reordered by JavaScript's own object key rules before this code
- * ever sees it. Section names are free-form strings (§7.4) and nothing forbids `1`, but a
- * numeric name will not sort where it was written. Names that are not bare integers —
- * every name in the corpora — are unaffected.
- */
 function normalizeSection(name, def, index, onWarn) {
   const raw = (def && typeof def === 'object' && !Array.isArray(def)) ? def : {};
   const render = (raw.render && typeof raw.render === 'object') ? raw.render : {};
 
   const isSlot = raw.slot === true;
-  // `file:` and `from:` are resolved into `text:` by the loader before this runs, so they
-  // are counted here only for a caller that normalizes an unresolved document — a unit test,
-  // or a future caller. Counting them costs one clause and stops CL0602 firing on a section
-  // whose content is real and simply has not been read yet.
   const hasSource = (typeof raw.file === 'string' && raw.file !== '')
     || (raw.from && typeof raw.from === 'object' && !Array.isArray(raw.from));
   const hasText = (raw.text !== undefined && raw.text !== null && raw.text !== '') || hasSource;
   const hasHeading = typeof raw.heading === 'string' && raw.heading !== '';
 
-  // A section is text or a slot, never both. The ambiguity is real — where would the text
-  // sit relative to the occupants, and does the slot's wrapper enclose it? — and a
-  // preamble is expressible as its own text section positioned ahead of the slot. Refusing
-  // it now keeps the option of allowing it later; allowing it now would not.
   if (isSlot && hasText) {
     onWarn(CODES.SECTION_TEXT_AND_SLOT,
       `section "${name}" declares both "text:" and "slot: true" — a section is one or the other. `
       + 'Move the text into its own section positioned ahead of the slot.');
   }
 
-  // Nothing to render and nothing to fill: the section is a no-op the author did not mean
-  // to write. A heading alone still renders, so it does not count as empty.
   if (!isSlot && !hasText && !hasHeading) {
-    // `__importedFrom` is set by `resolveImports` (loader/component.js) on a section
-    // contributed by `imports:` that no local override has touched — see that module for
-    // why. Its presence here means this is the *second* of Decision 5's two reports: the
-    // first already fired against the imported file itself, when it was normalized alone.
     const importedFrom = typeof raw.__importedFrom === 'string' ? raw.__importedFrom : null;
     onWarn(CODES.SECTION_RENDERS_NOTHING,
       `section "${name}" has no text, no heading and is not a slot, so it renders nothing.`
@@ -147,7 +76,6 @@ function normalizeSection(name, def, index, onWarn) {
     isSlot,
     text: raw.text === undefined ? null : raw.text,
     heading: hasHeading ? raw.heading : null,
-    // Deliberately undefined when unwritten — see the module comment.
     headingLevel: raw.headingLevel,
     position: typeof render.position === 'number' ? render.position : DEFAULT_POSITION,
     wrapper: render.wrapper || 'none',
@@ -159,33 +87,6 @@ function normalizeSection(name, def, index, onWarn) {
   };
 }
 
-/**
- * Layer one section variant's delta over a normalized section.
- *
- * Returns a new section; the input is never mutated, because the same normalized document
- * is shared by every leaf and a variant applied on one branch must not be visible on the
- * next. That sharing is the point of normalizing once per file rather than once per leaf.
- *
- * The delta shape is v3's, carried across unchanged so that a component file written for
- * v3's AI Instructions still means what it meant. The one translation is `render:` — the
- * normalized section has its render options flattened onto it, so a delta's `render:`
- * mapping is merged key by key rather than replacing an object.
- *
- * `text:` takes three forms, which is where the shape earns its complexity:
- *   null      drop the section's text entirely
- *   string    a field op against the section's text — a plain string replaces it
- *   mapping   treat the section's text as a keyed collection and apply a field op per key,
- *             so a variant can add, replace or delete one line without restating the rest
- *
- * The string arm goes through `applyFieldOp` rather than assigning, which is what makes
- * `dark: {text: '+{ Do not soften outcomes. }'}` — §7.6.2's own worked example — append
- * rather than replace the section with the literal characters `+{ … }`. A string that is
- * not an operation still replaces, because that is what `applyFieldOp` does with one: the
- * op vocabulary is a superset of assignment, not a separate mode. Routing it here is also
- * what keeps one vocabulary across the two positions a section variant is reached from —
- * a branch dispatch through this function, and an import selector through
- * `applySectionSelector` — rather than two that agree on plain strings and diverge on ops.
- */
 function applySectionVariant(section, delta) {
   if (!delta || typeof delta !== 'object' || Array.isArray(delta)) return section;
   const result = { ...section };
@@ -223,46 +124,7 @@ function applySectionVariant(section, delta) {
   return result;
 }
 
-// ── Component imports (§7.6) ─────────────────────────────────────────────────
-//
-// Everything below layers *raw section definitions*, before normalization, and that choice
-// is the whole design of `imports:`.
-//
-// A component may import a house-style base, then a world layer, then declare its own
-// deltas — three sources for one section, each written as ordinary section syntax. Merging
-// them raw means one layering rule applied three times and `normalizeSection` running once,
-// at the end, on the finished section. Merging them normalized would mean a second layering
-// rule for the normalized shape (`isSlot` where the author wrote `slot:`, render options
-// flattened onto the section), and it would run `normalizeSection`'s checks on each partial
-// override — reporting "renders nothing" for a project delta that supplies only a
-// `branches:` dispatch, which §7.6.2's own worked example does.
-//
-// Two layering vocabularies for one grammar is the disagreement §7.1 names as this
-// project's largest bug category, and this is the position where it would reappear.
 
-/**
- * Layer one raw section definition over another (§7.6.3).
- *
- * `text:` goes through `applyFieldOp`, which is what makes `+{}`, `-{}` and `/{}/{}` mean
- * the same thing here as anywhere else — including the mapping form, where AI Instructions'
- * named lines let an override edit one rule without restating the block. A plain string
- * replaces, because `applyFieldOp` on a non-op string replaces; the op vocabulary is a
- * superset of assignment rather than a separate mode.
- *
- * `render:` merges key by key so an override can move a section without restating its
- * wrapper. `variants:` merges by name, and `branches:` replaces. That asymmetry is what
- * §7.6.2's worked example needs: a project overrides `narrativeTone` with nothing but a
- * `branches:` dispatch to `lighthearted`, and `lighthearted` is defined in the *imported*
- * section — a replacing `variants:` would delete the variant the dispatch just named.
- *
- * **The `variants:` merge is case-insensitive with the base spelling winning**, which every
- * other name in this language already is and which a plain `Object.assign` is not.
- * `variants:` is an open namespace — the schema cannot validate names an author invents —
- * so an imported `Dark:` and a local `dark:` both pass validation, and merging them by
- * exact key would leave two entries. `sectionsForBranch` then resolves the dispatch with a
- * case-insensitive `find`, taking whichever comes first in key order: the imported one. The
- * project's override would be discarded with nothing reported.
- */
 const CONTENT_KEYS = ['text', 'file', 'from'];
 
 function layerSectionDef(base, over) {
@@ -270,10 +132,6 @@ function layerSectionDef(base, over) {
   const raw = (over && typeof over === 'object' && !Array.isArray(over)) ? over : {};
   const result = { ...from };
 
-  // A section takes its text from one source (§7.7), so an override naming a different one
-  // replaces rather than joins it. Without this an imported `file:` and a local `text:`
-  // would both survive the merge and the result would be CL0619 — an author reporting for
-  // an override that is the ordinary way to replace inherited content.
   const overridesContent = CONTENT_KEYS.filter((k) => k in raw);
   if (overridesContent.length > 0) {
     for (const key of CONTENT_KEYS) {
@@ -302,19 +160,6 @@ function layerSectionDef(base, over) {
   return result;
 }
 
-/**
- * Merge one raw `sections:` record over another (§7.6.3).
- *
- * Three cases, and the third is the one with a diagnostic. A name the base provided is
- * layered. A name it did not is appended, in declaration order after everything inherited.
- * A name mapped to `~` deletes the inherited section — and deleting one nothing provided is
- * CL0608, on the same reasoning as CL0530: `~` removing something that was never there is
- * meaningless as written and reliably means the author expected an import to supply it.
- *
- * Key matching is case-insensitive and the *base's* spelling wins, matching how every other
- * name in this language resolves. The returned record is a fresh object; neither input is
- * mutated, because a cached imported document is shared by every project that imports it.
- */
 function mergeSectionRecords(base, over, onWarn = () => {}) {
   const merged = {};
   const keyOf = new Map();
@@ -350,17 +195,6 @@ function mergeSectionRecords(base, over, onWarn = () => {}) {
   return merged;
 }
 
-/**
- * Apply one import selector across every section that defines it (§7.6.2a).
- *
- * Returns the layered record and how many sections matched. Silent where a section does not
- * define the name, because an import's `importVariants:` names every section it pulled in —
- * the arity-N rule, the same one an `include:` over a lore file follows. The count is what
- * the caller needs for CL0326, which is the whole of what keeps that silence safe.
- *
- * The lookup is flat rather than slash-nested, matching `sectionsForBranch`: a component's
- * variants are one level deep, and nesting them here would be a second variant grammar.
- */
 function applySectionSelector(sections, name) {
   const result = {};
   let matched = 0;
@@ -381,58 +215,12 @@ function applySectionSelector(sections, name) {
   return { sections: result, matched };
 }
 
-/**
- * Look one variant name up in a section's own `variants:`, case-insensitively.
- *
- * One lookup for the two positions a section variant is reached from — the component's
- * fan-out and the section's own dispatch — so the two cannot come to disagree about which
- * spelling matches.
- */
 function findSectionVariant(section, name) {
   if (!section.variants) return undefined;
   return Object.keys(section.variants)
     .find((k) => k.toLowerCase() === String(name).toLowerCase());
 }
 
-/**
- * The sections that apply to one branch, in output order, with their variants applied.
- *
- * Returns `null` when a component-level `~` excludes the whole component from this branch,
- * which is a different fact from "no sections applied" and has to stay distinguishable:
- * an empty list means every section resolved away and is `CL0615`, an ERROR, while an
- * exclusion is the author saying this branch does not get this component and is silent.
- * `null` for exclusion is the convention `resolveBranchSpec`, `collectVariantDeltas` and
- * `resolveItem` already use.
- *
- * A section excluded by its own `branches:` dispatch is dropped entirely — §7.2's
- * component-level visibility gating, which is how an author drops a whole slot's contents
- * from one branch without editing every item that routes into it.
- *
- * The variants the dispatch selected are applied here rather than handed back for the
- * caller to apply. Returning the names and trusting someone downstream to act on them is
- * how `variants:` came to be a declared key that nothing read, which is the §4.3 defect
- * the schema exists to catch. The names still travel alongside, for the reports.
- *
- * ── Two dispatch positions, and the order they compose in (§7.6.2a) ─────────
- *
- * A component document may carry `branches:` of its own, and it names *every* section it
- * holds rather than one. Both positions run, component first and section second, which is
- * the order §7.6.2a states for the whole grammar: selection at import, then local layering,
- * then component dispatch, then section dispatch. Neither position claims exclusivity — a
- * component-level name says "apply this wherever it is defined" and a section-level one
- * says "apply this here" — so when both fire they stack, in that order, the same way
- * `resolveBranchSpec` already stacks a wildcard under an explicit key. There is no
- * override rule because neither declaration is a denial of the other.
- *
- * Arity decides the reporting, per Step 0. The component's fan-out is silent on a section
- * that does not define the name, because missing it on most sections is what fanning out
- * *is*; the section's own dispatch still raises `CL0604`, because it named one target. What
- * keeps the silence safe is `CL0605`: a component-level name matching no section at all.
- *
- * Re-sorting after applying is deliberate: a variant may set `render.position`, and a
- * section that moves has to move in the output too. The sort is the same one
- * `normalizeComponent` uses — position, then declaration order.
- */
 function sectionsForBranch(component, branchPath, onWarn = () => {}) {
   const fanned = resolveBranchSpec(component.branches, branchPath, onWarn);
   if (fanned === null) return null; // component-level ~ — excluded from this branch
@@ -454,9 +242,6 @@ function sectionsForBranch(component, branchPath, onWarn = () => {}) {
 
     let resolved = section;
 
-    // Component-level first, silent on a miss. Applied before the section's own dispatch so
-    // a section that names a variant specifically wins the last word over one that reached
-    // it by fan-out.
     for (const name of fanned) {
       const key = findSectionVariant(section, name);
       if (key === undefined) continue;
@@ -479,14 +264,6 @@ function sectionsForBranch(component, branchPath, onWarn = () => {}) {
   return applicable;
 }
 
-/**
- * The slots a branch actually declares — the set a render target may name (§7.4).
- *
- * A component excluded from the branch declares no slots. An item targeting one is then
- * caught by the no-output invariant (`CL0610`) rather than by the undeclared-slot ERROR,
- * which is §7.4's third row and the same answer a section-level `~` already gives: gating
- * is legitimate until it makes an item vanish from every output it declared.
- */
 function slotsForBranch(component, branchPath) {
   const slots = new Map();
   for (const { section } of sectionsForBranch(component, branchPath) || []) {

@@ -8,45 +8,18 @@ const {
   writeOutput, buildBranchOutputDir, resolveBranchFolderPath,
 } = require('./outputPaths');
 
-/**
- * Copy scripts directory to target branch Scripts/ folder.
- */
 function copyScripts(srcDir, targetDir) {
   if (!srcDir || !fs.existsSync(srcDir)) return;
   const dest = path.join(targetDir, 'Scripts');
   fs.cpSync(srcDir, dest, { recursive: true });
 }
 
-/**
- * Component/script inheritance and story-card frontier placement.
- *
- * The leaf loop renders and checks every component and card per leaf, but defers the
- * *file write* to here, where the full set of per-leaf texts is known. A value identical
- * at every leaf (and redeclared by no branch) is written once at the node Velvet Lattice
- * inherits it from; anything else is written per leaf, byte-for-byte where the leaf loop
- * used to write it.
- *
- * Returns the number of files written, for the spine to fold into `totalFiles`.
- */
 function placeInheritedFiles({
   deferredComponents, deferredScripts, deferredCardLeaves,
   leaves, config, diagnostics, log,
 }) {
   let filesWritten = 0;
 
-  // ── Component and script inheritance ──────────────────────────────────────────
-  //
-  // Each deferred component (and the `Scripts/` dir) is written once at the output root
-  // when its value is identical at every leaf and no branch node redeclares it — the
-  // shape Velvet Lattice inherits down the tree for free. Anything else is written per
-  // leaf, byte-for-byte where the leaf loop used to write it, so the fallback is the old
-  // behavior rather than a new one.
-  //
-  // "Identical at every leaf" is required to be a total match, not a majority: a leaf that
-  // excludes the component (`~`, or a gap) is not in `perLeaf`, and lifting to the root
-  // would make VL inherit it there anyway. `leaves.length > 1` skips the single-leaf
-  // projects, where the one "leaf" already *is* the root and lifting would be a no-op that
-  // only muddies the diff.
   const canLift = (perLeaf, declaredInBranches) => leaves.length > 1
     && perLeaf.size === leaves.length
     && !declaredInBranches
@@ -78,12 +51,6 @@ function placeInheritedFiles({
     }
   }
 
-  // The `Scripts/` dir rides the same lift test. `canLift` compares the
-  // resolved spec strings — one distinct spec across every leaf is one identical
-  // `fs.cpSync` by construction — but `scripts/rebaseline.js` still asserts byte-identity
-  // of the copied files, because this pass is the only thing between a lifted layout and a
-  // silently re-contented script. A single-leaf project (`leaves.length === 1`) writes per
-  // leaf, where the one "leaf" already is the output root, so its layout does not move.
   if (deferredScripts.size > 0) {
     const scriptsDeclaredInBranches = branchTreeDeclares(
       config.branches, (node) => node.scripts !== undefined,
@@ -97,21 +64,7 @@ function placeInheritedFiles({
     }
   }
 
-  // ── Story-card inheritance ───────────────────────────────────────────────────
-  //
-  // A card was rendered once per leaf above. Velvet Lattice inherits a node's cards down
-  // its subtree, merging by card name, so a card that renders byte-identically across a
-  // whole subtree need only be written once, at that subtree's root. This pass finds, for
-  // each card, the minimal set of nodes whose subtrees partition exactly the leaves that
-  // rendered it — the frontier — and writes the card there. A card that varies within its
-  // scope (a protagonist-dependent body, say) has each of its versions placed the same
-  // way, and one that reaches an irregular set of leaves falls all the way back to a copy
-  // per leaf. Every leaf still *resolves* to the same card set it did before; only the
-  // file layout changes.
   if (deferredCardLeaves.length <= 1) {
-    // One leaf (or none): there is no subtree to inherit down, so the frontier would only
-    // relocate the single leaf's cards to the output root for no saving. Write them where
-    // they were — same as the pre-Step-5 leaf loop did.
     for (const leaf of deferredCardLeaves) {
       const byType = new Map();
       for (const [type, entries] of leaf.grouped) byType.set(type, entries);
@@ -134,7 +87,6 @@ function placeInheritedFiles({
       }
       return out;
     };
-    // The minimal nodes (as branch-id paths) whose subtrees cover exactly `carry`.
     const frontier = (prefix, carry) => {
       const under = leavesUnder(prefix);
       if (under.length === 0) return [];
@@ -152,14 +104,6 @@ function placeInheritedFiles({
       return nodes;
     };
 
-    // Every rendering of every card, indexed by the (type, name) pair — a card's file is
-    // `Story Cards/<type>/<type>.md` and Velvet Lattice merges within it by name, so that
-    // pair is the identity inheritance has to preserve. A per-branch variant that changes
-    // the name or the type is a different card here and lands on its own leaves; one that
-    // only changes the body is one entry with two texts, each placed on its own frontier.
-    // Keying on the item id would be wrong — a `variants:` item keeps one id while its
-    // name and type differ per branch. (The key separator is a control char so it cannot
-    // occur in either half.)
     const cardIndex = new Map();
     deferredCardLeaves.forEach((leaf, li) => {
       for (const [type, entries] of leaf.grouped) {
@@ -174,7 +118,6 @@ function placeInheritedFiles({
       }
     });
 
-    // nodeDir → type → [{ sortKey, rendered }]
     const ownedByNode = new Map();
     const putOwned = (dir, type, sortKey, rendered) => {
       if (!ownedByNode.has(dir)) ownedByNode.set(dir, new Map());
@@ -193,8 +136,6 @@ function placeInheritedFiles({
       }
     }
 
-    // Types alphabetical, cards within a type by id then rendered text — the order
-    // `renderBranchItems` used to apply itself, now applied once per owning node.
     for (const [dir, byType] of ownedByNode) {
       for (const type of [...byType.keys()].sort((a, b) => a.localeCompare(b))) {
         const items = byType.get(type)

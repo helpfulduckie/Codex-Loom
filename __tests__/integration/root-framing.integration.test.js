@@ -1,25 +1,5 @@
 'use strict';
 
-/**
- * Phase 11 Step 1 — root `branchFraming` renders through the same sectioned path an
- * interior node uses, rather than the literal/`{%variable}`-only `resolveOpeningContent`
- * the old hand-rolled root rung called.
- *
- * `__tests__/fixtures/kitchen-sink/` cannot carry this proof: its own header says it is
- * "validated, not compiled" — `kitchen-sink.test.js` only walks the schema for key
- * coverage, and the project's declared canon/templates/scripts don't exist on disk, so a
- * real `compile()` against it fails long before reaching root framing. None of the golden
- * corpus can carry it either (per the Phase 11 plan's Fixture obligations): proving a
- * `{$role}` token at root framing needs a **non-protagonist** role bound at a project
- * root, and no golden declares one. This test builds the smallest project that can.
- *
- * Three things this proves, per the plan's Session A stop conditions:
- *   - a root-level `branchFraming` pointing at a `sections:` document renders its sections
- *   - a `{$role}` token for a non-protagonist role resolves to that role's item
- *   - a `{%libraryName}` token in root framing expands (it did not before Step 1, because
- *     the old root rung resolved against `config.variables` rather than `config._variables`,
- *     which is where library names are folded in)
- */
 
 const path = require('path');
 const fs = require('fs');
@@ -53,10 +33,6 @@ beforeAll(() => {
     '',
     ].join('\n'),
 
-    // The sections document root framing now renders through. A bare {$LI} substitutes the
-    // role's item display name; {%main} is a library name exposed as a variable (§6.1),
-    // present only in the effective `_variables` set the root visit seeds with, not in the
-    // author's declared `variables:` — which is what the old root rung expanded against.
     'components/root-framing.yaml': [
     'sections:',
     '  choice:',
@@ -77,10 +53,6 @@ beforeAll(() => {
     "  output: './out'",
     'roles:',
     '  protagonist: Aness',
-    // A non-protagonist role bound at the project root. A {$protagonist} token would
-    // render identically to plain second-person text even with role resolution broken
-    // (the Watch note in the Phase 11 Session A handoff) — the proof needs a role other
-    // than it.
     '  LI: Kaiden',
     'components:',
     '  branchFraming: ./components/root-framing.yaml',
@@ -116,16 +88,6 @@ test('the undeclared-placeholder check runs at root framing, where the old rung 
   expect(found).toEqual([]);
 });
 
-/**
- * The literal / inline arm of root framing resolves roles too.
- *
- * Phase 11 gave root framing the sectioned path (the tests above). What it left behind
- * was `renderFraming`'s fallback — a `branchFraming:` written as a bare sentence or a
- * prose `.md` still went through `resolveOpeningContent`, which only expands `{%…}`. A
- * `{$role}` there was never attempted, so the token leaked into `Opening.md` and tripped
- * the CL0430 output sweep. It now runs the same token pass the sectioned arm does, with
- * the project's own `roles:` table and (null) protagonist.
- */
 describe('root branchFraming — inline sentence arm', () => {
   let dir;
   let diag;
@@ -180,12 +142,6 @@ describe('root branchFraming — inline sentence arm', () => {
   });
 });
 
-/**
- * An undeclared `{%var}` in a literal framing sentence is reported once. The literal arm
- * resolves the spec to decide whether it names a file, then resolves the content; both
- * steps run `resolveVariables` over the same string, and the bus does not dedupe, so the
- * count is what guards against the same token being reported per expansion pass.
- */
 describe('root branchFraming — undeclared variable in the inline arm', () => {
   let diag;
 

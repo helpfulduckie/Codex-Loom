@@ -1,22 +1,11 @@
 'use strict';
 
-/**
- * Output-directory paths and pre-build directory hygiene for the compiled tree.
- *
- * Where a branch node's folder lands on disk, and the pre-build sweep that wipes the
- * output-type folders from every active node and archives (or deletes) any node that has
- * gone stale.
- */
 
 const fs = require('fs');
 const path = require('path');
 const { FILENAME: PLACEHOLDERS_FILENAME } = require('./emit/placeholders');
 const { walkBranchChain } = require('./model/branches');
 
-/**
- * Write compiled items to output directory.
- * One .md file per item type: Story Cards/{type}/{type}.md
- */
 function writeOutput(outputDir, type, renderedItems) {
   const typeDir = path.join(outputDir, 'Story Cards', type);
   fs.mkdirSync(typeDir, { recursive: true });
@@ -25,9 +14,6 @@ function writeOutput(outputDir, type, renderedItems) {
   return outputPath;
 }
 
-/**
- * Delete Story Cards, Components, Scripts subdirs and Label.md from a branch output dir.
- */
 function cleanBranchOutputDir(dir) {
   for (const sub of ['Story Cards', 'Components', 'Scripts']) {
     const target = path.join(dir, sub);
@@ -39,16 +25,6 @@ function cleanBranchOutputDir(dir) {
   }
 }
 
-/**
- * Every branch *node* dir on disk beneath a `Branches/` container, deepest first.
- *
- * Was `findLeafDirsOnDisk`, which stopped at leaves. An interior node is a node: it owns
- * a `Label.md` and, since Phase 4, a `Placeholders.yaml`, and Velvet Lattice reads both
- * and inherits them down the subtree. A sweep that only sees leaves cannot clean an
- * interior node and cannot tell that one has gone stale.
- *
- * Deepest first so a caller removing empty directories meets a child before its parent.
- */
 function findNodeDirsOnDisk(dir) {
   if (!fs.existsSync(dir)) return [];
   const nodes = [];
@@ -61,12 +37,6 @@ function findNodeDirsOnDisk(dir) {
   return nodes;
 }
 
-/**
- * Every node dir from `leafDir` up to and including `baseOutput`.
- *
- * The `Branches` containers between them are skipped: they hold nodes and are not nodes,
- * so they carry no `Label.md` and nothing to clean.
- */
 function nodeDirsUpTo(leafDir, baseOutput) {
   const chain = [];
   let current = path.resolve(leafDir);
@@ -86,24 +56,6 @@ function isDirEmpty(dir) {
   return fs.readdirSync(dir).length === 0;
 }
 
-/**
- * Pre-build clean: wipe output-type folders from every active branch node, then detect
- * and archive (or delete) any stale node on disk.
- *
- * **Nodes, not leaves.** This swept only leaf directories until Phase 4 raised it: a
- * declaration deleted from an interior node — its `Placeholders.yaml`, or the `Label.md`
- * that has the same shape and predates placeholders — survived in the output tree, and
- * Velvet Lattice went on reading it and inheriting it down the subtree. The compiler
- * rewrites what it emits, so only a key that stopped being emitted was affected, which is
- * exactly the edit an author makes when they mean to remove one.
- *
- * The root is a node too, and had the same hole: it was added to the expected set only
- * for a project with no branches at all, so a branched project's root `Label.md` and
- * `Placeholders.yaml` were never swept either.
- *
- * Ancestors of an expected leaf are expected, which gives the stale pass an invariant it
- * needs: a stale node can never contain a live descendant, so archiving one whole is safe.
- */
 function cleanAndArchive(config, leaves, log) {
   const baseOutput = config._resolvedOutput;
 
@@ -130,9 +82,6 @@ function cleanAndArchive(config, leaves, log) {
 
   for (const staleDir of stale) {
     cleanBranchOutputDir(staleDir);
-    // `stale` is deepest first, so a stale node's own stale children have already been
-    // dealt with by the time it is reached — leaving behind an empty `Branches` container
-    // that would otherwise read as content and get the node archived as a hollow shell.
     const container = path.join(staleDir, 'Branches');
     if (fs.existsSync(container) && isDirEmpty(container)) fs.rmSync(container, { recursive: true });
     if (isDirEmpty(staleDir)) {
@@ -148,22 +97,11 @@ function cleanAndArchive(config, leaves, log) {
   }
 }
 
-/**
- * Build the output directory path for a branch leaf.
- */
 function buildBranchOutputDir(baseOutput, branchPath) {
   if (branchPath.length === 0) return baseOutput;
   return path.join(baseOutput, ...branchPath.flatMap(b => ['Branches', b]));
 }
 
-/**
- * Resolve the output folder path for a branch identifier path.
- * Uses the internal key name (case-preserved from the YAML) for each folder segment.
- *
- * @param {object|null} branches - root branches mapping from config
- * @param {string[]}    idPath   - branch identifier path (e.g. ['tier2', 'alpha'])
- * @returns {string[]}           - folder name path (e.g. ['tier2', 'alpha'])
- */
 function resolveBranchFolderPath(branches, idPath) {
   return walkBranchChain(branches, idPath).folderPath;
 }

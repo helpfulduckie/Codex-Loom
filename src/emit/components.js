@@ -1,14 +1,5 @@
 'use strict';
 
-/**
- * The component descriptor table (v4 spec §7.3, §3.3).
- *
- * §3.3 asks for components to be table-driven so that adding one is a table row rather
- * than another bespoke block in `compile()`. Each descriptor carries the output filename,
- * heading default and per-component flags the emitter and renderer read; where a file
- * lands in the branch tree is `compile.js`'s Phase 11 frontier placement, not a column
- * here.
- */
 
 const fs = require('fs');
 const path = require('path');
@@ -21,22 +12,6 @@ const {
   resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts,
 } = require('../util');
 
-/**
- * Components built from `sections:`, some of which are slots items route into (§7.2).
- *
- * The rows differ by output file and heading default and by little else. AI Instructions
- * and Author's Note reached this table by having their own document layer deleted rather
- * than ported — `ain.js` ran a second branch walker and a second delta vocabulary for what
- * a section's own `branches:` and `variants:` already do. See `loader/component-schema.js`
- * for what went and why.
- *
- * `defaultHeadingLevel` is a column rather than a constant because v3's two formats
- * disagree about what a bare `heading:` means — Plot Essentials reads it as level 0 and
- * AI Instructions as level 2 — and both are right for their own output.
- * `model/component.js` therefore carries `headingLevel` through unset, and the default is
- * applied here, where the component is known. That disagreement is the whole reason the
- * rows are not one constant, and it survives the merge intact.
- */
 const SLOTTED_COMPONENTS = Object.freeze([
   {
     key: 'plotEssential',
@@ -47,10 +22,6 @@ const SLOTTED_COMPONENTS = Object.freeze([
     defaultHeadingLevel: 0,
   },
   {
-    // §7.3: VL reads this into `storySummary`, AID's context slot 4 — the running "what
-    // has happened so far". Plot Essentials states standing fact and Summary states
-    // narrative past, and authors shape the two alike, so it takes Plot Essentials'
-    // settings rather than a format of its own. Expect it to be used rarely.
     key: 'summary',
     label: 'Summary',
     file: 'Summary.md',
@@ -64,13 +35,9 @@ const SLOTTED_COMPONENTS = Object.freeze([
     file: 'AI Instructions.md',
     dir: 'Components',
     verboseLabel: 'AIInstructions',
-    // v3's AI Instructions format reads a bare `heading:` as level 2, and every shipped
-    // file was written against that reading.
     defaultHeadingLevel: 2,
   },
   {
-    // Velvet Lattice expects the file to be named "Author Notes.md", not "Author's
-    // Note.md". That is VL's spelling, not a typo, and changing it breaks the import.
     key: 'authorsNote',
     label: "Author's Note",
     file: 'Author Notes.md',
@@ -79,73 +46,27 @@ const SLOTTED_COMPONENTS = Object.freeze([
     defaultHeadingLevel: 2,
   },
   {
-    /**
-     * §7.7 — the description a leaf carries, which AID applies to the adventure started
-     * from it. The scenario's own blurb is `description:`, a separate key written once at
-     * the output root; the two share `Description.md` at different levels exactly as
-     * `opening:` and `branchFraming:` share `Opening.md`.
-     *
-     * It inherits down the branch tree, which is what makes it an ordinary row here: a
-     * value declared at an interior node flows down to the leaves beneath it and is written
-     * there, so there is no interior-node render path and no half-routed component. The
-     * scenario description cannot work this way — inheriting it would copy one blurb into
-     * every leaf — which is the whole reason the two are separate keys.
-     *
-     * `dir: null` puts the file at the node root rather than in `Components/`, because that
-     * is where Velvet Lattice reads a node's description from.
-     */
     key: 'adventureDescription',
     label: 'Adventure Description',
     file: 'Description.md',
     dir: null,
     verboseLabel: 'AdventureDescription',
     inlineProse: false,
-    // v3's descriptions carry no headings at all, so neither reading is established by the
-    // corpus. Level 0 is Plot Essentials' — a bare heading is a plain line — which is the
-    // safer default for prose a store listing renders without markdown.
     defaultHeadingLevel: 0,
     frontmatter: true,
   },
   {
-    /**
-     * §7.1's fourth syntax, retired. `src/opening.js` was an anonymous ordered block list
-     * with a `branches:` dispatch and a `variants:` vocabulary of its own — a block's
-     * variant was `{text:}` and nothing else, dispatch took the *first* name and discarded
-     * the rest where `sectionsForBranch` stacks them all, and a missing one was a bare
-     * `console.warn` with no code. Nothing in the corpus used that half, so the
-     * disagreement was dead code rather than a feature, and openings join the grammar the
-     * other components already share.
-     *
-     * Prose is the common case and stays free: an opening spec that names a `.md` file is
-     * copied verbatim, and one that resolves to no file at all is the literal text. That
-     * is what every opening in all three golden corpora is.
-     */
     key: 'opening',
     label: 'Opening',
     file: 'Opening.md',
     dir: 'Components',
     verboseLabel: 'Opening',
-    // An opening is the story's first message, so a bare `heading:` is a plain line rather
-    // than a Markdown heading — Plot Essentials' reading, for the same reason.
     defaultHeadingLevel: 0,
-    // The one component whose spec is routinely a sentence rather than a path.
     inlineProse: true,
-    // §8.5's tightest cap, and the reason this row carries a `limit` column at all: VL
-    // writes an opening to a field AID caps at 4,000 characters, measured after placeholder
-    // substitution. Branch framing lands in the same filename and is capped with it.
     limitKey: 'opening',
   },
 ]);
 
-/**
- * The scenario blurb (§7.7) — a full descriptor, because it is rendered by the same
- * `renderSectionedComponent` the routable components use and written by the same writer.
- *
- * It sits outside `SLOTTED_COMPONENTS` for one reason: items are branch-scoped and a
- * scenario has one blurb, so there is no branch whose cast could route into it. It renders
- * with an empty occupant map at the root, which is not a second render path — it is the
- * same one, called with nothing to place.
- */
 const DESCRIPTION_DESCRIPTOR = Object.freeze({
   key: 'description',
   label: 'Description',
@@ -156,19 +77,6 @@ const DESCRIPTION_DESCRIPTOR = Object.freeze({
   frontmatter: true,
 });
 
-/**
- * Branch framing (§7.3) — a full descriptor, and outside `SLOTTED_COMPONENTS` for the same
- * reason the scenario blurb is: routing needs items, and items are resolved per leaf.
- *
- * Framing is the one component that belongs to a *non-leaf* node, which is where the leaf
- * loop cannot reach it. It renders through `renderSectionedComponent` with an empty
- * occupant map at the interior node's own branch path — the same call the blurb makes at
- * the root — so it is on the sections grammar without a render path of its own.
- *
- * It writes `Opening.md`, the filename `opening:` uses at leaves, because Velvet Lattice
- * reads a node's prompt from that name at every level. That is also why it shares the
- * opening's cap: AID measures the field, not the chain.
- */
 const FRAMING_DESCRIPTOR = Object.freeze({
   key: 'branchFraming',
   label: 'Branch framing',
@@ -182,51 +90,29 @@ const FRAMING_DESCRIPTOR = Object.freeze({
 
 const PASSTHROUGH_EXTENSIONS = new Set(['.md', '.txt']);
 
-/**
- * True when a component spec points at prose to copy rather than a document to compile.
- *
- * Every component may be either. All three golden corpora point `aiInstructions:` at a
- * shared `.md` file, so this is not a legacy path — it is how the largest component in the
- * corpus is actually authored, and it survives the move onto the sections grammar
- * unchanged.
- */
 function isPassthrough(spec) {
   return typeof spec === 'string' && PASSTHROUGH_EXTENSIONS.has(path.extname(spec).toLowerCase());
 }
 
-/** The prose a passthrough spec holds, or null when the file is empty. */
 function readPassthrough(spec) {
   return fs.readFileSync(spec, 'utf8').trimEnd() || null;
 }
 
-// ── Sectioned components (§7.2, §7.4) ────────────────────────────────────────
 
-/**
- * Blocks that stand on their own are separated by a blank line; lines sharing one wrapper
- * are not. That single rule produces both of v3's behaviors without a special case:
- * `wrap: each` emits several wrapped blocks and joins them with `BLOCK_GAP`, `wrap: all`
- * emits one wrapper around occupants joined with `LINE_GAP`, and sections join with
- * `BLOCK_GAP` because a section is a block.
- */
 const BLOCK_GAP = '\n\n';
 const LINE_GAP = '\n';
 
-/** `heading` as it is written into the output, or null when the section has none. */
 function headingText(section, defaultHeadingLevel) {
   if (!section.heading) return null;
   const level = section.headingLevel === undefined ? defaultHeadingLevel : section.headingLevel;
   return level > 0 ? `${'#'.repeat(level)} ${section.heading}` : section.heading;
 }
 
-/** The lines of a text section's own content, variables and tokens resolved. */
 function textLines(section, options) {
   const { variables = {}, registry, branchProtagonist, roles, onWarn, onRoleUsed, diagnostics, file } = options;
   const prefix = section.bullet ? '- ' : '';
   const resolve = (value) => {
     const withVars = resolveVariables(String(value), variables, { diagnostics, file });
-    // §9.7: this is the call site most likely to be skipped, because `item: {}` reads as a
-    // degenerate case — but component prose (AI Instructions, Author's Note) is where a
-    // share of the hardcoded pronouns §9.1 fixes actually live, and roles resolve here too.
     return prefix + applyTokenPass(
       withVars, { item: {}, registry, branchProtagonist, roles, onWarn, onRoleUsed },
     ).trim();
@@ -240,13 +126,6 @@ function textLines(section, options) {
   return [];
 }
 
-/**
- * One section's contribution to the output, or null when it contributes nothing.
- *
- * A slot with no occupants returns null rather than an empty wrapper — an empty cast on
- * one branch is legitimate (§7.4 makes it a WARN, raised in step 7), and shipping `[\n\n]`
- * for it would be worse than shipping nothing.
- */
 function renderSection(section, occupants, options) {
   const { defaultHeadingLevel = 0 } = options;
   const heading = headingText(section, defaultHeadingLevel);
@@ -255,8 +134,6 @@ function renderSection(section, occupants, options) {
     const bodies = occupants.map((o) => o.text).filter((t) => t && t.trim());
     if (bodies.length === 0) return null;
 
-    // The slot owns the wrapping and the item's own `render.wrapper` is ignored (§7.4);
-    // `wrap` decides only whether that wrapper encloses each occupant or the collection.
     if (section.wrap === WRAP.ALL) {
       const lines = [];
       if (heading) {
@@ -269,8 +146,6 @@ function renderSection(section, occupants, options) {
 
     const blocks = bodies.map((body) => applyWrapper(body, section.wrapper));
     if (!heading) return blocks.join(BLOCK_GAP);
-    // The heading sits outside the wrappers here, because there is no single wrapper for
-    // it to sit inside — that is the whole difference `wrap: all` expresses.
     return [heading, blocks.join(BLOCK_GAP)].join(section.compact ? LINE_GAP : BLOCK_GAP);
   }
 
@@ -286,27 +161,6 @@ function renderSection(section, occupants, options) {
   return applyWrapper(parts.join(LINE_GAP), section.wrapper);
 }
 
-/**
- * Render a whole sectioned component for one branch leaf.
- *
- * Returns `{ text, segments }`. `segments` is the same content un-joined and keyed by
- * section name, which is what the cross-branch reports compare — §7.2's naming made
- * load-bearing a second time: v3 could only diff Plot Essentials as one opaque blob for
- * exactly the reason it could never make a component importable, namely that its blocks
- * had no names.
- *
- * `occupants` is a Map keyed by lowercased slot name. Sorting happens here rather than at
- * the call site so that `order:` then item id (§7.4) is stated once — filesystem traversal
- * order must never reach the output, and the only way to be sure of that is for the sort
- * to have no other input.
- */
-/**
- * A slot's occupants in output order — `order:` then item id (§7.4).
- *
- * Exported so the inventory report can name the same sequence the file does. Filesystem
- * traversal order must never reach either one, and the only way to be sure of that is for
- * both to read the rule from here rather than restate it.
- */
 function sortOccupants(placed) {
   return (placed || []).slice().sort(
     (a, b) => (a.order - b.order) || String(a.id).localeCompare(String(b.id)),
@@ -316,11 +170,6 @@ function sortOccupants(placed) {
 function renderSectionedComponent(component, branchPath, occupants, options = {}) {
   if (!component) return { text: null, segments: [] };
 
-  // A component-level `~` excludes the whole component from this branch (§7.6.2a). It is
-  // reported back rather than collapsed into an empty render, because the caller answers
-  // two different questions with the two: an empty render is CL0615, an ERROR saying every
-  // section resolved away, and an exclusion is the author saying this branch does not get
-  // this component at all.
   const applicable = sectionsForBranch(component, branchPath, options.onWarn);
   if (applicable === null) return { text: null, segments: [], excluded: true };
 
@@ -337,23 +186,12 @@ function renderSectionedComponent(component, branchPath, occupants, options = {}
   };
 }
 
-/**
- * Write a sectioned component's output file, or return null when there is nothing to say.
- *
- * The three unexpanded-token checks run here rather than at the section level because they
- * report per file, and a `{%var}` that survived is equally wrong wherever in the document
- * it sits.
- */
 function writeSectionedComponent(outputDir, descriptor, content, sink, metadata = null) {
   if (!content) return null;
   const dir = descriptor.dir ? path.join(outputDir, descriptor.dir) : outputDir;
   fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, descriptor.file);
   const label = `component ${descriptor.file}`;
-  // The three checks run on the body alone. Frontmatter is structured data an author wrote
-  // as YAML, not prose the compiler substituted into, so a `{%var}` there would be a
-  // different fault with a different fix — and reporting it as an unexpanded variable in
-  // the rendered document would name the wrong half of the file.
   checkUnexpandedVariables(content, label, sink);
   checkUnresolvedFieldTokens(content, label, sink);
   checkMechanicalArtifacts(content, label, sink);
@@ -361,14 +199,6 @@ function writeSectionedComponent(outputDir, descriptor, content, sink, metadata 
   return outPath;
 }
 
-/**
- * `metadata:` as a YAML frontmatter block, or '' when there is none (§7.7).
- *
- * Stringified by the same library that parsed it, so a value round-trips rather than being
- * re-quoted by a hand-rolled writer — which matters because Velvet Lattice parses this back
- * out (`scenario.py:193` reads scenario tags from it) and a list that arrives as a string
- * is a silent failure at the far end.
- */
 function renderFrontmatter(metadata) {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return '';
   if (Object.keys(metadata).length === 0) return '';

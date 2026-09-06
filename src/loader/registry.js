@@ -1,16 +1,5 @@
 'use strict';
 
-/**
- * Item loading and registry construction (v4 spec §3.2).
- *
- * Gathers what v3 split between `loader.js` (file loading, registry building, overlays)
- * and `compile.js` (library registry, include resolution) — the two halves of one job,
- * separated only by which file happened to grow first.
- *
- * Items are validated against `loader/schema.js` as they load, so an unknown or
- * misplaced key is reported once, at its source position, rather than surfacing later as
- * output that is quietly missing something.
- */
 
 const fs = require('fs');
 const path = require('path');
@@ -23,22 +12,6 @@ const { CODES } = require('../diag');
 const { splitRef } = require('../model/refs');
 const { collectVariantDeltas, parseVariantsList } = require('../model/item');
 
-/**
- * The merged item registry (§17.2).
- *
- * A `Map` first and foremost: plain lowercase id → item, exactly as before, so every
- * consumer that does `registry.get(id)` is untouched. Two sidecars carry what multi-set
- * shared libraries added:
- *
- *   `qualified`  `set:id` → item, for every library item, so `grimwood:magic` always resolves
- *   `ambiguous`  plain id → the rival items, for ids more than one library set defines
- *   `sources`    the declared library set names, so an unknown qualifier is distinguishable
- *                from a known set that simply lacks the id
- *
- * An id claimed by two sets is deliberately absent from the plain keys. That is what makes
- * §17.3 work: the unqualified lookup misses, and `resolveItemRef` reaches the sidecar to
- * explain why rather than silently picking whichever set was declared last.
- */
 class ItemRegistry extends Map {
   constructor(entries) {
     super(entries || []);
@@ -47,7 +20,6 @@ class ItemRegistry extends Map {
     this.sources = new Set();
   }
 
-  /** Items known, counting the ambiguous ones the plain keys omit. */
   get itemCount() {
     let extra = 0;
     for (const rivals of this.ambiguous.values()) extra += rivals.length;
@@ -55,10 +27,6 @@ class ItemRegistry extends Map {
   }
 }
 
-/**
- * Collapse the `v`/`var`/`vars`/`variable`/`variables` aliases to canonical `v` (§4.7).
- * Sibling aliases are merged last-writer-wins, with a warning.
- */
 function normalizeItemVarField(entry, onWarn) {
   const aliasKeys = Object.keys(entry).filter((k) => VAR_ALIASES.has(k.toLowerCase()));
   if (aliasKeys.length === 0) return entry;
@@ -88,11 +56,6 @@ function normalizeItemVarField(entry, onWarn) {
   return out;
 }
 
-/**
- * Load every item file under one or more directories.
- *
- * `options.diagnostics` is required.
- */
 function loadItemsFromDir(dirs, options = {}) {
   const { diagnostics } = options;
   const dirList = Array.isArray(dirs) ? dirs : [dirs];
@@ -100,17 +63,8 @@ function loadItemsFromDir(dirs, options = {}) {
 
   for (const dir of dirList) {
     for (const file of findFiles(dir, YAML_SUFFIXES)) {
-      // `library.cl.yaml` is the reserved per-library-set manifest (§9.4.2) — excluded
-      // from item loading (Decision 3, Phase 8) rather than parsed, which is deferred past
-      // Phase 8. Skipped by basename before the file is even read, same as the
-      // component-shape skip below is silent rather than warned. This walk serves project
-      // item directories as well as library ones, so the skip applies to both.
       if (RESERVED_LIBRARY_BASENAMES.includes(path.basename(file).toLowerCase())) continue;
 
-      // A file that cannot be read or parsed is one coded ERROR (`CL0102` / `CL0101`, or
-      // `CL0105` for a swallowed token) and the walk goes on to the next file, so an author
-      // with three broken files hears about all three in one run. The load bus aborts the
-      // compile once loading finishes, which is what a throw here used to do — one file early.
       let data; let sourceMap;
       try {
         ({ value: data, sourceMap } = loadYamlDocument(file));
@@ -136,12 +90,6 @@ function loadItemsFromDir(dirs, options = {}) {
           return;
         }
 
-        // A library entry may point at a mixed-purpose directory — §11.1's own example
-        // pairs an item source with a `components:` one. A component document (top-level
-        // `sections:`, no `id`/`name`) is expected content there, not an authoring mistake,
-        // so it is skipped silently rather than warned or made to crash in `buildRegistry`.
-        // Narrow on purpose: a genuinely broken item file (wrong shape, still missing
-        // identity, no `sections:`) still falls through to the hard error below.
         if (
           !Array.isArray(entry) && typeof entry === 'object'
           && entry.sections && typeof entry.sections === 'object'
@@ -151,8 +99,6 @@ function loadItemsFromDir(dirs, options = {}) {
           return;
         }
 
-        // Validate before normalization and before `_source` is stamped, so positions
-        // address the document as written.
         const at = Array.isArray(data) ? [String(index)] : [];
         const label = entry.id || (typeof entry.name === 'string' ? entry.name : null);
         validate(entry, ITEM_SCHEMA, {
@@ -163,9 +109,6 @@ function loadItemsFromDir(dirs, options = {}) {
           context: label ? `item "${label}"` : `item ${index + 1} of ${path.basename(file)}`,
         });
 
-        // `:` separates a library set from an id in a reference (§17.2), so an id containing
-        // one would make every reference to it ambiguous. Rejected at load, where the
-        // position is still known, rather than at the confusing far end.
         if (typeof entry.id === 'string' && entry.id.includes(':')) {
           const message = `item id "${entry.id}" contains ":", which separates a library set from an id`;
           diagnostics.error(CODES.ID_CONTAINS_COLON, message, { file });
@@ -179,15 +122,6 @@ function loadItemsFromDir(dirs, options = {}) {
   return items;
 }
 
-/**
- * Build an id-keyed registry. Ids are lowercased; `include` defs are skipped because they
- * carry no identity of their own, and so are bare `import:` defs — they *are* the item they
- * name, with local deltas.
- *
- * An import def carrying its own `id:` is the exception, and registers under that local id
- * (§17.4). That is rename-on-import: `id: dragon` over `import: wyvern` is a second copy of
- * a library item, not an override of the original.
- */
 function buildRegistry(items, context, { diagnostics } = {}) {
   const registry = new Map();
   for (const item of items.filter((c) => !c.include && (!c.import || c.id))) {
@@ -207,15 +141,6 @@ function buildRegistry(items, context, { diagnostics } = {}) {
   return registry;
 }
 
-/**
- * Merge library and project registries, erroring on any id collision between them.
- *
- * This stays a load-time ERROR while the cross-set case became a reference-time one
- * (§17.3), and the asymmetry is deliberate: there is exactly one project and its author owns
- * both sides of the clash, so renaming the local item is the available fix. A library id that
- * *is* ambiguous holds no plain key, so a project item of that name simply takes it — an
- * explicit local definition is a clear enough answer to "which magic did you mean".
- */
 function mergeRegistries(canonRegistry, projectRegistry, { diagnostics } = {}) {
   const merged = new ItemRegistry(canonRegistry);
   if (canonRegistry instanceof ItemRegistry) {
@@ -234,15 +159,6 @@ function mergeRegistries(canonRegistry, projectRegistry, { diagnostics } = {}) {
   return merged;
 }
 
-/**
- * Load every named library directory into one registry (§17.2).
- *
- * A duplicate id *within* one set is still an error, raised by `buildRegistry` — one set
- * owning an id twice is a mistake in that set, and no reference could disambiguate it.
- * A duplicate *across* sets is not an error here: both copies are kept, reachable by their
- * qualified names, and only an unqualified reference that cannot choose between them fails
- * (§17.3, `resolveItemRef`).
- */
 function buildCanonRegistry(resolvedCanon, options = {}) {
   const registry = new ItemRegistry();
   if (!resolvedCanon) return registry;
@@ -274,12 +190,6 @@ function buildCanonRegistry(resolvedCanon, options = {}) {
   return registry;
 }
 
-/**
- * Expand `include:` directives into the item definitions they name.
- *
- * An id already declared explicitly in the project wins over the same id arriving through
- * an include, and including one file twice is an error rather than a silent merge.
- */
 function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
   const { diagnostics } = options;
   const explicitIds = new Set();
@@ -289,8 +199,6 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
     if (def.include) {
       includeDefs.push(def);
     } else if (def.import) {
-      // A rename claims its local id and leaves the imported one free — an include may
-      // still supply `wyvern` alongside a project `dragon` that copies it (§17.4).
       explicitIds.add(def.id ? String(def.id).toLowerCase() : splitRef(def.import).id);
     } else if (def.id || def.name) {
       explicitIds.add(((def.id || (typeof def.name === 'string' ? def.name : '')) || '').toLowerCase());
@@ -303,8 +211,6 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
   const seenFiles = new Map();
 
   for (const def of includeDefs) {
-    // Root variables only: includes resolve once, before branches are enumerated (§5.1).
-    // Library names are among those variables as of §6.1.
     let includePath = resolveVariables(
       String(def.include), config._variables || config.variables || null,
       { diagnostics, file: def._source },
@@ -321,8 +227,6 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
     const importerSource = def._source || '(unknown)';
     if (seenFiles.has(fullPath)) {
       seenFiles.get(fullPath).push(importerSource);
-      // `CL0131` names every importer seen so far, and the directive is skipped rather than
-      // merged a second time. Reported per repeat, so a third include lists all three.
       diagnostics.error(
         CODES.DOUBLE_INCLUDE,
         `File included more than once: ${fullPath}\nIncluded by:\n`
@@ -341,9 +245,6 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
       diagnostics.error(err.code, err.message, { file: fullPath });
       continue;
     }
-    // The items this one directive contributed — the target set its selectors were aimed
-    // at, and therefore the set CL0326 counts against. `included` accumulates across every
-    // directive, so counting there would let one include's matches cover another's typo.
     const fromThisInclude = [];
     for (const item of (Array.isArray(raw) ? raw : [raw])) {
       const id = ((item.id || (typeof item.name === 'string' ? item.name : '')) || '').toLowerCase();
@@ -362,21 +263,6 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
   return included;
 }
 
-/**
- * CL0326 for an include's `importVariants:` — the guard that makes arity-N silence safe.
- *
- * **Here rather than in the per-branch resolve loop, because `importVariants:` does not
- * depend on the branch.** §7.6.2a's two axes decide where each half of this check lives:
- * `importVariants:` selects from the imported source unconditionally, so it is asked and
- * answered once per compile; an include's `branches:` dispatches per leaf and its own
- * CL0326 belongs in `resolveBranchItems`, where a branch path exists. Asking this half per
- * leaf as well would repeat one typo warning across all 32 of The Institute's leaves.
- *
- * A target counts as matched when `collectVariantDeltas` returns a non-empty list *or*
- * `null`, because `null` is the `~` exclusion — the variant was found and it said to drop
- * the item. A partial path counts too: `human/noble` with `noble` missing returns `[human]`,
- * which is the apply-where-defined rule and a match on the segment that resolved.
- */
 function reportUnmatchedSelectors(def, items, includePath, diagnostics) {
   if (!def.importVariants || items.length === 0) return;
 
@@ -397,13 +283,6 @@ function reportUnmatchedSelectors(def, items, includePath, diagnostics) {
   }
 }
 
-/**
- * Find the config entry point in a directory (§4.6).
- *
- * Searching in order and erroring when more than one exists beats silently preferring
- * whichever comes first: two config files in one directory means one of them is being
- * ignored, and the author has no way to tell which.
- */
 function findConfigEntry(dir, basenames) {
   const candidates = basenames.filter((name) => fs.existsSync(path.join(dir, name)));
   if (candidates.length === 0) return null;

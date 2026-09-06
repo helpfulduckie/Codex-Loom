@@ -1,55 +1,11 @@
 'use strict';
 
-/**
- * `--inventory` — a slot x branch x occupants report (v4 spec §7.9, §7.10).
- *
- * §7.2 moved membership onto the item: a component declares a slot and says nothing about
- * who fills it, and an item declares a `render:` target and says nothing about what else
- * is beside it. §7.9 accepts the discoverability cost of that trade deliberately. This is
- * the convenience it names — the one place that puts the two ends back together.
- *
- * What it answers that a diagnostic cannot. `CL0611` fires when a target names a slot no
- * component declares and `CL0614` fires when a declared slot ends up empty, so the two
- * typo classes are already loud. Neither says what a *filled* slot contains, and a slot
- * holding the wrong four items is well-formed by every check the compiler runs. Answering
- * that from the output tree means reading every leaf, which for The Institute is 32 files
- * whose Plot Essentials are mostly identical.
- *
- * ── Why rows collapse ───────────────────────────────────────────────────────
- *
- * A slot x branch grid is the natural shape and the wrong one at this scale: 32 columns
- * does not render, and 32 near-identical rows hide the two that differ. So branches are
- * grouped by what the slot actually holds, which turns the common case into one row
- * reading "all 32" and leaves each divergence as its own row. That makes the report's
- * length proportional to how much a project *varies* rather than to how big it is, which
- * is the same trade `Shared.md` makes in `diff.js`.
- *
- * ── Why gating is its own occupancy state ───────────────────────────────────
- *
- * A slot has three ways to hold nothing, and §7.4 treats them differently, so flattening
- * them here would throw away the distinction the report exists to show. A slot may be
- * *empty* (declared, placeable, nobody targeted it — `CL0614`'s WARN), *gated* (the
- * component's own `branches:` excluded the section on this branch, which §7.4's third and
- * fifth rows keep legitimate), or absent because the component is a `.md` passthrough and
- * declares no sections at all.
- */
 
 const fs = require('fs');
 const path = require('path');
 const { sortOccupants } = require('./emit/components');
 
-// ── capture ──────────────────────────────────────────────────────────────────
 
-/**
- * One leaf's slot occupancy, read from the same two structures the emitter uses.
- *
- * `slotIndex` says what this branch may place into and `occupants` says what it did, and
- * both are already in hand at the call site — this adds a traversal, not a resolve. Taking
- * the occupant list through `sortOccupants` rather than reading it raw is what makes the
- * report name items in the order the file lists them (§7.4).
- *
- * @returns {{label: string, components: Array}}
- */
 function captureLeafInventory(label, branchPath, sectionedForLeaf, slotIndex, occupants) {
   const components = [];
 
@@ -80,22 +36,7 @@ function captureLeafInventory(label, branchPath, sectionedForLeaf, slotIndex, oc
   return { label, branchPath: branchPath || [], components };
 }
 
-// ── rendering ────────────────────────────────────────────────────────────────
 
-/**
- * A set of leaves as a branch-path pattern, when one describes it exactly.
- *
- * The Institute is 32 leaves over four axes, and a row covering half of them is almost
- * always half by *one* axis — the 16 branches where `you` is Aness, not an arbitrary 16.
- * Listing them spends sixteen fully-qualified paths saying what one wildcard pattern says
- * once (star, Aness, star, star), and buries the axis that actually decided the row.
- *
- * Per segment: the values this set takes there, or `*` when the set takes every value that
- * position offers. The result is then **checked against the leaves it matches** and thrown
- * away unless it selects exactly this set — a pattern that over-matches would be a report
- * asserting a placement that did not happen, which is worse than a long cell. Returns null
- * when no pattern is exact, and the caller lists instead.
- */
 function branchPattern(selected, allLeaves) {
   const depth = allLeaves[0].branchPath.length;
   if (depth === 0) return null;
@@ -116,7 +57,6 @@ function branchPattern(selected, allLeaves) {
   return segments.join('/');
 }
 
-/** A cell's worth of branches — "all N", else a path pattern, else the list. */
 function describeBranches(selected, allLeaves) {
   if (selected.length === allLeaves.length) return `all ${allLeaves.length}`;
   const pattern = branchPattern(selected, allLeaves);
@@ -126,7 +66,6 @@ function describeBranches(selected, allLeaves) {
     : `${selected.length} — ${labels.join(', ')}`;
 }
 
-/** The occupancy of one slot on one branch, as the string rows are grouped by. */
 function occupancyKey(slot) {
   if (!slot) return '(not declared)';
   if (slot.gated) return '(gated off this branch)';
@@ -134,20 +73,11 @@ function occupancyKey(slot) {
   return slot.occupants.map((o) => o.id).join(', ');
 }
 
-/**
- * Every slot any branch declares, keyed `component slot`.
- *
- * Built across all leaves rather than from the first, because a slot can be gated off on
- * the branch that happens to come first and a report that omitted it would be answering a
- * different question than the one asked.
- */
 function collectSlots(leaves) {
   const slots = new Map();
   for (const leaf of leaves) {
     for (const component of leaf.components) {
       for (const slot of component.slots) {
-        // JSON rather than a delimiter: slot names are free-form strings (§7.4), so any
-        // separator picked here is one a slot name may legitimately contain.
         const key = JSON.stringify([component.key, slot.name.toLowerCase()]);
         if (!slots.has(key)) {
           slots.set(key, {
@@ -190,8 +120,6 @@ function renderSlotSections(leaves) {
         rows.get(key).push(leaf);
       }
 
-      // Most-common occupancy first: the report is read to find the exceptions, and they
-      // are easiest to see against the rule stated immediately above them.
       const ordered = [...rows.entries()].sort((a, b) => b[1].length - a[1].length);
       parts.push([
         '| Occupants | Branches |',
@@ -204,13 +132,6 @@ function renderSlotSections(leaves) {
   return parts;
 }
 
-/**
- * The same placements read from the item's end — "did this item land where it said".
- *
- * This is the direction §7.9's discoverability cost actually runs in. A slot's contents
- * can be checked against the output file if you are willing to open it; an item's targets
- * are spread across every branch it resolves on, and nothing else gathers them.
- */
 function renderItemSection(leaves) {
   const placements = new Map();                 // [item, component, slot] -> leaves
   const meta = new Map();
@@ -255,8 +176,6 @@ function renderItemSection(leaves) {
 function renderHeader(leaves) {
   const slots = collectSlots(leaves);
   let placements = 0;
-  // Counted by component key, not per leaf: one shared `.md` across 32 branches is one
-  // passthrough component, and reporting it as 32 would read as 32 distinct files.
   const passthroughs = new Set();
   for (const leaf of leaves) {
     for (const component of leaf.components) {
@@ -277,7 +196,6 @@ function renderHeader(leaves) {
   ];
 }
 
-/** Write `Inventory.md`. Returns `{ written }`, matching the other report modes. */
 function runInventoryMode(leaves, outputDir) {
   const parts = renderHeader(leaves);
   if (leaves.length === 0 || collectSlots(leaves).size === 0) {
@@ -295,7 +213,6 @@ function runInventoryMode(leaves, outputDir) {
 module.exports = {
   captureLeafInventory,
   runInventoryMode,
-  // exported for tests
   occupancyKey,
   describeBranches,
   collectSlots,

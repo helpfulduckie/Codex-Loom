@@ -1,15 +1,5 @@
 'use strict';
 
-/**
- * Field operations (v4 spec §3.2).
- *
- * Value-level edits with no knowledge of items or branches, which is the seam this
- * module was split along: `+{}` / `-{}` / `/{}/{}` / `~` operate on a value and say
- * nothing about what holds it.
- *
- * Pure by contract (§3.3): no `fs`, no `console`. Warnings go to a caller-supplied
- * `onWarn(code, message)` so reporting a problem does not mean printing one.
- */
 
 const {
   deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
@@ -17,62 +7,18 @@ const {
 } = require('../util');
 const { CODES } = require('../diag');
 
-/**
- * Apply a single field operation to a current value.
- * Returns the new value or the sentinel '__DELETE__'.
- *
- * Operations (on string values):
- *   null / ~        → remove (DELETE)
- *   "+{value}"      → append
- *   "-{value}"      → remove substring (or remove matching array element)
- *   "/{a}/{b}"      → swap
- *   anything else   → replace
- *
- * If op is a mapping and current is also a mapping, recurse into subfields.
- * If op is an array of op-strings, apply sequentially.
- * If op is a value array (not all op-strings), replace.
- *
- * ── CL0328, the no-op field operation (§3.2) ────────────────────────────────
- *
- * `-{x}` and `/{a}/{b}` are `split(…).join(…)` under the hood, which hands back the
- * original value when the target substring is absent — a silent no-op. That silence is
- * how upstream drift ships: a library item's text changes, a consuming project's
- * `hair: -{in a controlled bun}` quietly stops biting, and the card compiles clean.
- *
- * The naive "warn on every missed op" is unusable — `06-field-operations.md`'s pronoun
- * swap-chain (`/{She}/{He}`, `/{she}/{he}`, `/{her}/{his}`) is *built* on misses, since
- * any one description contains some of those forms and not others. So the report is
- * scoped the way `CL0326` scopes selectors: three of seven matched is normal, zero of
- * seven is the mistake. `onWarn` fires only when **every** removal/swap in a chain
- * missed, or when a **standalone** `-{}` / `/{}/{}` missed. Pass `ctx` as
- * `{ onWarn, label }` to arm it; without `ctx` the function is byte-for-byte as before.
- */
 function applyFieldOp(current, op, ctx = null) {
   const { value, changed, targeted } = applyOp(current, op, ctx);
-  // The chain and mapping arms of `applyOp` raise CL0328 at their own boundaries; this
-  // wrapper covers the remaining shape — a lone op string that targeted something and
-  // matched nothing.
   if (ctx && ctx.onWarn && typeof op === 'string' && targeted && !changed) {
     ctx.onWarn(CODES.FIELD_OP_NOOP, standaloneNoopMessage(ctx.label, op));
   }
   return value;
 }
 
-/** The `+{…}` / `-{…}` / `/{…}/{…}` matchers, shared by every arm. */
 const APPEND_RE = /^\+\{([\s\S]*)\}$/;
 const REMOVE_RE = /^-\{([\s\S]*)\}$/;
 const SWAP_RE = /^\/\{([\s\S]*?)\}\/\{([\s\S]*?)\}$/;
 
-/**
- * The workhorse `applyFieldOp` wraps. Returns `{ value, changed, targeted }`:
- *   value     the new value, or '__DELETE__'
- *   targeted  the op (tree) contained at least one removal or swap — the ops that can miss
- *   changed   at least one op actually did something (an append or a replace always does;
- *             a removal/swap does only when its target is present)
- *
- * `changed` keys off target *presence*, not `value !== current`: a missed `-{x}` still
- * `.trim()`s the string, so an inequality test would read a whitespace trim as a match.
- */
 function applyOp(current, op, ctx) {
   if (Array.isArray(op)) {
     const isOpsArray = op.length === 0 || op.every(
@@ -112,8 +58,6 @@ function applyOp(current, op, ctx) {
       const r = applyOp(currentSub, subOp, childCtx);
       changed = changed || r.changed;
       targeted = targeted || r.targeted;
-      // A standalone op string per subfield is the mapping arm's to report — `applyOp`'s
-      // scalar arm never warns, and the chain arm above only fires for an array subOp.
       if (childCtx && childCtx.onWarn && typeof subOp === 'string' && r.targeted && !r.changed) {
         childCtx.onWarn(CODES.FIELD_OP_NOOP, standaloneNoopMessage(childCtx.label, subOp));
       }
@@ -190,7 +134,6 @@ function applyOp(current, op, ctx) {
   return { value: op, changed: true, targeted: false };
 }
 
-/** `a` + `.` + `b`, skipping an empty side so a missing label never leads with a dot. */
 function joinLabel(a, b) {
   if (!a) return b || '';
   if (!b) return a;
@@ -222,14 +165,6 @@ function chainNoopMessage(label, ops) {
     + 'swap-chain is built that way); one where none of them do is drift or a typo.';
 }
 
-/**
- * Apply a delta to an item's body fields and eligible top-level fields.
- * Mutates item in place.
- *
- * The top-level fields variants can modify are `util.ITEM_TOP_LEVEL_FIELDS`; `body:` is
- * handled separately below because deltas apply to it subfield by subfield rather than
- * as a whole value. The `id` field cannot be altered by variants or branches.
- */
 function applyFieldsDelta(item, delta, onWarn) {
   if (!delta || typeof delta !== 'object') return;
 
@@ -239,7 +174,6 @@ function applyFieldsDelta(item, delta, onWarn) {
     || '(unknown)';
   const opCtx = onWarn ? (field) => ({ onWarn, label: joinLabel(labelBase, field) }) : () => null;
 
-  // Warn if the delta contains multiple variable-block aliases
   const deltaAliasKeys = Object.keys(delta).filter(k => VAR_ALIASES.has(k.toLowerCase()));
   if (deltaAliasKeys.length > 1) {
     const itemId = item.id || (typeof item.name === 'string' ? item.name : '(unknown)');
@@ -253,8 +187,6 @@ function applyFieldsDelta(item, delta, onWarn) {
     const keyLower = key.toLowerCase();
     if (keyLower === 'id') continue; // id is immutable
 
-    // Both alias families collapse here, so a variant may write `description:` and hit
-    // the same field an item declared as `notes:` (§4.5).
     const normalizedKey = normalizeNotesKey(normalizeVarKey(key));
     const normalizedLower = normalizedKey.toLowerCase();
     const isTopLevel = topLevelFields.some(f => f === normalizedLower);
@@ -268,13 +200,10 @@ function applyFieldsDelta(item, delta, onWarn) {
         setCI(item, normalizedKey, newVal);
       }
     } else if (keyLower === 'body') {
-      // Explicit body: block — apply as subfield ops. The mapping arm appends each
-      // subfield name to the label, so the context carries only the item here.
       if (!item.body) item.body = {};
       const newVal = applyFieldOp(item.body, op, onWarn ? { onWarn, label: labelBase } : null);
       if (newVal !== '__DELETE__') item.body = newVal;
     } else {
-      // Unknown key: treat as body field op
       if (!item.body) item.body = {};
       const currentVal = getCI(item.body, key);
       const newVal = applyFieldOp(currentVal, op, opCtx(key));
@@ -287,12 +216,8 @@ function applyFieldsDelta(item, delta, onWarn) {
   }
 }
 
-/**
- * Apply a variant delta to an item. Handles structural keys and field ops.
- */
 function applyDelta(item, delta, onWarn) {
   if (!delta) return;
-  // Skip structural-only keys
   for (const [key, value] of Object.entries(delta)) {
     const keyLower = key.toLowerCase();
     if (['variants', 'importvariants', '_source'].includes(keyLower)) continue;

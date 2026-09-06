@@ -6,12 +6,6 @@ const { findFiles } = require('./util');
 const { loadFieldTable } = require('./loader/field-table');
 const { CODES } = require('./diag');
 
-/**
- * Load all files of a given extension from one or more directories recursively.
- * Returns a Map of lowercase name → { content, _source }.
- * Errors on duplicate names within the same directory.
- * When multiple directories are given, later directories override earlier ones.
- */
 function loadNamedFiles(dirs, ext) {
   if (!Array.isArray(dirs)) dirs = [dirs];
   const result = new Map();
@@ -20,8 +14,6 @@ function loadNamedFiles(dirs, ext) {
     for (const file of findFiles(dir, ext)) {
       const name = path.basename(file, ext).toLowerCase();
       if (dirEntries.has(name)) {
-        // Fatal, not a bus diagnostic: this runs before any `diagnostics` is in scope,
-        // and two files claiming one name leave the name→file map with no defensible winner.
         const err = new Error(
           `${CODES.DUPLICATE_NAMED_FILE}: Duplicate ${ext} name "${name}" found in ${dir}:`
           + `\n  ${dirEntries.get(name)._source}\n  ${file}`
@@ -38,16 +30,6 @@ function loadNamedFiles(dirs, ext) {
   return result;
 }
 
-/**
- * Reject any template or partial that still writes a VL fence (§8.3).
- *
- * After the Phase 2 flip the envelope is `emit/vl.js`'s alone, so a `~~~` left in a
- * template produces a card with two of them — the emitter's, then the template's, with
- * the second one's keys landing in the body where VL will never read them. That output
- * is not obviously wrong on inspection, which is why this is a load-time refusal rather
- * than a lint finding: a half-migrated project should name the files that remain rather
- * than compile into something subtly broken.
- */
 function checkNoFences(files, ext, diagnostics) {
   for (const [name, entry] of files) {
     if (!entry.content.includes('~~~')) continue;
@@ -64,14 +46,6 @@ function checkNoFences(files, ext, diagnostics) {
   }
 }
 
-/**
- * Load all templates, partials and the field table from one or more directories.
- *
- * `fieldTable` is the §13 declaration surface — `fields.cl.yaml`'s three namespaces merged
- * key-wise across the search path. It loads here, beside the `.template`/`.partial` files,
- * because §13.5 requires the declarations and the templates that name them to travel
- * together: a library shipping templates must ship the field table those templates use.
- */
 function loadTemplates(dirs, options = {}) {
   const templates = loadNamedFiles(dirs, '.template');
   const partials = loadNamedFiles(dirs, '.partial');
@@ -81,8 +55,6 @@ function loadTemplates(dirs, options = {}) {
   return { templates, partials, fieldTable };
 }
 
-// This module owns template and named-file loading only. Config loading is config/load.js,
-// and item loading, registries and overlays are loader/registry.js (§3.2).
 
 module.exports = {
   loadNamedFiles,

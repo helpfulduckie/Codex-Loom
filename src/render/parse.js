@@ -2,38 +2,9 @@
 
 const { CODES } = require('../diag');
 
-/**
- * The template lexer and parser (v4 spec §13, Phase 9 Step 1).
- *
- * Replaces the regex-and-sentinel engine `template.js` used through Phase 8. A template is
- * tokenized once, so escape handling (`{{`/`}}`) is a lexer concern rather than a
- * find-and-restore pass, and every tag carries a source span so a malformed template can
- * finally report a line.
- *
- * Grammar (informal): a document is a sequence of text and single-brace tags. Tags do not
- * nest inside one `{...}` pair — `[^{}]+` was the v3 regex's rule and stays the lexer's
- * rule, because no construct in this language ever needs a literal brace inside a tag body.
- * Block tags (`{if}`/`{/if}`, `{wrapper}`/`{/wrapper}`, `{preserve}`/`{/preserve}`) are
- * matched by the parser walking the token stream with real nesting, which is what lets
- * `{if}` blocks nest correctly without the old engine's repeat-to-fixpoint loop.
- *
- * `{include}` is not a node here — it is expanded textually, before tokenization, by
- * `expandIncludes` in `template.js`. A real template opens a block in one partial and
- * closes it in another (the golden corpus does this for `{wrapper}` via `cardHeader`/
- * `cardFooter`), so an `Include` AST node scoped to its own parse tree cannot represent
- * every template the v3 engine already rendered correctly. Expanding first, then
- * tokenizing the fully-assembled string once, is what makes cross-partial blocks and
- * `{{`/`}}` escapes inside partials both fall out of the same one-pass lexer for free.
- */
 
 const FUNCTION_NAMES = ['inline', 'join', 'list', 'and', 'prose', 'block', 'keys'];
 
-/**
- * The field/group name a template-list or group entry references: a bare string, or the
- * `field:` / `name:` key of a `{ field: … }` / `{ name: … }` object. `null` for anything
- * else. The one reading of a template entry's identity, shared by the loader's field-table
- * validation, the unread-field audit, the schema-table generator and the field-list renderer.
- */
 function entryName(entry) {
   if (typeof entry === 'string') return entry;
   if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
@@ -42,10 +13,6 @@ function entryName(entry) {
   return null;
 }
 
-/**
- * Split `source` into a flat token stream. Each token carries `{line, column, length}` —
- * a 1-based source span, computed as the scan proceeds rather than reconstructed afterward.
- */
 function tokenize(source) {
   const tokens = [];
   let i = 0;
@@ -128,8 +95,6 @@ function tokenize(source) {
   return tokens;
 }
 
-/** One brace-delimited tag → a typed token. `raw` is the untrimmed original text, kept for
- * the literal fallback an unmatched or unknown tag renders as. */
 function classifyTag(inner, raw, line, column) {
   const base = { raw, line, column, length: raw.length };
   const trimmed = inner.trim();
@@ -157,23 +122,8 @@ function classifyTag(inner, raw, line, column) {
   return { ...base, type: 'UNKNOWN' };
 }
 
-/**
- * Parse a token stream into a document tree.
- *
- * Block tags nest for real: an `{if}` inside an `{if}` is matched to its own `{/if}` by a
- * stack, not by a repeat-until-fixpoint string pass. A block whose closing tag never
- * arrives is not swallowed — the parser backtracks, emits the open tag as literal text
- * (matching the v3 engine's fallback, since an unmatched regex left the tag untouched), and
- * reports `CL0415` naming the block. Every node it builds carries the opening tag's span.
- *
- * `report(code, message, span)` is a diagnostics callback rather than a bus reference, so
- * this module never has to know what a `Diagnostics` instance looks like.
- */
 function parse(tokens, report) {
   let pos = 0;
-  // An unclosed block is discovered once per real attempt but re-walked whenever an
-  // enclosing block also fails to close and backtracks over it — dedupe on the open
-  // token's identity so a nested miss is reported once, not once per backtrack.
   const reportedUnclosed = new Set();
 
   function reportUnclosedOnce(openTok, code, message) {
@@ -229,8 +179,6 @@ function parse(tokens, report) {
         return parseWrapper(tok);
       case 'PRESERVE_OPEN':
         return parsePreserve(tok);
-      // Stray closers/else with no matching opener — the v3 engine's regexes never
-      // matched these either, so they render as the literal tag text.
       case 'ELSE':
       case 'IF_CLOSE':
       case 'WRAPPER_CLOSE':
@@ -260,8 +208,6 @@ function parse(tokens, report) {
         line: openTok.line, column: openTok.column,
       };
     }
-    // No matching {/if} anywhere in the remaining stream: back out to just past the open
-    // tag and let it and everything after it be reparsed as ordinary content.
     reportUnclosedOnce(openTok, CODES.TEMPLATE_UNCLOSED_BLOCK, `Unclosed {if ${openTok.cond}} block.`);
     pos = start + 1;
     return literal(openTok);

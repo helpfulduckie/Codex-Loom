@@ -8,13 +8,7 @@ const { readFileTrim } = require('./util');
 const { NULL_LOG } = require('./log');
 const { sanitizeFilename, shiftHeadings, leafFileName } = require('./report');
 
-// ── exported building blocks ─────────────────────────────────────────────────
 
-/**
- * Build a concatenated story-cards block from a Story Cards/ directory.
- * Groups files by their immediate sub-folder (card type).
- * headingLevel controls the markdown heading depth for group names.
- */
 function buildStoryCardsBlock(storyCardsDir, headingLevel) {
   const files = collectMdFiles(storyCardsDir);
   if (files.length === 0) return null;
@@ -45,17 +39,6 @@ function buildStoryCardsBlock(storyCardsDir, headingLevel) {
   return lines.join('\n\n');
 }
 
-/**
- * One story-cards block for a leaf, merging every `Story Cards/` directory on its ancestor
- * chain into a single view — one `### <type>` heading per type, its cards sorted by title.
- *
- * Since Phase 11 Step 5 a card is written at the node that owns it and inherited down, so a
- * leaf's cards are spread across several nodes on its chain. A leaf review is a picture of
- * one leaf; the author reading it should not have to know or care which node in the tree a
- * card was declared at, so this reassembles the picture rather than concatenating a block
- * per node. A within-leaf duplicate card name is a compile error (`CL0622`), so there is
- * nothing to de-duplicate — every `## <name>` chunk across the chain is a distinct card.
- */
 function buildMergedStoryCardsBlock(storyCardsDirs, headingLevel) {
   const hashes = '#'.repeat(headingLevel);
   const byType = new Map(); // type name → [{ title, chunk }]
@@ -88,18 +71,6 @@ function buildMergedStoryCardsBlock(storyCardsDirs, headingLevel) {
   return lines.join('\n\n');
 }
 
-/**
- * Discover every leaf node under a scenario root directory, each carrying the merged
- * story-cards block for that leaf.
- *
- * The traversal is `compiledTree.js`'s shared tree (Phase 11 Step 2) rather than a private
- * `childBranches` recursion — `overview.js` was the last report-layer walker that still
- * descended on its own.
- *
- * @typedef {{ branchNames: string[], cards: (string|null), leafDir: string }} LeafNode
- * @param {string} rootDir - absolute path of the scenario output root
- * @returns {LeafNode[]}
- */
 function discoverLeaves(rootDir) {
   return leafNodes(buildTree(rootDir)).map((leaf) => {
     const dirs = [];
@@ -112,15 +83,6 @@ function discoverLeaves(rootDir) {
   });
 }
 
-/**
- * One section per node in the tree (root first, depth-first through `Branches/`),
- * each showing only what that node declares itself.
- *
- * Traversal is `compiledTree.js`'s shared tree (Phase 11 Step 2); components come from
- * `node.own.components`, the same filename-keyed map `readComponents` builds by hand.
- * Story cards stay on `buildStoryCardsBlock` — `--overview` prints raw per-node blocks,
- * not the resolved set.
- */
 function collectOverviewSections(rootDir, rootDirName) {
   const sections = [];
 
@@ -148,16 +110,10 @@ function collectOverviewSections(rootDir, rootDirName) {
   return sections;
 }
 
-// ── exported leaf compiler ────────────────────────────────────────────────────
 
-/**
- * Compile a single leaf node into a .leaf.md file and write it to outputDir.
- * Filename: sanitize(branchNames.join(" - ") || rootDirName) + ".leaf.md"
- */
 function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log = NULL_LOG) {
   const { branchNames, cards, leafDir } = leaf; // `cards` is the merged block, or null
 
-  // Walk up from the leaf to find the nearest versions of each component file.
   let dir      = leafDir;
   let opening  = null;
   let plotEss  = null;
@@ -197,13 +153,7 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log = NULL_LOG)
   log.verbose(`  ✓  ${filename}`);
 }
 
-// ── exported runners ──────────────────────────────────────────────────────────
 
-/**
- * Run leaves mode on a scenario root: discover all leaves, compile each one.
- * Returns `{ written }` — the list of output file paths written, `written: []` when no
- * branch leaves were found. Prints nothing; the caller decides what to show.
- */
 function runLeafReviewMode(scenarioRoot, outputDir, options = {}) {
   const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
@@ -226,11 +176,6 @@ function runLeafReviewMode(scenarioRoot, outputDir, options = {}) {
   return { written };
 }
 
-/**
- * Run overview mode: produce one .overview.md covering the whole tree.
- * Returns `{ written, outPath }` — the output file path written. Prints nothing; the
- * caller decides what to show.
- */
 function runOverviewMode(scenarioRoot, outputDir, options = {}) {
   const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);

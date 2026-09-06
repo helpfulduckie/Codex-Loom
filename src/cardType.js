@@ -1,30 +1,11 @@
 'use strict';
 
-/**
- * `aid.type` validation and normalization for emit (v4 spec §4.4).
- *
- * `aid.type` becomes both a folder and a filename — `Story Cards/{type}/{type}.md` — so it
- * must be a legal path segment, and a built-in AID category has to be folded to the casing
- * AID stores or the cards land in a custom category beside the real one.
- */
 
 const { CODES: DIAG_CODES } = require('./diag');
 const { PATH_UNSAFE_CHARS } = require('./util');
 
-// Characters illegal in a Windows/Unix path segment, plus control chars — built on
-// util.js's PATH_UNSAFE_CHARS, the single definition it shares with overview.js's
-// sanitizeFilename. aid.type becomes both a folder and a filename, so it must be safe.
 const INVALID_TYPE_CHARS = new RegExp('[' + PATH_UNSAFE_CHARS + '\\x00-\\x1f]');
 
-/**
- * Validate an item's aid.type after variable expansion. aid.type is written to disk
- * as Story Cards/{type}/{type}.md, so it must be a legal path segment. No-op when the
- * item has no aid.type (that case is already warned about during item resolution).
- *
- * `options.diagnostics` is required: raises `CARD_TYPE_INVALID` on the bus and returns,
- * so the leaf loop that calls it can continue to the next item and report every bad type
- * in one run.
- */
 function validateCardType(item, { diagnostics }) {
   const type = item.aid && item.aid.type;
   if (typeof type !== 'string' || type === '') return;
@@ -41,27 +22,8 @@ function validateCardType(item, { diagnostics }) {
   diagnostics.error(DIAG_CODES.CARD_TYPE_INVALID, message, { file: item._source });
 }
 
-/**
- * AI Dungeon's five built-in story-card categories, in the casing AID itself stores.
- *
- * Confirmed against the platform rather than inherited from Velvet Lattice's old list: a
- * card pushed as `Race` comes back as `Race` and does not group with `race` in the editor,
- * so AID stores the string verbatim and matches it exactly. Anything not in this set is a
- * custom category and keeps whatever casing the author gave it — `Character - Dalor` and
- * `Spell - Ice` are deliberate groupings, not misspellings of a built-in.
- */
 const AID_BUILTIN_TYPES = new Set(['character', 'class', 'race', 'location', 'faction']);
 
-/**
- * Normalize one `aid.type` for emit: trim leading space, fold a built-in to lowercase.
- *
- * Pure, and separate from `validateCardType` because the two answer different questions —
- * that one asks whether the string can be a path at all and throws when it cannot, this one
- * asks what should actually be written. Trailing space and period never reach here; they
- * are fatal above, since Windows strips them and the type would silently become another.
- *
- * @returns {{ type: string, trimmed: boolean }}
- */
 function normalizeCardType(raw) {
   if (typeof raw !== 'string' || raw === '') return { type: raw, trimmed: false };
   const trimmedText = raw.replace(/^\s+/, '');
@@ -70,19 +32,8 @@ function normalizeCardType(raw) {
   return { type: folded ? lower : trimmedText, trimmed: trimmedText !== raw };
 }
 
-/**
- * Compile-wide accumulator for `aid.type` normalization and collisions (CL0626–CL0628).
- *
- * Shaped like `buildFieldAudit`: record as the compile walks branches, report once at the
- * end. Both halves need that shape for the same reason — a type is resolved per item per
- * branch, so per-site reporting would print one line per card per branch for a single
- * authoring decision, and the collision check cannot run until every branch's types are in.
- */
 function buildCardTypeAudit() {
-  // authored value → { to, file }. Keyed on the authored string so one warning covers
-  // every card that spells the type that way.
   const trimmedValues = new Map();
-  // final type → the first source file that produced it, for the collision message.
   const originOf = new Map();
 
   function resolve(raw, loc = {}) {
@@ -108,13 +59,7 @@ function buildCardTypeAudit() {
       );
     }
 
-    // The built-in fold itself is not reported. It is a correct, unconditional rewrite an
-    // author cannot act on — capitalizing `Character` is the natural spelling, since it
-    // matches a field table's `templates:` keys — so a per-compile line about it was noise
-    // on a handled situation. The fold still happens; see `normalizeCardType`.
 
-    // Collision is checked on the *normalized* values: a pair that folded to one built-in
-    // has already been merged on purpose, and only a pair that still differs still collides.
     const byPath = new Map();
     for (const type of originOf.keys()) {
       const key = type.trim().toLowerCase();

@@ -1,28 +1,8 @@
 'use strict';
 
-/**
- * Item reference resolution (v4 spec §17.2–§17.3).
- *
- * A reference is either a plain id — `kaiden` — or qualified with the library set that owns
- * it — `grimwood:magic`. Qualification is optional, and needed only where two library sets
- * define the same id. §17.3 reports that collision here, at the reference, rather than at
- * registry build: loading two sets that both define `magic` is a fact about the sets, not a
- * fault in a project that references neither of them or references both qualified.
- *
- * Pure by §3.3 — nothing is thrown or printed. A failed lookup comes back as a described
- * result and the caller decides whether that becomes a throw, a console line, or a
- * diagnostic. A plain `Map` carrying none of the sidecars resolves exactly as it did before
- * this module existed, which is what keeps the test corpus's hand-built registries working.
- */
 
 const { CODES } = require('../diag');
 
-/**
- * Split a reference into `{ source, id }`, both lowercased.
- *
- * `:` is illegal inside an item id (§17.2), so the first colon is unambiguously the
- * library separator and there is no need to scan for the last one.
- */
 function splitRef(ref) {
   const text = String(ref);
   const at = text.indexOf(':');
@@ -33,13 +13,6 @@ function splitRef(ref) {
   };
 }
 
-/**
- * Resolve a reference against a registry.
- *
- * Returns `{ item }` on success, or `{ item: null, code, message, hint }` describing why
- * not. `message` for the not-found case deliberately keeps its pre-§17 wording, because it
- * is the one this function produces that was already being read by people.
- */
 function resolveItemRef(registry, ref) {
   const { source, id } = splitRef(ref);
   const label = String(ref);
@@ -93,7 +66,6 @@ function resolveItemRef(registry, ref) {
   };
 }
 
-/** The failure text as one string — for call sites that throw rather than collect. */
 function describeRefFailure(result) {
   return result.hint ? `${result.message}\n${result.hint}` : result.message;
 }

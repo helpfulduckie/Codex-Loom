@@ -6,15 +6,6 @@ const { CODES: DIAG_CODES } = require('./diag');
 const { isOutOfBase, normalize } = require('./config/load');
 const { reportUnusedPlaceholders, reportDuplicateQuestions } = require('./emit/placeholders');
 
-/**
- * `CL0545`: a role declared and never referenced by a resolved token anywhere in the
- * compile. `resolveRole` in `model/pronouns.js` calls `onRoleUsed` only on a successful
- * bind, so `usage` names every role that actually did something.
- *
- * Whole-compile rather than `CL0535`'s subtree-scoped check, deliberately simpler: no
- * golden declares a role yet, so there is no corpus case where a role is legitimately used
- * on one branch and unused on a sibling that this coarser check would miss.
- */
 function reportUnusedRoles(declarations, usage, { diagnostics, file }) {
   const unused = [];
   for (const { label, keys } of declarations) {
@@ -31,9 +22,6 @@ function reportUnusedRoles(declarations, usage, { diagnostics, file }) {
   return unused;
 }
 
-/**
- * Build a library dependency manifest for the output JSON file.
- */
 function buildLibraryManifest(config) {
   const { findFiles } = require('./util');
   const manifest = {};
@@ -46,38 +34,21 @@ function buildLibraryManifest(config) {
   return manifest;
 }
 
-/**
- * The report emitters (provenance, schema-tables, `--diff` / `--annotate` / `--inventory`).
- * Provenance is always emitted from registry data; the rest are opt-in. Called from
- * `finalizeDiagnostics` at the point the inline code emitted them — after the
- * dependency-coverage sweep, before the unused-roles / audit drains — so the console
- * ordering the integration snapshots capture does not move.
- */
 function runReports({
   config, configPath, options, log, registry, rootDirName,
   fieldTable, tierTemplates, captureReports, leafData, inventoryData, allItemDefs,
 }) {
-  // Cross-branch review reports — emitted from the per-leaf data captured above.
   const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
   const reportSummary = [];
 
-  // Provenance report — always emitted from registry data, independent of leaf loop.
-  // Source paths are reported relative to the project directory (the one holding the
-  // compile config), so a shared report carries no machine-specific path and a committed
-  // baseline compares equal to one compiled anywhere else.
   const { runProvenanceMode } = require('./provenance');
   const provenanceResult = runProvenanceMode(
     registry, reportBase, rootDirName, path.dirname(configPath),
   );
   reportSummary.push(`${provenanceResult.written.length} provenance file(s)`);
 
-  // The generated field reference, opt-in. Derived from the merged field table, not the
-  // leaf loop, and written in a form meant to be pasted into a hand-maintained schema doc.
   if (options.schemaTables) {
     const { runSchemaTablesMode } = require('./schematables');
-    // Every template a branch's `templateFor` slot files produce, so a tier author can
-    // diff a terse list against the full type in one place. `tierTemplates` was gathered
-    // once beside the field audit (`gatherTierTemplates`), which needs the same set.
     const w = runSchemaTablesMode(fieldTable, path.join(reportBase, 'schema-tables'),
       { title: config.title || rootDirName, tierTemplates });
     reportSummary.push(`${w.written.length} schema-tables file(s)`);
@@ -108,14 +79,6 @@ function runReports({
   }
 }
 
-/**
- * Everything after the tree is on disk and before the two terminal throws: the
- * project-wide leaf-outcome checks (`CL0616`, `CL0630`/`CL0631`), the summary table, the
- * library manifest, the dependency-coverage sweep, the report emitters, and the "unused"
- * drains (roles, fields, card types, placeholders, duplicate questions) that are only
- * knowable once every write point has run. Everything it touches is read-only except the
- * compile bus. The spine keeps the `gaps.length` and `hasErrors()` throws.
- */
 function finalizeDiagnostics({
   config, configPath, options, log,
   diagnostics,
@@ -125,11 +88,6 @@ function finalizeDiagnostics({
   registry, rootDirName, fieldTable, tierTemplates,
   captureReports, leafData, inventoryData, allItemDefs,
 }) {
-  // Velvet Lattice sets a node's prompt to `components["Opening"] or node.description`, so
-  // a leaf carrying an adventure description and no Opening.md does not produce an empty
-  // prompt — it opens the adventure with its own blurb rather than a scene. That is the
-  // price of letting `adventureDescription:` be a per-node inherited component, and this
-  // guard is what flags it.
   for (const leafLabel of descriptionLeaves) {
     if (openingLeaves.has(leafLabel)) continue;
     diagnostics.error(
@@ -142,12 +100,6 @@ function finalizeDiagnostics({
     );
   }
 
-  // A leaf that resolves neither an opening nor AI Instructions. Both are ordinary
-  // inherited components (`buildCompileContext` merges them down the chain), so a `false`
-  // here means nothing in the leaf's ancestry set one — not merely that this node did not.
-  // Read from `leafSummaries` because a leaf's opening status is only final once every
-  // component write, inherited ones included, has run. A leaf covered by the CL0616 ERROR
-  // above (has a description, no opening) is not also flagged CL0630.
   for (const s of leafSummaries) {
     if (!openingLeaves.has(s.label) && !descriptionLeaves.has(s.label)) {
       diagnostics.warn(
@@ -170,7 +122,6 @@ function finalizeDiagnostics({
     }
   }
 
-  // Per-leaf summary table (printed after all component writes so Opening status is known)
   for (const s of leafSummaries) {
     s.hasOpening = openingLeaves.has(s.label);
   }
@@ -186,7 +137,6 @@ function finalizeDiagnostics({
   }
   log.info(`\n${allItemIds.size} unique items across project. Wrote ${totalFiles} file(s).`);
 
-  // Library dependency manifest
   const libraryManifest = buildLibraryManifest(config);
   if (Object.keys(libraryManifest).length > 0) {
     const manifestPath = path.join(config._resolvedOutput, 'library-dependencies.json');
@@ -200,12 +150,6 @@ function finalizeDiagnostics({
     log.verbose(`  OK: Library manifest → ${manifestPath}`);
   }
 
-  // Dependency-coverage check: the ledger is every resolved component path this compile
-  // actually read, `imports:` chains included (built inside `ComponentLoader`). A component
-  // that lives outside the project but under no `structure.input.library` entry compiles
-  // and renders correctly today and is invisible to `--snapshot` — the freeze walks
-  // declared entries, not resolved dependencies, so nothing else notices the gap. Checked
-  // once, here, rather than per leaf: the ledger is already deduplicated by resolved path.
   const libraryDirs = [...config._resolvedLibrarySource.values()];
   for (const specPath of componentLoader.dependencyLedger) {
     if (!isOutOfBase(specPath, config._base)) continue;
@@ -232,13 +176,8 @@ function finalizeDiagnostics({
     fieldTable, tierTemplates, captureReports, leafData, inventoryData, allItemDefs,
   });
 
-  // Last, because "unused" is only knowable once every write point has run — and the
-  // Description and the scenario title are written after the branch tree.
   reportUnusedRoles(roleState.declarations, roleState.usage, { diagnostics, file: configPath });
-  // The deduped unread-field findings, then the whole-table dead-declaration sweep.
   fieldAudit.finish(diagnostics);
-  // CL0626–CL0628, here for the same reason: the fold warns once per authored value across
-  // the whole compile, and a case collision is only visible once every branch's types are in.
   cardTypeAudit.finish(diagnostics);
   reportUnusedPlaceholders(placeholderState.declarations, placeholderState.usage, {
     diagnostics, file: configPath,
@@ -247,9 +186,6 @@ function finalizeDiagnostics({
     diagnostics, file: configPath,
   });
 
-  // Requested-but-unwritten components: surface as an error so the gap is never silent.
-  // Raised onto the bus before the spine's `hasErrors()` check in `compile.js`, which is
-  // why a gap fails the run — nothing here prints it; the CLI prints the bus.
   for (const g of gaps.entries) {
     diagnostics.error(
       DIAG_CODES.COMPONENT_NO_OUTPUT,

@@ -12,23 +12,18 @@ const FIXTURE_DIR = path.resolve(__dirname, '../../test');
 let tmpDir;
 
 beforeAll(() => {
-  // A patched compile.yaml (based on the test/ smoke project) that redirects output to a
-  // temp dir but uses the real test fixtures for everything else.
   ({ tmpDir } = compileProject({
     'compile.yaml': [
       'version: 4',
       'structure:',
       `  input:`,
       `    items:`,
-      // The key is the v4 spelling; the directory on disk is still test/cards.
       `      - ${FIXTURE_DIR}/cards`,
       `    library:`,
       `      main: ${FIXTURE_DIR}/canon`,
       `    templates:`,
       `      - ${FIXTURE_DIR}/templates`,
       '  output: %TMP%/output',
-      // The fixture items carry `notes: {known: true}`; this is the template that turns
-      // that flag into the `[e]` marker (§4.5.1, rung 3).
       'render:',
       '  notesTemplate: Notes',
       'roles:',
@@ -47,9 +42,6 @@ beforeAll(() => {
   }));
 });
 
-// Phase 11 Step 5: a card constant across a subtree is written once at the node that owns
-// it and inherited down, so a leaf need not hold its own copy. Resolve it the way Velvet
-// Lattice does — the nearest `Story Cards/<type>/<type>.md` from the leaf up to the root.
 function resolveCardFile(leafDir, baseDir, type) {
   let dir = leafDir;
   for (;;) {
@@ -108,10 +100,6 @@ describe('protagonist you-mode', () => {
 
 describe('snapshot regression', () => {
   test('subject Character.md matches snapshot', () => {
-    // Phase 11 Step 5: the subject leaf's Character cards are split across the nodes that
-    // own them (shared ones at the root, subject-only ones at the leaf). Reconstruct the
-    // resolved view the way Velvet Lattice does — every Character.md from the root down to
-    // the leaf, root first.
     let dir = path.join(tmpDir, 'output');
     const base = dir;
     const leafDir = path.join(base, 'Branches', 'subject');
@@ -129,7 +117,6 @@ describe('snapshot regression', () => {
   });
 });
 
-// ── nested protagonist inheritance ────────────────────────────────────────────
 
 describe('protagonist inherited from parent branch node', () => {
   let nestedTmpDir;
@@ -141,7 +128,6 @@ describe('protagonist inherited from parent branch node', () => {
         'structure:',
         '  input:',
         `    items:`,
-        // The key is the v4 spelling; the directory on disk is still test/cards.
         `      - ${FIXTURE_DIR}/cards`,
         `    library:`,
         `      main: ${FIXTURE_DIR}/canon`,
@@ -150,7 +136,6 @@ describe('protagonist inherited from parent branch node', () => {
         '  output: %TMP%/output',
         'render:',
         '  notesTemplate: Notes',
-        // protagonist declared on parent node only — leaf nodes have none
         'branches:',
         '  Aness:',
         '    roles:',
@@ -186,16 +171,12 @@ describe('protagonist inherited from parent branch node', () => {
   });
 });
 
-// ── Opening.md integration ────────────────────────────────────────────────────
 
 describe('Opening.md generation', () => {
   let openingTmpDir;
 
   beforeAll(() => {
-    // the test/ smoke project's shape — opening under components: at root and branch levels
-    // opening: inherits to leaves; branchFraming: writes to branch node directly
     ({ tmpDir: openingTmpDir } = compileProject({
-      // Minimal v3-format item + template so compile has something to do
       'items/items.yaml': [
         '- id: Widget',
         '  name: Widget',
@@ -210,7 +191,6 @@ describe('Opening.md generation', () => {
       'templates/Item.template': [
         '{$body.Desc}',
       ].join('\n'),
-      // File-based opening content
       'openings/b-opening.md': 'Leaf B from file\n',
       'compile.yaml': [
         'version: 4',
@@ -266,8 +246,6 @@ describe('Opening.md generation', () => {
   });
 
   test('non-leaf branch node with only branchFraming does not get a leaf Opening.md at its own level', () => {
-    // nested itself is not a leaf — its Opening.md is for branchFraming
-    // but the leaves X and Y have the inherited root opening
     const nested = path.join(openingTmpDir, 'output', 'Branches', 'nested', 'Components', 'Opening.md');
     const x = path.join(openingTmpDir, 'output', 'Branches', 'nested', 'Branches', 'X', 'Components', 'Opening.md');
     expect(fs.readFileSync(nested, 'utf8')).toBe('Branch question\n'); // branchFraming
@@ -275,7 +253,6 @@ describe('Opening.md generation', () => {
   });
 });
 
-// ── branchFraming {%Key} token resolution ──────────────────────────────────────
 
 describe('branchFraming {%Key} resolution', () => {
   let atKeyTmpDir;
@@ -350,17 +327,11 @@ describe('branchFraming {%Key} resolution', () => {
   });
 });
 
-// ── cross-item render function refs in body fields ────────────────────────────
 
 describe('cross-item refs inside body field render functions', () => {
   let xrefTmpDir;
 
   beforeAll(() => {
-    // Items: Alice and Carol cross-ref Bishop's hair (plain token, resolved by applyCrossItemRefs).
-    // Bishop's familyMembers use join() on Alice/Carol's physicalTraits (new cross-item render fn).
-    // Store's employees use join() on Bishop's familyMembers (chained, order-dependent without multi-pass).
-    // Items are deliberately ordered Store → Bishop → Carol → Alice (deepest-dependent first)
-    // so that cross-item references resolve in topological order (crossItem.js).
     ({ tmpDir: xrefTmpDir } = compileProject({
       'items/items.yaml': [
       '- id: Store',
@@ -387,9 +358,6 @@ describe('cross-item refs inside body field render functions', () => {
       "      - 'Alice ({join(\"; \", $Alice.body.physicalTraits)})'",
       "      - 'Carol ({join(\"; \", $Carol.body.physicalTraits)})'",
       '',
-      // Alice and Carol are data records: their bodies exist only to be cross-referenced
-      // by Store and Bishop, and `Item.template` reads no key they carry. `kind: reference`
-      // says so — without it each emits an empty-bodied card and earns CL0609.
       '- id: Carol',
       '  name: Carol',
       '  kind: reference',
@@ -452,12 +420,10 @@ describe('cross-item refs inside body field render functions', () => {
 
   test('Alice physicalTraits.hair: plain cross-item token resolved to Bishop hair', () => {
     const content = xrefItem();
-    // Carol's physicalTraits are referenced in Bishop's familyMembers and appear resolved
     expect(content).toContain('Carol (blond; green)');
   });
 });
 
-// ── opening {%Key} token resolving to a block file the migrator converted ────
 
 describe('opening {%Key} resolving to a migrated block file', () => {
   let opKeyTmpDir;
@@ -515,13 +481,6 @@ describe('opening {%Key} resolving to a migrated block file', () => {
   });
 });
 
-// ── v3 block opening → sections, migrated then compiled ─────────────────────
-//
-// The block list below is written exactly as a v3 project holds it, then run through
-// `migrateOpeningFiles` before the compile. Every assertion is the one this suite made when
-// `src/opening.js` rendered the blocks directly, which is the point: the conversion is
-// faithful, or one of them goes red. It covers universal blocks, single and nested branch
-// dispatch, a variant, a file-path `text:`, and variable expansion in one project.
 
 describe('v3 block opening, migrated to sections and compiled', () => {
   let blkTmpDir;
@@ -545,20 +504,15 @@ describe('v3 block opening, migrated to sections and compiled', () => {
       '{$body.Desc}',
     ].join('\n'), 'utf8');
 
-    // A paragraph stored as an external file
     fs.writeFileSync(
       path.join(blkTmpDir, 'paragraphs', 'knight-oath.md'),
       'You have sworn an oath to protect the realm.',
       'utf8'
     );
 
-    // The opening.yaml block sequence
-    // Note: _: ~ is the fallback key for "exclude unmatched branches"
     fs.writeFileSync(path.join(blkTmpDir, 'opening.yaml'), [
-      // Universal block — no branches: key
       '- text: "A world of magic and intrigue awaits."',
       '',
-      // Role blocks — [] = include with no variant; _: ~ = exclude unmatched branches
       '- text: "You serve the empire as a subject."',
       '  branches:',
       '    subject: []',
@@ -569,7 +523,6 @@ describe('v3 block opening, migrated to sections and compiled', () => {
       '    researcher: []',
       '    _: ~',
       '',
-      // Specialisation block with a variant — shared across subject/mage and researcher/mage
       '- text: "You have mastered the arcane arts."',
       '  variants:',
       '    researcher-mage:',
@@ -585,7 +538,6 @@ describe('v3 block opening, migrated to sections and compiled', () => {
       '        _: ~',
       '    _: ~',
       '',
-      // File-path text block — knight leaves only
       `- text: ./paragraphs/knight-oath.md`,
       '  branches:',
       '    subject:',
@@ -598,7 +550,6 @@ describe('v3 block opening, migrated to sections and compiled', () => {
       '        _: ~',
       '    _: ~',
       '',
-      // Variable expansion block
       '- text: "Your role is {%role}."',
     ].join('\n'), 'utf8');
 
@@ -681,7 +632,6 @@ describe('v3 block opening, migrated to sections and compiled', () => {
   });
 
   test('existing .md opening still works (regression)', () => {
-    // Use a separate minimal project that points opening: to a .md file
     const mdDir = withTmpDir();
     try {
       fs.mkdirSync(path.join(mdDir, 'items'), { recursive: true });
@@ -714,7 +664,6 @@ describe('v3 block opening, migrated to sections and compiled', () => {
   });
 });
 
-// ── deterministic item ordering (sorted by id within type) ────────────────────
 
 describe('deterministic item ordering', () => {
   let orderTmpDir;
@@ -724,9 +673,6 @@ describe('deterministic item ordering', () => {
     fs.mkdirSync(path.join(orderTmpDir, 'items'), { recursive: true });
     fs.mkdirSync(path.join(orderTmpDir, 'templates'), { recursive: true });
 
-    // Items are authored out of alphabetical order, and titles sort opposite to
-    // ids, so a regression to authoring-order or title-order would be caught.
-    // Two types ("Beta" before "Alpha") are also declared out of order.
     fs.writeFileSync(path.join(orderTmpDir, 'items', 'items.yaml'), [
       '- id: Zebra',
       '  name: Zebra',
@@ -766,15 +712,12 @@ describe('deterministic item ordering', () => {
 
   test('items within a type are ordered by id, not authoring or title order', () => {
     const content = fs.readFileSync(typeFile('Alpha'), 'utf8');
-    // id Apple (title ZebraTitle) must precede id Zebra (title AppleTitle)
     expect(content.indexOf('[Apple]')).toBeGreaterThanOrEqual(0);
     expect(content.indexOf('[Apple]')).toBeLessThan(content.indexOf('[Zebra]'));
-    // If it had sorted by visible title instead, AppleTitle would come first
     expect(content.indexOf('ZebraTitle')).toBeLessThan(content.indexOf('AppleTitle'));
   });
 
   test('id sort is case-insensitive and deterministic across builds', () => {
-    // Recompiling the identical project yields byte-identical output.
     const before = fs.readFileSync(typeFile('Alpha'), 'utf8');
     compile(path.join(orderTmpDir, 'compile.yaml'));
     const after = fs.readFileSync(typeFile('Alpha'), 'utf8');
@@ -782,10 +725,8 @@ describe('deterministic item ordering', () => {
   });
 });
 
-// ── Requested-but-unwritten component detection ───────────────────────────────
 
 describe('component gap detection', () => {
-  // Build a minimal project; `extraComponents` lines are spliced into components:.
   function makeProject(extraComponents) {
     const dir = withTmpDir();
     fs.mkdirSync(path.join(dir, 'items'), { recursive: true });
@@ -838,7 +779,6 @@ describe('component gap detection', () => {
 
   test('no components requested does not throw', () => {
     const dir = makeProject([]);
-    // makeProject always writes a `components:` header; an empty mapping is fine.
     fs.writeFileSync(path.join(dir, 'compile.yaml'), [
       'version: 4',
       'structure:',
@@ -865,7 +805,6 @@ describe('component gap detection', () => {
   });
 });
 
-// ── CL0323 (notes:/description: both declared) fails the build ────────────────
 
 describe('item-level ERROR diagnostics fail the build after writing the tree', () => {
   test('an item declaring both notes: and description: throws, but the leaf is still written', () => {
@@ -956,7 +895,6 @@ describe('item-level ERROR diagnostics fail the build after writing the tree', (
   });
 });
 
-// ── Root `title` → top-level Label.md ──────────────────────────────────────────
 
 describe('root title -> Label.md', () => {
   function makeTitleProject(extraLines) {
@@ -1027,12 +965,6 @@ describe('root title -> Label.md', () => {
   });
 });
 
-// ── opening paths and branch variables ───────────────────────────────────────
-//
-// These used to call `writeOpeningsRecursive` directly. `opening:` is an ordinary inherited
-// component since Phase 6 Step 6, so the branch-variable merge is `buildCompileContext`'s
-// rather than a hand-rolled walk — which is the point of the move, and is why the property
-// is now asserted through a whole compile instead of through a private writer.
 
 describe('opening paths resolve against branch variables', () => {
   const NL = String.fromCharCode(10);
@@ -1073,7 +1005,6 @@ describe('opening paths resolve against branch variables', () => {
     fs.writeFileSync(path.join(dir, 'E-Zephon.md'), 'Zephon opening content', 'utf8');
     const spec = `${dir.split(String.fromCharCode(92)).join('/')}/E-{%pcName}.md`;
 
-    // The root table has no pcName at all — each branch has to supply its own.
     project([
       'branches:',
       '  Kaiden:',
@@ -1108,12 +1039,6 @@ describe('opening paths resolve against branch variables', () => {
   });
 });
 
-// ── config-loading errors abort before any filesystem work ────────────────────
-//
-// A schema violation in compile.yaml itself — here, a missing required structure.output —
-// must stop the compile before mkdirSync, template loading, or item/canon loading ever
-// run. It used to be checked only after all of that had already happened, so the output
-// directory was created (into the wrong, defaulted location) before the throw arrived.
 
 describe('config errors abort before filesystem work', () => {
   let tmpDir;
@@ -1128,12 +1053,10 @@ describe('config errors abort before filesystem work', () => {
 
     expect(() => compile(configPath)).toThrow(/error/i);
 
-    // The fallback default the config loader computes when output: is absent.
     expect(fs.existsSync(path.join(tmpDir, 'output'))).toBe(false);
   });
 });
 
-// ── the emitter owns the envelope (§8.2) ─────────────────────────────────────
 
 describe('compile writes the VL envelope through emit/vl.js', () => {
   let tmpDir;
@@ -1144,12 +1067,6 @@ describe('compile writes the VL envelope through emit/vl.js', () => {
     fs.mkdirSync(path.join(tmpDir, 'templates'), { recursive: true });
   });
 
-  /**
-   * Compile a one-item project and return its compiled Item.md.
-   *
-   * `options.config` splices extra root-level config lines; `options.branches` replaces
-   * the branch block; `options.leaf` picks which leaf's output to read back.
-   */
   function compileItem(itemLines, templateContent, extraTemplates = {}, options = {}) {
     const { config = [], branches = ['  main: {}'], leaf = ['main'] } = options;
     fs.writeFileSync(path.join(tmpDir, 'items', 'items.yaml'), itemLines.join('\n'), 'utf8');
@@ -1167,9 +1084,6 @@ describe('compile writes the VL envelope through emit/vl.js', () => {
       ...branches,
     ].join('\n'), 'utf8');
     compile(path.join(tmpDir, 'compile.yaml'));
-    // Phase 11 Step 5: a card constant across the subtree is written once at the node that
-    // owns it and inherited down, so a leaf may not hold its own copy. Read it the way
-    // Velvet Lattice resolves it — the nearest Story Cards/Item/Item.md up the chain.
     let dir = leaf.reduce((acc, segment) => path.join(acc, 'Branches', segment),
       path.join(tmpDir, 'output'));
     const base = path.join(tmpDir, 'output');
@@ -1229,7 +1143,6 @@ describe('compile writes the VL envelope through emit/vl.js', () => {
   });
 });
 
-// ── CL0622 card-name collision (Phase 10 Step 3) ───────────────────────────────
 
 describe('CL0622 card-name collision', () => {
   let tmpDir;
@@ -1254,12 +1167,9 @@ describe('CL0622 card-name collision', () => {
     ].join('\n'), 'utf8');
 
     const diagnostics = new Diagnostics();
-    // CL0622 is an error as of Phase 11 Step 5, so `compile` aborts — the diagnostics
-    // object is populated before it throws, which is what these tests read.
     try {
       compile(path.join(tmpDir, 'compile.yaml'), { diagnostics });
     } catch {
-      /* expected: compile aborts once the collision is an error */
     }
     return diagnostics;
   }
@@ -1280,9 +1190,6 @@ describe('CL0622 card-name collision', () => {
     const collision = diagnostics.errors.find((d) => d.code === 'CL0622');
     expect(collision).toBeTruthy();
     expect(collision.message).toContain('Shared Name');
-    // Lowercase because `Character` and `Location` are AID built-ins and the emit path folds them
-    // before anything downstream reads `aid.type` — including this message. The fixture
-    // still authors them capitalized, which is what keeps the fold covered from this end.
     expect(collision.message).toContain('character');
     expect(collision.message).toContain('location');
   });
@@ -1306,7 +1213,6 @@ describe('CL0622 card-name collision', () => {
   });
 });
 
-// ── the notes template ladder (§4.5) ─────────────────────────────────────────
 
 describe('the notes ladder end to end', () => {
   let tmpDir;
@@ -1341,8 +1247,6 @@ describe('the notes ladder end to end', () => {
       ...branches,
     ].join('\n'), 'utf8');
     compile(path.join(tmpDir, 'compile.yaml'));
-    // Phase 11 Step 5: the card may be written at an ancestor node and inherited, so read
-    // it the way Velvet Lattice resolves it — nearest Item.md from the leaf up.
     return (...segments) => {
       let dir = path.join(tmpDir, 'output', ...segments.flatMap((s) => ['Branches', s]));
       const base = path.join(tmpDir, 'output');
@@ -1364,8 +1268,6 @@ describe('the notes ladder end to end', () => {
   });
 
   test('a branch turns the marker off by pointing at a blank template', () => {
-    // The mod-loading case: the marker means something on the branch that loads the mod
-    // and nothing on the branch that does not, and no item changes.
     const read = build({
       templates: { ProjectNotes: '{if $notes.known}[e]{/if}', NoNotes: '' },
       config: ['render:', '  notesTemplate: ProjectNotes'],
@@ -1376,10 +1278,6 @@ describe('the notes ladder end to end', () => {
   });
 
   test('~ unbinds the project default, falling through to the default rendering rather than suppressing', () => {
-    // Worth pinning down, because the two readings differ in output rather than in
-    // tidiness: `~` removes the binding, and rung 4 then renders the notes value itself.
-    // For a mapping that means `known: true` reaching AID as text — which is why the
-    // idiom for "off" is a blank template, not `~`.
     const read = build({
       templates: { ProjectNotes: '{if $notes.known}[e]{/if}' },
       config: ['render:', '  notesTemplate: ProjectNotes'],

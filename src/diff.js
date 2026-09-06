@@ -1,19 +1,5 @@
 'use strict';
 
-// `safeResolve` re-resolves items the compile has already resolved and reported on, purely
-// to build the annotation report. It reports nothing: every diagnostic it could raise was
-// raised — and printed — during the compile that produced the tree being annotated.
-//
-// The silence is deliberate and safe for a structural reason, not a hopeful one: unlike the
-// post-hoc report modes, `--with-diff` and `--with-annotate` force a compile in the same
-// invocation (see `doCompile` in `compile.js`), so this pass cannot run against a tree whose
-// diagnostics were never emitted. Routing a real warner here instead double-reports every
-// finding, which is the bug this replaced.
-//
-// It follows that this path can never surface anything new, including diagnostics added
-// later — Phase 3's item-level ERRORs raise during the compile's own resolve and are
-// printed there. That stops being true only if annotation ever gains a standalone mode that
-// reads an existing output tree without compiling; such a mode needs a real warner, not this.
 const silentWarner = () => {};
 
 const fs   = require('fs');
@@ -24,51 +10,15 @@ const { resolveItemRef } = require('./model/refs');
 const { SLOTTED_COMPONENTS } = require('./emit/components');
 const { sanitizeFilename, shiftHeadings } = require('./report');
 
-// ── shared helpers ────────────────────────────────────────────────────────────
 
-/**
- * Component families captured per leaf, in `SLOTTED_COMPONENTS` display order.
- *
- * Derived rather than listed. The hand-written version carried Plot Essentials, AI
- * Instructions and Author's Note, which was the whole component table when it was written
- * and three of six after Phase 6 — so a variant landing in a leaf's `opening:`,
- * `summary:` or `adventureDescription:` did not appear in a bleed check at all. Deriving
- * it means the next row added to the table is read here without anyone remembering to
- * come back.
- */
 const COMPONENT_FAMILIES = SLOTTED_COMPONENTS.map((d) => [d.key, d.label]);
 
-/**
- * Families whose report blocks are fenced as code rather than set as prose.
- *
- * Plot Essentials, Summary and AI Instructions are directive text an author reads
- * literally and compares character by character; the fence stops Markdown from eating a
- * leading `#` or collapsing a blank line, which is exactly what a diff is being read for.
- * Openings and descriptions are prose meant to be read as prose. `summary` joins the
- * fenced set because §7.3 gives it Plot Essentials' settings throughout.
- */
 const FENCED_FAMILIES = new Set(['plotEssential', 'summary', 'aiInstructions']);
 
-// ════════════════════════════════════════════════════════════════════════════
-//  --with-diff : Shared.md + per-leaf *.delta.md  (rendered-block level, no annotation)
-// ════════════════════════════════════════════════════════════════════════════
 
-/**
- * Partition captured per-leaf output into universally-shared blocks and per-leaf deltas.
- *
- * A item (keyed by id) or component block (keyed by family+key) is *shared* iff it is
- * present in every leaf and its rendered text is identical across all of them. Otherwise
- * it is *varying*: each leaf's own version goes into that leaf's delta, and leaves where
- * it is absent (e.g. ~-excluded) silently omit it.
- *
- * @param {Array} leafData - [{ label, fileBase, items: Map<id,{type,rendered}>,
- *                              components: { plotEssentials:[{key,text}], ... } }]
- * @returns {{ shared: object, deltas: Map<fileBase, object> }}
- */
 function buildSharedAndDeltas(leafData) {
   const leafCount = leafData.length;
 
-  // ── Items ──────────────────────────────────────────────────────────────────
   const itemIds = new Set();
   for (const leaf of leafData) for (const id of leaf.items.keys()) itemIds.add(id);
 
@@ -92,8 +42,6 @@ function buildSharedAndDeltas(leafData) {
     }
   }
 
-  // ── Component blocks ────────────────────────────────────────────────────────
-  // sharedComponents[family] = [{ key, text }]; deltaComponentsByLeaf[fileBase][family] = [...]
   const sharedComponents = {};
   const deltaComponentsByLeaf = new Map();
   for (const leaf of leafData) {
@@ -185,7 +133,6 @@ function writeDeltaDoc(fileBase, delta, outputDir) {
   return outPath;
 }
 
-/** Emit Shared.md and one <leaf>.delta.md per leaf. Returns `{ written }`. */
 function runDiffMode(leafData, outputDir) {
   const { shared, deltas } = buildSharedAndDeltas(leafData);
   const written = [writeSharedDoc(shared, outputDir)];
@@ -193,22 +140,14 @@ function runDiffMode(leafData, outputDir) {
   return { written };
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-//  --with-annotate : per-leaf *.annotate.md  (field-level diff vs project base + provenance)
-// ════════════════════════════════════════════════════════════════════════════
 
 const DIFF_ROOTS = ['name', 'pronouns', 'aid', 'body'];
 
-/** True if `obj` has a key matching `name` case-insensitively. */
 function hasKeyCI(obj, name) {
   return obj && typeof obj === 'object' &&
     Object.keys(obj).some(k => k.toLowerCase() === name.toLowerCase());
 }
 
-/**
- * Flatten an item's diff-relevant fields to a map of lowercase dot-path → JSON value.
- * Only roots in DIFF_ROOTS are walked; leaves are scalars and arrays (arrays compared whole).
- */
 function flattenItem(item) {
   const out = {};
   const walk = (val, prefix) => {
@@ -225,7 +164,6 @@ function flattenItem(item) {
   return out;
 }
 
-/** Diff two flattened items → [{ path, base, leaf }] for every differing leaf-path. */
 function diffFlattened(base, leaf) {
   const paths = new Set([...Object.keys(base), ...Object.keys(leaf)]);
   const changes = [];
@@ -241,10 +179,6 @@ function diffFlattened(base, leaf) {
   return changes;
 }
 
-/**
- * Collect the set of lowercase dot-paths a variant delta touches, normalized to the
- * same root namespace as flattenItem (bare keys and explicit `body:` → `body.*`).
- */
 function collectDeltaKeyPaths(delta) {
   const paths = new Set();
   const walk = (val, prefix) => {
@@ -265,7 +199,6 @@ function collectDeltaKeyPaths(delta) {
   return paths;
 }
 
-/** A changed path is explained by a delta if either is a prefix of (or equal to) the other. */
 function pathExplained(changedPath, deltaPaths) {
   for (const dp of deltaPaths) {
     if (changedPath === dp || changedPath.startsWith(dp + '.') || dp.startsWith(changedPath + '.')) {
@@ -275,11 +208,6 @@ function pathExplained(changedPath, deltaPaths) {
   return false;
 }
 
-/**
- * For one item under one leaf, attribute each changed field to the applied variant(s)
- * that touch it, or flag it `unexplained`. Returns { applied, attributions } where
- * attributions maps changedPath → array of explaining variant names (empty = unexplained).
- */
 function attributeChanges(itemDef, registry, branchVariantNames, changes) {
   const canonItem = itemDef.import ? (resolveItemRef(registry, itemDef.import).item || null) : null;
 
@@ -310,11 +238,6 @@ function safeResolve(itemDef, registry, branchPath) {
   catch { return null; }
 }
 
-/**
- * Build the annotation document for one leaf. Iterates every item def so ~-nulled items
- * are reported explicitly. Items identical to their project base with no variants applied
- * are omitted (they belong in Shared.md, not the drill-down).
- */
 function buildLeafAnnotation(leaf, allItemDefs, registry) {
   const { label, branchPath } = leaf;
   const sections = [`# Annotations: ${label}`,
@@ -330,7 +253,6 @@ function buildLeafAnnotation(leaf, allItemDefs, registry) {
       : (itemDef._include_branch_spec || itemDef.branches);
     const branchVariantNames = resolveBranchSpec(spec, branchPath);
 
-    // ── Nulled (~) — excluded from this leaf ──
     if (branchVariantNames === null) {
       sections.push(`## ${itemId}\n\n- **nulled** — excluded from this branch by \`~\` dispatch`);
       continue;
@@ -365,7 +287,6 @@ function buildLeafAnnotation(leaf, allItemDefs, registry) {
   return sections.join('\n\n');
 }
 
-/** Emit one <leaf>.annotate.md per leaf. Returns `{ written }`. */
 function runAnnotateMode(leafData, allItemDefs, registry, outputDir) {
   const written = [];
   for (const leaf of leafData) {
@@ -383,7 +304,6 @@ module.exports = {
   runDiffMode,
   buildLeafAnnotation,
   runAnnotateMode,
-  // exported for unit tests
   flattenItem,
   diffFlattened,
   collectDeltaKeyPaths,

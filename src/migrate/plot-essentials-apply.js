@@ -1,28 +1,5 @@
 'use strict';
 
-/**
- * Applying a Plot Essentials conversion to the files (§7.2, §14.2).
- *
- * `plot-essentials.js` decides what each v3 block becomes and touches nothing. This does
- * the surgery: rewrites the component as `sections:`, adds a render target to every item an
- * `- import:` block named, and moves each inline block out into an item file of its own.
- *
- * ── Why this edits YAML documents rather than re-serializing ────────────────
- *
- * Item files are the author's own prose — section rules, comment banners, deliberate line
- * breaks — and a migration whose diff is mostly reformatting is one nobody can review for
- * the changes that matter. So every edit goes through `YAML.parseDocument` and sets
- * individual nodes, leaving every untouched line byte-identical. `v3.js` made the same
- * choice for the same reason.
- *
- * ── The one case that needs a graft ─────────────────────────────────────────
- *
- * A v3 Plot Essentials block could carry its own `branches:`, resolved independently of the
- * item's. v4 has one item with one dispatch, so the two have to become one. The placement
- * goes into a variant and that variant's name is grafted into the item's existing branch
- * tree at exactly the nodes the block's spec selected — which works because `render:` is
- * variant-modifiable, so a branch can move an item without new machinery.
- */
 
 const fs = require('fs');
 const path = require('path');
@@ -34,16 +11,13 @@ const { buildCompileContext } = require('../branchCompile');
 const NL = '\n';
 const SPLIT_LINES = /\r?\n/;
 
-/** Header for the file inline blocks are moved into, so its provenance is on the page. */
 const HEADER_LINES = [
   '# Items moved out of Plot Essentials by the v3 migrator (§7.5).',
   '# Each carries no `aid:` block, which §7.4 permits for an item with no story-card target.',
   '# Rename this file and fold the items into wherever they belong.',
 ];
 
-// ── node helpers ─────────────────────────────────────────────────────────────
 
-/** The id a project item entry answers to, lowercased. */
 function entryId(node) {
   if (!YAML.isMap(node)) return null;
   const raw = node.get('id') || node.get('import')
@@ -51,7 +25,6 @@ function entryId(node) {
   return raw ? String(raw).toLowerCase() : null;
 }
 
-/** `node.render`, created if absent. */
 function renderMap(doc, node) {
   let render = node.get('render', true);
   if (!YAML.isMap(render)) {
@@ -61,21 +34,12 @@ function renderMap(doc, node) {
   return render;
 }
 
-/** Write the render target (and the suppression, when the block was full-style) onto a map. */
 function setTarget(doc, render, target, suppressStoryCard) {
   if (suppressStoryCard) render.set('storyCard', false);
   render.set('plotEssential', doc.createNode(target));
 }
 
-// ── the branch graft ─────────────────────────────────────────────────────────
 
-/**
- * Every branch path a v3 block's own `branches:` spec *included*.
- *
- * Exclusions are the paths that need nothing — `~` on a block meant "no Plot Essentials
- * here", and in v4 that is simply the placement variant not being applied. Only the
- * inclusions have to be written somewhere.
- */
 function includedPaths(spec, prefix = []) {
   const paths = [];
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return paths;
@@ -92,13 +56,6 @@ function includedPaths(spec, prefix = []) {
   return paths;
 }
 
-/**
- * Add `variantName` to the item's dispatch at one branch path, creating the path if needed.
- *
- * The four shapes a dispatch node can already have are the four `resolveBranchSpec` accepts,
- * and each takes the name differently — a bare scalar has to become a list to hold two, and
- * a mapping carries its variants under `apply:` beside the `branches:` it descends through.
- */
 function addVariantAt(doc, branchesNode, branchPath, variantName) {
   let current = branchesNode;
   for (let i = 0; i < branchPath.length; i++) {
@@ -131,12 +88,6 @@ function addVariantAt(doc, branchesNode, branchPath, variantName) {
   }
 }
 
-/**
- * Put a placement behind a named variant and dispatch that variant where the block applied.
- *
- * Used only when a block carried its own `branches:` — otherwise the target belongs in the
- * base `render:`, where it costs nothing and reads better.
- */
 function graftPlacement(doc, node, placement, variantName, notes) {
   let variants = node.get('variants', true);
   if (!YAML.isMap(variants)) { variants = doc.createNode({}); node.set('variants', variants); }
@@ -165,15 +116,7 @@ function graftPlacement(doc, node, placement, variantName, notes) {
   );
 }
 
-// ── applying to item files ───────────────────────────────────────────────────
 
-/**
- * Add every `- import:` placement to the item entry it names.
- *
- * Returns the ids that were not found. A miss is not silent: a block naming an item the
- * project never defines locally rendered in v3 through canon alone, and in v4 it needs an
- * entry to hang the target on — which is a file the author has to place, not the migrator.
- */
 function applyImportPlacements(itemDirs, placements, options = {}) {
   const notes = [];
   const touched = [];
@@ -229,14 +172,6 @@ function applyImportPlacements(itemDirs, placements, options = {}) {
   return { touched, notes, missing };
 }
 
-/**
- * Move inline Plot Essentials blocks into an item file of their own.
- *
- * §7.5's rule: standalone Plot Essentials content is an item, because it carries structured
- * body fields rendered through a template. `aid:` is dropped rather than carried, since §7.4
- * asks for triggers and a type only when a story-card target exists — and a block that lived
- * in Plot Essentials has none.
- */
 function buildInlineItems(placements) {
   const items = [];
   for (const placement of placements) {
@@ -250,8 +185,6 @@ function buildInlineItems(placements) {
     }
 
     const render = {};
-    // v3 let a block name its template through `aid.type`, the same fallback an item uses.
-    // The type itself goes, because there is no story card for it to file.
     const template = placement.block.template || (raw.aid && raw.aid.type) || null;
     if (template) render.template = template;
     render.storyCard = false;
@@ -264,15 +197,7 @@ function buildInlineItems(placements) {
 }
 
 
-// ── orchestration ────────────────────────────────────────────────────────────
 
-/**
- * Migrate one project's Plot Essentials, end to end.
- *
- * Assumes `v3.js` has already run: the config must be v4-valid before the compiler's own
- * loader can be used to answer what a block resolved to, and using that loader rather than a
- * private copy is what keeps the migrator's idea of a wrapper identical to the compiler's.
- */
 function migratePlotEssentialsFiles(configPath, options = {}) {
   const { loadTemplates } = require('../loader');
   const { loadCompileConfig } = require('../config/load');
@@ -280,22 +205,14 @@ function migratePlotEssentialsFiles(configPath, options = {}) {
   const { buildCanonRegistry } = require('../loader/registry');
   const { convertPlotEssentials, buildItemLookup } = require('./plot-essentials');
 
-  // `options.diagnostics` is required; see `migrateDescriptionFiles` for why the stage does
-  // not own a bus of its own.
   const { diagnostics } = options;
   const config = loadCompileConfig(configPath, { diagnostics });
-  // `null` is a config that could not be loaded at all — nothing to inspect, the same
-  // outcome `wireNotesTemplate` reports for its own read.
   if (!config) {
     return { notes: ['could not load the migrated config to find Plot Essentials — nothing migrated.'], touched: [] };
   }
   const canon = buildCanonRegistry(config._resolvedLibrary, { diagnostics });
   const registry = buildItemLookup(canon, loadItemsFromDir(config._resolvedItems, { diagnostics }));
   const { templates, fieldTable } = loadTemplates(config._resolvedTemplates, { diagnostics });
-  // A `.hint` / `.you` sibling target is valid whether it is a `.template` text file or a
-  // `templates:` entry in `fields.cl.yaml` (Phase 12) — both resolve through
-  // `lookupNamedTemplate` at compile time, so the migrator's existence check has to see
-  // both namespaces or it silently drops `template: Character.you` on a field-list corpus.
   const templateNames = new Set([
     ...[...templates.keys()].map((k) => String(k).toLowerCase()),
     ...Object.keys((fieldTable && fieldTable.templates) || {}).map((k) => k.toLowerCase()),
@@ -316,8 +233,6 @@ function migratePlotEssentialsFiles(configPath, options = {}) {
   const applied = applyImportPlacements(config._resolvedItems, placements, options);
   notes.push(...applied.notes);
 
-  // The component keeps its own leading comments: they describe the project, not the block
-  // list, and a migration that silently discards an author's banner is one they cannot audit.
   const banner = source.split(SPLIT_LINES).filter((line) => line.trim().startsWith('#')).join(NL);
   const componentText = (banner ? banner + NL + NL : '')
     + YAML.stringify({ sections }, { lineWidth: 0 });

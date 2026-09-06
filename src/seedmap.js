@@ -8,32 +8,19 @@ const { resolveAt } = require('./compiledTree');
 const { NULL_LOG } = require('./log');
 const { csvCell, sanitizeFilename, branchLabel } = require('./report');
 
-// ── parsing ──────────────────────────────────────────────────────────────────
 
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// ── analysis ─────────────────────────────────────────────────────────────────
 
-/**
- * For every card, find which other cards' bodies or Plot Essentials contain its triggers.
- * Returns an array of { seeder, seeded, via, source } objects.
- *   source: 'card' | 'pe'
- * Self-matches (seeder.title === seeded.title) are skipped.
- */
 function buildSeedRelations(cards, peText = '') {
   const relations = [];
 
   for (const seeded of cards) {
     for (const trigger of seeded.triggers) {
-      // No `g` flag. One regex is reused across every candidate seeder below, and a
-      // `g` regex carries `lastIndex` between `.test()` calls — so after a match in one
-      // body the next body was searched from that offset rather than from zero, and
-      // real edges went missing. Nothing here iterates matches; `test` alone is wanted.
       const re = new RegExp(escapeRegex(trigger), 'i');
 
-      // Card-to-card seeds
       for (const seeder of cards) {
         if (seeder.title === seeded.title) continue;
         if (re.test(seeder.body)) {
@@ -41,7 +28,6 @@ function buildSeedRelations(cards, peText = '') {
         }
       }
 
-      // Plot Essentials seeds
       if (peText && re.test(peText)) {
         relations.push({ seeder: 'Plot Essentials', seeded: seeded.title, via: trigger, source: 'pe' });
       }
@@ -51,18 +37,12 @@ function buildSeedRelations(cards, peText = '') {
   return relations;
 }
 
-/**
- * For every card, check whether any of its triggers appear in the Opening text.
- * Returns a Set of card titles that are seeded by the Opening.
- */
 function buildOpeningFlags(cards, openingText = '') {
   const seededInOpening = new Set();
   if (!openingText) return seededInOpening;
 
   for (const card of cards) {
     for (const trigger of card.triggers) {
-      // Same reason as buildSeedRelations. Harmless here — the loop breaks on the first
-      // match — but a stateful regex in a `test`-only path is a trap either way.
       const re = new RegExp(escapeRegex(trigger), 'i');
       if (re.test(openingText)) {
         seededInOpening.add(card.title);
@@ -74,7 +54,6 @@ function buildOpeningFlags(cards, openingText = '') {
   return seededInOpening;
 }
 
-// ── formatting ────────────────────────────────────────────────────────────────
 
 function formatSeedMap(rootDirName, leafResults) {
   const parts = [`# Seed Map — ${rootDirName}`];
@@ -90,7 +69,6 @@ function formatSeedMap(rootDirName, leafResults) {
       continue;
     }
 
-    // Group relations by seeded card (inbound view)
     const inbound = new Map(); // seeded title → [{ seeder, via, source }]
     for (const rel of relations) {
       if (!inbound.has(rel.seeded)) inbound.set(rel.seeded, []);
@@ -138,7 +116,6 @@ function formatSeedMapCsv(rootDirName, leafResults) {
   for (const { branchNames, cards, relations, seededInOpening } of leafResults) {
     const label = branchLabel(branchNames, rootDirName);
 
-    // Count distinct seeders (cards + PE) per seeded title
     const seederSets = new Map(); // seeded title → Set of seeder labels
     for (const rel of relations) {
       if (!seederSets.has(rel.seeded)) seederSets.set(rel.seeded, new Set());
@@ -159,16 +136,7 @@ function formatSeedMapCsv(rootDirName, leafResults) {
   return rows.join('\n');
 }
 
-// ── runner ────────────────────────────────────────────────────────────────────
 
-/**
- * Run seed-map mode on a scenario output root.
- * Discovers all leaf branches, collects their compiled cards, builds seed
- * relations, and writes a .seedmap.md and .seedmap.csv to outputDir, plus one
- * per-branch pair when there is more than one leaf.
- * Returns `{ written, mdPath, csvPath }`, with `written: []` when no branch leaves were
- * found. Prints nothing; the caller decides what to show.
- */
 function runSeedMapMode(scenarioRoot, outputDir, options = {}) {
   const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
@@ -198,7 +166,6 @@ function runSeedMapMode(scenarioRoot, outputDir, options = {}) {
   fs.writeFileSync(mdPath,  formatSeedMap(rootDirName, leafResults) + '\n', 'utf8');
   fs.writeFileSync(csvPath, formatSeedMapCsv(rootDirName, leafResults) + '\n', 'utf8');
 
-  // Per-branch files (skipped for single-leaf scenarios with no branch names)
   const singleLeaf = leafResults.length === 1 && leafResults[0].branchNames.length === 0;
   if (!singleLeaf) {
     for (const leafResult of leafResults) {
@@ -207,7 +174,6 @@ function runSeedMapMode(scenarioRoot, outputDir, options = {}) {
       const leafMd     = path.join(outputDir, `${stem}.seedmap.md`);
       const leafCsv    = path.join(outputDir, `${stem}.seedmap.csv`);
       written.push(leafMd, leafCsv);
-      // Format as a single-leaf doc (no "## Branch:" header — filename conveys the branch)
       const asSingle   = [{ ...leafResult, branchNames: [] }];
       fs.writeFileSync(leafMd,  formatSeedMap(rootDirName, asSingle) + '\n', 'utf8');
       fs.writeFileSync(leafCsv, formatSeedMapCsv(rootDirName, asSingle) + '\n', 'utf8');

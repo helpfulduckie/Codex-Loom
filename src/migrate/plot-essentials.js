@@ -1,48 +1,9 @@
 'use strict';
 
-/**
- * v3 Plot Essentials to v4 sections and slots (§7.2, §14.2).
- *
- * This is the half of the migration Phase 3 deferred. `v3.js` handles the config break and
- * the item-level key removals, all of which are local rewrites; this one is not local. A v3
- * Plot Essentials file *resolves items*, and v4's does not — so every block in it has to be
- * split into a slot on the component and a render target on the item it named, in a
- * different file.
- *
- * ── Why runs of blocks can collapse into one slot ───────────────────────────
- *
- * The naive conversion is one slot per v3 block, which preserves output and produces a
- * component with five near-identical single-occupant slots. It can do better, and the
- * reason is a property of the emitter rather than a guess: `renderSectionedComponent` joins
- * sections with `BLOCK_GAP`, and a `wrap: each` slot joins its occupants with the same
- * `BLOCK_GAP`. So N headingless blocks sharing a wrapper produce byte-identical output
- * whether they are N slots of one occupant or one slot of N.
- *
- * Consecutive blocks sharing a render signature therefore merge into a single slot. What
- * this cannot do is name the result the way an author would: The Institute's five blocks
- * become one slot rather than the three semantic slots a human chose. The output is
- * identical, and the derived names are reported for renaming.
- *
- * ── What is derived and what is reported ────────────────────────────────────
- *
- * Section names have no source in v3, because blocks are anonymous. They are derived from a
- * heading, a sole occupant's id, or position, and every derived name is reported so the
- * author renames before committing. Migration is a supervised one-time run, so a good guess
- * that is printed beats a safe guess that must be edited everywhere.
- */
 
 const { DEFAULT_POSITION } = require('../model/component');
 
-// ── block reading ────────────────────────────────────────────────────────────
 
-/**
- * One v3 block, normalized to the fields the conversion reads.
- *
- * `kind` separates the two things a block can be: `inline` defines an item inside the Plot
- * Essentials file, and `import` points at one defined elsewhere. They migrate to different
- * places — an inline block becomes a new item file, an import block becomes a render target
- * added to an existing entry — so the distinction is carried rather than rediscovered.
- */
 function readBlock(raw, index) {
   const render = raw.render || {};
   return {
@@ -59,12 +20,6 @@ function readBlock(raw, index) {
   };
 }
 
-/**
- * A v3 file's blocks as ordered units, with `blocks:` groups kept whole.
- *
- * A group is one unit because its children share a single wrapper and heading — the
- * behavior `wrap: all` exists to preserve — so it can never merge with a neighbour.
- */
 function readUnits(blocks) {
   const units = [];
   blocks.forEach((raw, index) => {
@@ -94,17 +49,7 @@ function readUnits(blocks) {
   return units;
 }
 
-// ── item lookup ──────────────────────────────────────────────────────────────
 
-/**
- * Id to definition, with a project `import:` override layered over the canon item.
- *
- * The compiler's own `mergeRegistries` cannot serve here, because it deliberately refuses
- * an id present in both canon and project — which is exactly the shape every `- import:`
- * entry has. What this needs is the opposite: the canon definition as the base, with the
- * project's override on top, since that is what the block resolved against. Only `render:`
- * and `aid:` are merged, because wrapper and template are the only questions asked.
- */
 function buildItemLookup(canonRegistry, projectItems) {
   const lookup = new Map();
   for (const [id, item] of canonRegistry) lookup.set(id, item);
@@ -125,21 +70,12 @@ function buildItemLookup(canonRegistry, projectItems) {
   return lookup;
 }
 
-/**
- * The wrapper a v3 block actually rendered with.
- *
- * A block with no `render.wrapper` inherited the resolved item's own, which is why this
- * needs the registry rather than the block alone — Baseline's protagonist block declares no
- * wrapper and ships curly, because canon Aness declares curly. Reading the block alone
- * would silently drop the braces from every such block.
- */
 function effectiveWrapper(block, registry) {
   if (block.declaredWrapper) return block.declaredWrapper;
   const item = block.id ? registry.get(String(block.id).toLowerCase()) : null;
   return (item && item.render && item.render.wrapper) || null;
 }
 
-/** The template a block resolved to, before `style:` and `isPlayer:` modify it. */
 function baseTemplate(block, registry) {
   if (block.template) return block.template;
   const item = block.id ? registry.get(String(block.id).toLowerCase()) : null;
@@ -149,16 +85,6 @@ function baseTemplate(block, registry) {
   return null;
 }
 
-/**
- * The per-target `template:` a block needs, or null when the item's own default suffices.
- *
- * `style: hint` and `isPlayer: true` both mean "use a sibling of the normal template", and
- * both are conditional on that sibling existing. v3 fell back to the full template with a
- * WARN when a `.hint` was missing, and `isPlayer` was never a compiler key at all — it did
- * something only because two of the project's own templates tested it. A missing sibling is
- * therefore a silent no-op in v3, and reproducing that exactly is what keeps output
- * identical rather than merely plausible.
- */
 function targetTemplate(block, registry, templateNames, notes) {
   const base = baseTemplate(block, registry);
   if (!base) return block.template || null;
@@ -184,22 +110,13 @@ function targetTemplate(block, registry, templateNames, notes) {
   return block.template || null;
 }
 
-// ── grouping and naming ──────────────────────────────────────────────────────
 
-/** Two units share a slot only when every layout key agrees. */
 function signature(unit, wrapper) {
   return JSON.stringify([
     unit.group, wrapper || '', unit.heading || '', unit.headingLevel, unit.compact, unit.position,
   ]);
 }
 
-/**
- * Units in output order, merged into runs.
- *
- * Ordered by `position` then document index, which is v3's own ordering, so a run is always
- * a contiguous stretch of the rendered sequence. Merging non-adjacent units would reorder
- * output; merging adjacent ones with an identical signature cannot.
- */
 function groupIntoRuns(units, wrapperOf) {
   const ordered = [...units].sort((a, b) => (a.position - b.position) || (a.index - b.index));
   const runs = [];
@@ -207,8 +124,6 @@ function groupIntoRuns(units, wrapperOf) {
     const wrapper = wrapperOf(unit);
     const sig = signature(unit, wrapper);
     const last = runs[runs.length - 1];
-    // A group wraps its whole collection, so it neither absorbs a neighbour nor is absorbed
-    // — `wrap: all` and `wrap: each` are different renderings of the same occupants.
     if (last && !unit.group && !last.group && last.signature === sig) {
       last.units.push(unit);
       continue;
@@ -218,7 +133,6 @@ function groupIntoRuns(units, wrapperOf) {
   return runs;
 }
 
-/** A slot name from whatever the run offers: a heading, a sole occupant, or its position. */
 function deriveSectionName(run, ordinal, taken) {
   const slug = (text) => String(text)
     .toLowerCase()
@@ -242,15 +156,7 @@ function deriveSectionName(run, ordinal, taken) {
   return name;
 }
 
-// ── conversion ───────────────────────────────────────────────────────────────
 
-/**
- * Convert a parsed v3 Plot Essentials file into a v4 component plus a placement per member.
- *
- * Returns `{ sections, placements, notes }`. This reads the registry and writes nothing —
- * `placements` is the instruction list the caller applies to item files, so deciding what to
- * convert stays separable from the file surgery that follows.
- */
 function convertPlotEssentials(blocks, registry, templateNames) {
   const notes = [];
   const units = readUnits(blocks);
@@ -266,10 +172,6 @@ function convertPlotEssentials(blocks, registry, templateNames) {
   runs.forEach((run, ordinal) => {
     const name = deriveSectionName(run, ordinal, taken);
     const first = run.units[0];
-    // Reported unconditionally, not only for the positional fallback. A name derived from a
-    // heading looks deliberate and is still a guess — `coinflip-company` for a party
-    // directory is exactly the kind of plausible-but-wrong name that survives review if
-    // nothing draws attention to it.
     notes.push(
       'slot "' + name + '" was named by the migrator from '
       + (first.heading ? 'its heading'
@@ -285,8 +187,6 @@ function convertPlotEssentials(blocks, registry, templateNames) {
 
     const render = { position: ordinal + 1 };
     if (run.wrapper) render.wrapper = run.wrapper;
-    // A group wrapped its joined children once; a standalone block wrapped itself. §7.4's
-    // `wrap` is the key that preserves both, and `each` is the default so it stays unwritten.
     if (run.group) render.wrap = 'all';
     if (first.compact) render.compact = true;
     section.render = render;
@@ -310,9 +210,6 @@ function convertPlotEssentials(blocks, registry, templateNames) {
           block,
           section: name,
           target,
-          // v3 suppressed the story card of any full-style import, through the
-          // `emittedFullImportIds` side channel. `style: hint` did not, which is the whole
-          // reason the party members keep their cards and the protagonists do not.
           suppressStoryCard: block.kind === 'import' && block.style !== 'hint',
         });
       }
