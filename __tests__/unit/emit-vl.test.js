@@ -201,12 +201,14 @@ describe('renderCard', () => {
     const diagnostics = new Diagnostics();
     renderCard({ item: { id: 'A', aid: { triggers: ['Vale, Aness'] } }, bodyText: 'x', diagnostics });
     expect(diagnostics.errors.map((d) => d.code)).toEqual([CODES.TRIGGER_CONTAINS_COMMA]);
+    expect(diagnostics.errors[0].message).toContain('split it into separate entries or remove the comma');
   });
 
   test('an empty trigger is a WARN — it reaches AID as an empty key', () => {
     const diagnostics = new Diagnostics();
     renderCard({ item: { id: 'A', aid: { triggers: ['Aness', ''] } }, bodyText: 'x', diagnostics });
     expect(diagnostics.warnings.map((d) => d.code)).toEqual([CODES.TRIGGER_EMPTY]);
+    expect(diagnostics.warnings[0].message).toContain('remove the empty entry or provide a trigger');
   });
 
   test('a clean card produces no diagnostics', () => {

@@ -285,6 +285,15 @@ describe('every CL code raised in src/ is in the registry', () => {
       expect(summary).toMatch(/(?:add|correct|change|remove|split|keep|break|declare|define|rename|use|move|give|provide|exclude|target|inherit|choose)/i);
     }
   });
+
+  test('CL07xx summaries state the consequence and immediate author fix', () => {
+    const ids = ['CL0701', 'CL0702', 'CL0710', 'CL0711', 'CL0712', 'CL0713', 'CL0714', 'CL0715'];
+    for (const id of ids) {
+      const summary = Object.values(REGISTRY).find((entry) => entry.id === id).summary;
+      expect(summary).toMatch(/(?:so|will|receives|splits|remains)/i);
+      expect(summary).toMatch(/(?:split|remove|provide|shorten|reduce)/i);
+    }
+  });
 });
 
 describe('the compiler / lint split', () => {

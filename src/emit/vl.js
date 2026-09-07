@@ -132,7 +132,7 @@ function triggerLine(item, diagnostics, loc) {
     if (value.includes(',')) {
       diagnostics.error(
         CODES.TRIGGER_CONTAINS_COMMA,
-        `Trigger ${JSON.stringify(value)} contains a comma.`,
+        `Trigger ${JSON.stringify(value)} contains a comma, so Velvet Lattice splits it into two triggers; split it into separate entries or remove the comma.`,
         loc,
         {
           hint: 'Velvet Lattice joins triggers with commas into one AID keys string '
@@ -143,7 +143,7 @@ function triggerLine(item, diagnostics, loc) {
     } else if (value.trim() === '') {
       diagnostics.warn(
         CODES.TRIGGER_EMPTY,
-        'Trigger is empty and will reach AID as an empty key.',
+        'Trigger is empty, so AID receives an empty key; remove the empty entry or provide a trigger.',
         loc,
       );
     }

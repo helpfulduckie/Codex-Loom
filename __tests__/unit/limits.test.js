@@ -88,12 +88,14 @@ describe('checkLimit', () => {
     checkLimit(body(1800), null, LIMITS.cardBody, { diagnostics });
     expect(diagnostics.warnings.map((d) => d.code)).toEqual([CODES.CARD_BODY_NEAR_LIMIT]);
     expect(diagnostics.warnings[0].message).toContain('within 200 of the 2,000 limit');
+    expect(diagnostics.warnings[0].hint).toContain('Shorten the content or reduce its placeholder expansion');
   });
 
   test('content over the cap is an ERROR, and only the ERROR — not both', () => {
     const diagnostics = new Diagnostics();
     checkLimit(body(2001), null, LIMITS.cardBody, { diagnostics });
     expect(diagnostics.all.map((d) => d.code)).toEqual([CODES.CARD_BODY_OVER_LIMIT]);
+    expect(diagnostics.errors[0].hint).toContain('Shorten the content or reduce its placeholder expansion');
   });
 
   test('exactly at the cap passes — the cap is inclusive, the band is what warns', () => {

@@ -81,12 +81,13 @@ ERROR CL0622 Codex/items.cl.yaml
   story cards named "Anchor" collide on branch "open" (both as character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
 ERROR CL0712 Codex/items.cl.yaml
   Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
-  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play. Shorten the content or reduce its placeholder expansion.
 WARN CL0713 Codex/items.cl.yaml
   Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
+  hint: Shorten the content or reduce its placeholder expansion.
 ERROR CL0714 Codex/items.cl.yaml
   Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
-  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play. Shorten the content or reduce its placeholder expansion.
 ERROR CL0413 templates/Broken.template
   Malformed join() call in Broken: Malformed join(): join($body.Tagline); correct the call syntax, and the malformed call remains literal until fixed.
 ERROR CL0415 templates/Unclosed.template
@@ -113,10 +114,12 @@ ERROR CL0430 Codex/items.cl.yaml
   compiled output contains unresolved token {$Undeclared}; fix the authoring reference or resolver input in item "RoleTester" (character)
 WARN CL0715 Codex/items.cl.yaml
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
+  hint: Shorten the content or reduce its placeholder expansion.
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "open". Add or route an item.
 WARN CL0711 components/opening-open.md
   Opening for branch "open" is 3,626 characters on upload, within 374 of the 4,000 limit. Compiled length is 3,301; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
+  hint: Shorten the content or reduce its placeholder expansion.
 WARN CL0326 canon/rumors.cl.yaml
   branch dispatch to variant "hshed" on branch "gated" matched none of the 3 items included from rumors.cl.yaml. No included item defines that variant, so the dispatch changes nothing; check the spelling or add the variant to an included item.
 ERROR CL0325 Codex/items.cl.yaml
@@ -147,12 +150,13 @@ ERROR CL0622 Codex/items.cl.yaml
   story cards named "Anchor" collide on branch "gated" (both as character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
 ERROR CL0712 Codex/items.cl.yaml
   Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
-  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play. Shorten the content or reduce its placeholder expansion.
 WARN CL0713 Codex/items.cl.yaml
   Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
+  hint: Shorten the content or reduce its placeholder expansion.
 ERROR CL0714 Codex/items.cl.yaml
   Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
-  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play. Shorten the content or reduce its placeholder expansion.
 ERROR CL0413 templates/Broken.template
   Malformed join() call in Broken: Malformed join(): join($body.Tagline); correct the call syntax, and the malformed call remains literal until fixed.
 ERROR CL0415 templates/Unclosed.template
@@ -179,11 +183,12 @@ ERROR CL0430 Codex/items.cl.yaml
   compiled output contains unresolved token {$Undeclared}; fix the authoring reference or resolver input in item "RoleTester" (character)
 WARN CL0715 Codex/items.cl.yaml
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
+  hint: Shorten the content or reduce its placeholder expansion.
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "gated". Add or route an item.
 ERROR CL0710 components/opening-gated.md
   Opening for branch "gated" is 4,021 characters on upload (limit 4,000). Compiled length is 3,501; 8 placeholder references add 520 characters when Velvet Lattice expands them to their question text on upload.
-  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play. Shorten the content or reduce its placeholder expansion.
 ERROR CL0325 Codex/items.cl.yaml
   two item definitions resolve to id "anchor" on this branch.
   hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
@@ -216,12 +221,13 @@ ERROR CL0622 Codex/items.cl.yaml
   story cards named "Anchor" collide on branch "silent" (both as character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
 ERROR CL0712 Codex/items.cl.yaml
   Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
-  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play. Shorten the content or reduce its placeholder expansion.
 WARN CL0713 Codex/items.cl.yaml
   Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
+  hint: Shorten the content or reduce its placeholder expansion.
 ERROR CL0714 Codex/items.cl.yaml
   Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
-  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
+  hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play. Shorten the content or reduce its placeholder expansion.
 ERROR CL0413 templates/Broken.template
   Malformed join() call in Broken: Malformed join(): join($body.Tagline); correct the call syntax, and the malformed call remains literal until fixed.
 ERROR CL0415 templates/Unclosed.template
@@ -248,6 +254,7 @@ ERROR CL0430 Codex/items.cl.yaml
   compiled output contains unresolved token {$Undeclared}; fix the authoring reference or resolver input in item "RoleTester" (character)
 WARN CL0715 Codex/items.cl.yaml
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
+  hint: Shorten the content or reduce its placeholder expansion.
 WARN CL0614 components/plot-essentials.cl.yaml
   slot "party" in Plot Essentials has no items on branch "silent". Add or route an item.
 WARN CL0534 compile.cl.yaml

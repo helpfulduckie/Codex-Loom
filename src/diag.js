@@ -148,14 +148,14 @@ const REGISTRY = Object.freeze({
   COMPONENT_NO_OUTPUT:          { id: 'CL0634', severity: ERROR, summary: 'A requested component produces no output anywhere, so the compiled scenario is missing that component; provide renderable content or correct its source.' },
   CARD_NO_TRIGGERS:             { id: 'CL0635', severity: WARN,  layer: 'opinion', summary: 'A story card has no triggers, so AID can never pull it into context; add trigger values or use kind: reference.' },
 
-  TRIGGER_CONTAINS_COMMA:       { id: 'CL0701', severity: ERROR, summary: 'A trigger value contains a comma, which Velvet Lattice would split into two triggers.' },
-  TRIGGER_EMPTY:                { id: 'CL0702', severity: WARN,  summary: 'A trigger value is empty and will reach AID as an empty key.' },
-  OPENING_OVER_LIMIT:           { id: 'CL0710', severity: ERROR, summary: "An Opening.md exceeds AID's 4,000-character limit." },
-  OPENING_NEAR_LIMIT:           { id: 'CL0711', severity: WARN,  summary: 'An Opening.md is within 10% of the 4,000-character limit.' },
-  CARD_BODY_OVER_LIMIT:         { id: 'CL0712', severity: ERROR, summary: "A story card body exceeds AID's 2,000-character limit." },
-  CARD_BODY_NEAR_LIMIT:         { id: 'CL0713', severity: WARN,  summary: 'A story card body is within 10% of the 2,000-character limit.' },
-  NOTES_OVER_LIMIT:             { id: 'CL0714', severity: ERROR, summary: "An item's notes: exceeds AID's 10,000-character description limit." },
-  NOTES_NEAR_LIMIT:             { id: 'CL0715', severity: WARN,  summary: "An item's notes: is within 10% of the 10,000-character limit." },
+  TRIGGER_CONTAINS_COMMA:       { id: 'CL0701', severity: ERROR, summary: 'A trigger value contains a comma, so Velvet Lattice splits it into two triggers; split it into separate entries or remove the comma.' },
+  TRIGGER_EMPTY:                { id: 'CL0702', severity: WARN,  summary: 'A trigger value is empty, so AID receives an empty key; remove the empty entry or provide a trigger.' },
+  OPENING_OVER_LIMIT:           { id: 'CL0710', severity: ERROR, summary: "An Opening.md exceeds AID's 4,000-character limit, so AID truncates it on upload; shorten the opening or reduce its placeholder expansion." },
+  OPENING_NEAR_LIMIT:           { id: 'CL0711', severity: WARN,  summary: "An Opening.md is within 10% of AID's 4,000-character limit, so little headroom remains; shorten the opening or reduce its placeholder expansion." },
+  CARD_BODY_OVER_LIMIT:         { id: 'CL0712', severity: ERROR, summary: "A story card body exceeds AID's 2,000-character limit, so AID truncates it on upload; shorten the body or reduce its placeholder expansion." },
+  CARD_BODY_NEAR_LIMIT:         { id: 'CL0713', severity: WARN,  summary: "A story card body is within 10% of AID's 2,000-character limit, so little headroom remains; shorten the body or reduce its placeholder expansion." },
+  NOTES_OVER_LIMIT:             { id: 'CL0714', severity: ERROR, summary: "An item's notes: exceeds AID's 10,000-character description limit, so AID truncates it on upload; shorten the notes or reduce its placeholder expansion." },
+  NOTES_NEAR_LIMIT:             { id: 'CL0715', severity: WARN,  summary: "An item's notes: is within 10% of AID's 10,000-character limit, so little headroom remains; shorten the notes or reduce its placeholder expansion." },
 });
 
 const CODES = Object.freeze(

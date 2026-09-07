@@ -628,14 +628,14 @@ report every folded pair as an error.
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `CL0701` | ERROR | A trigger value contains a comma. |
-| `CL0702` | WARN | A trigger value is empty and will reach AID as an empty key. |
-| `CL0710` | ERROR | An `Opening.md` exceeds AID's 4,000-character limit. |
-| `CL0711` | WARN | An `Opening.md` is within 10% of the 4,000-character limit. |
-| `CL0712` | ERROR | A story card body exceeds AID's 2,000-character limit. |
-| `CL0713` | WARN | A story card body is within 10% of the 2,000-character limit. |
-| `CL0714` | ERROR | An item's `notes:` exceeds AID's 10,000-character `description` limit. |
-| `CL0715` | WARN | An item's `notes:` is within 10% of the 10,000-character limit. |
+| `CL0701` | ERROR | A trigger value contains a comma, so Velvet Lattice splits it into two triggers; split it into separate entries or remove the comma. |
+| `CL0702` | WARN | A trigger value is empty, so AID receives an empty key; remove the empty entry or provide a trigger. |
+| `CL0710` | ERROR | An `Opening.md` exceeds AID's 4,000-character limit, so AID truncates it on upload; shorten the opening or reduce its placeholder expansion. |
+| `CL0711` | WARN | An `Opening.md` is within 10% of AID's 4,000-character limit, so little headroom remains; shorten the opening or reduce its placeholder expansion. |
+| `CL0712` | ERROR | A story card body exceeds AID's 2,000-character limit, so AID truncates it on upload; shorten the body or reduce its placeholder expansion. |
+| `CL0713` | WARN | A story card body is within 10% of AID's 2,000-character limit, so little headroom remains; shorten the body or reduce its placeholder expansion. |
+| `CL0714` | ERROR | An item's `notes:` exceeds AID's 10,000-character `description` limit, so AID truncates it on upload; shorten the notes or reduce its placeholder expansion. |
+| `CL0715` | WARN | An item's `notes:` is within 10% of AID's 10,000-character limit, so little headroom remains; shorten the notes or reduce its placeholder expansion. |
 
 Both trigger codes are facts about what Velvet Lattice can carry to AID rather than
 opinions about content, which is why they live in the compiler and not in lint. `CL0701` is

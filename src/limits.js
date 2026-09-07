@@ -79,7 +79,7 @@ function checkLimit(text, questions, limit, { diagnostics, loc = {}, label = nul
       loc,
       {
         hint: 'AID truncates rather than refusing, so this ships shortened and the loss '
-          + 'shows up during play.',
+          + 'shows up during play. Shorten the content or reduce its placeholder expansion.',
       },
     );
   } else if (result.expanded >= limit.warnAt) {
@@ -88,6 +88,7 @@ function checkLimit(text, questions, limit, { diagnostics, loc = {}, label = nul
       `${subject} is ${n(result.expanded)} characters on upload, `
       + `within ${n(limit.cap - result.expanded)} of the ${n(limit.cap)} limit.${detail}`,
       loc,
+      { hint: 'Shorten the content or reduce its placeholder expansion.' },
     );
   }
 
