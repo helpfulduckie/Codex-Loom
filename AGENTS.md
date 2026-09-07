@@ -1,8 +1,8 @@
 # Codex Loom
 
 Codex Loom compiles YAML item definitions into Velvet Lattice story card format
-for AI Dungeon scenarios. The released compiler is v3.3.2 (see `package.json`);
-active work is the v4 rebuild on the `v4-phase1` branch — a clean break from v3.
+for AI Dungeon scenarios. The current compiler is v4 (see `package.json`), a
+clean break from v3 with no compatibility mode — v3.3.2 was the last v3 release.
 **Phases 1 through 17 are complete; there is no Phase 18.** What remains is a
 queue of independent items in the vault note `Codex Loom v4 Backlog`, worked one
 at a time. Phase 13 added context tiering (a tier is a branch carrying

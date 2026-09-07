@@ -18,7 +18,7 @@ description: >
 
 # Codex Loom — Authoring Skill
 
-> **Describes v4, a clean break from the released v3.3.2.** There is no compatibility mode
+> **Describes v4, a clean break from v3.3.2.** There is no compatibility mode
 > — `version: 4` is required and a v3 project fails loudly rather than compiling with
 > warnings. `--migrate` converts one in place; that workflow is documented in the repo's
 > `documentation/15-migrating-from-v3.md` and deliberately not carried here.

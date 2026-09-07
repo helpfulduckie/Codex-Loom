@@ -1,12 +1,12 @@
 ## Project status
 
-**The released compiler is v3.3.2, on `main`.** Active development is the v4 rebuild on the
-`v4-phase1` branch — a clean break from v3, feature-complete and in pre-release testing. v4
-changes the config format, collapses the four component syntaxes into one, drops the
-template envelope and the `{@name}` reference family, splits the compiler from the lint
-pass, adds player placeholders and the platform field caps, and adds convention packs and
-context tiering. See [documentation/15-migrating-from-v3.md](documentation/15-migrating-from-v3.md)
-for the conversion. If you are reading this to see how the thing is built, read `v4-phase1`.
+**The current compiler is v4, on `main`.** A clean break from v3 with no compatibility
+mode — v3.3.2 was the last v3 release. v4 changes the config format, collapses the four
+component syntaxes into one, drops the template envelope and the `{@name}` reference
+family, splits the compiler from the lint pass, adds player placeholders and the platform
+field caps, and adds convention packs and context tiering. A v3 project is converted in
+place with `--migrate`; see [documentation/15-migrating-from-v3.md](documentation/15-migrating-from-v3.md)
+for the conversion.
 
 ## Tests
 
