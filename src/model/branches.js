@@ -187,8 +187,8 @@ function mergePlaceholders(table, node, onWarn = null) {
         onWarn(
           CODES.PLACEHOLDER_UNBIND_UNKNOWN,
           `placeholder "${key}" is unbound with ~ but was never inherited here — `
-          + 'nothing was removed. A bare "' + key + ':" with no question also parses '
-          + 'as ~, which is usually the cause.',
+          + 'nothing was removed; remove ~ or inherit the placeholder. A bare "' + key
+          + ':" with no question also parses as ~, which is usually the cause.',
         );
       }
       delete merged[key];
@@ -209,7 +209,7 @@ function mergeUnbindable(table, local, { code, kind, onWarn = null }) {
         onWarn(
           code,
           `${kind} "${key}" is unbound with ~ but was never inherited here — nothing was `
-          + 'removed.',
+          + 'removed; remove ~ or inherit it.',
         );
       }
       delete merged[key];

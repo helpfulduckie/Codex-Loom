@@ -548,7 +548,7 @@ describe('applyCrossItemRefs', () => {
     const items = [{ id: 'aria', body: { Tagline: '{$nobody.body.Field}' } }];
     applyCrossItemRefs(items, { registry: new Map(), onWarn });
     expect(items[0].body.Tagline).toBe('{$nobody.body.Field}');
-    expect(onWarn).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('item not found'));
+    expect(onWarn).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('names no resolved item'));
   });
 
   test('missing field → leaves token as-is', () => {

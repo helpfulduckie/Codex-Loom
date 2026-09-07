@@ -45,7 +45,7 @@ function checkVariableGraph(config, diagnostics, sourceMap, names) {
       if (!known.has(ref.toLowerCase())) {
         diagnostics.error(
           CODES.VARIABLE_UNDECLARED,
-          `Variable "{%${ref}}", referenced by variable "${name}", is not declared.`,
+          `Variable "{%${ref}}", referenced by variable "${name}", is not declared, so expansion fails; declare or correct the key.`,
           location
         );
       }
@@ -67,7 +67,7 @@ function checkVariableGraph(config, diagnostics, sourceMap, names) {
         const name = lowerToName.get(lower);
         diagnostics.error(
           CODES.VARIABLE_CYCLE,
-          `Variable cycle: "${loop.map((k) => lowerToName.get(k) || k).join('" → "')}".`,
+          `Variable cycle: "${loop.map((k) => lowerToName.get(k) || k).join('" → "')}"; expansion cannot finish until the cycle is broken.`,
           sourceMap ? sourceMap.nearest(['variables', name]) : {}
         );
       }

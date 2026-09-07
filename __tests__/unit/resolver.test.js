@@ -212,7 +212,7 @@ describe('collectVariantDeltas', () => {
     const onWarn = jest.fn();
     const deltas = collectVariantDeltas(canonItem, 'human/peasant', onWarn);
     expect(deltas).toHaveLength(1);
-    expect(onWarn).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('not found in variant tree'));
+    expect(onWarn).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('is not defined in the variant tree'));
   });
 
   test('an unknown segment is silent when no reporter is supplied', () => {

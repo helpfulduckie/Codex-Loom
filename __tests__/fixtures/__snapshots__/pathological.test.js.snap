@@ -56,10 +56,10 @@ ERROR CL0325 Codex/items.cl.yaml
   two item definitions resolve to id "anchor" on this branch.
   hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
 ERROR CL0532 Codex/items.cl.yaml
-  undeclared placeholder "%ghostName%" in item "Greeter" rendering into plotEssential slot "cast" on branch "open" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
+  undeclared placeholder "%ghostName%" in item "Greeter" rendering into plotEssential slot "cast" on branch "open" — Velvet Lattice substitutes only declared keys, so the AI receives the literal token until you declare or correct "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
 ERROR CL0532 Codex/items.cl.yaml
-  undeclared placeholder "%ghostName%" in story card "Greeter" on branch "open" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
+  undeclared placeholder "%ghostName%" in story card "Greeter" on branch "open" — Velvet Lattice substitutes only declared keys, so the AI receives the literal token until you declare or correct "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
 ERROR CL0610 Codex/items.cl.yaml
   item "Silent" resolves on branch "open" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
@@ -94,17 +94,17 @@ ERROR CL0415 templates/Unclosed.template
 ERROR CL0433 Codex/items.cl.yaml
   leaked template tag {if $body.Tagline} in item "UnclosedBlock" (character)
 ERROR CL0541 (branch open)
-  "Anchor" is both a declared role and an item id, which is ambiguous — rename one (§9.3).
+  "Anchor" is both a declared role and an item id, which is ambiguous — rename the role or item; the token remains unresolved until fixed.
 ERROR CL0542 (branch open)
-  role "Missing" is bound to "NoSuchItem", which does not resolve on this branch.
+  role "Missing" is bound to "NoSuchItem", which does not resolve on this branch; bind it to an available item or adjust branch scope.
 ERROR CL0540 (branch open)
-  "{$Missing}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Missing}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0543 (branch open)
-  role "Loop" is bound to "LI", which is itself a role — a role must resolve directly to an item id, one level of indirection always (§9.3).
+  role "Loop" is bound to "LI", which is itself a role — bind it directly to an item id; its tokens remain unresolved until fixed.
 ERROR CL0540 (branch open)
-  "{$Loop}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Loop}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0540 (branch open)
-  "{$Undeclared}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Undeclared}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
   unresolved token {$Missing} in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
@@ -123,7 +123,7 @@ ERROR CL0325 Codex/items.cl.yaml
   two item definitions resolve to id "anchor" on this branch.
   hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
 ERROR CL0532 Codex/items.cl.yaml
-  undeclared placeholder "%ghostName%" in story card "Greeter" on branch "gated" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
+  undeclared placeholder "%ghostName%" in story card "Greeter" on branch "gated" — Velvet Lattice substitutes only declared keys, so the AI receives the literal token until you declare or correct "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
 ERROR CL0610 Codex/items.cl.yaml
   item "Ghost" resolves on branch "gated" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
@@ -160,17 +160,17 @@ ERROR CL0415 templates/Unclosed.template
 ERROR CL0433 Codex/items.cl.yaml
   leaked template tag {if $body.Tagline} in item "UnclosedBlock" (character)
 ERROR CL0541 (branch gated)
-  "Anchor" is both a declared role and an item id, which is ambiguous — rename one (§9.3).
+  "Anchor" is both a declared role and an item id, which is ambiguous — rename the role or item; the token remains unresolved until fixed.
 ERROR CL0542 (branch gated)
-  role "Missing" is bound to "NoSuchItem", which does not resolve on this branch.
+  role "Missing" is bound to "NoSuchItem", which does not resolve on this branch; bind it to an available item or adjust branch scope.
 ERROR CL0540 (branch gated)
-  "{$Missing}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Missing}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0543 (branch gated)
-  role "Loop" is bound to "LI", which is itself a role — a role must resolve directly to an item id, one level of indirection always (§9.3).
+  role "Loop" is bound to "LI", which is itself a role — bind it directly to an item id; its tokens remain unresolved until fixed.
 ERROR CL0540 (branch gated)
-  "{$Loop}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Loop}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0540 (branch gated)
-  "{$Undeclared}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Undeclared}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
   unresolved token {$Missing} in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
@@ -191,10 +191,10 @@ ERROR CL0629 components/adventure-description.cl.yaml
   "Adventure Description" declares advanced: in metadata:, which belongs to the scenario blurb only.
   hint: Velvet Lattice reads both keys at the root and nowhere else, so they do nothing at a leaf today. AID has no markdown description for an adventure, and if it gains one this frontmatter would set a field the player cannot change. Move them to the Description component; other metadata keys are fine here.
 ERROR CL0532 Codex/items.cl.yaml
-  undeclared placeholder "%ghostName%" in item "Greeter" rendering into plotEssential slot "cast" on branch "silent" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
+  undeclared placeholder "%ghostName%" in item "Greeter" rendering into plotEssential slot "cast" on branch "silent" — Velvet Lattice substitutes only declared keys, so the AI receives the literal token until you declare or correct "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
 ERROR CL0532 Codex/items.cl.yaml
-  undeclared placeholder "%ghostName%" in story card "Greeter" on branch "silent" — Velvet Lattice substitutes only declared keys, so this reaches the AI as the literal text "%ghostName%".
+  undeclared placeholder "%ghostName%" in story card "Greeter" on branch "silent" — Velvet Lattice substitutes only declared keys, so the AI receives the literal token until you declare or correct "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
 ERROR CL0610 Codex/items.cl.yaml
   item "Silent" resolves on branch "silent" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
@@ -229,17 +229,17 @@ ERROR CL0415 templates/Unclosed.template
 ERROR CL0433 Codex/items.cl.yaml
   leaked template tag {if $body.Tagline} in item "UnclosedBlock" (character)
 ERROR CL0541 (branch silent)
-  "Anchor" is both a declared role and an item id, which is ambiguous — rename one (§9.3).
+  "Anchor" is both a declared role and an item id, which is ambiguous — rename the role or item; the token remains unresolved until fixed.
 ERROR CL0542 (branch silent)
-  role "Missing" is bound to "NoSuchItem", which does not resolve on this branch.
+  role "Missing" is bound to "NoSuchItem", which does not resolve on this branch; bind it to an available item or adjust branch scope.
 ERROR CL0540 (branch silent)
-  "{$Missing}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Missing}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0543 (branch silent)
-  role "Loop" is bound to "LI", which is itself a role — a role must resolve directly to an item id, one level of indirection always (§9.3).
+  role "Loop" is bound to "LI", which is itself a role — bind it directly to an item id; its tokens remain unresolved until fixed.
 ERROR CL0540 (branch silent)
-  "{$Loop}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Loop}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0540 (branch silent)
-  "{$Undeclared}" does not resolve to a declared role or a known item id. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Undeclared}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
   unresolved token {$Missing} in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
@@ -257,21 +257,21 @@ ERROR CL0533 components/description.md
 ERROR CL0616 compile.cl.yaml
   branch "silent" has an adventure description and no Opening.md. Velvet Lattice reads a node's prompt as its Opening or, failing that, its description — so this leaf would open the adventure with its own blurb rather than a scene. Give the branch an opening:, or drop the adventureDescription: it inherits.
 WARN CL0545 compile.cl.yaml
-  role "LI" is declared at the project root but no resolved token anywhere references it.
+  role "LI" is declared at the project root but no resolved token references it, so its binding has no effect; use or remove the role.
 WARN CL0545 compile.cl.yaml
-  role "Anchor" is declared at the project root but no resolved token anywhere references it.
+  role "Anchor" is declared at the project root but no resolved token references it, so its binding has no effect; use or remove the role.
 WARN CL0545 compile.cl.yaml
-  role "Missing" is declared at the project root but no resolved token anywhere references it.
+  role "Missing" is declared at the project root but no resolved token references it, so its binding has no effect; use or remove the role.
 WARN CL0545 compile.cl.yaml
-  role "Loop" is declared at the project root but no resolved token anywhere references it.
+  role "Loop" is declared at the project root but no resolved token references it, so its binding has no effect; use or remove the role.
 WARN CL0535 compile.cl.yaml
-  placeholder "altName" is declared at the project root but no text beneath it references "%altName%" — the player is asked the question and the answer goes nowhere.
+  placeholder "altName" is declared at the project root but no text beneath it references "%altName%" — the player is asked a question whose answer goes nowhere; use or remove the key.
   hint: Declared at the project root, so this counts every branch.
 WARN CL0535 compile.cl.yaml
-  placeholder "neverUsed" is declared at the project root but no text beneath it references "%neverUsed%" — the player is asked the question and the answer goes nowhere.
+  placeholder "neverUsed" is declared at the project root but no text beneath it references "%neverUsed%" — the player is asked a question whose answer goes nowhere; use or remove the key.
   hint: Declared at the project root, so this counts every branch.
 WARN CL0536 compile.cl.yaml
-  placeholders "altName" and "heroName" ask the same question ("What is your name?"). AID treats identical question text as one placeholder, so the player is prompted once and every one of these keys receives that single answer.
+  placeholders "altName" and "heroName" ask the same question ("What is your name?"). AID treats identical question text as one placeholder, so the player is prompted once and every key receives one shared answer; differentiate or merge the keys.
   hint: If they are meant to be answered separately, give them different question text. If they are meant to share an answer, one key does it with no duplicate prompt to explain."
 `;
 

@@ -262,6 +262,19 @@ describe('every CL code raised in src/ is in the registry', () => {
     const ids = Object.values(REGISTRY).map((e) => e.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  test('CL05xx summaries state the consequence and an author action', () => {
+    const ids = [
+      'CL0510', 'CL0511', 'CL0512', 'CL0520', 'CL0521', 'CL0522',
+      'CL0530', 'CL0531', 'CL0532', 'CL0533', 'CL0534', 'CL0535', 'CL0536',
+      'CL0540', 'CL0541', 'CL0542', 'CL0543', 'CL0544', 'CL0545', 'CL0546',
+    ];
+    for (const id of ids) {
+      const summary = Object.values(REGISTRY).find((entry) => entry.id === id).summary;
+      expect(summary).toMatch(/(?:so|because|will|cannot|fails|treats)/i);
+      expect(summary).toMatch(/(?:declare|correct|break|remove|move|rename|cover|inherit|use|bind|write|differentiate|merge)/i);
+    }
+  });
 });
 
 describe('the compiler / lint split', () => {

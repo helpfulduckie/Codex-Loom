@@ -684,26 +684,31 @@ exactly at the cap warns rather than erroring — the cap is inclusive.
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `CL0510` | ERROR | A referenced variable is not declared anywhere. |
-| `CL0511` | ERROR | Variables form a reference cycle; every key in the loop is named. |
-| `CL0512` | WARN | A variable is unbound with `~` but was never inherited at that node. |
-| `CL0520` | ERROR | A branch-scoped variable was used where only root variables resolve. |
-| `CL0521` | ERROR | A library name collides with a declared variable. |
-| `CL0522` | WARN | A component reads from outside the project, and no `structure.input.library` entry covers it. |
-| `CL0530` | WARN | A placeholder is unbound with `~` but was never inherited at that node. |
-| `CL0531` | ERROR | Placeholder questions form a reference cycle; every key in the loop is named. |
-| `CL0532` | ERROR | A `%key%` reaching compiled output is not declared on that branch. |
-| `CL0533` | ERROR | A placeholder reached a destination AID does not fill: the Description, or a card's `type`. |
-| `CL0534` | WARN | A placeholder reached a title, where AID does not do what writing one implies. |
-| `CL0535` | WARN | A placeholder is declared and referenced nowhere beneath its declaring node. |
-| `CL0536` | WARN | Two or more placeholders declare the same question text. |
-| `CL0540` | ERROR | A `{$X}` token resolves to neither a declared role nor a known item id. |
-| `CL0541` | ERROR | A role name and an item id are the same string, which is ambiguous. |
-| `CL0542` | ERROR | A role is bound to an item id that does not resolve on this branch. |
-| `CL0543` | ERROR | A role is bound to another role name rather than directly to an item id. |
-| `CL0544` | WARN | A role is unbound with `~` but was never inherited at that node. |
-| `CL0545` | WARN | A role is declared and never referenced by a resolved token anywhere in the compile. |
-| `CL0546` | WARN | A `${...}` holds identifier-shaped content, so it reads as a `{$token}` with the brace and the dollar transposed. |
+| `CL0510` | ERROR | An undeclared variable stays literal and fails compilation; declare or correct the key. |
+| `CL0511` | ERROR | A variable cycle cannot expand and fails compilation; break the cycle, or cyclic tokens stay literal. |
+| `CL0512` | WARN | `~` removes no variable that was inherited; remove `~` or inherit it, or the no-op remains. |
+| `CL0520` | ERROR | A branch-only variable cannot resolve before branch enumeration; move it to root scope or move the use into a branch. |
+| `CL0521` | ERROR | A library and variable share a name, so path resolution is ambiguous; rename one declaration. |
+| `CL0522` | WARN | An outside component is not frozen by `--snapshot`; declare its directory as a library entry, or edits remain live. |
+| `CL0530` | WARN | `~` removes no placeholder that was inherited; remove `~` or inherit it, or the no-op remains. |
+| `CL0531` | ERROR | A placeholder cycle cannot expand and fails compilation; break the cycle, or references stay unexpanded. |
+| `CL0532` | ERROR | An undeclared `%key%` reaches AID literally; declare or correct the key, or the literal remains. |
+| `CL0533` | ERROR | A placeholder reaches a destination AID never fills; remove or relocate it, or that output remains invalid. |
+| `CL0534` | WARN | A title does not substitute placeholders, so its raw token is shown; remove or relocate it. |
+| `CL0535` | WARN | A declared placeholder asks a question whose answer goes nowhere; use or remove the key. |
+| `CL0536` | WARN | Identical questions share one AID answer; differentiate or merge the keys, or they remain coupled. |
+| `CL0540` | ERROR | A `{$X}` matches neither a role nor an item id, so it cannot resolve; correct the name. |
+| `CL0541` | ERROR | A role and item id share a name, so `{$X}` is ambiguous and cannot resolve; rename one. |
+| `CL0542` | ERROR | A role targets an item absent from this branch, so its tokens cannot resolve; bind an available item or adjust scope. |
+| `CL0543` | ERROR | A role targets another role, but resolution is one level only; bind it directly to an item id. |
+| `CL0544` | WARN | `~` removes no role that was inherited; remove `~` or inherit it, or the no-op remains. |
+| `CL0545` | WARN | A declared role is never referenced, so its binding has no effect; use or remove the role. |
+| `CL0546` | WARN | AID treats identifier-shaped `${...}` as a player prompt; write `{$...}` for a Codex Loom token. |
+
+**CL05xx messages are written for the author at the point of repair.** Each message names
+what the author will observe while the finding remains, then gives the smallest immediate
+fix; WARN findings describe the unchanged or live behavior that continues until the source
+is corrected, while ERROR findings identify the unresolved output or failed compilation.
 
 `CL0530` exists for a specific footgun rather than for careless authors. A bare `heroName:` with
 nothing after it parses as null, and null is `~` — so the most natural-looking way to

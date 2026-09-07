@@ -84,8 +84,8 @@ function expandQuestions(table, variables, {
         reported.add(signature);
         onWarn(
           CODES.PLACEHOLDER_CYCLE,
-          `placeholders form a reference cycle: ${loop.join(' → ')}. A question cannot `
-          + 'contain itself, directly or through other questions.',
+          `placeholders form a reference cycle: ${loop.join(' → ')}; expansion cannot finish `
+          + 'until the cycle is broken.',
           file,
         );
       }
@@ -165,8 +165,8 @@ function checkUndeclaredPlaceholders(text, table, { diagnostics, file, where, br
     diagnostics.error(
       CODES.PLACEHOLDER_UNDECLARED,
       `undeclared placeholder "%${name}%" in ${where}${branch ? ` on branch "${branch}"` : ''}`
-      + ' — Velvet Lattice substitutes only declared keys, so this reaches the AI as the'
-      + ` literal text "%${name}%".`,
+      + ' — Velvet Lattice substitutes only declared keys, so the AI receives the literal'
+      + ` token until you declare or correct "%${name}%".`,
       { file: file == null ? undefined : String(file) },
       { hint },
     );
@@ -195,7 +195,7 @@ function reportUnusedPlaceholders(declarations, usage, { diagnostics, file } = {
       diagnostics.warn(
         CODES.PLACEHOLDER_UNUSED,
         `placeholder "${key}" is declared ${label} but no text beneath it references `
-        + `"%${key}%" — the player is asked the question and the answer goes nowhere.`,
+        + `"%${key}%" — the player is asked a question whose answer goes nowhere; use or remove the key.`,
         { file: file == null ? undefined : String(file) },
         {
           hint: declPath === ''
@@ -236,7 +236,7 @@ function reportDuplicateQuestions(duplicates, { diagnostics, file }) {
       CODES.PLACEHOLDER_DUPLICATE_QUESTION,
       `placeholders ${keys.map((k) => `"${k}"`).join(' and ')} ask the same question `
       + `("${question}"). AID treats identical question text as one placeholder, so the `
-      + 'player is prompted once and every one of these keys receives that single answer.',
+      + 'player is prompted once and every key receives one shared answer; differentiate or merge the keys.',
       { file: file == null ? undefined : String(file) },
       {
         hint: 'If they are meant to be answered separately, give them different question '

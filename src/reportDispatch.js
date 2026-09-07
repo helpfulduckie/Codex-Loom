@@ -14,7 +14,7 @@ function reportUnusedRoles(declarations, usage, { diagnostics, file }) {
       unused.push(key);
       diagnostics.warn(
         DIAG_CODES.ROLE_UNUSED,
-        `role "${key}" is declared ${label} but no resolved token anywhere references it.`,
+        `role "${key}" is declared ${label} but no resolved token references it, so its binding has no effect; use or remove the role.`,
         { file: file == null ? undefined : String(file) },
       );
     }
@@ -162,10 +162,9 @@ function finalizeDiagnostics({
       diagnostics.warn(
         DIAG_CODES.LIBRARY_DEPENDENCY_UNCOVERED,
         `This component is read from outside the project (${specPath}), and no `
-        + 'structure.input.library entry covers it — --snapshot will not freeze it, and '
-        + 'a live edit to this file changes every project that reaches it. Declare its '
-        + 'directory as a library entry so the freeze and the {%name} it is reached '
-        + 'through are the same thing.',
+        + 'structure.input.library entry covers it — --snapshot will not freeze it, so '
+        + 'live edits change every project that reaches it. Declare its directory as a '
+        + 'library entry to freeze it.',
         { file: specPath },
       );
     }

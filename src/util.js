@@ -187,7 +187,8 @@ function resolveVariables(text, variables, sink = {}) {
           { hint: 'Only root-level variables are available in include/import paths and under structure:.' },
         );
       } else {
-        diagnostics.error(DIAG_CODES.VARIABLE_UNDECLARED, `variable "{%${key}}" is not declared`, loc);
+        diagnostics.error(DIAG_CODES.VARIABLE_UNDECLARED,
+          `variable "{%${key}}" is not declared, so the token remains literal; declare or correct the key.`, loc);
       }
       return match;
     }
