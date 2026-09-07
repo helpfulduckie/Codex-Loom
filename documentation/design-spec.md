@@ -274,7 +274,7 @@ story card with a deliberately empty trigger list, which no render target can ex
 |---|---|
 | `empty-triggers` lint | No — trigger-less is the intended state |
 | Seed-map inclusion | No — it would sit permanently atop "never seeded" |
-| Card-size ranking | Reported in its own section — it never enters context |
+| Body-size ranking | Reported in its own section — it never enters context |
 | Platform field caps (§8.5) | **Yes** |
 | Unresolved-token / leaked-artifact sweep | **Yes** |
 
@@ -1006,7 +1006,7 @@ stated line, `off` would let a project ship with an undeclared role — the exac
 | | Compiler diagnostics | Lint findings |
 |---|---|---|
 | What | Facts about the output | Opinions about quality |
-| Examples | unknown key, undeclared role, the no-output invariant, platform caps, undeclared `%x%`, a placeholder AID will not fill, a leaked `{$she}` or `{join}` | `empty-triggers`, seed-map and card-size ranking, `suspect-verb-marker`, the `${…}` confusability check, unused and duplicate declarations |
+| Examples | unknown key, undeclared role, the no-output invariant, platform caps, undeclared `%x%`, a placeholder AID will not fill, a leaked `{$she}` or `{join}` | `empty-triggers`, seed-map and body-size ranking, `suspect-verb-marker`, the `${…}` confusability check, unused and duplicate declarations |
 | Silenceable | No | Yes — `lint.level`, per-pack `level:`, or unbind the pack |
 | An ERROR fails the build | Always | Only packs emit opinion-layer ERRORs (§8.2.2) |
 
@@ -1336,7 +1336,7 @@ covers it. Later work is a task queue, not a phase — there is no Phase 18.
 | 2 | `emit/vl.js`; templates render body only; shared parser; trigger `_` padding; `notes:` field; `encapsulate`→`wrapper` | §4.2, §4.5, §8, §8.4, §8.6 |
 | 3 | Item/slot model; `pe.js` deleted; component sections; the no-output invariant; `--with-inventory` | §7.2, §7.4, §7.9 |
 | 4 | Player placeholders + the `${…}` confusability lint | §12 |
-| 5 | Platform limits (caps, WARN bands, `--card-sizes` rework); `kind:`; the compiler/lint split and `lint.level` | §4.8, §8.5, §12.5 |
+| 5 | Platform limits (caps, WARN bands, `--body-sizes` rework); `kind:`; the compiler/lint split and `lint.level` | §4.8, §8.5, §12.5 |
 | 6 | Component `imports:`; the section fan-out and arity-silence rule; description as a component, split into `description:` / `adventureDescription:`; openings onto the sections grammar; the `notes:` cap | §7.6, §7.7, §7.1 |
 | 7 | The library snapshot (items, components, shared templates); `canon:`→`library:` and `vault:`→`snapshot:` renames | §11 |
 | 8 | Roles; the migration review queue; the `--migrate` CLI; `protagonist:` retired into `roles:` | §9, §14.2 |

@@ -145,7 +145,7 @@ function formatRowLine(row, leafless) {
 }
 
 function formatBodySizeMd(rootDirName, leafless, rows) {
-  const parts = [`# Card Sizes — ${rootDirName}`];
+  const parts = [`# Body Sizes — ${rootDirName}`];
 
   const summary = ['| Target | Measured | Over | Near | Tightest |', '|---|---|---|---|---|'];
   for (const section of SECTIONS) {

@@ -1,4 +1,4 @@
-# Card Sizes — output
+# Body Sizes — output
 
 | Target | Measured | Over | Near | Tightest |
 |---|---|---|---|---|

@@ -5,7 +5,7 @@ const PROJECTS = [
   {
     name: 'showcase',
     dir: 'showcase',
-    reports: ['seed-map', 'card-sizes', 'lint', 'overview', 'leaf-review'],
+    reports: ['seed-map', 'body-sizes', 'lint', 'overview', 'leaf-review'],
     compileReports: ['inventory', 'schemaTables'],
   },
   {

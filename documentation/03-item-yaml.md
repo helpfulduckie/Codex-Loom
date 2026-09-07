@@ -119,7 +119,7 @@ Whether this item is narrative content or reference material. `story` (the defau
 |---|---|
 | `empty-triggers` lint | No — trigger-less is the intended state |
 | Seed-map inclusion | No — it would sit permanently atop "never seeded" |
-| Card-size ranking | Reported separately — it never enters context |
+| Body-size ranking | Reported separately — it never enters context |
 | Platform field caps | **Yes** |
 | Unresolved-token and artifact diagnostics | **Yes** |
 

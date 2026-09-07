@@ -45,7 +45,7 @@ codex-loom --seed-map path/to/project/
 codex-loom -s path/to/project/
 
 # Generate an item body size report (see below)
-codex-loom --card-sizes path/to/project/
+codex-loom --body-sizes path/to/project/
 codex-loom -b path/to/project/
 
 # Generate a syntax lint report (see below)
@@ -67,7 +67,7 @@ codex-loom --compile --leafReview --overview path/to/project/
 codex-loom -C -l -o path/to/project/
 ```
 
-**Mode flags** — `-C`/`--compile`, `-l`/`--leafReview`, `-o`/`--overview`, `-s`/`--seed-map`, `-b`/`--card-sizes`, `-L`/`--lint`, `--snapshot`, `--migrate` — control what runs. Any combination is valid except `--migrate`, which runs alone.
+**Mode flags** — `-C`/`--compile`, `-l`/`--leafReview`, `-o`/`--overview`, `-s`/`--seed-map`, `-b`/`--body-sizes`, `-L`/`--lint`, `--snapshot`, `--migrate` — control what runs. Any combination is valid except `--migrate`, which runs alone.
 
 **Compile options** — `-d`/`--with-diff`, `-a`/`--with-annotate`, `-i`/`--with-inventory`, `-c`/`--clean`, `-v`/`--verbose`, `--live` — modify a compile rather than selecting one. The first three emit review reports from data that only exists in memory during compilation, so any of them forces a compile. (`--diff`, `--annotate` and `--inventory` are accepted as aliases.)
 
@@ -109,7 +109,7 @@ Two files are written to the overview folder:
 
 "Seeded By" counts distinct seeder items, not individual trigger matches. Items with a count of 0 are never organically pulled in by another item's body text.
 
-**Item sizes** (`-b`/`--card-sizes`) — Reads compiled output and measures every item body and every `Opening.md` against AID's field caps: 2,000 characters for a story card body, 4,000 for an Opening. Two files are written to the overview folder:
+**Item sizes** (`-b`/`--body-sizes`) — Reads compiled output and measures every item body and every `Opening.md` against AID's field caps: 2,000 characters for a story card body, 4,000 for an Opening. Two files are written to the overview folder:
 
 | File | Contents |
 |---|---|
@@ -130,7 +130,7 @@ Two files are written to the overview folder:
 
 `Status` is `OVER` past the cap, `NEAR` within 10% of it, `OK` below that — the same bands the compiler raises `CL0710`–`CL0713` on, so the report and the build agree. `Target` is `Card` or `Opening`; `Kind` is `story`/`reference` for a card and `leaf`/`framing` for an Opening. Reference items get their own section in the markdown report: soft heuristics skip them, but the caps do not.
 
-**The third cap is enforced but not reported here.** An item's `notes:` — AID's `description` field — is capped at 10,000 characters (`CL0714` over, `CL0715` within 10%), and the compiler checks it on every build. `--card-sizes` measures only `Card` and `Opening` targets, so a `notes:` field near its limit shows up as a compile diagnostic and not as a row in these files. It matters most for `render.storyCards` alternates, which put a whole rendered component into `notes:` — see [Components](09-components.md#swappable-alternates--renderstorycards).
+**The third cap is enforced but not reported here.** An item's `notes:` — AID's `description` field — is capped at 10,000 characters (`CL0714` over, `CL0715` within 10%), and the compiler checks it on every build. `--body-sizes` measures only `Card` and `Opening` targets, so a `notes:` field near its limit shows up as a compile diagnostic and not as a row in these files. It matters most for `render.storyCards` alternates, which put a whole rendered component into `notes:` — see [Components](09-components.md#swappable-alternates--renderstorycards).
 
 Each `Opening.md` is measured as its own file rather than per branch, because Velvet Lattice merges components by filename — a leaf's opening *replaces* an ancestor's rather than adding to it. For single-branch scenarios the `Branch` column is omitted.
 

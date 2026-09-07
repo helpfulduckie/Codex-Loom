@@ -227,7 +227,7 @@
 
 # ── §4.8 and §8.5 together: a reference card inside the WARN band ────────────
 # `kind: reference` exempts an item from the soft heuristics — empty-triggers, the seed
-# map, the card-size ranking — and exempts it from nothing that the platform enforces.
+# map, the body-size ranking — and exempts it from nothing that the platform enforces.
 # CL0713, WARN, on a card that carries no triggers on purpose. This item is also what
 # pins the fence key: `kind: reference` is written into the `~~~` block, `story` is not.
 - id: Ledger

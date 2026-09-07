@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * `--card-sizes` after the Phase 5 Step 6 rework.
+ * `--body-sizes` after the Phase 5 Step 6 rework.
  *
  * The golden corpus pins the report's bytes but cannot test what the rework is *for*: it
  * holds no placeholders, no `kind: reference` card and nothing within a thousand characters

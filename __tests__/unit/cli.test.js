@@ -626,3 +626,57 @@ describe('CLI version: 4 detection', () => {
     expect(result.stderr).toMatch(/unsupported/i);
   });
 });
+
+// ── unknown options ───────────────────────────────────────────────────────────
+
+describe('CLI unknown options', () => {
+  let tmp;
+
+  beforeEach(() => {
+    tmp = withTmpDir();
+    write(path.join(tmp, 'proj', 'compile.yaml'), MINIMAL_COMPILE_YAML);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test('a dash-led typo is rejected rather than read as the config path', () => {
+    const result = run(['--wildly-wrong', path.join(tmp, 'proj')], tmp);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Unknown option --wildly-wrong');
+    expect(result.stderr).not.toMatch(/No compile\.yaml found/);
+  });
+
+  test('a near miss names the flag it was probably meant to be', () => {
+    const result = run(['--card-sizes', path.join(tmp, 'proj')], tmp);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Did you mean --body-sizes?');
+  });
+
+  test('a typo far from every flag is reported without a guess', () => {
+    const result = run(['--zzzzzzzzzzzz', path.join(tmp, 'proj')], tmp);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Unknown option --zzzzzzzzzzzz');
+    expect(result.stderr).not.toMatch(/Did you mean/);
+  });
+
+  test('every unknown option is listed, not just the first', () => {
+    const result = run(['--nope-one', '--nope-two', path.join(tmp, 'proj')], tmp);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Unknown option --nope-one');
+    expect(result.stderr).toContain('Unknown option --nope-two');
+  });
+
+  test('a repeated known flag is consumed, not mistaken for an unknown one', () => {
+    const result = run(['-C', '-C', path.join(tmp, 'proj')], tmp);
+    expect(result.stderr).not.toMatch(/Unknown option/);
+    expect(result.status).toBe(0);
+  });
+
+  test('a bare path still compiles', () => {
+    const result = run([path.join(tmp, 'proj')], tmp);
+    expect(result.stderr).not.toMatch(/Unknown option/);
+    expect(result.status).toBe(0);
+  });
+});

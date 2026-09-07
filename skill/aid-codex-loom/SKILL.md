@@ -82,7 +82,7 @@ existing output tree.
 | `-l` / `--leafReview` | One review file per branch leaf |
 | `-o` / `--overview` | A single whole-tree overview |
 | `-s` / `--seed-map` | Seed map |
-| `-b` / `--card-sizes` | Item body size report — the platform-cap diagnostic |
+| `-b` / `--body-sizes` | Item body size report — the platform-cap diagnostic |
 | `-L` / `--lint` | Syntax lint over the compiled tree |
 | `--snapshot` | Freeze the library into `snapshot/`, with a `sync-diff.txt` review artifact |
 | `--migrate` | Convert a v3 project in place; does not compile |

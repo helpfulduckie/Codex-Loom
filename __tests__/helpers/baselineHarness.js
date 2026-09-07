@@ -54,13 +54,13 @@ const HAVE_GOLDENS = fs.existsSync(path.join(GOLDEN_DIR, 'projects.js'));
 /**
  * The report modes reachable as `(scenarioRoot, outputDir, options)` against an
  * already-written tree — the harness calls each one directly and it writes into `outputDir`.
- * `seed-map`, `card-sizes` and `lint` parse compiled cards back into the model, which is how
+ * `seed-map`, `body-sizes` and `lint` parse compiled cards back into the model, which is how
  * `emit/vl.js:parseCards` gets tested against real output; `overview` and `leaf-review` read
  * files wholesale and match the same signature.
  */
 const DEFAULT_REPORT_MODES = {
   'seed-map': () => require('../../src/seedmap').runSeedMapMode,
-  'card-sizes': () => require('../../src/bodysize').runBodySizeMode,
+  'body-sizes': () => require('../../src/bodysize').runBodySizeMode,
   lint: () => require('../../src/lint').runLintMode,
   overview: () => require('../../src/overview').runOverviewMode,
   'leaf-review': () => require('../../src/overview').runLeafReviewMode,

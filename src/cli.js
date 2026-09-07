@@ -112,13 +112,47 @@ function renderMigrationReport(result) {
 }
 
 
+function editDistance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
+ * The nearest known alias, or null when nothing is close enough to be worth guessing.
+ * The tolerance scales with length so a short flag cannot match half the roster.
+ */
+function nearestFlag(arg, aliases) {
+  let best = null;
+  let bestDistance = Infinity;
+  for (const alias of aliases) {
+    const distance = editDistance(arg, alias);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = alias;
+    }
+  }
+  return bestDistance <= Math.max(2, Math.floor(arg.length / 3)) ? best : null;
+}
+
+
 function main(rawArgs) {
   const knownFlags = [
     ['compile',    ['--compile',    '-C']],
     ['leafReview', ['--leafReview', '-l']],
     ['overview',   ['--overview',   '-o']],
     ['seedMap',    ['--seed-map',   '-s']],
-    ['cardSizes',  ['--card-sizes', '-b']],
+    ['bodySizes',  ['--body-sizes', '-b']],
     ['lint',       ['--lint',       '-L']],
     ['snapshot',   ['--snapshot']],
     ['migrate',    ['--migrate']],
@@ -135,9 +169,11 @@ function main(rawArgs) {
   const flags = {};
   const flagIdxs = new Set();
   for (const [key, aliases] of knownFlags) {
-    const idx = rawArgs.findIndex(a => aliases.includes(a));
-    flags[key] = idx !== -1;
-    if (idx !== -1) flagIdxs.add(idx);
+    // Every occurrence is consumed, not just the first: a repeated flag must not
+    // survive into `positional`, where the unknown-option guard would reject it.
+    const idxs = rawArgs.reduce((acc, a, i) => (aliases.includes(a) ? acc.concat(i) : acc), []);
+    flags[key] = idxs.length > 0;
+    for (const idx of idxs) flagIdxs.add(idx);
   }
 
   const log = {
@@ -168,24 +204,37 @@ function main(rawArgs) {
 
   const positional = rawArgs.filter((_, i) => !flagIdxs.has(i));
 
+  // Anything dash-led left over is a typo, not a path. Without this it becomes the
+  // config path and the failure reads as a missing compile.yaml at a nonsense location.
+  const unknown = positional.filter((a) => a.startsWith('-') && a !== '-');
+  if (unknown.length > 0) {
+    const aliases = knownFlags.flatMap(([, names]) => names).concat('--lint-level');
+    for (const arg of unknown) {
+      const guess = nearestFlag(arg, aliases);
+      console.error(`Unknown option ${arg}.${guess ? ` Did you mean ${guess}?` : ''}`);
+    }
+    console.error('Run codex-loom with no arguments for the full option list.');
+    return 1;
+  }
+
   const doCompile    = flags.compile || flags.diff || flags.annotate || flags.inventory ||
     flags.schemaTables ||
-    (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint &&
+    (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.bodySizes && !flags.lint &&
       !flags.snapshot && !flags.migrate);
   const doLeafReview = flags.leafReview;
   const doOverview   = flags.overview;
   const doSeedMap    = flags.seedMap;
-  const doCardSizes  = flags.cardSizes;
+  const doBodySizes  = flags.bodySizes;
   const doLint       = flags.lint;
   const doSnapshot   = flags.snapshot;
 
   if (positional.length === 0 && !flags.compile && !flags.diff && !flags.annotate &&
       !flags.inventory && !flags.schemaTables &&
-      !flags.leafReview && !flags.overview && !flags.seedMap && !flags.cardSizes && !flags.lint &&
+      !flags.leafReview && !flags.overview && !flags.seedMap && !flags.bodySizes && !flags.lint &&
       !flags.snapshot && !flags.migrate) {
     console.error(
       'Usage: codex-loom [mode flags] [compile options] [<folder | compile.yaml>]\n' +
-      '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --card-sizes|-b  --lint|-L  --snapshot  --migrate\n' +
+      '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --body-sizes|-b  --lint|-L  --snapshot  --migrate\n' +
       '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-inventory|-i  --schema-tables  --clean|-c  --verbose|-v  --live\n' +
       '  Migrate options:       --rename-cl  (§4.6: also rename compile.yaml to compile.cl.yaml)\n' +
       '  Diagnostics:           --lint-level=off|error|warn  (overrides lint.level; reaches the opinion layer only)\n' +
@@ -300,7 +349,7 @@ function main(rawArgs) {
     }
   }
 
-  if (doLeafReview || doOverview || doSeedMap || doCardSizes || doLint) {
+  if (doLeafReview || doOverview || doSeedMap || doBodySizes || doLint) {
     if (!scenarioRoot) {
       console.error('No compile.yaml in current directory and no path given.');
       return 1;
@@ -315,7 +364,7 @@ function main(rawArgs) {
         doLeafReview && 'leaf-review',
         doOverview   && 'overview',
         doSeedMap    && 'seed-map',
-        doCardSizes  && 'card-sizes',
+        doBodySizes  && 'body-sizes',
         doLint       && 'lint',
       ].filter(Boolean).join(' + ');
       console.log(`\n${modeLabel} mode\nScenario root : ${scenarioRoot}\nOutput dir    : ${outputDir}\n`);
@@ -352,12 +401,12 @@ function main(rawArgs) {
         if (result.written.length > 0) summaryParts.push(files(result.written.length, 'overview'));
       }
 
-      if (doCardSizes) {
+      if (doBodySizes) {
         const { runBodySizeMode } = require('./bodysize');
-        const dir = path.join(outputDir, 'card-sizes');
+        const dir = path.join(outputDir, 'body-sizes');
         fs.mkdirSync(dir, { recursive: true });
         const result = runBodySizeMode(scenarioRoot, dir, { log });
-        if (result.written.length > 0) summaryParts.push(files(result.written.length, 'card size'));
+        if (result.written.length > 0) summaryParts.push(files(result.written.length, 'body size'));
         else console.warn('No cards or Openings found — nothing to size.');
       }
 

@@ -222,7 +222,7 @@ describe('renderCard', () => {
    *
    * `story` is the default and writing it would move every existing byte to say nothing,
    * which is also why no golden fixture moves when this lands. `reference` is written
-   * because the reports that act on it — `--card-sizes`, `--lint` — parse the compiled
+   * because the reports that act on it — `--body-sizes`, `--lint` — parse the compiled
    * tree and have no other channel back to the source.
    */
   describe('kind: reference in the fence', () => {

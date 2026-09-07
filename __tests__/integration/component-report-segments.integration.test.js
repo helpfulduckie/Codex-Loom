@@ -11,7 +11,7 @@
  * `aiInstructions:` at one shared `.md` passthrough, and both Author's Note files are a
  * single section holding a plain string, so every one of them has exactly one segment
  * under either scheme. The cross-branch diff report is not in the golden report fixtures
- * at all — `REPORT_MODES` freezes seed-map, card-sizes and lint. So this file is the only
+ * at all — `REPORT_MODES` freezes seed-map, body-sizes and lint. So this file is the only
  * thing standing between the change and a silent regression.
  *
  * What the segment key buys is the shared/delta partition, not the rendered text.
