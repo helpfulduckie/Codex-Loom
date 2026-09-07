@@ -137,16 +137,16 @@ resting on nothing. Sync still runs and the entry's files are still frozen; only
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `CL0201` | ERROR | Unknown key. Carries a spelling suggestion when one is close. |
-| `CL0202` | ERROR | Key has the wrong value type. |
-| `CL0203` | ERROR | A required key is missing. |
-| `CL0204` | WARN | Key is recognized but not read — either it is not yet consumed or it never will be; it is ignored. |
-| `CL0205` | WARN | Key has been superseded by another spelling. |
-| `CL0206` | ERROR | Key takes a closed set of values and got something else. |
-| `CL0207` | ERROR | A number is outside its descriptor's inclusive `min`/`max` bounds. Used by convention-pack schemas; no `compile.yaml` key declares bounds. |
-| `CL0208` | ERROR | A string does not match its descriptor's `pattern:` regex, compiled case-insensitively. Used by convention-pack schemas; no `compile.yaml` key declares a pattern. |
-| `CL0209` | ERROR | `version: 4` is missing or wrong. A missing key or `version: 3` names `--migrate`; any other value is reported as unsupported. Raised before the rest of schema validation, so a v3 config gets this line alone. |
-| `CL0210` | ERROR | Key is valid, but at a different level — with the level named. |
+| `CL0201` | ERROR | An unknown key is ignored, so its value has no effect; remove it or rename it to a supported key. A close spelling gets a hint. |
+| `CL0202` | ERROR | A key has the wrong value type, so that value is not validated or used; replace it with the required type. |
+| `CL0203` | ERROR | A required key is absent, so the containing value cannot be validated or used; add the key. |
+| `CL0204` | WARN | A recognized key is ignored because the compiler does not read it; remove it or use a supported key until it is implemented. |
+| `CL0205` | WARN | A key uses an older spelling; replace it with the current spelling so the configuration keeps working if the old spelling is removed. |
+| `CL0206` | ERROR | A key has a value outside its allowed set, so the value is rejected; replace it with one of the listed values. |
+| `CL0207` | ERROR | A number is outside its descriptor's inclusive `min`/`max` bounds, so the value is rejected; change it to a value within the bounds. Used by convention-pack schemas; no `compile.yaml` key declares bounds. |
+| `CL0208` | ERROR | A string does not match its descriptor's `pattern:` regex, so the value is rejected; change it to match the pattern. Used by convention-pack schemas; no `compile.yaml` key declares a pattern. |
+| `CL0209` | ERROR | The project is not declared as v4, so configuration loading stops; set `version: 4` or run `--migrate` for a v3 project. A missing key or `version: 3` names `--migrate`; any other value is reported as unsupported. |
+| `CL0210` | ERROR | A valid key is at the wrong level, so it is ignored there; move it to the reported level. Relocation is suggested before edit-distance spelling. |
 
 ### CL0210 in detail
 

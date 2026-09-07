@@ -35,14 +35,14 @@ exports[`pathological fixture a hand-edited snapshot file aborts the load 1`] = 
 
 exports[`pathological fixture config schema violations abort the load 1`] = `
 "ERROR CL0201 compile.cl.yaml
-  Unknown key "report" under "structure".
-  hint: Did you mean "reports"?
+  Unknown key "report" under "structure"; remove it or rename/move it to a supported location, or it is ignored.
+  hint: "report" is not recognized, so it is ignored; rename it to "reports".
 ERROR CL0210 compile.cl.yaml
-  Unknown key "notesTemplate" at the top level.
-  hint: "notesTemplate" is valid under "render:" — did you mean to nest it there?
+  Unknown key "notesTemplate" at the top level; remove it or rename/move it to a supported location, or it is ignored.
+  hint: "notesTemplate" is valid under "render:" — move it there so the compiler reads it; until then, it is ignored here.
 ERROR CL0201 compile.cl.yaml
-  Unknown key "placeholder" at the top level.
-  hint: Did you mean "placeholders"?"
+  Unknown key "placeholder" at the top level; remove it or rename/move it to a supported location, or it is ignored.
+  hint: "placeholder" is not recognized, so it is ignored; rename it to "placeholders"."
 `;
 
 exports[`pathological fixture placement invariants and latent placeholder content 1`] = `

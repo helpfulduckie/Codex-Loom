@@ -151,13 +151,13 @@ function loadCompileConfig(configPath, options = {}) {
     if (version === undefined || version === null || version === 3) {
       diagnostics.error(
         CODES.UNSUPPORTED_VERSION,
-        'This looks like a v3 project. Run `codex-loom --migrate <project>` to convert it to v4.',
+        'This looks like a v3 project, so configuration loading stops. Run `codex-loom --migrate <project>` to convert it to v4, or set version: 4 in a v4 project.',
         at('version'),
       );
     } else {
       diagnostics.error(
         CODES.UNSUPPORTED_VERSION,
-        `Unsupported compile.yaml version ${JSON.stringify(version)}; v4 is the only supported version.`,
+        `Unsupported compile.yaml version ${JSON.stringify(version)}, so configuration loading stops; set version: 4.`,
         at('version'),
       );
     }

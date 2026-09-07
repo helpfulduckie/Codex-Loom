@@ -82,7 +82,7 @@ const REMOVED = Object.freeze({
   card: {
     hint: '"card:" is gone in v4. Its replacement is "render.storyCards" (§7.8) — a list of '
       + 'independent renderings, each an alternate the player can swap in. Re-author it there; '
-      + 'there is no automatic migration for this one.',
+      + 'there is no automatic migration for this one, and the old card is ignored.',
   },
 });
 
@@ -97,7 +97,7 @@ function suggestFor(key, ownPath, declaredHere, keyIndex) {
     return {
       code: CODES.UNKNOWN_KEY,
       hint: `"${key}" was renamed to "${renamedTo}" in v4. Rename it here, or convert the whole `
-        + `project with codex-loom --migrate <project> (§14.2).`,
+        + `project with codex-loom --migrate <project> (§14.2). Until then, this key is ignored.`,
     };
   }
 
@@ -107,8 +107,8 @@ function suggestFor(key, ownPath, declaredHere, keyIndex) {
     return {
       code: CODES.MISPLACED_KEY,
       hint: owner
-        ? `"${key}" is valid under "${owner}:" — did you mean to nest it there?`
-        : `"${key}" is valid at the top level — did you mean to move it there?`,
+        ? `"${key}" is valid under "${owner}:" — move it there so the compiler reads it; until then, it is ignored here.`
+        : `"${key}" is valid at the top level — move it there so the compiler reads it; until then, it is ignored here.`,
     };
   }
 
@@ -118,7 +118,10 @@ function suggestFor(key, ownPath, declaredHere, keyIndex) {
     const tolerance = Math.max(1, Math.floor(candidate.length / 3));
     if (distance <= tolerance && (!best || distance < best.distance)) best = { candidate, distance };
   }
-  if (best) return { code: CODES.UNKNOWN_KEY, hint: `Did you mean "${best.candidate}"?` };
+  if (best) return {
+    code: CODES.UNKNOWN_KEY,
+    hint: `"${key}" is not recognized, so it is ignored; rename it to "${best.candidate}".`,
+  };
 
   return { code: CODES.UNKNOWN_KEY, hint: null };
 }
@@ -199,7 +202,7 @@ function validate(value, schema, options = {}) {
     if (!types.some((t) => matchesType(normalized, t))) {
       diagnostics.error(
         CODES.WRONG_TYPE,
-        `"${display(currentPath) || '<root>'}" must be ${typeName(types)}, but is ${describeType(normalized)}${inContext}.`,
+        `"${display(currentPath) || '<root>'}" must be ${typeName(types)}, but is ${describeType(normalized)}${inContext}; replace it with the required type or the value is ignored.`,
         locate(currentPath)
       );
       return normalized;
@@ -209,7 +212,7 @@ function validate(value, schema, options = {}) {
       diagnostics.error(
         CODES.VALUE_NOT_ALLOWED,
         `"${display(currentPath) || '<root>'}" is ${JSON.stringify(normalized)}, but must be `
-        + `${descriptor.values.map((v) => JSON.stringify(v)).join(' or ')}${inContext}.`,
+        + `${descriptor.values.map((v) => JSON.stringify(v)).join(' or ')}${inContext}; replace it with one of those values or it is rejected.`,
         locate(currentPath)
       );
       return normalized;
@@ -222,7 +225,7 @@ function validate(value, schema, options = {}) {
       if (below || above) {
         diagnostics.error(
           CODES.VALUE_OUT_OF_RANGE,
-          `"${display(currentPath) || '<root>'}" is ${normalized}, but must be ${rangeText(descriptor)}${inContext}.`,
+          `"${display(currentPath) || '<root>'}" is ${normalized}, but must be ${rangeText(descriptor)}${inContext}; change it to a value in that range or it is rejected.`,
           locate(currentPath)
         );
         return normalized;
@@ -240,7 +243,7 @@ function validate(value, schema, options = {}) {
         diagnostics.error(
           CODES.PATTERN_MISMATCH,
           `"${display(currentPath) || '<root>'}" is ${JSON.stringify(normalized)}, but must match `
-          + `${JSON.stringify(String(descriptor.pattern))}${inContext}.`,
+          + `${JSON.stringify(String(descriptor.pattern))}${inContext}; change it to match the pattern or it is rejected.`,
           locate(currentPath)
         );
         return normalized;
@@ -268,14 +271,14 @@ function validate(value, schema, options = {}) {
             const { code, hint } = suggestFor(key, currentPath.slice(displayOffset), declared, keyIndex);
             const shown = display(currentPath);
             const where = shown ? `under "${shown}"` : 'at the top level';
-            diagnostics.error(code, `Unknown key "${key}" ${where}${inContext}.`, locate([...currentPath, key]), { hint });
+            diagnostics.error(code, `Unknown key "${key}" ${where}${inContext}; remove it or rename/move it to a supported location, or it is ignored.`, locate([...currentPath, key]), { hint });
             continue;
           }
 
           if (child.note && diagnostics) {
             const message = child.noteFinal
-              ? `"${key}" is recognized but is not a render target and never will be — ${child.note}. It is ignored.`
-              : `"${key}" is recognized but not yet implemented — ${child.note}. It will be ignored.`;
+              ? `"${key}" is recognized but is not a render target and never will be — ${child.note}. Remove it or use a supported key; it is ignored.`
+              : `"${key}" is recognized but not yet implemented — ${child.note}. Remove it or use a supported key; it is ignored until implemented.`;
             diagnostics.warn(
               CODES.NOT_YET_IMPLEMENTED,
               message,
@@ -285,7 +288,7 @@ function validate(value, schema, options = {}) {
           if (child.alias && diagnostics) {
             diagnostics.warn(
               CODES.SUPERSEDED_KEY,
-              `"${key}" has been superseded by "${child.alias}".`,
+              `"${key}" has been superseded by "${child.alias}"; replace it with the current spelling so it keeps working if the old spelling is removed.`,
               locate([...currentPath, key])
             );
           }
@@ -297,7 +300,7 @@ function validate(value, schema, options = {}) {
           if (child.required && normalized[key] === undefined && diagnostics) {
             diagnostics.error(
               CODES.MISSING_REQUIRED,
-              `Missing required key "${key}"${display(currentPath) ? ` under "${display(currentPath)}"` : ''}${inContext}.`,
+              `Missing required key "${key}"${display(currentPath) ? ` under "${display(currentPath)}"` : ''}${inContext}; add it or validation of this value fails.`,
               locate(currentPath)
             );
           }
@@ -312,7 +315,7 @@ function validate(value, schema, options = {}) {
           } else if (child.required && diagnostics) {
             diagnostics.error(
               CODES.MISSING_REQUIRED,
-              `Missing required key "${key}"${display(currentPath) ? ` under "${display(currentPath)}"` : ''}${inContext}.`,
+              `Missing required key "${key}"${display(currentPath) ? ` under "${display(currentPath)}"` : ''}${inContext}; add it or validation of this value fails.`,
               locate(currentPath)
             );
           }

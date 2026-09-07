@@ -65,7 +65,7 @@ describe('relocation suggestions', () => {
   test('a valid key at the wrong level suggests where it belongs', () => {
     const { diagnostics, codes } = run({ canon: { a: 'b' }, structure: { output: 'o' } });
     expect(codes).toContain(CODES.MISPLACED_KEY);
-    expect(diagnostics.errors[0].hint).toBe('"canon" is valid under "structure.input:" — did you mean to nest it there?');
+    expect(diagnostics.errors[0].hint).toBe('"canon" is valid under "structure.input:" — move it there so the compiler reads it; until then, it is ignored here.');
   });
 
   test('relocation is preferred over a spelling suggestion', () => {
@@ -73,18 +73,18 @@ describe('relocation suggestions', () => {
     // not offer an edit-distance guess at some other top-level key.
     const { diagnostics, codes } = run({ reports: './r', structure: { output: 'o' } });
     expect(codes).toContain(CODES.MISPLACED_KEY);
-    expect(diagnostics.errors[0].hint).toContain('nest it there');
+    expect(diagnostics.errors[0].hint).toContain('move it there');
   });
 
   test('a misspelling falls back to edit distance', () => {
     const { diagnostics, codes } = run({ structure: { output: 'o', reprots: './r' } });
     expect(codes).toContain(CODES.UNKNOWN_KEY);
-    expect(diagnostics.errors[0].hint).toBe('Did you mean "reports"?');
+    expect(diagnostics.errors[0].hint).toBe('"reprots" is not recognized, so it is ignored; rename it to "reports".');
   });
 
   test('a transposition is caught — the commonest typo', () => {
     const { diagnostics } = run({ titel: 'x' });
-    expect(diagnostics.errors[0].hint).toBe('Did you mean "title"?');
+    expect(diagnostics.errors[0].hint).toBe('"titel" is not recognized, so it is ignored; rename it to "title".');
   });
 
   test('a key resembling nothing gets no hint rather than a nonsense one', () => {
@@ -324,4 +324,3 @@ describe('levenshtein', () => {
     expect(levenshtein(a, b)).toBe(expected);
   });
 });
-
