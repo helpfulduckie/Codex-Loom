@@ -35,7 +35,7 @@ function checkNoFences(files, ext, diagnostics) {
     if (!entry.content.includes('~~~')) continue;
     diagnostics.error(
       CODES.TEMPLATE_CONTAINS_FENCE,
-      `Template "${name}" still contains a ~~~ fence, so its body is invalid; remove the story-card envelope and fence, and the fence remains until fixed.`,
+      `Template "${name}" still contains a ~~~ fence, so its body is invalid; remove the story-card envelope and fence.`,
       { file: entry._source },
       {
         hint: 'The story-card envelope (## heading, ~~~ fence, triggers/encapsulate/notes '

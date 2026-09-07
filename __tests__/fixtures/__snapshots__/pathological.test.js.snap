@@ -10,11 +10,11 @@ WARN CL0630 compile.cl.yaml
 WARN CL0631 compile.cl.yaml
   branch "south" resolves no aiInstructions:. Velvet Lattice writes an empty-string AI Instructions on AID's side for it, and an empty string suppresses AID's model-default instructions rather than falling back to them — the leaf plays with none at all. Give the branch an aiInstructions:, or one an ancestor passes down.
 WARN CL0426 Codex/items.cl.yaml
-  body key "strength" on item "Alba" is read by no template this item renders through and no declaration names it — its content is dropped from the compiled card; remove or declare and render the key, and the content stays dropped until fixed.
+  body key "strength" on item "Alba" is read by no template this item renders through and no declaration names it — its content is dropped from the compiled card; remove or declare and render the key.
 WARN CL0427 Codex/items.cl.yaml
-  body key "homeland" on item "Cairn" is a declared field in group \`origin\`, which no template this item renders through includes — its content is dropped from the compiled card; include the field in a rendered template or remove it, and the content stays dropped until fixed.
+  body key "homeland" on item "Cairn" is a declared field in group \`origin\`, which no template this item renders through includes — its content is dropped from the compiled card; include the field in a rendered template or remove it.
 WARN CL0428 templates/fields.cl.yaml
-  field "deadField" is declared in the field table but no template names it, directly or through a group, so the declaration has no effect; remove it or reference it, and it remains unused until fixed."
+  field "deadField" is declared in the field table but no template names it, directly or through a group, so the declaration has no effect; remove it or reference it."
 `;
 
 exports[`pathological fixture a committed manifest that disagrees with the config and the disk 1`] = `
@@ -92,25 +92,25 @@ ERROR CL0413 templates/Broken.template
 ERROR CL0415 templates/Unclosed.template
   Unclosed {if $body.Tagline} block; close the block, and the opening tag remains literal until fixed.
 ERROR CL0433 Codex/items.cl.yaml
-  compiled output contains leaked template tag {if $body.Tagline}; close or correct the source tag, and it remains in output until fixed in item "UnclosedBlock" (character)
+  compiled output contains leaked template tag {if $body.Tagline}; close or correct the source tag in item "UnclosedBlock" (character)
 ERROR CL0541 (branch open)
-  "Anchor" is both a declared role and an item id, which is ambiguous — rename the role or item; the token remains unresolved until fixed.
+  "Anchor" is both a declared role and an item id, which is ambiguous — rename the role or item.
 ERROR CL0542 (branch open)
   role "Missing" is bound to "NoSuchItem", which does not resolve on this branch; bind it to an available item or adjust branch scope.
 ERROR CL0540 (branch open)
-  "{$Missing}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Missing}" does not resolve to a declared role or a known item id, so the token cannot resolve; correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0543 (branch open)
-  role "Loop" is bound to "LI", which is itself a role — bind it directly to an item id; its tokens remain unresolved until fixed.
+  role "Loop" is bound to "LI", which is itself a role — bind it directly to an item id.
 ERROR CL0540 (branch open)
-  "{$Loop}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Loop}" does not resolve to a declared role or a known item id, so the token cannot resolve; correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0540 (branch open)
-  "{$Undeclared}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Undeclared}" does not resolve to a declared role or a known item id, so the token cannot resolve; correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
-  compiled output contains unresolved token {$Missing}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
+  compiled output contains unresolved token {$Missing}; fix the authoring reference or resolver input in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  compiled output contains unresolved token {$Loop}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
+  compiled output contains unresolved token {$Loop}; fix the authoring reference or resolver input in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  compiled output contains unresolved token {$Undeclared}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
+  compiled output contains unresolved token {$Undeclared}; fix the authoring reference or resolver input in item "RoleTester" (character)
 WARN CL0715 Codex/items.cl.yaml
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
 WARN CL0614 components/plot-essentials.cl.yaml
@@ -158,25 +158,25 @@ ERROR CL0413 templates/Broken.template
 ERROR CL0415 templates/Unclosed.template
   Unclosed {if $body.Tagline} block; close the block, and the opening tag remains literal until fixed.
 ERROR CL0433 Codex/items.cl.yaml
-  compiled output contains leaked template tag {if $body.Tagline}; close or correct the source tag, and it remains in output until fixed in item "UnclosedBlock" (character)
+  compiled output contains leaked template tag {if $body.Tagline}; close or correct the source tag in item "UnclosedBlock" (character)
 ERROR CL0541 (branch gated)
-  "Anchor" is both a declared role and an item id, which is ambiguous — rename the role or item; the token remains unresolved until fixed.
+  "Anchor" is both a declared role and an item id, which is ambiguous — rename the role or item.
 ERROR CL0542 (branch gated)
   role "Missing" is bound to "NoSuchItem", which does not resolve on this branch; bind it to an available item or adjust branch scope.
 ERROR CL0540 (branch gated)
-  "{$Missing}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Missing}" does not resolve to a declared role or a known item id, so the token cannot resolve; correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0543 (branch gated)
-  role "Loop" is bound to "LI", which is itself a role — bind it directly to an item id; its tokens remain unresolved until fixed.
+  role "Loop" is bound to "LI", which is itself a role — bind it directly to an item id.
 ERROR CL0540 (branch gated)
-  "{$Loop}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Loop}" does not resolve to a declared role or a known item id, so the token cannot resolve; correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0540 (branch gated)
-  "{$Undeclared}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Undeclared}" does not resolve to a declared role or a known item id, so the token cannot resolve; correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
-  compiled output contains unresolved token {$Missing}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
+  compiled output contains unresolved token {$Missing}; fix the authoring reference or resolver input in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  compiled output contains unresolved token {$Loop}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
+  compiled output contains unresolved token {$Loop}; fix the authoring reference or resolver input in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  compiled output contains unresolved token {$Undeclared}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
+  compiled output contains unresolved token {$Undeclared}; fix the authoring reference or resolver input in item "RoleTester" (character)
 WARN CL0715 Codex/items.cl.yaml
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
 WARN CL0614 components/plot-essentials.cl.yaml
@@ -227,25 +227,25 @@ ERROR CL0413 templates/Broken.template
 ERROR CL0415 templates/Unclosed.template
   Unclosed {if $body.Tagline} block; close the block, and the opening tag remains literal until fixed.
 ERROR CL0433 Codex/items.cl.yaml
-  compiled output contains leaked template tag {if $body.Tagline}; close or correct the source tag, and it remains in output until fixed in item "UnclosedBlock" (character)
+  compiled output contains leaked template tag {if $body.Tagline}; close or correct the source tag in item "UnclosedBlock" (character)
 ERROR CL0541 (branch silent)
-  "Anchor" is both a declared role and an item id, which is ambiguous — rename the role or item; the token remains unresolved until fixed.
+  "Anchor" is both a declared role and an item id, which is ambiguous — rename the role or item.
 ERROR CL0542 (branch silent)
   role "Missing" is bound to "NoSuchItem", which does not resolve on this branch; bind it to an available item or adjust branch scope.
 ERROR CL0540 (branch silent)
-  "{$Missing}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Missing}" does not resolve to a declared role or a known item id, so the token cannot resolve; correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0543 (branch silent)
-  role "Loop" is bound to "LI", which is itself a role — bind it directly to an item id; its tokens remain unresolved until fixed.
+  role "Loop" is bound to "LI", which is itself a role — bind it directly to an item id.
 ERROR CL0540 (branch silent)
-  "{$Loop}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Loop}" does not resolve to a declared role or a known item id, so the token cannot resolve; correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0540 (branch silent)
-  "{$Undeclared}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
+  "{$Undeclared}" does not resolve to a declared role or a known item id, so the token cannot resolve; correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
-  compiled output contains unresolved token {$Missing}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
+  compiled output contains unresolved token {$Missing}; fix the authoring reference or resolver input in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  compiled output contains unresolved token {$Loop}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
+  compiled output contains unresolved token {$Loop}; fix the authoring reference or resolver input in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  compiled output contains unresolved token {$Undeclared}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
+  compiled output contains unresolved token {$Undeclared}; fix the authoring reference or resolver input in item "RoleTester" (character)
 WARN CL0715 Codex/items.cl.yaml
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
 WARN CL0614 components/plot-essentials.cl.yaml

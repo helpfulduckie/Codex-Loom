@@ -105,7 +105,7 @@ function checkReferences(table, diagnostics) {
       const ref = entryName(m);
       if (ref && !knownField(ref)) {
         diagnostics.warn(CODES.FIELD_TABLE_BAD_REF,
-          `Group "${name}" names "${ref}", which is not a declared field, so the entry contributes nothing; declare or correct the name, and the missing entry remains empty until fixed.`,
+          `Group "${name}" names "${ref}", which is not a declared field, so the entry contributes nothing; declare or correct the name.`,
           { file: table._sources[0] || null });
       }
     }
@@ -117,7 +117,7 @@ function checkReferences(table, diagnostics) {
       const ref = entryName(e);
       if (ref && !knownField(ref) && !knownGroup(ref)) {
         diagnostics.warn(CODES.FIELD_TABLE_BAD_REF,
-          `Template "${name}" names "${ref}", which is not a declared field or group, so the entry contributes nothing; declare or correct the name, and the missing entry remains empty until fixed.`,
+          `Template "${name}" names "${ref}", which is not a declared field or group, so the entry contributes nothing; declare or correct the name.`,
           { file: table._sources[0] || null });
       }
     }

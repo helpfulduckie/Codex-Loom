@@ -142,7 +142,7 @@ function resolveRole(leading, { roles, registry, resolvedById, onWarn, onRoleUse
       onWarn(
         CODES.ROLE_COLLIDES_WITH_ITEM,
         `"${leading}" is both a declared role and an item id, which is ambiguous — rename `
-        + 'the role or item; the token remains unresolved until fixed.',
+        + 'the role or item.',
       );
     }
     return null;
@@ -156,7 +156,7 @@ function resolveRole(leading, { roles, registry, resolvedById, onWarn, onRoleUse
       onWarn(
         CODES.ROLE_INDIRECTION,
         `role "${roleKey}" is bound to "${boundId}", which is itself a role — bind it `
-        + 'directly to an item id; its tokens remain unresolved until fixed.',
+        + 'directly to an item id.',
       );
     }
     return null;
@@ -183,7 +183,7 @@ function roleUndeclaredMessage(name, roles) {
     ? `Roles declared in scope: ${Object.keys(roles).join(', ')}.`
     : 'No roles are declared on this branch.';
   return `"{$${name}}" does not resolve to a declared role or a known item id, so the token `
-    + `remains unresolved until you correct the name. ${scope}`;
+    + `cannot resolve; correct the name. ${scope}`;
 }
 
 function applyRolePass(resolvedItems, { registry, roles, resolvedById, onRoleUsed }) {
