@@ -62,7 +62,7 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
       diagnostics.error(
         DIAG_CODES.STORY_CARD_ENTRY_NO_TITLE,
         `a render.storyCards entry on component "${descriptor.label}" declares no title: — `
-        + 'the title is the card\'s AID name and its place in the frontier index.',
+        + 'the title is the card\'s AID name and its place in the frontier index. Add title:.',
         loc,
       );
       continue;
@@ -85,7 +85,7 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
       (name) => diagnostics.warn(
         DIAG_CODES.STORY_CARD_ENTRY_UNKNOWN_SECTION,
         `render.storyCards entry "${title}" names section "${name}", which component `
-        + `"${descriptor.label}" does not declare — it is dropped from this entry.`,
+        + `"${descriptor.label}" does not declare — it is dropped from this entry. Correct sections: or declare the section.`,
         loc,
       ),
     );
@@ -100,7 +100,7 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
       diagnostics.warn(
         DIAG_CODES.STORY_CARD_ENTRY_RENDERS_NOTHING,
         `render.storyCards entry "${title}" renders no text on branch "${branchLabel}" — `
-        + 'its variant:/sections: selectors left nothing. No card is written.',
+        + 'its variant:/sections: selectors left nothing. No card is written; correct the selectors or add content.',
         loc,
       );
       continue;
@@ -212,7 +212,7 @@ function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, file) {
       DIAG_CODES.TARGET_UNDECLARED_SLOT,
       `item "${itemId}" targets slot "${target.slot || '(unnamed)'}" in ${known.label}, which is `
       + 'prose copied verbatim and declares no slots. Point the component at a YAML '
-      + 'document with "sections:" to route items into it.',
+        + 'document with "sections:" to route items into it.',
       { file },
     );
     return false;
@@ -235,7 +235,7 @@ function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, file) {
     diagnostics.error(
       DIAG_CODES.TARGET_NOT_A_SLOT,
       `item "${itemId}" targets "${target.slot}" in ${known.label}, which is a section but `
-      + 'not a slot — only a section declaring "slot: true" can hold items.',
+      + 'not a slot — only a section declaring "slot: true" can hold items. Add "slot: true" or target a real slot.',
       { file },
     );
     return false;
@@ -244,7 +244,7 @@ function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, file) {
   diagnostics.error(
     DIAG_CODES.TARGET_UNDECLARED_SLOT,
     `item "${itemId}" targets slot "${target.slot}" in ${known.label} on branch "${label}", `
-    + `which declares no such slot. Declared here: ${[...known.documentSlots].join(', ') || '(none)'}.`,
+    + `which declares no such slot. Declared here: ${[...known.documentSlots].join(', ') || '(none)'}. Correct slot: or declare it.`,
     { file },
   );
   return false;
@@ -258,7 +258,7 @@ function warnEmptySlots(descriptor, slotIndex, filled, label, diagnostics, file)
     if (placed && placed.length > 0) continue;
     diagnostics.warn(
       DIAG_CODES.SLOT_EMPTY,
-      `slot "${name}" in ${known.label} has no items on branch "${label}".`,
+      `slot "${name}" in ${known.label} has no items on branch "${label}". Add or route an item.`,
       { file: file == null ? undefined : String(file) },
     );
   }

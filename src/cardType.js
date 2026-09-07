@@ -18,7 +18,7 @@ function validateCardTypeValue(type, {
   else if (trimmed === '.' || trimmed === '..') reason = 'is "." or ".."';
   else if (/[ .]$/.test(type)) reason = 'ends with a space or period';
   if (!reason) return;
-  const message = `Invalid ${field} "${type}" for item "${name}"${src}: ${reason}. The card type becomes a folder/file name and must be a legal path segment.`;
+  const message = `Invalid ${field} "${type}" for item "${name}"${src}: ${reason}. The card type becomes a folder/file name and must be a legal path segment; use a nonempty legal type without illegal characters, . / .. or trailing space/period.`;
   diagnostics.error(DIAG_CODES.CARD_TYPE_INVALID, message, { file: file || source });
 }
 
@@ -57,7 +57,7 @@ function buildCardTypeAudit() {
     for (const [authored, { to, file }] of trimmedValues) {
       diagnostics.warn(
         DIAG_CODES.CARD_TYPE_LEADING_SPACE,
-        `aid.type "${authored}" has leading whitespace; writing it as "${to}".`,
+        `aid.type "${authored}" has leading whitespace; writing it as "${to}". Remove the whitespace.`,
         { file },
         {
           hint: 'A leading space survives in a directory name, so the type would reach AI '
@@ -80,7 +80,7 @@ function buildCardTypeAudit() {
       diagnostics.error(
         DIAG_CODES.CARD_TYPE_CASE_COLLISION,
         `aid.type values ${sorted.map((v) => `"${v}"`).join(' and ')} differ only by case, `
-        + 'and are written to the same file on a case-insensitive filesystem.',
+        + 'and are written to the same file on a case-insensitive filesystem. Rename one type.',
         { file: originOf.get(sorted[0]) },
         {
           hint: 'Story Cards/{type}/{type}.md is one path for all of them on Windows and '

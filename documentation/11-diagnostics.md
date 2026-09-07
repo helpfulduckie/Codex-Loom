@@ -398,40 +398,40 @@ interpolated value, and the property belongs to the template, not to each field.
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `CL0601` | ERROR | A section declares both `text:` and `slot: true`. |
-| `CL0602` | WARN | A section has no text, no heading and is not a slot, so it renders nothing. |
-| `CL0603` | WARN | A section's `render.wrap` is neither `each` nor `all`; `each` is used. |
-| `CL0604` | WARN | A section's branch dispatch names a variant the section does not define. |
-| `CL0605` | WARN | A component-level branch dispatch names a variant no section defines. |
-| `CL0606` | ERROR | A component `imports:` entry names a `from:` that does not resolve to a file. |
-| `CL0607` | ERROR | A component import chain loops back on a file already being resolved. |
-| `CL0608` | WARN | A section is deleted with `~` but no import provided it. |
-| `CL0609` | ERROR | An item reaches a render target — a component slot or its own story-card body — but its body renders to nothing there. |
-| `CL0610` | ERROR | An item resolves onto a branch and produces no output there. |
-| `CL0611` | ERROR | A render target names a slot the component does not declare. |
-| `CL0612` | ERROR | A render target names a section that exists but is not a slot. |
-| `CL0613` | ERROR | A render target names no slot at all. |
-| `CL0614` | WARN | A declared slot has no items on a branch. |
-| `CL0615` | ERROR | A component renders to nothing on a branch. |
-| `CL0616` | ERROR | A leaf carries an adventure description and declares no `Opening.md`. |
-| `CL0617` | ERROR | A section's `file:` or `from.script:` does not resolve to a file. |
-| `CL0618` | ERROR | A section's `extract:` names no known transform. |
-| `CL0619` | ERROR | A section declares more than one of `text:`, `file:` and `from:`. |
-| `CL0620` | WARN | `metadata:` on a component whose output has no place for frontmatter. |
-| `CL0621` | WARN | Both description keys aimed at one file — an unbranched project. |
-| `CL0622` | ERROR | Two story cards share a display name on the same leaf — Velvet Lattice merges by name, so only one reaches AID. |
-| `CL0623` | ERROR | A `render.storyCards` entry declares no `title:` — the title is the card's AID name and the frontier keys on it. |
-| `CL0624` | WARN | A `render.storyCards` entry's `sections:` names a section the component does not declare; it is dropped from that entry. |
-| `CL0625` | WARN | A `render.storyCards` entry renders no text on a branch — its `variant:` / `sections:` selectors left nothing. No card is written. |
-| `CL0626` | ERROR | Two `aid.type` values differ only by case, so they are one file on a case-insensitive filesystem and one group's cards are overwritten. |
-| `CL0628` | WARN | An `aid.type` has leading whitespace; it is trimmed. |
-| `CL0629` | ERROR | `adventureDescription` declares `advanced:` or `description:` in `metadata:` — both belong to the scenario blurb only. |
-| `CL0630` | WARN | A branch leaf resolves neither an `opening:` nor an `adventureDescription:`, inherited or its own — Velvet Lattice would start it with an empty prompt. |
-| `CL0631` | WARN | A branch leaf resolves no `aiInstructions:`, inherited or its own — Velvet Lattice writes an empty-string AI Instructions, which suppresses AID's model default rather than falling back to it. |
-| `CL0632` | ERROR | `aid.type` fails path-legality: empty/whitespace, an illegal path character, `.`/`..`, or a trailing space/period. |
-| `CL0633` | WARN | `branchFraming` on a node with nothing below it to frame — the root with no branches, or a leaf. |
-| `CL0634` | ERROR | A requested component produced no output anywhere in the compile. |
-| `CL0635` | WARN | A story card has an empty or missing trigger list, so it can never be pulled into context. `kind: reference` is exempt. |
+| `CL0601` | ERROR | A section declares both `text:` and `slot: true`, so prose-versus-slot output is ambiguous; split the prose into another section. |
+| `CL0602` | WARN | A section has no text, heading or slot, so it renders nothing; add content, make it a slot, or remove it. |
+| `CL0603` | WARN | A section's `render.wrap` is invalid, so `each` is used; change it to `each` or `all`. |
+| `CL0604` | WARN | A section dispatch names an undefined variant, so it has no effect; correct or define the variant. |
+| `CL0605` | WARN | A component dispatch names a variant no section defines, so it changes nothing; correct the name or define it. |
+| `CL0606` | ERROR | A component import names a missing file, so its sections are unavailable; correct `from:` or add the file. |
+| `CL0607` | ERROR | A component import chain loops, so the cyclic import cannot be merged; break the cycle. |
+| `CL0608` | WARN | A section is deleted with `~` but no import provided it, so nothing is removed; remove the deletion or import the section first. |
+| `CL0609` | ERROR | An item reaches a render target but renders no body there, so the target receives no usable content; add a rendered field or exclude the item. |
+| `CL0610` | ERROR | An item resolves on a branch but produces no output, so it cannot reach AID; add a target or card, or exclude it. |
+| `CL0611` | ERROR | A render target names no declared slot, so the item cannot be placed; correct `slot:` or declare it. |
+| `CL0612` | ERROR | A render target names a text section rather than a slot, so the item cannot be placed; add `slot: true` or target a real slot. |
+| `CL0613` | ERROR | A render target names no slot, so the item has nowhere to go; add `slot:` naming a declared slot. |
+| `CL0614` | WARN | A declared slot has no items on a branch, so it contributes no item content; add or route an item. |
+| `CL0615` | ERROR | A component renders no output on a branch, so its destination is empty; add a renderable section or exclude it there. |
+| `CL0616` | ERROR | A leaf has an adventure description but no `Opening.md`, so it has no opening prompt; add `Opening.md` or remove the description. |
+| `CL0617` | ERROR | A section source path names no readable file, so its text is unavailable; correct the path or add the file. |
+| `CL0618` | ERROR | A section's `extract:` names no known transform, so its source cannot become text; choose a supported transform. |
+| `CL0619` | ERROR | A section declares multiple text sources, so precedence is ambiguous; keep only one source. |
+| `CL0620` | WARN | `metadata:` targets output with no frontmatter destination, so metadata is discarded; move it to a frontmatter-capable output. |
+| `CL0621` | WARN | Both description keys target one unbranched file, so one value wins; keep one key or add branches. |
+| `CL0622` | ERROR | Two story cards share a name on one leaf, so Velvet Lattice merges them and one is lost; give them distinct names. |
+| `CL0623` | ERROR | A `render.storyCards` entry has no `title:`, so no AID card name or frontier key exists; add `title:`. |
+| `CL0624` | WARN | A story-card entry names an undeclared section, so that selection is dropped; correct `sections:` or declare the section. |
+| `CL0625` | WARN | A story-card entry renders no text on a branch, so no card is written; correct `variant:`/`sections:` or add content. |
+| `CL0626` | ERROR | Two `aid.type` values differ only by case, so their files collide and one group is overwritten; rename one type. |
+| `CL0628` | WARN | An `aid.type` has leading whitespace, so it is trimmed before writing; remove the whitespace. |
+| `CL0629` | ERROR | `adventureDescription` declares unsupported `advanced:` or `description:` metadata, so invalid frontmatter would be written; keep those keys on the scenario blurb. |
+| `CL0630` | WARN | A leaf resolves neither `opening:` nor `adventureDescription:`, so it starts with an empty prompt; add or inherit one. |
+| `CL0631` | WARN | A leaf resolves no `aiInstructions:`, so an empty string suppresses AID's default; add or inherit instructions. |
+| `CL0632` | ERROR | `aid.type` is not a legal path segment, so card files cannot be written safely; use a nonempty legal type without `.`/`..` or trailing space/period. |
+| `CL0633` | WARN | `branchFraming` is set where no child branches exist, so it has no effect; remove it or move it to a branching node. |
+| `CL0634` | ERROR | A requested component produces no output anywhere, so the compiled scenario is missing it; provide renderable content or correct its source. |
+| `CL0635` | WARN | A story card has no triggers, so AID cannot pull it into context; add triggers or use `kind: reference`. |
 
 `CL0601` is an error rather than a resolved precedence because the two readings differ in
 output and neither is obviously right: text inside a slot could sit before or after the
@@ -578,7 +578,7 @@ Only those two keys are refused. Anything else under `adventureDescription`'s `m
 harmless at a leaf and passes, rather than the check inventing a whitelist for keys VL does not
 read at all.
 
-### CL0626–CL0628 in detail — `aid.type` as a path segment
+### CL0626, CL0628, CL0632 in detail — `aid.type` as a path segment
 
 `aid.type` is written to disk as `Story Cards/{type}/{type}.md`, which makes a category name
 into a path segment and drags two filesystem facts into the compiler. `validateCardType`

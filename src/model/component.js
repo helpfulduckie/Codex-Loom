@@ -60,13 +60,13 @@ function normalizeSection(name, def, index, onWarn) {
       + (importedFrom
         ? ` (inherited from ${importedFrom}, which already reports this for its own copy of `
           + 'the section — fix it there; this is the same section, merged.)'
-        : ''));
+        : '') + ' Add content, make it a slot, or remove it.');
   }
 
   let wrap = render.wrap === undefined ? WRAP.EACH : String(render.wrap).toLowerCase();
   if (wrap !== WRAP.EACH && wrap !== WRAP.ALL) {
     onWarn(CODES.SECTION_WRAP_UNKNOWN,
-      `section "${name}" sets wrap: "${render.wrap}", which is neither "each" nor "all" — using "each".`);
+      `section "${name}" sets wrap: "${render.wrap}", which is neither "each" nor "all" — using "each". Change it to "each" or "all".`);
     wrap = WRAP.EACH;
   }
 
@@ -176,7 +176,7 @@ function mergeSectionRecords(base, over, onWarn = () => {}) {
         onWarn(CODES.IMPORT_DELETE_UNKNOWN,
           `section "${name}" is deleted with ~ but no import provided it — nothing was `
           + `removed. A bare "${name}:" with no body also parses as ~, which is usually `
-          + 'the cause.');
+          + 'the cause. Remove the deletion or import the section first.');
       } else {
         delete merged[existing];
         keyOf.delete(name.toLowerCase());
@@ -232,7 +232,7 @@ function sectionsForBranch(component, branchPath, onWarn = () => {}) {
       `the component dispatches to variant "${name}" on this branch, and none of its `
       + `${component.sections.length} sections define it. A component-level dispatch names `
       + 'every section (§7.6.2a), so it is silent on the ones that do not define the name — '
-      + 'which makes this the only report a misspelling produces.');
+          + 'which makes this the only report a misspelling produces. Correct the variant name or define it.');
   }
 
   const applicable = [];
@@ -252,7 +252,7 @@ function sectionsForBranch(component, branchPath, onWarn = () => {}) {
       const key = findSectionVariant(section, name);
       if (key === undefined) {
         onWarn(CODES.SECTION_VARIANT_NOT_FOUND,
-          `section "${section.name}" dispatches to variant "${name}", which it does not define.`);
+          `section "${section.name}" dispatches to variant "${name}", which it does not define. Correct the variant name or define it.`);
         continue;
       }
       resolved = applySectionVariant(resolved, section.variants[key]);

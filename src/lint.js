@@ -145,7 +145,7 @@ function scanStoryCardStructure(content, { diagnostics, file = null } = {}) {
     if (card.triggers.length === 0) {
       diagnostics.add(
         SEVERITY.WARN, DIAG_CODES.CARD_NO_TRIGGERS,
-        `card "${card.title || '(untitled)'}" has an empty or missing trigger list`,
+        `card "${card.title || '(untitled)'}" has an empty or missing trigger list, so AID cannot pull it into context. Add triggers or use kind: reference.`,
         { file },
       );
     }

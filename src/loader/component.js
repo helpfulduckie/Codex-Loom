@@ -91,7 +91,7 @@ function resolveImports(doc, spec, options) {
       report(diagnostics, 'error', CODES.IMPORT_CYCLE,
         `component import cycle: "${path.basename(resolved)}" is already being resolved `
         + `further up this chain (${chain.map((p) => path.basename(p)).join(' → ')}). `
-        + 'The import is skipped; nothing from it is merged.',
+        + 'The import is skipped; nothing from it is merged. Break the cycle.',
         spec);
       continue;
     }
@@ -100,7 +100,7 @@ function resolveImports(doc, spec, options) {
       report(diagnostics, 'error', CODES.IMPORT_NOT_FOUND,
         `component import not found: ${entry.from}${expanded === String(entry.from) ? '' : ` (expanded to ${expanded})`}. `
         + 'A `from:` resolves against the project base unless it is absolute — the same '
-        + 'base `include:` and every `components:` entry use.',
+        + 'base `include:` and every `components:` entry use. Correct `from:` or add the file.',
         spec);
       continue;
     }
@@ -188,7 +188,7 @@ function resolveOneSource(def, label, options) {
     report(diagnostics, 'error', CODES.SECTION_TEXT_AND_SOURCE,
       `section "${label}" declares "text:" and ${hasFile ? '"file:"' : '"from:"'} — a section `
       + 'takes its text from one source. The text is kept and the file is ignored; move the '
-      + 'file into its own section if both were meant to appear.',
+      + 'file into its own section if both were meant to appear; the text remains selected and the file ignored.',
       spec);
     return result;
   }
@@ -196,7 +196,7 @@ function resolveOneSource(def, label, options) {
   const rawPath = hasFile ? def.file : def.from.script;
   if (typeof rawPath !== 'string' || rawPath === '') {
     report(diagnostics, 'error', CODES.SECTION_SOURCE_NOT_FOUND,
-      `section "${label}" has a "from:" with no "script:" naming a file to read.`,
+      `section "${label}" has a "from:" with no "script:" naming a file to read. Add a valid script path.`,
       spec);
     return result;
   }
@@ -211,7 +211,7 @@ function resolveOneSource(def, label, options) {
       `section "${label}" reads from "${rawPath}"`
       + `${expanded === rawPath ? '' : ` (expanded to ${expanded})`}, which does not exist. `
       + 'The path resolves against the project base unless it is absolute — the same base '
-      + '`imports:`, `include:` and every `components:` entry use.',
+      + '`imports:`, `include:` and every `components:` entry use. Correct the path or add the file.',
       spec);
     return result;
   }
@@ -226,7 +226,7 @@ function resolveOneSource(def, label, options) {
   const { text, error } = runExtractor(def.from.extract, source);
   if (error) {
     report(diagnostics, 'error', CODES.SECTION_EXTRACT_UNKNOWN,
-      `section "${label}": ${error}`, spec);
+      `section "${label}": ${error} Choose a supported transform.`, spec);
     return result;
   }
   result.text = text;

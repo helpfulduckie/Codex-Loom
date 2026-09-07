@@ -275,6 +275,16 @@ describe('every CL code raised in src/ is in the registry', () => {
       expect(summary).toMatch(/(?:declare|correct|break|remove|move|rename|cover|inherit|use|bind|write|differentiate|merge)/i);
     }
   });
+
+  test('CL06xx summaries state the consequence and immediate author fix', () => {
+    const ids = Array.from({ length: 35 }, (_, index) => `CL${String(601 + index).padStart(4, '0')}`)
+      .filter((id) => id !== 'CL0627');
+    for (const id of ids) {
+      const summary = Object.values(REGISTRY).find((entry) => entry.id === id).summary;
+      expect(summary).toMatch(/(?:so|cannot|has no|is not|is set|is deleted|differs|declares|names)/i);
+      expect(summary).toMatch(/(?:add|correct|change|remove|split|keep|break|declare|define|rename|use|move|give|provide|exclude|target|inherit|choose)/i);
+    }
+  });
 });
 
 describe('the compiler / lint split', () => {

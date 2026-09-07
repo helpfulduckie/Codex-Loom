@@ -67,7 +67,7 @@ class ComponentLoader {
             this._diagnostics.error(
               DIAG_CODES.ADVENTURE_DESCRIPTION_ADVANCED,
               `"${descriptor.label}" declares ${offending.map((k) => `${k}:`).join(' and ')} in `
-              + 'metadata:, which belongs to the scenario blurb only.',
+              + 'metadata:, which belongs to the scenario blurb only. Move those keys to the scenario blurb.',
               { file: String(spec) },
               {
                 hint: 'Velvet Lattice reads both keys at the root and nowhere else, so they do '

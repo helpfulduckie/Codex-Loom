@@ -413,7 +413,7 @@ function writeScenarioBlurb({
           'this project declares both description: and adventureDescription: and has no '
           + 'branches, so the root is its own leaf and both write the same Description.md. '
           + 'The scenario blurb is what survives. Drop one, or add the branch the '
-          + 'adventure description was written for.',
+          + 'adventure description was written for. Keep one key or add branches.',
           { file: configPath },
         );
       }

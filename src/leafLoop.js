@@ -183,7 +183,7 @@ function compileLeaf(branchPath, ctx) {
       diagnostics.error(
         DIAG_CODES.COMPONENT_RENDERS_NOTHING,
         `component "${descriptor.label}" renders to nothing on branch "${label}" — `
-        + 'every section is excluded by its own branches: dispatch, empty, or an unfilled slot.',
+        + 'every section is excluded by its own branches: dispatch, empty, or an unfilled slot. Add renderable content or exclude the component there.',
         { file: String(spec) },
       );
     }
