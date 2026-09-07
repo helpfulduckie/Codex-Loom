@@ -31,7 +31,7 @@ function checkSourceConflict(decl, label, currentPath, sourceMap, diagnostics) {
       `${label} ${both}${joinKeys(present)}. Each of these says where the field's text comes `
       + 'from, so a declaration may give only one — from: reads a single body path, parts: '
       + 'joins several pieces into one field, try: uses the first path that exists. Until this '
-      + `is fixed, ${joinKeys([winner])} is used and ${joinKeys(losers)} is ignored.`,
+      + `is fixed, ${joinKeys([winner])} is used and ${joinKeys(losers)} is ignored; the ignored source remains ineffective.`,
       sourceMap.nearest(currentPath),
       { hint: 'Keep the one you meant and delete the other.' });
   }
@@ -58,8 +58,7 @@ function foldDocument(doc, file, sourceMap, acc, diagnostics) {
   if (!isPlainObject(doc)) {
     diagnostics.error(CODES.FIELD_TABLE_UNUSABLE,
       'This field table could not be read, so none of the fields, groups or templates it '
-      + 'declares are available. Any template entry naming one of them renders nothing, with '
-      + 'no further error.',
+      + 'declares are available; affected entries render nothing until the file is repaired.',
       sourceMap.nearest([]),
       { hint: 'A field table must be a mapping with fields:, groups: and/or templates: at the top level.' });
     return;
@@ -106,7 +105,7 @@ function checkReferences(table, diagnostics) {
       const ref = entryName(m);
       if (ref && !knownField(ref)) {
         diagnostics.warn(CODES.FIELD_TABLE_BAD_REF,
-          `Group "${name}" names "${ref}", which is not a declared field.`,
+          `Group "${name}" names "${ref}", which is not a declared field, so the entry contributes nothing; declare or correct the name, and the missing entry remains empty until fixed.`,
           { file: table._sources[0] || null });
       }
     }
@@ -118,7 +117,7 @@ function checkReferences(table, diagnostics) {
       const ref = entryName(e);
       if (ref && !knownField(ref) && !knownGroup(ref)) {
         diagnostics.warn(CODES.FIELD_TABLE_BAD_REF,
-          `Template "${name}" names "${ref}", which is not a declared field or group.`,
+          `Template "${name}" names "${ref}", which is not a declared field or group, so the entry contributes nothing; declare or correct the name, and the missing entry remains empty until fixed.`,
           { file: table._sources[0] || null });
       }
     }
@@ -138,8 +137,8 @@ function loadFieldTable(dirs, options = {}) {
         if (stem !== 'fields' && levenshtein(stem, 'fields') <= 2) {
           diagnostics.warn(CODES.FIELD_TABLE_STRAY_FILE,
             `"${path.basename(file)}" looks like a misspelled "fields.cl.yaml" and will be `
-            + 'ignored. Rename it, or if it is a templateFor slot file the near-miss is '
-            + 'coincidental.',
+            + 'ignored, so its declarations are unavailable; rename it, or if it is a '
+            + 'templateFor slot file the near-miss is coincidental.',
             { file });
         }
         continue;
@@ -151,8 +150,7 @@ function loadFieldTable(dirs, options = {}) {
       } catch (err) {
         diagnostics.error(CODES.FIELD_TABLE_UNUSABLE,
           'This field table could not be read, so none of the fields, groups or templates it '
-          + 'declares are available. Any template entry naming one of them renders nothing, '
-          + 'with no further error.',
+          + 'declares are available; affected entries render nothing until the file is repaired.',
           { file },
           { hint: `YAML error: ${(err.cause && err.cause.message) || err.message}` });
         continue;

@@ -16,7 +16,7 @@ function checkConfigNotesTemplates(config, templates, diagnostics, configPath, f
     if (!name || templates.has(String(name).toLowerCase()) || fieldListTemplates[String(name)]) return;
     diagnostics.error(
       CODES.NOTES_TEMPLATE_NOT_FOUND,
-      `${where} declares render.notesTemplate "${name}", which is not a loaded template.`,
+      `${where} declares render.notesTemplate "${name}", which is not loaded, so configured notes rendering cannot run; add or rename the template, and the notes fallback continues until fixed.`,
       { file: configPath },
       { hint: 'Add a matching .template file, or remove the key to fall back to rendering '
         + 'the notes value itself. Use `notesTemplate: ~` to turn notes off for a branch.' },
@@ -39,7 +39,7 @@ function renderNotesText(item, context, templates, partials, variables, projectN
     const label = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
     diagnostics.error(
       CODES.ITEM_NOTES_TEMPLATE_NOT_FOUND,
-      `item "${label}" declares render.notesTemplate "${resolved.name}", which is not a loaded template.`,
+      `item "${label}" declares render.notesTemplate "${resolved.name}", which is not loaded, so the item cannot use its requested notes rendering; add or rename the template, and the item continues without that template until fixed.`,
       { file: item._source },
     );
     return undefined;
@@ -93,7 +93,7 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
         diagnostics.error(CODES.FIELD_TABLE_UNUSABLE,
           `templateFor.${role} names this file, and it could not be read — so the templates `
           + 'it declares are unavailable, and every item on this branch falls back to its '
-          + 'base template instead of the one this file names.',
+          + 'base template instead of the one this file names until the file is repaired.',
           { file: abs },
           { hint: `YAML error: ${err.cause ? err.cause.message : err.message}` });
         continue;

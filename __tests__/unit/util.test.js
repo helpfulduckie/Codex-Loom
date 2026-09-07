@@ -382,7 +382,7 @@ describe('checkMechanicalArtifacts', () => {
     expect(by.CL0435.severity).toBe('error');
     expect(by.CL0435.message).toContain('JS interpolation artifact');
     expect(by.CL0437.severity).toBe('warn');
-    expect(by.CL0437.message).toContain('possible JS interpolation artifact "undefined"');
+    expect(by.CL0437.message).toContain('compiled output contains bare undefined');
   });
 
   test('clean text returns false', () => {

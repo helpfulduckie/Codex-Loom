@@ -15,7 +15,7 @@ function loadNamedFiles(dirs, ext) {
       const name = path.basename(file, ext).toLowerCase();
       if (dirEntries.has(name)) {
         const err = new Error(
-          `${CODES.DUPLICATE_NAMED_FILE}: Duplicate ${ext} name "${name}" found in ${dir}:`
+          `${CODES.DUPLICATE_NAMED_FILE}: Duplicate ${ext} name "${name}" found in ${dir}; remove or rename one file, and loading cannot choose a winner until fixed:`
           + `\n  ${dirEntries.get(name)._source}\n  ${file}`
         );
         err.code = CODES.DUPLICATE_NAMED_FILE;
@@ -35,7 +35,7 @@ function checkNoFences(files, ext, diagnostics) {
     if (!entry.content.includes('~~~')) continue;
     diagnostics.error(
       CODES.TEMPLATE_CONTAINS_FENCE,
-      `Template "${name}" still contains a ~~~ fence.`,
+      `Template "${name}" still contains a ~~~ fence, so its body is invalid; remove the story-card envelope and fence, and the fence remains until fixed.`,
       { file: entry._source },
       {
         hint: 'The story-card envelope (## heading, ~~~ fence, triggers/encapsulate/notes '

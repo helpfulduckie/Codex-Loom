@@ -85,7 +85,7 @@ function processFieldRenderFunctions(value, context, options) {
         } catch (e) {
           options.diagnostics.error(
             CODES.TEMPLATE_PARSE_FAILED,
-            `render function in field value: ${e.message}`,
+            `render function in field value: ${e.message}; correct the call syntax, and the malformed call remains literal until fixed.`,
             { file: options.file },
           );
           return match;
@@ -136,12 +136,12 @@ function expandIncludes(source, partials, report, variables, diagnostics, file, 
     const key = includeName.toLowerCase();
     const line = whole.slice(0, offset).split('\n').length;
     if (stack.includes(key)) {
-      report(CODES.PARTIAL_CYCLE, `Circular partial include: ${[...stack, key].join(' → ')}`, { line });
+      report(CODES.PARTIAL_CYCLE, `Circular partial include: ${[...stack, key].join(' → ')}; break the include cycle, and the cyclic directive renders empty until fixed.`, { line });
       return '';
     }
     const partial = partials.get(key);
     if (!partial) {
-      report(CODES.PARTIAL_NOT_FOUND, `Unknown partial "${includeName}" (no .partial file found).`, { line });
+      report(CODES.PARTIAL_NOT_FOUND, `Unknown partial "${includeName}" (no .partial file found); add or rename the partial, and the directive renders empty until fixed.`, { line });
       return '';
     }
     const partialSource = variables

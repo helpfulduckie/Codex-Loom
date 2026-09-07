@@ -270,23 +270,23 @@ function reportPattern(text, label, re, code, describe, sink = {}) {
 
 function checkUnresolvedFieldTokens(text, label, sink) {
   return reportPattern(text, label, FIELD_TOKEN_RE, DIAG_CODES.LEAKED_FIELD_TOKEN,
-    m => `unresolved token ${m}`, sink);
+    m => `compiled output contains unresolved token ${m}; fix the authoring reference or resolver input, and the token remains in output until fixed`, sink);
 }
 
 function checkUnexpandedVariables(text, label, sink) {
   return reportPattern(text, label, VAR_TOKEN_RE, DIAG_CODES.LEAKED_VARIABLE,
-    m => `unexpanded variable ${m}`, sink);
+    m => `compiled output contains unexpanded variable ${m}; declare or correct the variable reference, and the token remains in output until fixed`, sink);
 }
 
 function checkMechanicalArtifacts(text, label, sink) {
   const C = DIAG_CODES;
   let found = false;
-  found = reportPattern(text, label, TEMPLATE_FN_RE,  C.LEAKED_RENDER_FUNCTION, m => `leaked render function ${m}`, sink) || found;
-  found = reportPattern(text, label, TEMPLATE_TAG_RE, C.LEAKED_TEMPLATE_TAG,    m => `leaked template tag ${m}`, sink) || found;
-  found = reportPattern(text, label, VERB_MARKER_RE,  C.LEAKED_VERB_MARKER,     m => `unresolved verb-conjugation marker ${m}`, sink) || found;
-  found = reportPattern(maskFencedRegions(text), label, SUSPECT_VERB_MARKER_RE, C.SUSPECT_VERB_MARKER, m => `bracketed "${m}" isn't a recognized verb-conjugation marker ([s]/[es]/[is]/[was]/[has]) or [e] — possible typo`, sink) || found;
-  found = reportPattern(text, label, JS_ARTIFACT_RE,  C.LEAKED_JS_ARTIFACT,     m => `JS interpolation artifact ${m}`, sink) || found;
-  found = reportPattern(text, label, JS_WORD_RE,      C.SUSPECT_JS_WORD,        m => `possible JS interpolation artifact "${m}"`, sink) || found;
+  found = reportPattern(text, label, TEMPLATE_FN_RE,  C.LEAKED_RENDER_FUNCTION, m => `compiled output contains leaked render function ${m}; fix the source call or renderer, and it remains in output until fixed`, sink) || found;
+  found = reportPattern(text, label, TEMPLATE_TAG_RE, C.LEAKED_TEMPLATE_TAG,    m => `compiled output contains leaked template tag ${m}; close or correct the source tag, and it remains in output until fixed`, sink) || found;
+  found = reportPattern(text, label, VERB_MARKER_RE,  C.LEAKED_VERB_MARKER,     m => `compiled output contains unresolved verb-conjugation marker ${m}; correct the source marker or its subject, and it remains in output until fixed`, sink) || found;
+  found = reportPattern(maskFencedRegions(text), label, SUSPECT_VERB_MARKER_RE, C.SUSPECT_VERB_MARKER, m => `compiled output contains unrecognized bracketed word ${m}; correct the source marker if it is a typo, and it remains until fixed`, sink) || found;
+  found = reportPattern(text, label, JS_ARTIFACT_RE,  C.LEAKED_JS_ARTIFACT,     m => `compiled output contains JS interpolation artifact ${m}; fix the source interpolation, and it remains in output until fixed`, sink) || found;
+  found = reportPattern(text, label, JS_WORD_RE,      C.SUSPECT_JS_WORD,        m => `compiled output contains bare ${m}; fix the source value or interpolation, and it remains in output until fixed`, sink) || found;
   return found;
 }
 

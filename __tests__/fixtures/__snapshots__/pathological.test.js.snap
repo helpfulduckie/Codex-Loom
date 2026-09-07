@@ -10,11 +10,11 @@ WARN CL0630 compile.cl.yaml
 WARN CL0631 compile.cl.yaml
   branch "south" resolves no aiInstructions:. Velvet Lattice writes an empty-string AI Instructions on AID's side for it, and an empty string suppresses AID's model-default instructions rather than falling back to them — the leaf plays with none at all. Give the branch an aiInstructions:, or one an ancestor passes down.
 WARN CL0426 Codex/items.cl.yaml
-  body key "strength" on item "Alba" is read by no template this item renders through and no declaration names it — its content is dropped from the compiled card.
+  body key "strength" on item "Alba" is read by no template this item renders through and no declaration names it — its content is dropped from the compiled card; remove or declare and render the key, and the content stays dropped until fixed.
 WARN CL0427 Codex/items.cl.yaml
-  body key "homeland" on item "Cairn" is a declared field in group \`origin\`, which no template this item renders through includes — its content is dropped from the compiled card.
+  body key "homeland" on item "Cairn" is a declared field in group \`origin\`, which no template this item renders through includes — its content is dropped from the compiled card; include the field in a rendered template or remove it, and the content stays dropped until fixed.
 WARN CL0428 templates/fields.cl.yaml
-  field "deadField" is declared in the field table but no template names it, directly or through a group."
+  field "deadField" is declared in the field table but no template names it, directly or through a group, so the declaration has no effect; remove it or reference it, and it remains unused until fixed."
 `;
 
 exports[`pathological fixture a committed manifest that disagrees with the config and the disk 1`] = `
@@ -76,7 +76,7 @@ ERROR CL0611 Codex/items.cl.yaml
 ERROR CL0533 Codex/items.cl.yaml
   placeholder "%heroName%" in the type of story card "MistypedType" on branch "open" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
 ERROR CL0420 Codex/items.cl.yaml
-  no template found for item "MistypedType" (type: Character-%heroName%)
+  no template found for item "MistypedType" (type: Character-%heroName%); add or select the template, and the item remains unrendered until fixed.
 ERROR CL0622 Codex/items.cl.yaml
   story cards named "Anchor" collide on branch "open" (both as character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
 ERROR CL0712 Codex/items.cl.yaml
@@ -88,11 +88,11 @@ ERROR CL0714 Codex/items.cl.yaml
   Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
 ERROR CL0413 templates/Broken.template
-  Malformed join() call in Broken: Malformed join(): join($body.Tagline)
+  Malformed join() call in Broken: Malformed join(): join($body.Tagline); correct the call syntax, and the malformed call remains literal until fixed.
 ERROR CL0415 templates/Unclosed.template
-  Unclosed {if $body.Tagline} block.
+  Unclosed {if $body.Tagline} block; close the block, and the opening tag remains literal until fixed.
 ERROR CL0433 Codex/items.cl.yaml
-  leaked template tag {if $body.Tagline} in item "UnclosedBlock" (character)
+  compiled output contains leaked template tag {if $body.Tagline}; close or correct the source tag, and it remains in output until fixed in item "UnclosedBlock" (character)
 ERROR CL0541 (branch open)
   "Anchor" is both a declared role and an item id, which is ambiguous — rename the role or item; the token remains unresolved until fixed.
 ERROR CL0542 (branch open)
@@ -106,11 +106,11 @@ ERROR CL0540 (branch open)
 ERROR CL0540 (branch open)
   "{$Undeclared}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Missing} in item "RoleTester" (character)
+  compiled output contains unresolved token {$Missing}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Loop} in item "RoleTester" (character)
+  compiled output contains unresolved token {$Loop}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Undeclared} in item "RoleTester" (character)
+  compiled output contains unresolved token {$Undeclared}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
 WARN CL0715 Codex/items.cl.yaml
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
 WARN CL0614 components/plot-essentials.cl.yaml
@@ -142,7 +142,7 @@ ERROR CL0611 Codex/items.cl.yaml
 ERROR CL0533 Codex/items.cl.yaml
   placeholder "%heroName%" in the type of story card "MistypedType" on branch "gated" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
 ERROR CL0420 Codex/items.cl.yaml
-  no template found for item "MistypedType" (type: Character-%heroName%)
+  no template found for item "MistypedType" (type: Character-%heroName%); add or select the template, and the item remains unrendered until fixed.
 ERROR CL0622 Codex/items.cl.yaml
   story cards named "Anchor" collide on branch "gated" (both as character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
 ERROR CL0712 Codex/items.cl.yaml
@@ -154,11 +154,11 @@ ERROR CL0714 Codex/items.cl.yaml
   Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
 ERROR CL0413 templates/Broken.template
-  Malformed join() call in Broken: Malformed join(): join($body.Tagline)
+  Malformed join() call in Broken: Malformed join(): join($body.Tagline); correct the call syntax, and the malformed call remains literal until fixed.
 ERROR CL0415 templates/Unclosed.template
-  Unclosed {if $body.Tagline} block.
+  Unclosed {if $body.Tagline} block; close the block, and the opening tag remains literal until fixed.
 ERROR CL0433 Codex/items.cl.yaml
-  leaked template tag {if $body.Tagline} in item "UnclosedBlock" (character)
+  compiled output contains leaked template tag {if $body.Tagline}; close or correct the source tag, and it remains in output until fixed in item "UnclosedBlock" (character)
 ERROR CL0541 (branch gated)
   "Anchor" is both a declared role and an item id, which is ambiguous — rename the role or item; the token remains unresolved until fixed.
 ERROR CL0542 (branch gated)
@@ -172,11 +172,11 @@ ERROR CL0540 (branch gated)
 ERROR CL0540 (branch gated)
   "{$Undeclared}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Missing} in item "RoleTester" (character)
+  compiled output contains unresolved token {$Missing}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Loop} in item "RoleTester" (character)
+  compiled output contains unresolved token {$Loop}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Undeclared} in item "RoleTester" (character)
+  compiled output contains unresolved token {$Undeclared}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
 WARN CL0715 Codex/items.cl.yaml
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
 WARN CL0614 components/plot-essentials.cl.yaml
@@ -211,7 +211,7 @@ ERROR CL0611 Codex/items.cl.yaml
 ERROR CL0533 Codex/items.cl.yaml
   placeholder "%heroName%" in the type of story card "MistypedType" on branch "silent" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
 ERROR CL0420 Codex/items.cl.yaml
-  no template found for item "MistypedType" (type: Character-%heroName%)
+  no template found for item "MistypedType" (type: Character-%heroName%); add or select the template, and the item remains unrendered until fixed.
 ERROR CL0622 Codex/items.cl.yaml
   story cards named "Anchor" collide on branch "silent" (both as character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
 ERROR CL0712 Codex/items.cl.yaml
@@ -223,11 +223,11 @@ ERROR CL0714 Codex/items.cl.yaml
   Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play.
 ERROR CL0413 templates/Broken.template
-  Malformed join() call in Broken: Malformed join(): join($body.Tagline)
+  Malformed join() call in Broken: Malformed join(): join($body.Tagline); correct the call syntax, and the malformed call remains literal until fixed.
 ERROR CL0415 templates/Unclosed.template
-  Unclosed {if $body.Tagline} block.
+  Unclosed {if $body.Tagline} block; close the block, and the opening tag remains literal until fixed.
 ERROR CL0433 Codex/items.cl.yaml
-  leaked template tag {if $body.Tagline} in item "UnclosedBlock" (character)
+  compiled output contains leaked template tag {if $body.Tagline}; close or correct the source tag, and it remains in output until fixed in item "UnclosedBlock" (character)
 ERROR CL0541 (branch silent)
   "Anchor" is both a declared role and an item id, which is ambiguous — rename the role or item; the token remains unresolved until fixed.
 ERROR CL0542 (branch silent)
@@ -241,11 +241,11 @@ ERROR CL0540 (branch silent)
 ERROR CL0540 (branch silent)
   "{$Undeclared}" does not resolve to a declared role or a known item id, so the token remains unresolved until you correct the name. Roles declared in scope: LI, Anchor, Missing, Loop.
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Missing} in item "RoleTester" (character)
+  compiled output contains unresolved token {$Missing}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Loop} in item "RoleTester" (character)
+  compiled output contains unresolved token {$Loop}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
-  unresolved token {$Undeclared} in item "RoleTester" (character)
+  compiled output contains unresolved token {$Undeclared}; fix the authoring reference or resolver input, and the token remains in output until fixed in item "RoleTester" (character)
 WARN CL0715 Codex/items.cl.yaml
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
 WARN CL0614 components/plot-essentials.cl.yaml

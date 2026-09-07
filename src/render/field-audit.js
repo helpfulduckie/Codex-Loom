@@ -239,13 +239,13 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
               : 'is a declared field no template this item renders through includes';
             findings.set(key, {
               code: CODES.FIELD_UNREAD_MISROUTED,
-              message: `body key "${leaf}" on item "${itemId}" ${where} — its content is dropped from the compiled card.`,
+              message: `body key "${leaf}" on item "${itemId}" ${where} — its content is dropped from the compiled card; include the field in a rendered template or remove it, and the content stays dropped until fixed.`,
               file,
             });
           } else {
             findings.set(key, {
               code: CODES.FIELD_UNREAD_UNKNOWN,
-              message: `body key "${leaf}" on item "${itemId}" is read by no template this item renders through and no declaration names it — its content is dropped from the compiled card.`,
+              message: `body key "${leaf}" on item "${itemId}" is read by no template this item renders through and no declaration names it — its content is dropped from the compiled card; remove or declare and render the key, and the content stays dropped until fixed.`,
               file,
             });
           }
@@ -288,7 +288,7 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
       if (fields[name] === null || named.has(name.toLowerCase())) continue;
       diagnostics.warn(
         CODES.FIELD_DECLARED_UNUSED,
-        `field "${name}" is declared in the field table but no template names it, directly or through a group.`,
+        `field "${name}" is declared in the field table but no template names it, directly or through a group, so the declaration has no effect; remove it or reference it, and it remains unused until fixed.`,
         src == null ? undefined : { file: String(src) },
       );
     }
