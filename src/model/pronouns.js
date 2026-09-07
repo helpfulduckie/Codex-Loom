@@ -91,6 +91,22 @@ function matchCase(str, original) {
   return str.toLowerCase();
 }
 
+function isSentenceInitial(source, offset) {
+  const before = source.slice(0, offset);
+  if (/^\s*$/.test(before)) return true;
+
+  const lineStart = before.lastIndexOf('\n') + 1;
+  if (/^\s*[-*+]\s*$/.test(before.slice(lineStart))) return true;
+
+  return /[.!?][\]\)}"'”’]*\s*$/.test(before);
+}
+
+function matchSentenceCase(str, source, offset) {
+  return isSentenceInitial(source, offset)
+    ? str[0].toUpperCase() + str.slice(1)
+    : str.toLowerCase();
+}
+
 function getDisplayName(item) {
   const name = item.name;
   if (!name) return item.id || '';
@@ -194,7 +210,7 @@ function applyTokenPass(str, opts) {
 
   const TOKEN_RE = /\{(\$[^{}]+)\}|\[(s|es|is|was|has)\]/g;
 
-  return str.replace(TOKEN_RE, (match, braceContent, verbMarker) => {
+  return str.replace(TOKEN_RE, (match, braceContent, verbMarker, offset, source) => {
     if (verbMarker) {
       const scope = currentScope || itemPronounSet;
       const plural = scope ? PLURAL_SETS.has(scope.toLowerCase()) : false;
@@ -254,7 +270,7 @@ function applyTokenPass(str, opts) {
       if (registry.has(baseId)) {
         const refItem = (resolvedById && resolvedById.get(baseId)) || registry.get(baseId);
         const isProtagonist = branchProtagonist && branchProtagonist === baseId;
-        if (isProtagonist) return matchCase('your', inner);
+        if (isProtagonist) return matchSentenceCase('your', source, offset);
         return getDisplayName(refItem) + "'s";
       }
     }
@@ -263,7 +279,7 @@ function applyTokenPass(str, opts) {
       const refItem = (resolvedById && resolvedById.get(innerLower)) || registry.get(innerLower);
       const isProtagonist = branchProtagonist && branchProtagonist === innerLower;
       currentScope = isProtagonist ? 'you' : NAME_SCOPE;
-      if (isProtagonist) return 'you';
+      if (isProtagonist) return matchSentenceCase('you', source, offset);
       return matchCase(getDisplayName(refItem), inner);
     }
 

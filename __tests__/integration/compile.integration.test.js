@@ -88,7 +88,7 @@ describe('protagonist you-mode', () => {
   test('subject branch (protagonist=Aness): {$Aness.her~} resolves to "your" (you-mode)', () => {
     const content = fs.readFileSync(branchCardFile('subject', 'Character'), 'utf8');
     expect(content).toContain('your polite nature');
-    expect(content).toContain('you love magic research');
+    expect(content).toContain('You love magic research');
   });
 
   test('researcher branch (protagonist=Veyrn): {$Aness.her~} resolves via female pronoun set', () => {
@@ -141,7 +141,7 @@ describe('protagonist inherited from parent branch node', () => {
 
   test('Aness/Cult leaf inherits protagonist=Aness: {$Aness} resolves to "you"', () => {
     const content = fs.readFileSync(nestedCardFile('Aness', 'Cult', 'Character'), 'utf8');
-    expect(content).toContain('you love magic research');
+    expect(content).toContain('You love magic research');
     expect(content).toContain('your polite nature');
   });
 

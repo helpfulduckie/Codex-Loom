@@ -173,11 +173,32 @@ describe('applyTokenPass — unscoped pronoun tokens', () => {
 });
 
 describe('applyTokenPass — character references {$Id}', () => {
-  test('{$Id} → "you" when item is protagonist', () => {
+  test('{$Id} → "You" at the start of a sentence when item is protagonist', () => {
     const item = makeItem('aness', 'female');
     const registry = new Map([['aness', item]]);
     expect(applyTokenPass('{$Aness} walked in', { item, registry, branchProtagonist: 'aness' }))
-      .toBe('you walked in');
+      .toBe('You walked in');
+  });
+
+  test('{$Id} → "you" mid-sentence when item is protagonist', () => {
+    const item = makeItem('aness', 'female');
+    const registry = new Map([['aness', item]]);
+    expect(applyTokenPass('I saw {$Aness} walk in.', { item, registry, branchProtagonist: 'aness' }))
+      .toBe('I saw you walk in.');
+  });
+
+  test('{$Id} → "You" after sentence-ending punctuation when item is protagonist', () => {
+    const item = makeItem('aness', 'female');
+    const registry = new Map([['aness', item]]);
+    expect(applyTokenPass('The door opens. {$Aness} walk[s] in.', { item, registry, branchProtagonist: 'aness' }))
+      .toBe('The door opens. You walk in.');
+  });
+
+  test('{$Id} → "You" after a Markdown list marker when item is protagonist', () => {
+    const item = makeItem('aness', 'female');
+    const registry = new Map([['aness', item]]);
+    expect(applyTokenPass('- {$Aness} walk[s] in.', { item, registry, branchProtagonist: 'aness' }))
+      .toBe('- You walk in.');
   });
 
   test('{$Id} → display name when not protagonist', () => {
@@ -198,7 +219,7 @@ describe('applyTokenPass — character references {$Id}', () => {
     const item = makeItem('aness', 'female');
     const registry = new Map([['aness', item]]);
     expect(applyTokenPass('{$Aness} love[s] it', { item, registry, branchProtagonist: 'aness' }))
-      .toBe('you love it');
+      .toBe('You love it');
   });
 
   test('[is] uses scope from last {$Id}', () => {
@@ -212,7 +233,7 @@ describe('applyTokenPass — character references {$Id}', () => {
     const item = makeItem('aness', 'female');
     const registry = new Map([['aness', item]]);
     expect(applyTokenPass('{$Aness} [was] there', { item, registry, branchProtagonist: 'aness' }))
-      .toBe('you were there');
+      .toBe('You were there');
   });
 });
 
@@ -238,18 +259,25 @@ describe("applyTokenPass — possessive character reference {$Id's}", () => {
       .toBe("Aness's voice");
   });
 
-  test("{$Aness's} uppercase token → \"Your\" when protagonist", () => {
+  test("{$Aness's} → \"Your\" at the start of a sentence when protagonist", () => {
     const item = makeItem('aness', 'female');
     const registry = new Map([['aness', item]]);
     expect(applyTokenPass("{$Aness's} choice", { item, registry, branchProtagonist: 'aness' }))
       .toBe("Your choice");
   });
 
-  test("{$aness's} lowercase token → \"your\" when protagonist", () => {
+  test("{$Aness's} → \"your\" mid-sentence when protagonist", () => {
+    const item = makeItem('aness', 'female');
+    const registry = new Map([['aness', item]]);
+    expect(applyTokenPass("I respect {$Aness's} choice", { item, registry, branchProtagonist: 'aness' }))
+      .toBe('I respect your choice');
+  });
+
+  test("{$aness's} → \"Your\" at the start of a sentence when protagonist", () => {
     const item = makeItem('aness', 'female');
     const registry = new Map([['aness', item]]);
     expect(applyTokenPass("{$aness's} choice", { item, registry, branchProtagonist: 'aness' }))
-      .toBe("your choice");
+      .toBe("Your choice");
   });
 
   test("{$Marcus's} — name ending in s gets 's appended", () => {
@@ -273,6 +301,13 @@ describe('applyTokenPass — scoped pronoun tokens {$Id.pronoun}', () => {
     const registry = new Map([['aness', item]]);
     expect(applyTokenPass('{$Aness.she} smiled', { item, registry, branchProtagonist: 'aness' }))
       .toBe('you smiled');
+  });
+
+  test('{$Id.She} preserves explicit capitalization when protagonist', () => {
+    const item = makeItem('aness', 'female');
+    const registry = new Map([['aness', item]]);
+    expect(applyTokenPass('{$Aness.She} smiled', { item, registry, branchProtagonist: 'aness' }))
+      .toBe('You smiled');
   });
 
   test('{$Id.she} → "she" when not protagonist', () => {
@@ -325,7 +360,7 @@ describe('applyTokenPass — verb conjugation markers', () => {
     const registry = new Map([['aness', item]]);
     // scope set by {$Aness} as protagonist (you/plural)
     expect(applyTokenPass('{$Aness} love[s] it', { item, registry, branchProtagonist: 'aness' }))
-      .toBe('you love it');
+      .toBe('You love it');
   });
 
   test('[es] → es for female (singular)', () => {
@@ -336,21 +371,21 @@ describe('applyTokenPass — verb conjugation markers', () => {
     const item = makeItem('aness', 'female');
     const registry = new Map([['aness', item]]);
     expect(applyTokenPass('{$Aness} [is] ready', { item, registry, branchProtagonist: 'aness' }))
-      .toBe('you are ready');
+      .toBe('You are ready');
   });
 
   test('[was] → were for protagonist scope', () => {
     const item = makeItem('aness', 'female');
     const registry = new Map([['aness', item]]);
     expect(applyTokenPass('{$Aness} [was] here', { item, registry, branchProtagonist: 'aness' }))
-      .toBe('you were here');
+      .toBe('You were here');
   });
 
   test('[has] → have for protagonist scope', () => {
     const item = makeItem('aness', 'female');
     const registry = new Map([['aness', item]]);
     expect(applyTokenPass('{$Aness} [has] arrived', { item, registry, branchProtagonist: 'aness' }))
-      .toBe('you have arrived');
+      .toBe('You have arrived');
   });
 
   test('multiple conjugation markers in one string', () => {
@@ -408,7 +443,7 @@ describe('applyTokenPass — bare {$Id} name conjugates singular regardless of p
 
   test('protagonist they/them still conjugates plural via the "you" swap', () => {
     expect(applyTokenPass('{$Zephon} answer[s]', { item: zephon, registry, branchProtagonist: 'zephon' }))
-      .toBe('you answer');
+      .toBe('You answer');
   });
 });
 
@@ -724,7 +759,7 @@ describe('applyTokenPass — role resolution', () => {
   test('a role bound to the protagonist resolves to "you"', () => {
     expect(applyTokenPass('{$protagonist} arrived', {
       item: malcolm, registry, roles, branchProtagonist: 'aness',
-    })).toBe('you arrived');
+    })).toBe('You arrived');
   });
 
   test('an ordinary item id is unaffected by an unrelated roles table', () => {

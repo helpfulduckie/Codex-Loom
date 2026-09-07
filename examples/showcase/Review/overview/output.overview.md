@@ -49,7 +49,7 @@ Setting: Feudal empire; The Royal Academy, %house% wing
 You: %heroName%, Sworn Protector
 Appearance: female; late 20s; short silver hair
 Personality: determined, loyal, reserved
-you love a clean solution — you act before you explain.
+You love a clean solution — you act before you explain.
 }
 
 {
@@ -210,7 +210,7 @@ Setting: Feudal empire; The Royal Academy, %house% wing
 You: %heroName%, Sworn Protector
 Appearance: female; late 20s; short silver hair
 Personality: determined, loyal, reserved
-you love a clean solution — you act before you explain.
+You love a clean solution — you act before you explain.
 }
 
 {
@@ -341,7 +341,7 @@ Setting: Feudal empire; The Royal Academy, %house% wing
 You: %heroName%, Academy Mage
 Appearance: female; late 20s; short silver hair; silver staff
 Personality: determined, loyal, reserved
-you love a clean solution — you act before you explain.
+You love a clean solution — you act before you explain.
 }
 
 {

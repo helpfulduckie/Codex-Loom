@@ -89,10 +89,17 @@ body:
 ```
 
 When `protagonist: Aness` (Aness is the player character):
-> you love magic research — you instinctively leap to explore theoretical implications
+> You love magic research — you instinctively leap to explore theoretical implications
 
 When `protagonist: Veyrn` (Aness is an NPC):
 > Aness loves magic research — she instinctively leaps to explore theoretical implications
+
+**A protagonist swap follows source sentence position, not the id's capitalization.** `{$Aness}`
+and `{$Aness's}` render `You` and `Your` at the start of a text value or after sentence-ending
+punctuation; elsewhere they render `you` and `your`. Item ids conventionally start with a capital,
+so their spelling cannot carry this instruction. Scoped and unscoped pronoun tokens keep their
+existing explicit-case rule: write `{$She}` or `{$Aness.She}` when the pronoun itself needs a
+capital initial.
 
 ---
 
@@ -153,7 +160,7 @@ protagonist: Veyrn
 Zephon answers the question they wish had been asked
 ```
 
-When Aness is the protagonist, `{$Aness}` becomes "you" and the plural `you`-set drives the markers:
+When Aness is the protagonist, `{$Aness}` becomes "You" at the start of this sentence and the plural `you`-set drives the markers:
 
 ```text transform=pronoun-pass id=conj-protagonist
 text: "{$Aness} love[s] magic research — {$Aness.she} instinctively leap[s]"
@@ -163,7 +170,7 @@ protagonist: Aness
 ```
 
 ``` expect=conj-protagonist
-you love magic research — you instinctively leap
+You love magic research — you instinctively leap
 ```
 
 When Aness is an NPC with `pronouns: female`, the singular set drives them instead:
