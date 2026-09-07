@@ -210,4 +210,19 @@ describe('a bare import def carries no id of its own', () => {
     ], 'project', { diagnostics });
     expect(diagnostics.errors.some((d) => /Duplicate item ID/i.test(d.message))).toBe(true);
   });
+
+  test('CL0324 keeps the import hint separate and points at import:', () => {
+    const diagnostics = new Diagnostics();
+    resolveBranchItems(
+      [{ import: 'Anes', _source: 'items.cl.yaml', _importLocation: {
+        file: 'items.cl.yaml', line: 4, col: 3,
+      } }],
+      canon(), [], {}, diagnostics,
+    );
+    const finding = diagnostics.errors.find((d) => d.code === 'CL0324');
+    expect(finding).toBeDefined();
+    expect(finding.location).toBe('items.cl.yaml:4:3');
+    expect(finding.message).not.toContain('Did you mean');
+    expect(finding.hint).toBe('Did you mean "aness"?');
+  });
 });

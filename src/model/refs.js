@@ -2,6 +2,7 @@
 
 
 const { CODES } = require('../diag');
+const { damerauLevenshtein } = require('../util');
 
 function splitRef(ref) {
   const text = String(ref);
@@ -11,6 +12,21 @@ function splitRef(ref) {
     source: text.slice(0, at).trim().toLowerCase(),
     id: text.slice(at + 1).trim().toLowerCase(),
   };
+}
+
+function nearestCandidate(value, candidates) {
+  let best = null;
+  for (const candidate of candidates) {
+    const distance = damerauLevenshtein(value.toLowerCase(), candidate.toLowerCase());
+    const tolerance = Math.max(1, Math.floor(candidate.length / 3));
+    if (distance <= tolerance && (!best || distance < best.distance)) best = { candidate, distance };
+  }
+  return best && best.candidate;
+}
+
+function refHint(value, candidates) {
+  const suggestion = nearestCandidate(value, candidates);
+  return suggestion ? `Did you mean "${suggestion}"?` : null;
 }
 
 function resolveItemRef(registry, ref) {
@@ -24,7 +40,7 @@ function resolveItemRef(registry, ref) {
       return {
         item: null,
         code: CODES.UNKNOWN_CANON_SOURCE,
-        message: `"${label}" names library set "${source}", which is not declared in structure.input.library.`,
+        message: `reference "${label}" names undeclared library set "${source}"; use a set declared in structure.input.library.`,
         hint: known.length
           ? `Declared library sets: ${known.join(', ')}.`
           : 'No library sets are declared for this project.',
@@ -38,7 +54,10 @@ function resolveItemRef(registry, ref) {
     return {
       item: null,
       code: CODES.REF_NOT_FOUND,
-      message: `no item with id "${id}" found in library set "${source}"`,
+      message: `library set "${source}" defines no item with id "${id}"; check the id or qualify a different set`,
+      hint: refHint(id, qualified ? [...qualified.keys()]
+        .filter((key) => key.startsWith(`${source}:`))
+        .map((key) => key.slice(source.length + 1)) : []),
     };
   }
 
@@ -54,7 +73,7 @@ function resolveItemRef(registry, ref) {
     return {
       item: null,
       code: CODES.AMBIGUOUS_REF,
-      message: `"${id}" is defined in ${rival.length} library sets.\n${lines}`,
+      message: `reference "${id}" is defined in ${rival.length} library sets, so an unqualified import is ambiguous.\n${lines}`,
       hint: `Qualify the reference: ${options.join(' or ')}.`,
     };
   }
@@ -62,7 +81,8 @@ function resolveItemRef(registry, ref) {
   return {
     item: null,
     code: CODES.REF_NOT_FOUND,
-    message: `no item with id "${label}" found in registry`,
+    message: `reference "${label}" names no item in the project or declared libraries`,
+    hint: refHint(id, [...registry.keys()]),
   };
 }
 

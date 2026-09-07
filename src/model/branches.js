@@ -74,10 +74,8 @@ function warnWildcardUnbind(spec, onWarn) {
   if (WARNED_WILDCARD_UNBIND.has(spec) || !hasWildcardUnbind(spec)) return;
   WARNED_WILDCARD_UNBIND.add(spec);
   onWarn(CODES.BRANCH_WILDCARD_UNBIND,
-    "branch spec maps '*' to ~ (a null wildcard). Read literally that excludes the item "
-    + 'from every branch, which is never what anyone means, so the walker skips it and the '
-    + 'item stays included everywhere — the opposite of how it reads. Use \'_: ~\' as the '
-    + 'catch-all to drop the branches you did not name.');
+    "branch spec maps '*' to ~. The compiler skips that null wildcard, so the item stays "
+    + 'included everywhere. Use \'_: ~\' as the catch-all to exclude branches you did not name.');
 }
 
 function extractApplyList(val) {

@@ -179,7 +179,7 @@ function applyFieldsDelta(item, delta, onWarn) {
     const itemId = item.id || (typeof item.name === 'string' ? item.name : '(unknown)');
     if (onWarn) {
       onWarn(CODES.VARIANT_DELTA_VAR_ALIASES,
-        `item "${itemId}" variant delta contains multiple variable-block aliases (${deltaAliasKeys.map(k => `"${k}"`).join(', ')}). Merging — subfield conflicts resolve last-writer-wins.`);
+        `item "${itemId}" variant delta declares multiple variable-block aliases (${deltaAliasKeys.map(k => `"${k}"`).join(', ')}). They merge with later fields winning; keep one alias.`);
     }
   }
 

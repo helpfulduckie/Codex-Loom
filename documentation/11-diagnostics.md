@@ -173,19 +173,19 @@ Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein 
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `CL0320` | WARN | A variant delta declares more than one `v:` alias; they are merged. |
-| `CL0321` | WARN | A named variant does not exist in the item's variant tree. |
-| `CL0322` | WARN | An item emitting a story card has neither `aid.type` nor `render.template`. |
-| `CL0323` | ERROR | An item declares both `notes:` and `description:`. |
-| `CL0324` | ERROR | An item could not be resolved — most often a failed `import:`. |
-| `CL0325` | ERROR | Two item definitions resolve to the same id on one branch. |
-| `CL0326` | WARN | A selector aimed at many items matched none of them. |
-| `CL0327` | WARN | A branch spec maps `'*'` to `~`; it is skipped, and `'_': ~` is what was meant. |
-| `CL0328` | WARN | A field op changes nothing: every op in a chain missed, or a lone `-{}` / `/{}/{}` missed. |
-| `CL0340` | ERROR | A reference is defined in more than one library set and is not qualified. |
-| `CL0341` | ERROR | A reference names a library set not declared in `structure.input.library`. |
-| `CL0342` | ERROR | A reference names an id that no library set defines. |
-| `CL0330` | WARN | A cross-item reference names an item that does not exist. |
+| `CL0320` | WARN | A variant delta declares multiple variable-block aliases; later fields win when they merge. |
+| `CL0321` | WARN | A variant dispatch names no variant in the selected item tree, so that dispatch has no effect. |
+| `CL0322` | WARN | An item emits a story card without `aid.type` or `render.template`, so no card template can be selected. |
+| `CL0323` | ERROR | An item declares `notes:` and `description:` for the same field; remove one spelling. |
+| `CL0324` | ERROR | An item `import:` could not be resolved; the item is skipped. |
+| `CL0325` | ERROR | Two item definitions resolve to one id on a branch, so both cannot be emitted. |
+| `CL0326` | WARN | A selector aimed at multiple items matched none, so it changes nothing. |
+| `CL0327` | WARN | A branch spec maps `'*'` to `~`; use `'_': ~` to exclude the unnamed branches. |
+| `CL0328` | WARN | A field operation matches nothing, so it changes no value; check for drift or a typo. |
+| `CL0340` | ERROR | A reference is defined in more than one library set and needs a qualifier. |
+| `CL0341` | ERROR | A reference names an undeclared library set; use a set declared in `structure.input.library`. |
+| `CL0342` | ERROR | A reference names an id that the selected registry does not define. |
+| `CL0330` | WARN | A cross-item reference names no resolved item, so the token remains unresolved. |
 
 The resolution layer touches no filesystem and prints nothing, so these are collected on
 the diagnostics bus rather than printed where they arise. Reserved: `CL0310`, unresolvable
@@ -196,7 +196,9 @@ field. Two values under two names means the author believes they are two fields,
 silent winner hides that belief instead of correcting it. The declared `notes:` wins so
 output stays deterministic while it is fixed.
 
-`CL0324` is the reason a failed `import:` does not compile quietly. The item is dropped
+`CL0324` is the reason a failed `import:` does not compile quietly. The diagnostic points
+at the `import:` key itself when the YAML location is available, and keeps a near-match
+suggestion as a separate hint rather than folding it into the error message. The item is dropped
 and everything around it still renders, so the tree that lands looks complete: correct
 card count, tidy summary table, every branch present. What is missing is whatever that
 import was carrying — which, when the import also drove a branch's variant dispatch, can
@@ -872,6 +874,11 @@ that the id matches the library file's `id:` (or `name:` when `id:` is absent), 
 sits inside a declared `structure.input.library` directory, and — for a qualified reference
 — that the `set:` prefix names a declared library entry (`CL0341`) rather than a set that
 lacks the id (`CL0342`).
+
+`CL0342` suggests a nearby id from the candidate set being searched. An unqualified
+reference is compared only with unqualified registry ids; a qualified reference is compared
+only with ids in that declared library set. `CL0341` keeps the declared-library-set hint,
+because an unknown qualifier is a configuration error rather than an item-name typo.
 
 **`CL0321` "variant not found" when the variant looks defined** — variant dispatch reads
 the **item definition's** own `variants:` tree. On an `import:`, `importVariants:` reads the

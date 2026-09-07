@@ -95,6 +95,12 @@ describe('item loading', () => {
     expect(loadItemsFromDir([tmpDir])[0]._source).toBe(file);
   });
 
+  test('plain import keeps the import-key location as data', () => {
+    write('a.cl.yaml', '- id: A\n  import: Missing\n');
+    const [item] = loadItemsFromDir([tmpDir]);
+    expect(item._importLocation).toMatchObject({ file: path.join(tmpDir, 'a.cl.yaml'), line: 2 });
+  });
+
   test('an empty file is skipped with a diagnostic', () => {
     write('empty.cl.yaml', '');
     const { items, codes } = loadWithDiagnostics();
@@ -150,7 +156,7 @@ describe('item schema validation', () => {
 
   test('a misspelled key suggests the right spelling', () => {
     write('a.cl.yaml', 'id: A\nvarients: []\n');
-    expect(loadWithDiagnostics().diagnostics.errors[0].hint).toBe('Did you mean "variants"?');
+    expect(loadWithDiagnostics().diagnostics.errors[0].hint).toBe('"varients" is not recognized, so it is ignored; rename it to "variants".');
   });
 
   test('a misplaced nested key is caught too', () => {
@@ -352,6 +358,16 @@ describe('resolveIncludes — duplicate file detection', () => {
     const result = resolveIncludes(itemDefs, new Map(), makeConfig(tmpDir));
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('ItemA');
+  });
+
+  test('included plain import keeps the import-key location', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: ItemA\n  import: Missing\n', 'utf8');
+    const result = resolveIncludes(
+      [{ include: shared, _source: path.join(tmpDir, 'project.yaml') }],
+      new Map(), makeConfig(tmpDir),
+    );
+    expect(result[0]._importLocation).toMatchObject({ file: shared, line: 2 });
   });
 
   /** Resolve with a bus and hand back the CL0131 reports beside the result. */

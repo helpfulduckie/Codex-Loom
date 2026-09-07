@@ -114,7 +114,11 @@ function loadItemsFromDir(dirs, options = {}) {
           diagnostics.error(CODES.ID_CONTAINS_COLON, message, { file });
         }
 
-        items.push({ ...normalizeItemVarField(entry, (code, message) => warn(code, message)), _source: file });
+        const loaded = { ...normalizeItemVarField(entry, (code, message) => warn(code, message)), _source: file };
+        const importPath = [...at, 'import'];
+        const importLocation = sourceMap && sourceMap.nearest(importPath);
+        if (importLocation && importLocation.line !== undefined) loaded._importLocation = importLocation;
+        items.push(loaded);
       });
     }
   }
@@ -237,20 +241,24 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
     }
     seenFiles.set(fullPath, [importerSource]);
 
-    let raw;
+    let raw; let sourceMap;
     try {
-      ({ value: raw } = loadYamlDocument(fullPath));
+      ({ value: raw, sourceMap } = loadYamlDocument(fullPath));
     } catch (err) {
       if (!(err instanceof YamlLoadError)) throw err;
       diagnostics.error(err.code, err.message, { file: fullPath });
       continue;
     }
     const fromThisInclude = [];
-    for (const item of (Array.isArray(raw) ? raw : [raw])) {
+    for (const [index, item] of (Array.isArray(raw) ? raw : [raw]).entries()) {
       const id = ((item.id || (typeof item.name === 'string' ? item.name : '')) || '').toLowerCase();
       if (explicitIds.has(id)) continue; // an explicit import wins
 
       const stamped = { ...item, _source: fullPath };
+      const importLocation = sourceMap && sourceMap.nearest(
+        ...(Array.isArray(raw) ? [String(index), 'import'] : ['import'])
+      );
+      if (importLocation && importLocation.line !== undefined) stamped._importLocation = importLocation;
       if (def.importVariants) stamped._include_variants = def.importVariants;
       if (def.branches) stamped._include_branch_spec = def.branches;
       included.push(stamped);
@@ -276,9 +284,8 @@ function reportUnmatchedSelectors(def, items, includePath, diagnostics) {
     const message = `importVariants selector "${vPath}" matched none of the `
       + `${items.length} item${items.length === 1 ? '' : 's'} included from `
       + `${path.basename(includePath)}. `
-      + 'A selector aimed at every item in a file is silent where an item does not define '
-      + 'the name (§7.6.2a), so a misspelling applies to nothing and changes nothing — this '
-      + 'is the only report it produces.';
+      + 'No item defines that variant, so the selector changes nothing; check the spelling '
+      + 'or add the variant to an included item.';
     diagnostics.warn(CODES.SELECTOR_MATCHED_NOTHING, message, { file: def._source });
   }
 }

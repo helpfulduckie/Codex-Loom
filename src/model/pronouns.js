@@ -309,7 +309,8 @@ function applyCrossItemRefs(resolvedItems, { registry, onWarn, resolvedById }) {
     const lower = refId.toLowerCase();
     const sourceItem = resolvedById.get(lower) || registry.get(lower);
     if (!sourceItem) {
-      if (onWarn) onWarn(CODES.CROSS_ITEM_REF_MISSING, `cross-item ref {${refId}.body.${fieldPath}} — item not found`);
+      if (onWarn) onWarn(CODES.CROSS_ITEM_REF_MISSING,
+        `cross-item ref {${refId}.body.${fieldPath}} names no resolved item; check the id or define the item before using the reference.`);
       return null;
     }
     const parts = fieldPath.split('.');

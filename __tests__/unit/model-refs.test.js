@@ -33,7 +33,7 @@ describe('resolveItemRef — plain Map (no sidecars)', () => {
     const result = resolveItemRef(registry, 'x');
     expect(result.item).toBeNull();
     expect(result.code).toBe(CODES.REF_NOT_FOUND);
-    expect(result.message).toBe('no item with id "x" found in registry');
+    expect(result.message).toBe('reference "x" names no item in the project or declared libraries');
   });
 });
 
@@ -88,6 +88,26 @@ describe('resolveItemRef — ItemRegistry', () => {
     expect(result.item).toBeNull();
     expect(result.code).toBe(CODES.REF_NOT_FOUND);
     expect(result.message).toContain('library set "hollow"');
+  });
+
+  test('an unqualified near miss suggests only registry ids', () => {
+    const registry = buildRegistry();
+    expect(resolveItemRef(registry, 'kaidne').hint).toBe('Did you mean "kaiden"?');
+  });
+
+  test('a qualified near miss suggests only ids in that library set', () => {
+    const registry = buildRegistry();
+    expect(resolveItemRef(registry, 'grimwood:kaidne').hint).toBe('Did you mean "kaiden"?');
+  });
+
+  test('a distant miss has no suggestion', () => {
+    expect(resolveItemRef(buildRegistry(), 'completely-different').hint).toBeNull();
+  });
+
+  test('an unknown qualifier retains the declared-set hint', () => {
+    const result = resolveItemRef(buildRegistry(), 'nowher:kaidne');
+    expect(result.code).toBe(CODES.UNKNOWN_CANON_SOURCE);
+    expect(result.hint).toContain('Declared library sets:');
   });
 });
 

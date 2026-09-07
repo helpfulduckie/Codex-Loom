@@ -16,6 +16,27 @@ const RESERVED_LIBRARY_BASENAMES = Object.freeze(['library.cl.yaml']);
 
 const PATH_UNSAFE_CHARS = '<>:"/\\\\|?*';
 
+// Shared by schema and reference diagnostics; transpositions count as one edit.
+function damerauLevenshtein(a, b) {
+  a = String(a); b = String(b);
+  if (a === b) return 0;
+  const m = a.length; const n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const d = Array.from({ length: m + 1 }, (_, i) => [i]);
+  for (let j = 0; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
+    }
+  }
+  return d[m][n];
+}
+
 function hasSuffix(name, suffixes) {
   const lower = name.toLowerCase();
   return suffixes.some((s) => lower.endsWith(s));
@@ -269,6 +290,7 @@ function checkMechanicalArtifacts(text, label, sink) {
 }
 
 module.exports = {
+  damerauLevenshtein,
   findFiles, readFileTrim, listFilesRelative, loadYaml, deepClone, transformStringValues, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
   ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
   YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix, PATH_UNSAFE_CHARS, PLACEHOLDER_RE, isPlainObject,

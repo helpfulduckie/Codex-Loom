@@ -101,9 +101,8 @@ function reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics) {
         DIAG_CODES.SELECTOR_MATCHED_NOTHING,
         `branch dispatch to variant "${name}" on branch "${branchPath.join('/') || '(root)'}" `
         + `matched none of the ${items.length} items included from ${path.basename(source)}. `
-        + 'A dispatch stamped onto every item in a file is silent where an item does not '
-        + 'define the name (§7.6.2a), so a misspelling applies to nothing and changes '
-        + 'nothing — this is the only report it produces.',
+        + 'No included item defines that variant, so the dispatch changes nothing; check '
+        + 'the spelling or add the variant to an included item.',
         { file: source },
       );
     }
@@ -125,8 +124,9 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagno
       const label = itemDef.id || itemDef.import || itemDef.name || '?';
       diagnostics.error(
         DIAG_CODES.ITEM_RESOLUTION_FAILED,
-        `item "${label}" could not be resolved: ${err.message}`,
-        { file: itemDef._source, branch },
+        `item "${label}" could not be resolved: ${err.importFailure ? err.importFailure.message : err.message}`,
+        { ...(itemDef._importLocation || { file: itemDef._source }), branch },
+        { hint: err.hint },
       );
       continue;
     }

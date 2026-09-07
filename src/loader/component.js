@@ -118,10 +118,8 @@ function resolveImports(doc, spec, options) {
         report(diagnostics, 'warn', CODES.SELECTOR_MATCHED_NOTHING,
           `importVariants selector "${name}" matched none of the `
           + `${Object.keys(contributed).length} sections imported from `
-          + `${path.basename(resolved)}. A selector aimed at every section in a component `
-          + 'is silent where a section does not define the name (§7.6.2a), so a '
-          + 'misspelling applies to nothing and changes nothing — this is the only report '
-          + 'it produces.',
+          + `${path.basename(resolved)}. No imported section defines that variant, so the `
+          + 'selector changes nothing; check the spelling or add the variant to a section.',
           spec);
       }
     }

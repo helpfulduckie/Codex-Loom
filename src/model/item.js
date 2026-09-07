@@ -37,7 +37,7 @@ function collectVariantDeltas(itemDef, variantPath, onWarn, options = {}) {
     if (!variantTree || typeof variantTree !== 'object') {
       if (warn) {
         warn(CODES.VARIANT_NOT_FOUND,
-          `variant "${part}" not found in variant tree of "${itemDef.id || itemDef.name}"${src}`);
+          `variant "${part}" is not defined in the variant tree of "${itemDef.id || itemDef.name}"${src}; check the spelling or add the variant.`);
       }
       break;
     }
@@ -45,7 +45,7 @@ function collectVariantDeltas(itemDef, variantPath, onWarn, options = {}) {
     if (!actualKey) {
       if (warn) {
         warn(CODES.VARIANT_NOT_FOUND,
-          `variant "${part}" not found in variant tree of "${itemDef.id || itemDef.name}"${src}`);
+          `variant "${part}" is not defined in the variant tree of "${itemDef.id || itemDef.name}"${src}; check the spelling or add the variant.`);
       }
       break;
     }
@@ -86,7 +86,7 @@ function touchedLeafPaths(before, after) {
 
 function stripMeta(item) {
   const out = {};
-  const skip = new Set(['variants', '_include_variants', '_include_variant_tree']);
+  const skip = new Set(['variants', '_include_variants', '_include_variant_tree', '_importLocation']);
   for (const [k, v] of Object.entries(item)) {
     if (!skip.has(k.toLowerCase())) out[k] = v;
   }
@@ -100,7 +100,11 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
   if (itemDef.import) {
     const found = resolveItemRef(registry, itemDef.import);
     if (!found.item) {
-      throw new Error(`Import failed: ${describeRefFailure(found)}`);
+      const error = new Error(`Import failed: ${describeRefFailure(found)}`);
+      error.code = found.code;
+      error.hint = found.hint;
+      error.importFailure = found;
+      throw error;
     }
     const canonItem = found.item;
 
@@ -209,8 +213,8 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     if (onWarn) {
       onWarn(CODES.NO_TYPE_OR_TEMPLATE,
         `item "${name}" emits a story card but has neither aid.type nor render.template, `
-        + 'so no template can be selected for it. Add one, or set "render.storyCard: false" '
-        + 'if it was only ever meant to render into a component.');
+        + 'so no card template can be selected. Add one, or set "render.storyCard: false" '
+        + 'if the item should render only into a component.');
     }
   }
 
@@ -220,8 +224,8 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     if (onWarn) {
       onWarn(CODES.NOTES_AND_DESCRIPTION,
         `item "${label}" declares both ${notesKeys.map((k) => `"${k}"`).join(' and ')}. `
-        + '"description" is an accepted alias for "notes" (§4.5), so these are one field — '
-        + 'keep whichever value is correct and delete the other.');
+        + '"description" is an alias for "notes", so these keys name one field. '
+        + 'Keep the correct value and delete the other key.');
     }
   }
   for (const key of notesKeys) {

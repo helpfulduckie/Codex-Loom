@@ -12,39 +12,13 @@ const TYPES = Object.freeze({
 });
 
 const { CODES } = require('./diag');
-const { isPlainObject } = require('./util');
+const { isPlainObject, damerauLevenshtein } = require('./util');
 
 const STRING = { type: TYPES.STRING };
 const NUMBER = { type: TYPES.NUMBER };
 const BOOLEAN = { type: TYPES.BOOLEAN };
 const ANY = { type: TYPES.ANY };
 
-
-function levenshtein(a, b) {
-  if (a === b) return 0;
-  const m = a.length;
-  const n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-
-  const d = Array.from({ length: m + 1 }, (_, i) => {
-    const row = new Array(n + 1).fill(0);
-    row[0] = i;
-    return row;
-  });
-  for (let j = 0; j <= n; j++) d[0][j] = j;
-
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
-        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
-      }
-    }
-  }
-  return d[m][n];
-}
 
 function buildKeyIndex(schema) {
   const index = new Map();
@@ -114,7 +88,7 @@ function suggestFor(key, ownPath, declaredHere, keyIndex) {
 
   let best = null;
   for (const candidate of declaredHere) {
-    const distance = levenshtein(key.toLowerCase(), candidate.toLowerCase());
+    const distance = damerauLevenshtein(key.toLowerCase(), candidate.toLowerCase());
     const tolerance = Math.max(1, Math.floor(candidate.length / 3));
     if (distance <= tolerance && (!best || distance < best.distance)) best = { candidate, distance };
   }
@@ -336,4 +310,4 @@ function validate(value, schema, options = {}) {
   return walk(value, schema, path);
 }
 
-module.exports = { TYPES, STRING, NUMBER, BOOLEAN, ANY, validate, buildKeyIndex, levenshtein };
+module.exports = { TYPES, STRING, NUMBER, BOOLEAN, ANY, validate, buildKeyIndex, levenshtein: damerauLevenshtein };
