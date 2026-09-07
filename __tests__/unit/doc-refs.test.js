@@ -23,14 +23,14 @@
  * the chapter at the top and the reader never learns they were sent to the wrong place. That
  * silence is the whole reason this test exists rather than a lint rule nobody runs.
  *
- * ── What is deliberately not asserted yet ─────────────────────────────────────
+ * ── Per-chapter completeness ──────────────────────────────────────────────────
  *
- * **Per-chapter completeness — every chapter referenced by at least one example — is not
- * here.** Only `showcase` exists so far, and a chapter covering a construct it does not use
- * would fail for the honest reason that the example is not written yet. That assertion lands
- * once the three concept projects do, and turning it on is the step that makes a doc reorg
- * fail loudly rather than quietly. Until then the floor below keeps the convention from
- * dying unnoticed.
+ * **Every numbered chapter is pointed at by at least one example `# doc:` site**, unless it
+ * is in EXEMPT with a reason. This is what makes a chapter rename or a heading reword fail
+ * loudly instead of silently orphaning every pointer that named it. It was held off until
+ * all four example projects existed, since a chapter for a construct no example used yet
+ * would have failed for an honest reason. EXEMPT is deliberately small: an entry there is a
+ * chapter no compiling example *can* point at, not one nobody got to.
  */
 
 const fs = require('fs');
@@ -130,5 +130,42 @@ describe('the documentation pointed at is the documentation that ships', () => {
     const offenders = refs.filter((r) => !/^\d\d-/.test(r.chapter))
       .map((r) => `${r.where} → ${r.chapter}`);
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('every numbered chapter has a worked example pointing back at it', () => {
+  // A chapter no compiling example can point at, with why. Not "nobody wrote one yet" — that
+  // failure is the point of this check. Removing an entry is how a new example that finally
+  // covers the chapter proves it did.
+  const EXEMPT = {
+    '12-snapshot.md':
+      '`--snapshot` writes an absolute source: path and a wall-clock syncedAt into a '
+      + 'committed manifest, so no example can carry a byte baseline for it until those are '
+      + 'made project-relative (its own compiler session — see Example Projects plan, Watch).',
+    '15-migrating-from-v3.md':
+      'v3 migration coverage retires with goldenFixtures/ (Example Projects plan, "Decisions '
+      + 'already taken"); no committed v3-shaped example is built for it.',
+  };
+
+  const chapters = fs.readdirSync(DOCS).filter((f) => /^\d\d-.*\.md$/.test(f)).sort();
+  const referenced = new Set(refs.map((r) => r.chapter));
+
+  test.each(chapters.map((c) => [c, c]))('%s', (_label, chapter) => {
+    if (referenced.has(chapter)) return;
+    if (chapter in EXEMPT) return;
+    throw new Error(
+      `documentation/${chapter} has no example '# doc:' pointer.\n`
+      + 'Add one at a construct site in an example project, or — only if no compiling example '
+      + `can point at it — add it to EXEMPT in ${path.basename(__filename)} with the reason.`,
+    );
+  });
+
+  test('every EXEMPT entry names a real chapter that is still unreferenced', () => {
+    // A renamed chapter must not leave a dead exemption behind, and an exemption that a new
+    // example has made unnecessary must be deleted rather than left masking a real gap.
+    const stale = Object.keys(EXEMPT).filter(
+      (c) => !chapters.includes(c) || referenced.has(c),
+    );
+    expect(stale).toEqual([]);
   });
 });

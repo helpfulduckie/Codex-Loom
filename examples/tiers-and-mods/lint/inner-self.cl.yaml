@@ -1,0 +1,40 @@
+# A project-local convention pack, shipped beside the mod stub it checks. It is
+# reached by `lint.packs.innerSelf.source: ./lint/inner-self.cl.yaml` on the `modB`
+# branches — the `source:` form, resolved relative to compile.cl.yaml, for a pack
+# that travels with a scenario rather than being bundled in Codex Loom.
+# doc: 14-convention-packs.md#declaring-packs
+#
+# Inner Self reads an NPC brain card's notes: valid string-valued JSON, or (v1.0.2+)
+# a simpler line-delimited `key: value` form. Every value is a string — a
+# first-person thought — and the keys are meant to be snake_case. This pack checks
+# what it can.
+
+name: innerSelf
+rules:
+  # ── CL-innerSelf/0001 — a leaf running Inner Self has at least one brain card ──
+  #
+  # `requireCard` is the per-leaf existential: on a `modB` leaf that binds this pack
+  # and resolves no `@`-prefixed card, one WARN names the branch.
+  - id: 1
+    severity: warn
+    requireCard: { titleMatch: '^@' }
+    message: >-
+      No @-prefixed brain card resolves on this branch. Inner Self needs each
+      simulated NPC named either in IMPORTANT_SCENARIO_CHARACTERS or by an
+      @-prefixed story card title.
+
+  # ── CL-innerSelf/0002 — a brain card's notes are a flat map of thoughts ───────
+  #
+  # An open `record` whose every value must be a string: the notes may carry any
+  # keys, but each value is a single first-person thought, never a list or a nested
+  # map. A value that is not a string is CL0202, demoted to WARN and re-coded here.
+  - id: 2
+    severity: warn
+    appliesTo: { titleMatch: '^@' }
+    over: notes
+    schema:
+      type: record
+      of: { type: string }
+    message: >-
+      An Inner Self brain card's notes must be a flat set of string-valued thoughts.
+      A list or nested map here does not survive the mod's parse.

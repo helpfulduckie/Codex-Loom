@@ -1,0 +1,8 @@
+## WTG Time Config
+~~~
+encapsulate: false
+~~~
+Starting Date: 1/1/2183
+Starting Era: CE
+Starting Time: 7:00 AM
+Initialized: false

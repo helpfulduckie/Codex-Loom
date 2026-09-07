@@ -374,12 +374,14 @@ Stated as three rules, a terse list must invent no label the full list lacks, ke
 
 **A slot file's `templates:` keys are usually `aid.type` names, but one may be a free-standing name.** An item writing `render.template: CharacterFull` selects that list — the name differs from its `aid.type`, so it counts as a real choice and wins at rung 1 — and because the slot file is branch-scoped, the full list applies only where the tier is loaded.
 
-```yaml surface=fieldtable
+```yaml surface=fieldtable from=tiers-and-mods/templates/terse.cl.yaml
 # terse.cl.yaml
 templates:
   Character:     [name, appearance, personality]
   CharacterFull: [name, appearance, personality, background, relationships, prose]
 ```
+
+`examples/tiers-and-mods/` is the worked version: `templates/terse.cl.yaml` names a terse `Character` and a free-standing `CharacterFull`, and one crew member writes `render.template: CharacterFull` so their card stays detailed on the `lowContext` branch while the rest shorten.
 
 ```yaml surface=item
 # the one NPC who stays detailed even in the low-context tier

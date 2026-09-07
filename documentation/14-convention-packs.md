@@ -38,6 +38,15 @@ lint:
       source: '{%general}/lint/library-mod.cl.yaml'  # travels with a library set
 ```
 
+`examples/tiers-and-mods/` shows both forms on branch nodes rather than at the root: the `modA` branches bind the bundled `wtg` pack by name, and the `modB` branches bind a project-local `innerSelf` pack by `source:`.
+
+```yaml surface=config from=tiers-and-mods/compile.cl.yaml key=branches.fullContext.branches.modB.lint
+lint:
+  packs:
+    innerSelf:
+      source: ./lint/inner-self.cl.yaml
+```
+
 **`lint.packs` is a mapping, keyed by pack name, because packs merge down the branch
 chain.** A branch inherits every pack its ancestors declared and may override one entry or
 unbind it:

@@ -20,6 +20,12 @@ const PROJECTS = [
     reports: [],
     compileReports: [],
   },
+  {
+    name: 'tiers-and-mods',
+    dir: 'tiers-and-mods',
+    reports: [],
+    compileReports: [],
+  },
 ];
 
 const CONFIG_NAME = 'compile.cl.yaml';

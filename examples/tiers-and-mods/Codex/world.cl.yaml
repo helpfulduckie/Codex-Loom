@@ -1,0 +1,10 @@
+# One setting, the same on every leaf. This project's grid is context against mod,
+# not setting against anything, so the world is a fixed backdrop — it is here because
+# the shared Plot Essentials format keeps a `world` slot and warns (CL0614) when a
+# leaf leaves `you` / `cast` / `world` empty.
+# doc: 11-diagnostics.md#cl06xx--components
+
+- import: SciFiPlanet
+  render:
+    template: Location
+    plotEssential: { slot: world, order: 1 }

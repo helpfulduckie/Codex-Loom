@@ -1,0 +1,18 @@
+# The low-context tier's slot file, loaded by `templateFor: { base: terse.cl.yaml }`
+# on the `lowContext` branch. It contributes a `templates:` block keyed by aid.type;
+# every type it does not name keeps the full list from the shared field table.
+# doc: 10-field-declarations.md#tiering--a-shorter-rendering-per-branch
+#
+# Project-local on purpose: a slot file in the shared library would re-baseline every
+# project that loads it. Only `templates:` is read here — a slot file's own `fields:`
+# block is ignored, so a condensed variant is declared once in the shared table.
+
+templates:
+  # Omission only: the terse crew card drops vibe, the expanded personality line,
+  # Magic, Background, relationships and the secret. The name line and the two lines
+  # a card cannot be read without stay, in their original order.
+  Character: [{ include: cardName }, appearance, personality]
+
+  # Pattern 2 — a free-standing name, reachable only through templateFor. The one
+  # crew member who stays detailed in the tier writes `render.template: CharacterFull`.
+  CharacterFull: [{ include: cardName }, vibe, appearance, personality, personalityExpanded, Magic, Background, relationships, secret]
