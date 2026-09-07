@@ -1,19 +1,38 @@
 # Codex Loom
 
-Codex Loom is a command-line compiler that turns YAML item definitions into Velvet Lattice
-story card files for AI Dungeon scenarios. You write characters, locations, spells and lore
-once as structured YAML;
-Codex Loom resolves pronoun tokens, applies variant chains, and emits one complete output
-folder per playable branch.
+> A better way to write and manage reusable and branching content in AI Dungeon scenarios.
 
-It exists because a branching scenario multiplies its own content. A cast of twelve across
-four branch points is not twelve cards, it is twelve cards written some number of times each
-with small deliberate differences — and keeping those differences deliberate, rather than
-letting them drift, is the whole problem.
+by helpfulduckie (aka Aness)
+
+---
+
+## Overview
+
+Codex Loom is a structured prose based authoring language for writing AI Dungeon scenarios for upload via [Velvet Lattice](https://gitlab.com/robyn-hourglass/velvet-lattice). It lets you define sections of your characters, world building, and lore in bite sized pieces that can then be overwritten on demand and combined dynamically for reuse across many branches of a scenario or even between scenarios. 
+
+When authoring through AI Dungeon's built in scenario editor, every branch is a significant authoring burden. Every shared story card needs to be copied to every branch. Every variation of every card needs to be copied and then surgically line edited to match your vision. Later revisions need to be carefully propagated between branches so as not to overwrite something specific to a given branch while rolling out a global change. It is hard and the combinatorics mean every additional layer of branching multiplies that effort. It isn't sustainable on large projects. 
+
+Worse, if you have a reoccurring cast, a world you keep writing scenarios in, a magic system you reuse, and you decide you want to edit it, you are forced to choose between editing your existing catalogue (every branch of every scenario you wish to maintain) or letting older scenarios (that you might still be play new adventures from) fall out of date. 
+
+These two pain points are what Codex Loom was built to mitigate. 
+
+Write your characters, locations, lore once. Tweak the parts that matter per project or per branch. Edit the baseline version once and watch it propagate to every other instance while automatically respecting the project level changes that you already have been made there. 
+
+Easily make male, female, or non-binary versions of any character. 
+
+Provide multiple prebuilt protagonists (or love interests) alongside the option for a custom built one. 
+
+Configure a low context version along side your high context vision. 
+
+Set up different scripts on different branches.
+
+All while increasing your authoring burden linearly, instead of multiplicatively. 
+
+---
 
 ## What it does
 
-- **One definition, many branches.** Items are declared once and dispatched down a branch
+- **One definition, many branches.** Content is authored once and dispatched down a branch
   tree, with per-branch variants layering overrides onto a shared base.
 - **Pronoun resolution.** `{$Aness.she}` and `[s]`-style verb agreement resolve per item, so
   a character whose gender differs by branch reads correctly in every one.
@@ -26,6 +45,8 @@ letting them drift, is the whole problem.
 - **Reports.** Seed maps, card-size measurements against the platform's field caps, and a
   syntax lint pass — all reading the compiled tree back, so they measure what AID will
   actually store.
+
+---
 
 ## Install
 
@@ -47,38 +68,19 @@ current directory. Flags are combinable — `--verbose`, `--clean`, `--overview`
 `--card-sizes`, `--lint`. See [documentation/01-overview.md](documentation/01-overview.md)
 for the full CLI and [documentation/](documentation/) for the YAML surface.
 
-## Project status
+---
 
-**The released compiler is v3.3.2, on `main`.** Active development is the v4 rebuild on the
-`v4-phase1` branch — a clean break from v3, feature-complete and in pre-release testing. v4
-changes the config format, collapses the four component syntaxes into one, drops the
-template envelope and the `{@name}` reference family, splits the compiler from the lint
-pass, adds player placeholders and the platform field caps, and adds convention packs and
-context tiering. See [documentation/15-migrating-from-v3.md](documentation/15-migrating-from-v3.md)
-for the conversion. If you are reading this to see how the thing is built, read `v4-phase1`.
+## What is in this repo?
 
-## Tests
+**Authors**:
+- [documentation/](documentation/) - Full details on how to use Codex Loom and author with it. 
+- [examples/](examples/) - Four example projects that demonstrate what Codex Loom can do and the shared library of content the examples pull from. 
+- [skill/](skill/) - a skill to teach your AI agent of choice how to author with Codex Loom (written for Claude, likely compatible with most systems) 
+- [packs/](packs/) - a set of authoring opinions about what makes a "good" scenario. They are optional add-ons you can set Codex Loom up police. Use as is or write your own to help enforce your own desired authoring patterns (see [Convention Packs](documentation/14-convention-packs.md) for more information)
 
-```bash
-npm test
-```
+**Developers**: check out the [Dev-README.md](Dev-README.md) for more information. 
 
-Also available: `test:unit`, `test:integration`, `test:coverage`. `npm run compile` compiles
-`test/compile.yaml` as a smoke check.
-
-Two fixture sets back the suite, and they fail differently:
-
-- **`__tests__/fixtures/pathological/`** freezes the *diagnostic stream* — two projects that
-  are wrong on purpose, with a committed snapshot of every code, severity, file and message
-  they raise. It is authored from the spec, so where the compiler disagrees the fixture pins
-  the disagreement rather than being edited to match.
-- **`goldenFixtures/`** freezes v3.3.2-compiled *output* and asserts the v4 compiler
-  reproduces it byte-for-byte. These are real scenario projects and unpublished
-  worldbuilding, so they live in a
-  separate **private** repository — `helpfulduckie/Codex-Loom-Fixtures`, cloned into the
-  gitignored `goldenFixtures/` — rather than in this tree. You will not have access to it,
-  and you do not need it: `__tests__/fixtures/golden.test.js` reports its tests as skipped
-  when the directory is absent, and the other 50 suites run normally.
+---
 
 ## License
 
