@@ -190,7 +190,7 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
     } catch (err) {
       diagnostics.error(
         DIAG_CODES.RENDER_FAILED,
-      `item "${label}" failed to render into ${target.component}: ${err.message}; fix the template or data error, and the item remains unrendered until fixed.`,
+      `item "${label}" failed to render into ${target.component}: ${err.message}; fix the reported template or data error, and the item remains unrendered.`,
         { file: item._source },
       );
       return null;
@@ -205,7 +205,7 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
   diagnostics.error(
     DIAG_CODES.TEMPLATE_NOT_FOUND,
     `no template found for item "${label}" rendering into ${target.component}`
-    + `${target.slot ? ` slot "${target.slot}"` : ''} (template: ${target.template || 'none'}); add or select the template, and the item remains unrendered until fixed.`,
+    + `${target.slot ? ` slot "${target.slot}"` : ''} (template: ${target.template || 'none'}); add or select the matching template, and the item remains unrendered.`,
     { file: item._source },
   );
   return null;
@@ -366,7 +366,7 @@ function renderStoryCard(item, itemId, questions, ctx) {
     const type = (item.aid && item.aid.type) || (item.render && item.render.template) || '?';
     diagnostics.error(
       DIAG_CODES.TEMPLATE_NOT_FOUND,
-      `no template found for item "${itemId}" (type: ${type}); add or select the template, and the item remains unrendered until fixed.`,
+      `no template found for item "${itemId}" (type: ${type}); add or select the matching template, and the item remains unrendered.`,
       { file: item._source },
     );
     return;
@@ -415,7 +415,7 @@ function renderStoryCard(item, itemId, questions, ctx) {
   } catch (err) {
     diagnostics.error(
       DIAG_CODES.RENDER_FAILED,
-      `item "${itemId}" failed to render: ${err.message}; fix the template or data error, and the item remains unrendered until fixed.`,
+      `item "${itemId}" failed to render: ${err.message}; fix the reported template or data error, and the item remains unrendered.`,
       { file: item._source },
     );
     return;

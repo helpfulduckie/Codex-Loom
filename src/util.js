@@ -270,7 +270,7 @@ function reportPattern(text, label, re, code, describe, sink = {}) {
 
 function checkUnresolvedFieldTokens(text, label, sink) {
   return reportPattern(text, label, FIELD_TOKEN_RE, DIAG_CODES.LEAKED_FIELD_TOKEN,
-    m => `compiled output contains unresolved token ${m}; fix the authoring reference or resolver input`, sink);
+    m => `compiled output contains unresolved token ${m}; correct the authoring reference or resolver input`, sink);
 }
 
 function checkUnexpandedVariables(text, label, sink) {
@@ -281,12 +281,12 @@ function checkUnexpandedVariables(text, label, sink) {
 function checkMechanicalArtifacts(text, label, sink) {
   const C = DIAG_CODES;
   let found = false;
-  found = reportPattern(text, label, TEMPLATE_FN_RE,  C.LEAKED_RENDER_FUNCTION, m => `compiled output contains leaked render function ${m}; fix the source call or renderer`, sink) || found;
+  found = reportPattern(text, label, TEMPLATE_FN_RE,  C.LEAKED_RENDER_FUNCTION, m => `compiled output contains leaked render function ${m}; remove or correct the source call`, sink) || found;
   found = reportPattern(text, label, TEMPLATE_TAG_RE, C.LEAKED_TEMPLATE_TAG,    m => `compiled output contains leaked template tag ${m}; close or correct the source tag`, sink) || found;
   found = reportPattern(text, label, VERB_MARKER_RE,  C.LEAKED_VERB_MARKER,     m => `compiled output contains unresolved verb-conjugation marker ${m}; correct the source marker or its subject`, sink) || found;
-  found = reportPattern(maskFencedRegions(text), label, SUSPECT_VERB_MARKER_RE, C.SUSPECT_VERB_MARKER, m => `compiled output contains unrecognized bracketed word ${m}; correct the source marker if it is a typo`, sink) || found;
-  found = reportPattern(text, label, JS_ARTIFACT_RE,  C.LEAKED_JS_ARTIFACT,     m => `compiled output contains JS interpolation artifact ${m}; fix the source interpolation`, sink) || found;
-  found = reportPattern(text, label, JS_WORD_RE,      C.SUSPECT_JS_WORD,        m => `compiled output contains bare ${m}; fix the source value or interpolation`, sink) || found;
+  found = reportPattern(maskFencedRegions(text), label, SUSPECT_VERB_MARKER_RE, C.SUSPECT_VERB_MARKER, m => `compiled output contains unrecognized bracketed word ${m}; replace it with a supported marker if it is a typo`, sink) || found;
+  found = reportPattern(text, label, JS_ARTIFACT_RE,  C.LEAKED_JS_ARTIFACT,     m => `compiled output contains JS interpolation artifact ${m}; correct the source interpolation`, sink) || found;
+  found = reportPattern(text, label, JS_WORD_RE,      C.SUSPECT_JS_WORD,        m => `compiled output contains bare ${m}; provide the source value or correct the interpolation`, sink) || found;
   return found;
 }
 

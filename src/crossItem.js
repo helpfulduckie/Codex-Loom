@@ -120,7 +120,7 @@ function reportCycle(group, edgeFields, resolvedById, diagnostics) {
   }
   diagnostics.error(
     DIAG_CODES.CROSS_ITEM_CYCLE,
-    `Circular cross-item render dependency: ${parts.join(', ')}; break the cycle, and cyclic references remain unresolved until fixed.`,
+    `Circular cross-item render dependency: ${parts.join(', ')}; break the reference cycle, and cyclic references remain unresolved.`,
   );
 }
 

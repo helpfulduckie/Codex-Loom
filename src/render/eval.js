@@ -224,7 +224,7 @@ function renderFuncCall(node, data, ctx) {
     return fn(node.inner, data);
   } catch (e) {
     if (ctx.report) {
-      ctx.report(CODES.TEMPLATE_PARSE_FAILED, `Malformed ${node.name}() call in ${ctx.name || 'template'}: ${e.message}; correct the call syntax, and the malformed call remains literal until fixed.`, node);
+      ctx.report(CODES.TEMPLATE_PARSE_FAILED, `Malformed ${node.name}() call in ${ctx.name || 'template'}: ${e.message}; correct the call syntax, and the malformed call remains literal.`, node);
     }
     return '';
   }

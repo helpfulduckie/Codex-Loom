@@ -15,7 +15,7 @@ function loadNamedFiles(dirs, ext) {
       const name = path.basename(file, ext).toLowerCase();
       if (dirEntries.has(name)) {
         const err = new Error(
-          `${CODES.DUPLICATE_NAMED_FILE}: Duplicate ${ext} name "${name}" found in ${dir}; remove or rename one file, and loading cannot choose a winner until fixed:`
+          `${CODES.DUPLICATE_NAMED_FILE}: Duplicate ${ext} name "${name}" found in ${dir}; remove or rename one file so loading can choose a winner:`
           + `\n  ${dirEntries.get(name)._source}\n  ${file}`
         );
         err.code = CODES.DUPLICATE_NAMED_FILE;

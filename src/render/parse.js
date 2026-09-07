@@ -170,7 +170,7 @@ function parse(tokens, report) {
         return { type: 'FuncCall', name: tok.name, inner: tok.inner, line: tok.line, column: tok.column };
       case 'UNKNOWN_FUNCTION': {
         pos++;
-        report(CODES.TEMPLATE_UNKNOWN_FUNCTION, `Unknown template function "${tok.name}()"; replace it with a supported function, and the unknown call remains until fixed.`, tok);
+        report(CODES.TEMPLATE_UNKNOWN_FUNCTION, `Unknown template function "${tok.name}()"; replace it with a supported function, and the unknown call remains literal.`, tok);
         return literal(tok);
       }
       case 'IF_OPEN':
@@ -208,7 +208,7 @@ function parse(tokens, report) {
         line: openTok.line, column: openTok.column,
       };
     }
-    reportUnclosedOnce(openTok, CODES.TEMPLATE_UNCLOSED_BLOCK, `Unclosed {if ${openTok.cond}} block; close the block, and the opening tag remains literal until fixed.`);
+    reportUnclosedOnce(openTok, CODES.TEMPLATE_UNCLOSED_BLOCK, `Unclosed {if ${openTok.cond}} block; close the block, and the opening tag remains literal.`);
     pos = start + 1;
     return literal(openTok);
   }
@@ -221,7 +221,7 @@ function parse(tokens, report) {
       pos++;
       return { type: 'Wrapper', children, line: openTok.line, column: openTok.column };
     }
-    reportUnclosedOnce(openTok, CODES.TEMPLATE_UNCLOSED_BLOCK, 'Unclosed {wrapper} block; close the block, and the opening tag remains literal until fixed.');
+    reportUnclosedOnce(openTok, CODES.TEMPLATE_UNCLOSED_BLOCK, 'Unclosed {wrapper} block; close the block, and the opening tag remains literal.');
     pos = start + 1;
     return literal(openTok);
   }
@@ -234,7 +234,7 @@ function parse(tokens, report) {
       pos++;
       return { type: 'Preserve', children, line: openTok.line, column: openTok.column };
     }
-    reportUnclosedOnce(openTok, CODES.TEMPLATE_UNCLOSED_BLOCK, 'Unclosed {preserve} block; close the block, and the opening tag remains literal until fixed.');
+    reportUnclosedOnce(openTok, CODES.TEMPLATE_UNCLOSED_BLOCK, 'Unclosed {preserve} block; close the block, and the opening tag remains literal.');
     pos = start + 1;
     return literal(openTok);
   }

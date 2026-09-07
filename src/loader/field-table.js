@@ -58,7 +58,7 @@ function foldDocument(doc, file, sourceMap, acc, diagnostics) {
   if (!isPlainObject(doc)) {
     diagnostics.error(CODES.FIELD_TABLE_UNUSABLE,
       'This field table could not be read, so none of the fields, groups or templates it '
-      + 'declares are available; affected entries render nothing until the file is repaired.',
+      + 'declares are available; repair the field-table YAML so affected entries can render.',
       sourceMap.nearest([]),
       { hint: 'A field table must be a mapping with fields:, groups: and/or templates: at the top level.' });
     return;
@@ -150,7 +150,7 @@ function loadFieldTable(dirs, options = {}) {
       } catch (err) {
         diagnostics.error(CODES.FIELD_TABLE_UNUSABLE,
           'This field table could not be read, so none of the fields, groups or templates it '
-          + 'declares are available; affected entries render nothing until the file is repaired.',
+          + 'declares are available; repair the field-table YAML so affected entries can render.',
           { file },
           { hint: `YAML error: ${(err.cause && err.cause.message) || err.message}` });
         continue;

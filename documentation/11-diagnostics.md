@@ -256,31 +256,31 @@ are always mistakes, and they are what drift produces.
 |---|---|---|
 | `CL0410` | ERROR | A template still contains the story-card envelope fence, so its body is invalid; remove the fence and envelope keys. |
 | `CL0429` | ERROR | Two template files resolve to one case-insensitive name, so loading stops without choosing a winner; remove or rename one. |
-| `CL0411` | ERROR | compile.yaml names an unloaded notes template, so configured notes rendering cannot run; add or rename it, and the fallback continues until fixed. |
-| `CL0412` | ERROR | An item names an unloaded notes template, so its requested notes rendering cannot run; add or rename it, and the item continues without it until fixed. |
-| `CL0413` | ERROR | A render-function call cannot be parsed, so affected text cannot render; correct its syntax, and the malformed call remains literal until fixed. |
-| `CL0414` | ERROR | A template calls an unknown render function, so the call cannot render; replace it with a supported function, and it remains until fixed. |
-| `CL0415` | ERROR | A template control block has no closer, so its intended behavior cannot apply; close it, and the opening tag remains literal until fixed. |
-| `CL0416` | ERROR | Partials include one another in a cycle, so expansion cannot finish; break the cycle, and the directive renders empty until fixed. |
-| `CL0417` | ERROR | An include names an unloaded partial, so its content is unavailable; add or rename it, and the directive renders empty until fixed. |
-| `CL0418` | ERROR | Cross-item render references form a cycle, so fields cannot finish expanding; break the cycle, and cyclic references remain unresolved until fixed. |
-| `CL0420` | ERROR | An item has no matching loaded template, so its output cannot render; add or select it, and the item remains unrendered until fixed. |
-| `CL0421` | ERROR | A template threw while rendering an item, so its output is unreliable; fix the template or data error, and the item remains unrendered until fixed. |
-| `CL0430` | ERROR | Compiled output still contains a field/pronoun/character token, so AID receives it literally and the build fails; fix the authoring reference or resolver input. |
-| `CL0431` | ERROR | Compiled output still contains a compile.yaml variable token, so AID receives it literally and the build fails; declare or correct it. |
-| `CL0432` | ERROR | Compiled output still contains a render-function call, so AID receives unevaluated syntax and the build fails; fix the source call or renderer. |
+| `CL0411` | ERROR | compile.yaml names an unloaded notes template, so configured notes rendering cannot run; add or rename the notes template, and the notes fallback is used. |
+| `CL0412` | ERROR | An item names an unloaded notes template, so its requested notes rendering cannot run; add or rename the item’s notes template, and the item renders without it. |
+| `CL0413` | ERROR | A render-function call cannot be parsed, so affected text cannot render; correct the call syntax, and the malformed call remains literal. |
+| `CL0414` | ERROR | A template calls an unknown render function, so the call cannot render; replace the call with a supported function, and the unknown call remains literal. |
+| `CL0415` | ERROR | A template control block has no closer, so its intended behavior cannot apply; close the block, and the opening tag remains literal. |
+| `CL0416` | ERROR | Partials include one another in a cycle, so expansion cannot finish; break the include cycle, and the directive renders empty. |
+| `CL0417` | ERROR | An include names an unloaded partial, so its content is unavailable; add or rename the partial, and the directive renders empty. |
+| `CL0418` | ERROR | Cross-item render references form a cycle, so fields cannot finish expanding; break the reference cycle, and cyclic references remain unresolved. |
+| `CL0420` | ERROR | An item has no matching loaded template, so its output cannot render; add or select the matching template, and the item remains unrendered. |
+| `CL0421` | ERROR | A template threw while rendering an item, so its output is unreliable; fix the reported template or data error, and the item remains unrendered. |
+| `CL0430` | ERROR | Compiled output still contains a field/pronoun/character token, so AID receives it literally and the build fails; correct the authoring reference or resolver input. |
+| `CL0431` | ERROR | Compiled output still contains a compile.yaml variable token, so AID receives it literally and the build fails; declare the variable or correct its reference. |
+| `CL0432` | ERROR | Compiled output still contains a render-function call, so AID receives unevaluated syntax and the build fails; remove or correct the source call. |
 | `CL0433` | ERROR | Compiled output still contains a template control tag, so AID receives unevaluated syntax and the build fails; close or correct the source tag. |
 | `CL0434` | ERROR | Compiled output still contains a verb marker, so AID receives it literally and the build fails; correct the source marker or subject. |
-| `CL0435` | ERROR | Compiled output contains a JavaScript interpolation artifact, so AID receives corrupted text and the build fails; fix the source interpolation. |
-| `CL0422` | ERROR | A field table or templateFor slot file is unreadable or not a mapping, so its declarations are unavailable; repair it. |
-| `CL0423` | ERROR | A field declaration specifies multiple sources, so extra sources are ignored; keep one source kind, and the precedence winner continues until fixed. |
+| `CL0435` | ERROR | Compiled output contains a JavaScript interpolation artifact, so AID receives corrupted text and the build fails; correct the source interpolation. |
+| `CL0422` | ERROR | A field table or templateFor slot file is unreadable or not a mapping, so its declarations are unavailable; repair the YAML mapping. |
+| `CL0423` | ERROR | A field declaration specifies multiple sources, so extra sources are ignored; keep exactly one of from:, parts: or try:. |
 | `CL0424` | WARN | A group or template names an undeclared field/group, so that entry contributes nothing; declare or correct the name. |
 | `CL0425` | WARN | A likely misspelled field-table filename is ignored, so its declarations are unavailable; rename it. |
 | `CL0426` | WARN | An authored body key has no declaration or template reader, so its content is dropped; remove or declare and render it. |
 | `CL0427` | WARN | An authored body key is declared but no item render reads it, so its content is dropped; route or remove it. |
 | `CL0428` | WARN | A declared field is named by no template or partial, so its declaration has no effect; remove or reference it. |
-| `CL0436` | WARN | Compiled output contains an unrecognized bracketed lowercase word, so conjugation may be wrong; correct the source marker if needed. |
-| `CL0437` | WARN | Compiled output contains bare undefined or NaN, so source data or interpolation may be missing; fix it. |
+| `CL0436` | WARN | Compiled output contains an unrecognized bracketed lowercase word, so conjugation may be wrong; replace it with a supported marker if it is a typo. |
+| `CL0437` | WARN | Compiled output contains bare undefined or NaN, so source data or interpolation may be missing; provide the source value or correct the interpolation. |
 
 Templates render the card body; the heading and fence are the compiler's (see
 [Templates](07-templates.md)). A template that writes its own fence produces a second
