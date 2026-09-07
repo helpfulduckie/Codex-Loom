@@ -3,6 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const YAML = require('yaml');
 const { Diagnostics, LINT_LEVELS, SEVERITY } = require('./diag');
 const { loadCompileConfig } = require('./config/load');
 const { syncLibrary } = require('./snapshot');
@@ -73,6 +74,11 @@ function resolveMigrateConfigPath(positional) {
     if (fs.existsSync(candidate)) return candidate;
   }
   return null;
+}
+
+function migrateVersion(configPath) {
+  const config = YAML.parse(fs.readFileSync(configPath, 'utf8'));
+  return typeof config?.version === 'number' ? config.version : null;
 }
 
 function renderMigrationReport(result) {
@@ -196,6 +202,10 @@ function main(rawArgs) {
       return 1;
     }
     try {
+      const version = migrateVersion(migrateConfigPath);
+      if (version !== null && version >= 4) {
+        throw new Error(`Cannot migrate ${migrateConfigPath}: it already declares version: ${version}.`);
+      }
       const { migrateProjectFully } = require('./migrate');
       const result = migrateProjectFully(migrateConfigPath, { renameToCl: flags.renameToCl });
       const reportPath = path.join(path.dirname(result.configPath), 'migration-report.md');

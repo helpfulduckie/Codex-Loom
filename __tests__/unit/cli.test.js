@@ -580,6 +580,19 @@ describe('CLI --migrate flag', () => {
     expect(result.status).toBe(0);
     expect(fs.existsSync(path.join(tmp, 'proj', 'migration-report.md'))).toBe(true);
   });
+
+  test.each([4, 5])('refuses a project already at version %i without writing migration files', (version) => {
+    const configPath = path.join(tmp, 'proj', 'compile.yaml');
+    const source = `version: ${version}\n${V3_COMPILE_YAML}`;
+    write(configPath, source);
+
+    const result = run(['--migrate', path.join(tmp, 'proj')], tmp);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(new RegExp(`already declares version: ${version}`));
+    expect(fs.readFileSync(configPath, 'utf8')).toBe(source);
+    expect(fs.existsSync(path.join(tmp, 'proj', 'migration-report.md'))).toBe(false);
+  });
 });
 
 // ── version: 4 detection on the compile path (§14.1, CL0209) ──────────────────
