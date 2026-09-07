@@ -1,0 +1,10 @@
+# One setting, the same on every leaf. This project's grid is protagonist against
+# rival, not setting against anything, so the world is a fixed backdrop rather than
+# an axis - it is here because the shared Plot Essentials format keeps a `world`
+# slot and warns when a leaf leaves it empty.
+# doc: 09-components.md
+
+- import: ModernCity
+  render:
+    template: Location
+    plotEssential: { slot: world, order: 1 }

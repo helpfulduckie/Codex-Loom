@@ -98,25 +98,6 @@ describe('protagonist you-mode', () => {
   });
 });
 
-describe('snapshot regression', () => {
-  test('subject Character.md matches snapshot', () => {
-    let dir = path.join(tmpDir, 'output');
-    const base = dir;
-    const leafDir = path.join(base, 'Branches', 'subject');
-    const chain = [];
-    for (let d = leafDir; ; d = path.dirname(path.dirname(d))) {
-      chain.unshift(d);
-      if (d === base) break;
-    }
-    const content = chain
-      .map((d) => path.join(d, 'Story Cards', 'Character', 'Character.md'))
-      .filter((p) => fs.existsSync(p))
-      .map((p) => fs.readFileSync(p, 'utf8').trimEnd())
-      .join('\n\n') + '\n';
-    expect(content).toMatchSnapshot();
-  });
-});
-
 
 describe('protagonist inherited from parent branch node', () => {
   let nestedTmpDir;

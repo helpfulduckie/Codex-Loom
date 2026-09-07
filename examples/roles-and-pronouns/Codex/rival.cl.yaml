@@ -1,0 +1,28 @@
+# A rival defined by a placeholder rather than by the library - the fourth rival on
+# every protagonist's `vs-stranger` branch, and nowhere else. `roles.rival: Stranger`
+# binds to it there; `{$rival}` in the shared opening then renders `%rivalName%`,
+# substituted by AID at adventure start, and `{$rival.they}` conjugates from
+# `pronouns: they`.
+# doc: 13-roles.md#declaring-and-binding
+
+- id: Stranger
+  name: { display: '%rivalName%' }
+  pronouns: they
+  aid:
+    title: '%rivalName%'
+    type: character
+    triggers: ['%rivalName%']
+  render:
+    template: CharacterRoster
+    storyCard: false
+    plotEssential: { slot: cast, order: 4, template: CharacterRoster }
+  body:
+    role: the one you have not met
+    Physical Traits:
+      gender: unknown
+      age: unknown
+      hair: unknown
+  # Present on the three `*/vs-stranger` leaves, excluded from every other branch.
+  # doc: 05-branches-and-variants.md#wildcard---baseline-for-every-branch
+  branches:
+    '*': { branches: { vs-stranger: [], _: ~ } }

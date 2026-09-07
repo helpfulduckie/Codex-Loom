@@ -60,6 +60,21 @@ rival: ~                  # this branch has no rival
 Read the rest of that file for how the two interact with `placeholders:` and `templateFor:`
 on the same branches.
 
+**A grid takes the same three moves further.** `examples/roles-and-pronouns/` crosses a
+`protagonist` binding with a `rival` that rebinds at every leaf and an `ally` that is
+inherited, rebound, or `~`-unbound depending on who the leaf's rival is. One of its leaves,
+where the default ally would otherwise be the rival:
+
+```yaml surface=config level=branches.*.roles from=roles-and-pronouns/compile.cl.yaml key=branches.aness.branches.vs-kaiden.roles
+rival: Kaiden
+ally: Zephon   # the ally cannot also be the rival
+```
+
+The `ally` binding here is a rebind of the `ally: Kaiden` its parent `aness` node declared;
+its sibling `vs-stranger` leaf drops the key with `ally: ~` instead, because a rival nobody
+knows leaves no one to bind. Neither move invents an error to justify itself — each is what
+the grid's own casting forces.
+
 ---
 
 ## Using a role in prose

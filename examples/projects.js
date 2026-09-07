@@ -14,6 +14,12 @@ const PROJECTS = [
     reports: [],
     compileReports: [],
   },
+  {
+    name: 'roles-and-pronouns',
+    dir: 'roles-and-pronouns',
+    reports: [],
+    compileReports: [],
+  },
 ];
 
 const CONFIG_NAME = 'compile.cl.yaml';
