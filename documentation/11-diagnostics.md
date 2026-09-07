@@ -737,8 +737,12 @@ notes; the destinations below are the ones where they do not.
 |---|---|---|
 | The Description | Never filled — it is shown before an adventure exists to answer it | `CL0533` |
 | A card's `type` | Never filled — it is a category, and a path segment in the compiled tree | `CL0533` |
-| A branch title | Prompt fills and the player sees the answer while choosing; the saved adventure keeps the raw text | `CL0534` |
+| A leaf branch title | Prompt fills and the player sees the answer while choosing; the saved adventure then keeps the raw text | `CL0534` |
 | The scenario title | Never filled — it names the scenario in listings, before an adventure exists | `CL0534` |
+
+An **interior** node's title is not checked: it is shown only in the branch picker, after
+the placeholder prompt has been answered, and never reaches a saved adventure name, so the
+substitution there is clean.
 
 Both check the `${...}` spelling as well as `%key%`, and both ignore whether the key is
 declared: where a placeholder cannot go, declaring it changes nothing.
@@ -750,10 +754,10 @@ in particular runs *before* template resolution: `aid.type` selects the template
 explicit one is named, so a placeholder there also fails to find a template, and CL0420
 would otherwise be the only thing reported — the symptom, with the cause skipped past.
 
-`CL0534` covers both titles under one code because it is one authoring mistake — writing
-a placeholder into a title and expecting substitution — with two different outcomes. The
-message states the outcome rather than the rule, since neither is inferable from anything
-visible in the source.
+`CL0534` covers the leaf branch title and the scenario title under one code because it is
+one authoring mistake — writing a placeholder into a title and expecting substitution —
+with two different outcomes. The message states the outcome rather than the rule, since
+neither is inferable from anything visible in the source.
 
 It is a WARN rather than an ERROR in both cases because both are legal to write and a
 deliberate one is imaginable: a scenario called `${Roleplaying A Cool AID Scenario}` is a

@@ -159,7 +159,7 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
     variables, rootVariables, log, diagnostics, configPath = null, usage = null,
     registry = null, onRoleUsed = null, roleStateByPath = null,
   } = opts;
-  walkBranchTree(rootNode, ({ name, node, path: path_, isRoot, state }) => {
+  walkBranchTree(rootNode, ({ name, node, path: path_, isLeaf, isRoot, state }) => {
     let {
       outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
     } = nodeVisitPrologue(name, node, isRoot, state);
@@ -223,15 +223,20 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
       diagnostics, file: configPath, where: `the title of branch "${name}"`,
       usage, usagePath: path_.join('/'),
     });
-    checkPlaceholderContext(labelText, {
-      diagnostics,
-      file: configPath,
-      where: `the title of branch "${name}"`,
-      severity: 'warn',
-      reason: 'a branch title half-works. AID fills the prompt and shows the answer while '
-        + 'the player is choosing, then keeps the raw placeholder text in the saved '
-        + 'adventure’s title. Deliberate is possible; usually it is not.',
-    });
+    // Only a leaf title reaches the saved adventure's name. An interior node's title is
+    // shown solely in the branch picker, after the prompt that fills the placeholder has
+    // been answered, so it substitutes cleanly and never leaves a raw %token% behind.
+    if (isLeaf) {
+      checkPlaceholderContext(labelText, {
+        diagnostics,
+        file: configPath,
+        where: `the title of branch "${name}"`,
+        severity: 'warn',
+        reason: 'a branch title half-works. AID fills the prompt and shows the answer while '
+          + 'the player is choosing, then keeps the raw placeholder text in the saved '
+          + 'adventure’s title. Deliberate is possible; usually it is not.',
+      });
+    }
     if (labelText !== name) {
       fs.writeFileSync(outPath, labelText + '\n', 'utf8');
       log.verbose(`    OK: Label → ${outPath}`);

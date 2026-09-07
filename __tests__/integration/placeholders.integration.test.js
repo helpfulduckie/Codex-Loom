@@ -223,6 +223,25 @@ describe('where a placeholder may not go', () => {
     expect(byCode(diags, CODES.PLACEHOLDER_INVALID_CONTEXT)).toEqual([]);
   });
 
+  test('only a leaf title warns — an interior node title is shown pre-fill and substitutes', () => {
+    // An interior node's title appears only in the branch picker, after the placeholder
+    // prompt is answered; it never reaches the saved adventure name. So the warning fires
+    // for the leaf below and not for the node above it.
+    const diags = run({
+      'compile.cl.yaml': [
+        HEAD, ...DECLARED,
+        'branches:',
+        '  region:', '    title: The %hero% Marches',
+        '    branches:',
+        '      hold: {title: The %hero% Hold}',
+        '',
+      ].join('\n'),
+    });
+    const titleWarns = byCode(diags, CODES.PLACEHOLDER_IN_TITLE);
+    expect(titleWarns).toHaveLength(1);
+    expect(titleWarns[0]).toContain('branch "hold"');
+  });
+
   test('the scenario title warns — it is never filled, only legal', () => {
     // Confirmed against AID: it does not substitute in the listing name, and no author
     // expects it to. A WARN rather than an ERROR because writing one is legal and can even
