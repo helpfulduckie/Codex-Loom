@@ -56,11 +56,11 @@ spans need the deferred render rewrite.
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `CL0101` | ERROR | YAML document is malformed and could not be parsed. |
-| `CL0102` | ERROR | File could not be read. |
-| `CL0103` | WARN | File is empty; skipped. |
-| `CL0104` | WARN | Document within a multi-document file is null; skipped. |
-| `CL0105` | ERROR | A Codex Loom token was parsed as a YAML mapping key. |
+| `CL0101` | ERROR | YAML syntax is invalid; the file is skipped while loading continues. Fix the syntax. |
+| `CL0102` | ERROR | The file cannot be read; its content is skipped while loading continues. Restore it or fix its path/permissions. |
+| `CL0103` | WARN | The file is empty and contributes no items. Add YAML content or remove it. |
+| `CL0104` | WARN | The YAML document is null and contributes no items. Add content or remove the empty document. |
+| `CL0105` | ERROR | YAML consumed a Codex Loom token as a mapping key, so the intended text is lost. Quote the value. |
 
 `CL0101`, `CL0102` and `CL0105` are raised per file by whichever loader reached it — the
 item registry, an `include:`, a component document, or `compile.cl.yaml` itself — and the
@@ -86,23 +86,23 @@ arriving by any route is still worth flagging.
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `CL0110` | ERROR | `compile.yaml` is not a mapping of configuration keys. |
-| `CL0111` | WARN | `structure.input.snapshot` names a directory `--snapshot` never populated. |
-| `CL0112` | WARN | `snapshot/manifest.json` exists but is not valid JSON, or not the expected shape. |
-| `CL0113` | WARN | A `structure.input.library`/`templates` entry the config declares has no section in an otherwise-valid manifest. |
-| `CL0114` | WARN | A file under `snapshot/<name>/` on disk has no entry in the manifest. |
-| `CL0115` | ERROR | A file under `snapshot/<name>/` no longer matches its own manifest-recorded hash. |
-| `CL0116` | ERROR | `--snapshot` cannot compute `requiresRoles` for a library entry because the entry's own items do not validate. |
-| `CL0117` | ERROR | A convention pack is missing, unparseable, or not shaped like a pack — the pack is named. |
-| `CL0118` | WARN | `lint.packs.<name>: ~` on a branch that never inherited that pack — nothing was unbound. |
-| `CL0119` | ERROR | A convention pack's declared `name:` disagrees with the `lint.packs` key it was loaded under — both are named. |
-| `CL0120` | WARN | A declared input path does not exist on disk. |
-| `CL0130` | WARN | An `include:` path does not exist. |
-| `CL0131` | ERROR | The same file was included more than once. |
-| `CL0140` | ERROR | An item has neither `id:` nor `name:`. |
-| `CL0141` | ERROR | Duplicate item id. |
-| `CL0142` | WARN | An item declares more than one `v:` alias; they are merged. |
-| `CL0144` | ERROR | An item id contains `:`, which is reserved as the library separator in a reference. |
+| `CL0110` | ERROR | `compile.yaml` is not a mapping, so configuration cannot load. Replace its top-level value with configuration keys. |
+| `CL0111` | WARN | The configured snapshot directory is missing, so frozen inputs are unavailable. Run `--snapshot`. |
+| `CL0112` | WARN | `snapshot/manifest.json` is invalid or has the wrong shape, so snapshot tracking is skipped. Repair or regenerate it. |
+| `CL0113` | WARN | A configured library/templates entry is absent from the manifest, so it cannot be checked as frozen. Regenerate the manifest. |
+| `CL0114` | WARN | A snapshot file is not tracked by the manifest, so it is outside the freeze. Remove it or regenerate the snapshot. |
+| `CL0115` | ERROR | A frozen file differs from its recorded hash, so the snapshot is corrupted and compilation stops. Restore or regenerate it. |
+| `CL0116` | ERROR | `--snapshot` cannot compute `requiresRoles` because the library items are invalid; fix them and rerun `--snapshot`. |
+| `CL0117` | ERROR | The convention pack cannot be loaded, so its rules are unavailable. Provide a readable, correctly shaped pack. |
+| `CL0118` | WARN | `lint.packs.<name>: ~` targets a pack this branch never inherited, so nothing changes. Remove the entry or inherit the pack. |
+| `CL0119` | ERROR | The pack `name:` differs from its `lint.packs` key, so portable diagnostics/suppressions can break. Make them match. |
+| `CL0120` | WARN | A configured input path is missing, so content there is skipped. Create the path or correct the configuration. |
+| `CL0130` | WARN | An `include:` path is missing, so included items are skipped. Create the file or correct the path. |
+| `CL0131` | ERROR | The same file is included more than once, so the repeated include is skipped. Keep one include. |
+| `CL0140` | ERROR | The item has no `id:` or `name:`, so it cannot enter the registry. Add one identity field. |
+| `CL0141` | ERROR | An item id is already defined, so the later definition is skipped. Remove the duplicate or rename it. |
+| `CL0142` | WARN | The item declares multiple `v:` aliases, so they merge with later fields winning. Keep one alias. |
+| `CL0144` | ERROR | The item id contains `:`, so library-qualified references are ambiguous. Remove the colon. |
 
 ### CL0111–CL0115 in detail
 

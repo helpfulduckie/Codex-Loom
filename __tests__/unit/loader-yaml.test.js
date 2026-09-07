@@ -39,12 +39,14 @@ describe('loadYaml — v3 contract', () => {
 
   test('throws a wrapped error naming the path when the file cannot be read', () => {
     jest.spyOn(fs, 'readFileSync').mockImplementation(() => { throw new Error('ENOENT'); });
-    expect(() => loadYaml('/missing.yaml')).toThrow('Failed to load YAML at /missing.yaml');
+    expect(() => loadYaml('/missing.yaml')).toThrow(
+      'Failed to load YAML at /missing.yaml: ENOENT; its content is skipped while loading continues. Restore the file or fix its path and permissions.',
+    );
   });
 
   test('throws a wrapped error on malformed YAML', () => {
     jest.spyOn(fs, 'readFileSync').mockReturnValue('key: [unclosed');
-    expect(() => loadYaml('/bad.yaml')).toThrow('Failed to load YAML');
+    expect(() => loadYaml('/bad.yaml')).toThrow(/Failed to load YAML at \/bad\.yaml: [\s\S]*; this file is skipped while loading continues\. Fix the YAML syntax and compile again\./);
   });
 
   test('reports duplicate keys as an error rather than silently keeping one', () => {
@@ -170,6 +172,8 @@ describe('loadYamlDocument', () => {
 
   test('wraps load failures the same way loadYaml does', () => {
     jest.spyOn(fs, 'readFileSync').mockImplementation(() => { throw new Error('ENOENT'); });
-    expect(() => loadYamlDocument('/missing.yaml')).toThrow('Failed to load YAML at /missing.yaml');
+    expect(() => loadYamlDocument('/missing.yaml')).toThrow(
+      'Failed to load YAML at /missing.yaml: ENOENT; its content is skipped while loading continues. Restore the file or fix its path and permissions.',
+    );
   });
 });

@@ -81,7 +81,7 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
       if (!abs) {
         diagnostics.error(
           CODES.PATH_NOT_FOUND,
-          `templateFor.${role} names "${file}", which was not found on the templates search path.`,
+          `templateFor.${role} names "${file}", which was not found on the templates search path, so this role has no template; add the file to a configured templates path or correct the name.`,
           { file: configPath },
         );
         continue;

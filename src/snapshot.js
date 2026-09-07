@@ -207,7 +207,7 @@ function syncLibrary(config, options = {}) {
       diagnostics.error(
         CODES.LIBRARY_ROLE_SCAN_REFUSED,
         `${entryLabel(entry)}: cannot compute requiresRoles — this set's own items do not `
-        + `validate (${roleResult.refused}). Fix the item content and re-run --snapshot.`,
+        + `validate (${roleResult.refused}), so requiresRoles is omitted; fix the item content and re-run --snapshot.`,
         {}
       );
     } else if (roleResult && roleResult.roles) {
@@ -251,7 +251,7 @@ function checkDrift(config, diagnostics, log) {
     if (!section) {
       diagnostics.warn(
         CODES.SNAPSHOT_MISSING_ENTRY,
-        `${entryLabel(entry)} has no entry in ${path.basename(manifestPath)}.`,
+        `${entryLabel(entry)} has no entry in ${path.basename(manifestPath)}, so it cannot be checked as frozen; regenerate the snapshot manifest.`,
         {}
       );
       continue;
@@ -276,7 +276,7 @@ function checkDrift(config, diagnostics, log) {
     if (!fs.existsSync(snapEntryDir)) {
       diagnostics.warn(
         CODES.SNAPSHOT_DIR_MISSING,
-        `Snapshot directory for ${entryLabel(entry)} is missing: snapshot/${entry.name}`,
+        `Snapshot directory for ${entryLabel(entry)} is missing: snapshot/${entry.name}; frozen inputs are unavailable. Run --snapshot to populate it.`,
         {}
       );
       continue;
@@ -286,7 +286,7 @@ function checkDrift(config, diagnostics, log) {
       if (!(rel in section.files)) {
         diagnostics.warn(
           CODES.SNAPSHOT_FILE_UNTRACKED,
-          `${entryLabel(entry)}: snapshot/${entry.name}/${rel} has no entry in the manifest.`,
+          `${entryLabel(entry)}: snapshot/${entry.name}/${rel} has no entry in the manifest, so it is outside the freeze; remove it or regenerate the snapshot.`,
           {}
         );
         continue;
@@ -296,7 +296,7 @@ function checkDrift(config, diagnostics, log) {
         diagnostics.error(
           CODES.SNAPSHOT_HASH_MISMATCH,
           `${entryLabel(entry)}: snapshot/${entry.name}/${rel} does not match its manifest `
-          + 'hash — it was hand-edited since the last --snapshot.',
+          + 'hash, so the snapshot is corrupted and compilation stops; restore the file or regenerate the snapshot.',
           {}
         );
       }

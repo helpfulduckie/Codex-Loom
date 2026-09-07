@@ -79,14 +79,14 @@ function loadItemsFromDir(dirs, options = {}) {
       };
 
       if (data === null || data === undefined) {
-        warn(CODES.YAML_EMPTY_FILE, `empty file skipped: ${file}`);
+        warn(CODES.YAML_EMPTY_FILE, `Empty file skipped: ${file}; add YAML content or remove the file.`);
         continue;
       }
 
       const entries = Array.isArray(data) ? data : [data];
       entries.forEach((entry, index) => {
         if (entry === null || entry === undefined) {
-          warn(CODES.YAML_NULL_DOCUMENT, `null document in "${file}" — skipped`);
+          warn(CODES.YAML_NULL_DOCUMENT, `Null document in "${file}" — it contributes no items; add content or remove the empty document.`);
           return;
         }
 
@@ -110,7 +110,7 @@ function loadItemsFromDir(dirs, options = {}) {
         });
 
         if (typeof entry.id === 'string' && entry.id.includes(':')) {
-          const message = `item id "${entry.id}" contains ":", which separates a library set from an id`;
+          const message = `Item id "${entry.id}" contains ":", so it cannot be referenced unambiguously with library-qualified ids; remove the colon.`;
           diagnostics.error(CODES.ID_CONTAINS_COLON, message, { file });
         }
 
@@ -127,12 +127,12 @@ function buildRegistry(items, context, { diagnostics } = {}) {
   for (const item of items.filter((c) => !c.include && (!c.import || c.id))) {
     const id = (item.id || (typeof item.name === 'string' ? item.name : null) || '').toLowerCase();
     if (!id) {
-      const message = `Item in ${context} is missing both id and name fields (source: ${item._source})`;
+      const message = `Item in ${context} is missing both id and name fields (source: ${item._source}), so it cannot enter the registry; add id or name.`;
       diagnostics.error(CODES.ITEM_WITHOUT_IDENTITY, message, { file: item._source });
       continue;
     }
     if (registry.has(id)) {
-      const message = `Duplicate item ID "${id}" in ${context}:\n  ${registry.get(id)._source}\n  ${item._source}`;
+      const message = `Duplicate item ID "${id}" in ${context}; the later definition is skipped. Sources:\n  ${registry.get(id)._source}\n  ${item._source}`;
       diagnostics.error(CODES.DUPLICATE_ITEM_ID, message, { file: item._source });
       continue; // first definition wins — the newcomer is skipped
     }
@@ -150,7 +150,7 @@ function mergeRegistries(canonRegistry, projectRegistry, { diagnostics } = {}) {
   }
   for (const [id, item] of projectRegistry) {
     if (merged.has(id)) {
-      const message = `Item ID "${id}" exists in both a library set and the project:\n  Library: ${merged.get(id)._source}\n  Project: ${item._source}`;
+      const message = `Item ID "${id}" exists in both a library set and the project; the project definition is skipped and the library item wins. Sources:\n  Library: ${merged.get(id)._source}\n  Project: ${item._source}`;
       diagnostics.error(CODES.DUPLICATE_ITEM_ID, message, { file: item._source });
       continue; // the library item wins — the project copy is skipped
     }
@@ -167,7 +167,7 @@ function buildCanonRegistry(resolvedCanon, options = {}) {
 
   for (const [name, canonPath] of resolvedCanon) {
     if (!fs.existsSync(canonPath)) {
-      const message = `library path not found for "${name}": ${canonPath}`;
+      const message = `Library path not found for "${name}": ${canonPath}; this library contributes no items. Create the path or correct structure.input.library.`;
       options.diagnostics.warn(CODES.YAML_FILE_UNREADABLE, message);
       continue;
     }
@@ -219,7 +219,7 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
 
     const fullPath = path.isAbsolute(includePath) ? includePath : path.resolve(config._base, includePath);
     if (!fs.existsSync(fullPath)) {
-      const message = `include path not found: ${fullPath}`;
+      const message = `Include path not found: ${fullPath}; included items are skipped. Create the file or correct the include path.`;
       diagnostics.warn(CODES.INCLUDE_NOT_FOUND, message, { file: def._source });
       continue;
     }
@@ -229,7 +229,7 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
       seenFiles.get(fullPath).push(importerSource);
       diagnostics.error(
         CODES.DOUBLE_INCLUDE,
-        `File included more than once: ${fullPath}\nIncluded by:\n`
+        `File included more than once: ${fullPath}; the repeated include is skipped. Keep one include.\nIncluded by:\n`
         + seenFiles.get(fullPath).map((s) => `  ${s}`).join('\n'),
         { file: importerSource },
       );

@@ -28,7 +28,7 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
   const fail = (why) => {
     diagnostics.error(
       CODES.PACK_MALFORMED,
-      `Convention pack "${name}" ${why}.`,
+      `Convention pack "${name}" ${why}, so its rules are unavailable; provide a readable pack with the required shape.`,
       { file: filePath, ...loc },
       {
         hint: source
@@ -60,8 +60,7 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
     diagnostics.error(
       CODES.PACK_NAME_MISMATCH,
       `Convention pack loaded as "${name}" declares name: "${doc.name}". `
-      + 'The config key must match the pack\'s own name so diagnostic codes and '
-      + 'suppressions stay portable (§8.2.2).',
+      + 'The pack is unavailable until the config key and name match; this keeps diagnostic codes and suppressions portable.',
       { file: filePath, ...loc },
     );
     return null;

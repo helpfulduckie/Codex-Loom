@@ -19,9 +19,9 @@ WARN CL0428 templates/fields.cl.yaml
 
 exports[`pathological fixture a committed manifest that disagrees with the config and the disk 1`] = `
 "WARN CL0113
-  Library "alpha" has no entry in manifest.json.
+  Library "alpha" has no entry in manifest.json, so it cannot be checked as frozen; regenerate the snapshot manifest.
 WARN CL0114
-  Library "beta": snapshot/beta/extra.yaml has no entry in the manifest.
+  Library "beta": snapshot/beta/extra.yaml has no entry in the manifest, so it is outside the freeze; remove it or regenerate the snapshot.
 WARN CL0630 compile.cl.yaml
   branch "(root)" resolves no opening: and no adventureDescription:, so Velvet Lattice would start this leaf with an empty prompt. Give the branch an opening:, or one an ancestor passes down.
 WARN CL0631 compile.cl.yaml
@@ -30,7 +30,7 @@ WARN CL0631 compile.cl.yaml
 
 exports[`pathological fixture a hand-edited snapshot file aborts the load 1`] = `
 "ERROR CL0115
-  Library "main": snapshot/main/thing.yaml does not match its manifest hash — it was hand-edited since the last --snapshot."
+  Library "main": snapshot/main/thing.yaml does not match its manifest hash, so the snapshot is corrupted and compilation stops; restore the file or regenerate the snapshot."
 `;
 
 exports[`pathological fixture config schema violations abort the load 1`] = `

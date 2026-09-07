@@ -100,7 +100,7 @@ function loadManifest(manifestPath, diagnostics) {
   } catch (_) {
     diagnostics.warn(
       CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
-      `Snapshot manifest ${path.basename(manifestPath)} is not valid JSON.`,
+      `Snapshot manifest ${path.basename(manifestPath)} is not valid JSON, so snapshot tracking is skipped; repair or regenerate manifest.json.`,
       {}
     );
     return null;
@@ -108,7 +108,7 @@ function loadManifest(manifestPath, diagnostics) {
   if (!parsed || typeof parsed !== 'object' || typeof parsed.manifestVersion !== 'number') {
     diagnostics.warn(
       CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
-      `Snapshot manifest ${path.basename(manifestPath)} does not match the expected shape.`,
+      `Snapshot manifest ${path.basename(manifestPath)} has the wrong shape, so snapshot tracking is skipped; repair or regenerate manifest.json.`,
       {}
     );
     return null;
@@ -124,7 +124,11 @@ function loadCompileConfig(configPath, options = {}) {
     ({ value: parsed, sourceMap } = loadYamlDocument(configPath));
   } catch (err) {
     if (!(err instanceof YamlLoadError)) throw err;
-    diagnostics.error(err.code, err.message, { file: configPath });
+    diagnostics.error(
+      err.code,
+      `${err.message} Configuration loading stops because compile.yaml cannot be loaded.`,
+      { file: configPath },
+    );
     return null;
   }
   const base = path.dirname(path.resolve(configPath));
@@ -132,7 +136,7 @@ function loadCompileConfig(configPath, options = {}) {
   if (parsed === null || parsed === undefined || typeof parsed !== 'object' || Array.isArray(parsed)) {
     diagnostics.error(
       CODES.CONFIG_NOT_A_MAPPING,
-      'compile.yaml must be a mapping of configuration keys.',
+      'compile.yaml must be a mapping of configuration keys, so configuration cannot be loaded; replace its top-level value with configuration keys.',
       { file: configPath }
     );
     return null;
@@ -256,17 +260,17 @@ function loadCompileConfig(configPath, options = {}) {
 
   for (const [i, p] of resolvedItems.entries()) {
     if (!fs.existsSync(p)) {
-      diagnostics.warn(CODES.PATH_NOT_FOUND, `Items path not found: ${p}`, at('structure', 'input', 'items', String(i)));
+      diagnostics.warn(CODES.PATH_NOT_FOUND, `Items path not found: ${p}; items at this path are skipped. Create the path or correct structure.input.items.`, at('structure', 'input', 'items', String(i)));
     }
   }
   for (const [name, p] of resolvedLibrarySource) {
     if (!fs.existsSync(p)) {
-      diagnostics.warn(CODES.PATH_NOT_FOUND, `Library "${name}" path not found: ${p}`, at('structure', 'input', 'library', name));
+      diagnostics.warn(CODES.PATH_NOT_FOUND, `Library "${name}" path not found: ${p}; this library contributes no items. Create the path or correct structure.input.library.`, at('structure', 'input', 'library', name));
     }
   }
   for (const [i, p] of resolvedTemplatesSource.entries()) {
     if (!fs.existsSync(p)) {
-      diagnostics.warn(CODES.PATH_NOT_FOUND, `Templates path not found: ${p}`, at('structure', 'input', 'templates', String(i)));
+      diagnostics.warn(CODES.PATH_NOT_FOUND, `Templates path not found: ${p}; templates at this path are unavailable. Create the path or correct structure.input.templates.`, at('structure', 'input', 'templates', String(i)));
     }
   }
 

@@ -20,7 +20,7 @@ function loadComponentDocument(spec, options = {}) {
 
   if (!spec || typeof spec !== 'string') return null;
   if (!fs.existsSync(spec)) {
-    const message = `${label} file not found: ${spec}`;
+    const message = `${label} file not found: ${spec}; this component is skipped. Create the file or correct the component path.`;
     diagnostics.warn(CODES.YAML_FILE_UNREADABLE, message, { file: spec });
     return null;
   }

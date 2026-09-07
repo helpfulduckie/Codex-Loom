@@ -82,7 +82,7 @@ function parseYaml(raw, filePath) {
     const at = line ? ` at line ${line}, column ${col}` : '';
     const err = new Error(
       `${CODES.TOKEN_SWALLOWED_BY_YAML}: the token ${token} was parsed as a YAML mapping key${at}. `
-      + 'Wrap the value in quotes so it is read as text.'
+      + 'Quote the value so it is read as text; other files continue loading.'
     );
     err.code = CODES.TOKEN_SWALLOWED_BY_YAML;
     throw err;
@@ -93,7 +93,11 @@ function parseYaml(raw, filePath) {
 
 class YamlLoadError extends Error {
   constructor(kind, filePath, cause) {
-    super(`Failed to load YAML at ${filePath}: ${cause.message}`);
+    super(
+      kind === 'read'
+        ? `Failed to load YAML at ${filePath}: ${cause.message}; its content is skipped while loading continues. Restore the file or fix its path and permissions.`
+        : `Failed to load YAML at ${filePath}: ${cause.message}; this file is skipped while loading continues. Fix the YAML syntax and compile again.`,
+    );
     this.name = 'YamlLoadError';
     this.kind = kind;
     this.file = filePath;
