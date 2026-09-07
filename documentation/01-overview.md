@@ -271,7 +271,7 @@ A project with no `branches:` key produces a single root-level output with no `B
 
 Each is covered in its own reference document.
 
-**All seven component types share one grammar.** A component is a named mapping of `sections:`, and Plot Essentials, Summary, AI Instructions, Author's Note, Opening, branch framing and Description all read the same way. `imports:` pulls sections in from another component file and nests to any depth, which is how a house style is shared across projects. A component key may also point straight at a `.md` or `.txt`, which is copied through verbatim and declares no sections. See [Components](09-components.md).
+**All seven component types share one grammar.** A component is a named mapping of `sections:`, and Plot Essentials, Summary, AI Instructions, Author's Note, Opening, branch framing and Description all read the same way. `imports:` pulls sections in from another component file and nests to any depth, which is how a house style is shared across projects. A component key may also point straight at a `.md` or `.txt`; `{%variables}` expand at its render scope, its other prose is preserved, and it declares no sections. See [Components](09-components.md).
 
 ---
 
