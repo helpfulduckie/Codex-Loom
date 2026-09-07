@@ -9,7 +9,7 @@ const { busWarner, severityOf, CODES: DIAG_CODES } = require('./diag');
 const { walkBranchTree, mergePlaceholders, mergeUnbindable } = require('./model/branches');
 const {
   FRAMING_DESCRIPTOR, DESCRIPTION_DESCRIPTOR, isPassthrough, readPassthrough,
-  renderSectionedComponent, writeSectionedComponent,
+  renderSectionedComponent, writeSectionedComponent, resolveComponentMetadata,
 } = require('./emit/components');
 const { applyTokenPass } = require('./model/pronouns');
 const {
@@ -358,7 +358,9 @@ function writeScenarioBlurb({
       if (raw === null) {
         combined = null;
       } else {
-        combined = applyTokenPass(raw, {
+        combined = applyTokenPass(resolveVariables(raw, rootVariables || {}, {
+          diagnostics, file: String(descSpec),
+        }), {
           item: {}, registry, branchProtagonist: null,
           roles: rootRolesDeclared ? rootRoles : null, onRoleUsed: roleState.onUsed,
           onWarn: busWarner(diagnostics, { file: String(descSpec) }),
@@ -367,7 +369,9 @@ function writeScenarioBlurb({
     } else {
       const descComponent = componentLoader.load(descSpec, DESCRIPTION_DESCRIPTOR);
       if (descComponent) {
-        descMetadata = descComponent.metadata;
+        descMetadata = resolveComponentMetadata(descComponent.metadata, rootVariables || {}, {
+          diagnostics, file: String(descSpec),
+        });
         ({ text: combined } = renderSectionedComponent(
           descComponent, [], new Map(),
           {

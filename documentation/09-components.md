@@ -37,7 +37,7 @@ Sections join with a blank line between them, which is what a paragraph break is
 
 ```yaml surface=config
 components:
-  opening: ./openings/root.md                # a file, copied verbatim
+  opening: ./openings/root.md                # a prose file; variables expand at the emitting scope
 ```
 
 ```yaml surface=config
@@ -214,6 +214,8 @@ An item may name several targets: `storyCard: true` alongside a `plotEssential:`
 
 **Document-level keys.** Besides `sections:`, a component document may declare `imports:` (see [Sharing a component with `imports:`](#sharing-a-component-with-imports)), `branches:` (the fan-out over every section), and `metadata:` — frontmatter for the output file, emitted only by the components that write one with a place for it, which today is Description alone.
 
+**Component text values expand at the output scope.** `{%variables}` in prose, headings, and nested metadata values use the leaf's merged variables for inherited components and root variables for the scenario Description. Keys and selectors stay literal. Deferred component placement compares the full emitted payload, including serialized frontmatter, so equal text with different metadata remains at its leaves.
+
 `only:` and `except:` are not supported; use `branches:` with `~`.
 
 ### Branch dispatch and variants are per section
@@ -385,7 +387,7 @@ The spec may point at either:
 
 ```yaml surface=config
 components:
-  aiInstructions: ./components/ai-instructions.md      # copied through verbatim
+  aiInstructions: ./components/ai-instructions.md      # prose passthrough with variable expansion
 ```
 
 ```yaml surface=config
@@ -393,7 +395,7 @@ components:
   aiInstructions: ./components/ai-instructions.yaml    # sections, compiled
 ```
 
-A `.md` or `.txt` file is copied through with trailing blank lines trimmed and nothing else done to it. It declares no sections, so it declares no slots — an item whose `render.aiInstructions` names a slot in a passthrough component is an ERROR (`CL0611`) saying so, rather than a silent drop.
+A `.md` or `.txt` file expands `{%variables}` at the root or leaf where it renders and trims trailing blank lines; its other text is preserved. It declares no sections, so it declares no slots — an item whose `render.aiInstructions` names a slot in a passthrough component is an ERROR (`CL0611`) saying so, rather than a silent drop.
 
 ### Sections
 
@@ -483,6 +485,8 @@ The card's AID `type` — which groups it in the story-card editor — resolves 
 1. the entry's own `type:`;
 2. `storyCardType.<component>` in `compile.yaml` (project-wide, e.g. `storyCardType: {aiInstructions: zz_AIN}` to sort the alternates to the end of the player's list);
 3. the component's display label (`AI Instructions`, `Plot Essentials`, …).
+
+`storyCardType` values are root-scoped; an entry's `title:` and `type:` are leaf-scoped and expand before validation. Entry selectors (`variant:` and `sections:`) remain literal.
 
 Placement is the ordinary frontier mechanism: an alternate that renders identically across a subtree is written once at that subtree's root; one that varies per branch has each version placed on its own frontier. Two entries whose titles collide under one type are an ERROR (`CL0622`), the same as any two story cards sharing a name.
 
@@ -694,7 +698,7 @@ The key is declared on every component, but only the two description components 
 
 ### Prose descriptions still work
 
-A `.md` or `.txt` path is copied verbatim, exactly as it is for every other component:
+A `.md` or `.txt` path uses the same prose passthrough as every other component, including `{%variable}` expansion at its render scope:
 
 ```yaml surface=config
 components:

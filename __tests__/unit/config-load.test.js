@@ -179,6 +179,34 @@ describe('pre-branch scoping (CL0520)', () => {
   });
 });
 
+describe('storyCardType variable resolution', () => {
+  test('expands values from root variables while retaining literal component keys', () => {
+    const { config } = load([
+      'variables:',
+      '  category: Reference',
+      'storyCardType:',
+      '  aiInstructions: "{%category} Cards"',
+      '  "{%category}": literal-key',
+      '',
+    ].join('\n'));
+    expect(config.storyCardType).toEqual({ aiInstructions: 'Reference Cards', '{%category}': 'literal-key' });
+  });
+
+  test('a branch-only variable reports CL0520 once at its storyCardType value', () => {
+    const { diagnostics } = load([
+      'storyCardType:',
+      '  aiInstructions: "{%leafType}"',
+      'branches:',
+      '  calm:',
+      '    variables: {leafType: Reference}',
+      '',
+    ].join('\n'));
+    const raised = diagnostics.all.filter((d) => d.code === CODES.VARIABLE_PRE_BRANCH);
+    expect(raised).toHaveLength(1);
+    expect(raised[0].line).toBe(2);
+  });
+});
+
 describe('resolution behavior carried forward', () => {
   test('_base is the directory holding the config', () => {
     expect(load('title: x\n').config._base).toBe(tmpDir);

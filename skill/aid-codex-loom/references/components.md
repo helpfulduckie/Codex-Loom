@@ -117,15 +117,17 @@ The card's AID `type` resolves on three rungs, most specific first:
 2. `storyCardType.<component>` in `compile.yaml` — project-wide, e.g. `storyCardType: {aiInstructions: zz_AIN}` to sort alternates to the end of the player's list
 3. the component's display label (`AI Instructions`, `Plot Essentials`, …)
 
+`storyCardType` values are root-scoped; alternate entry `title:` and `type:` values are leaf-scoped and are expanded before validation. `variant:` and `sections:` are literal selectors. Component prose, headings, and nested metadata values expand at their emitting root/leaf; metadata keys stay literal, and component lifting compares the complete frontmatter-plus-body payload.
+
 **Placement uses the ordinary frontier mechanism.** An alternate rendering identically across a subtree is written once at that subtree's root; one that varies per branch has each version placed on its own frontier. Two entries whose titles collide under one type are `CL0622`, the same as any two story cards sharing a name.
 
 ### Prose passthrough
 
-`aiInstructions:` and the other sectioned keys may point at a `.md` or `.txt` instead of a `.yaml`. It is copied through with trailing blank lines trimmed and nothing else done to it. A passthrough declares no sections and therefore no slots — an item targeting a slot inside one is an ERROR (`CL0611`) naming the reason, not a silent drop.
+`aiInstructions:` and the other sectioned keys may point at a `.md` or `.txt` instead of a `.yaml`. The prose expands `{%variables}` at the root or leaf where it renders and trims trailing blank lines; its other text is preserved. A passthrough declares no sections and therefore no slots — an item targeting a slot inside one is an ERROR (`CL0611`) naming the reason, not a silent drop.
 
 ```yaml
 components:
-  aiInstructions: ./components/ai-instructions.md      # copied through verbatim
+  aiInstructions: ./components/ai-instructions.md      # prose passthrough with variable expansion
   aiInstructions: ./components/ai-instructions.yaml    # sections, compiled
 ```
 

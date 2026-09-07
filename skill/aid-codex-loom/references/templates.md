@@ -102,6 +102,8 @@ miss inside a template renders empty and is not flagged.
 
 `{%variable}` expands every semantic item string value, including nested values in `body`, `aid`, `render`, `v`, `notes`, `meta`, and `pronouns`. Mapping keys, selectors, and non-string scalars remain literal.
 
+The same value-only rule covers component prose, section headings, and nested metadata values. Component metadata uses the variables at the root or leaf that writes it; its mapping keys remain literal.
+
 ```
 {$name}                             full name; {$name.display} for the short form
 {$body.Tagline}                     body field

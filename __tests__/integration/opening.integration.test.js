@@ -79,17 +79,18 @@ describe('an opening spec is a document, a prose file, or a sentence', () => {
       .toBe('The harbor is still.\n\nSomeone is waiting for you.');
   });
 
-  test('a .md file is copied verbatim, which is what every golden opening is', () => {
+  test('a .md file expands variables while preserving its other literal bytes', () => {
     const { tmpDir } = compileProject({
       ...BASE,
+      'openings/calm.md': 'The {%place} harbor is still. {$literal}',
       'compile.yaml': config([
+        'variables: {place: quiet}',
         'components: {opening: ./openings/calm.md}',
         'branches: {calm: {}}',
       ]),
-      'openings/calm.md': 'The harbor is still.',
     });
 
-    expect(read(openingAt(tmpDir, 'calm'))).toBe('The harbor is still.');
+    expect(read(openingAt(tmpDir, 'calm'))).toBe('The quiet harbor is still. {$literal}');
   });
 
   test('a spec resolving to no file is the literal sentence', () => {

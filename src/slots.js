@@ -7,6 +7,8 @@ const {
   SLOTTED_COMPONENTS, isPassthrough, readPassthrough, renderSectionedComponent,
 } = require('./emit/components');
 const { renderCard } = require('./emit/vl');
+const { resolveVariables } = require('./util');
+const { validateCardTypeValue } = require('./cardType');
 
 function selectComponentSections(component, variant, entrySections, onUnknownSection) {
   let raw = (component && component.rawSections) || {};
@@ -46,15 +48,16 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
   const projectType = (storyCardType && typeof storyCardType === 'object')
     ? storyCardType[descriptor.key] : null;
 
-  const takenByType = new Map();
+  const takenNames = new Map();
   for (const [type, cards] of grouped) {
-    takenByType.set(type, new Set(cards.map((c) => c.name)));
+    for (const card of cards) takenNames.set(card.name, type);
   }
 
   for (const entry of entries) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
 
-    const title = typeof entry.title === 'string' ? entry.title.trim() : '';
+    const title = typeof entry.title === 'string'
+      ? resolveVariables(entry.title, variables, { diagnostics, file: loc.file }).trim() : '';
     if (title === '') {
       diagnostics.error(
         DIAG_CODES.STORY_CARD_ENTRY_NO_TITLE,
@@ -65,9 +68,14 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
       continue;
     }
 
-    const rawCardType = (typeof entry.type === 'string' && entry.type.trim() !== '' && entry.type.trim())
+    const entryType = typeof entry.type === 'string'
+      ? resolveVariables(entry.type, variables, { diagnostics, file: loc.file }) : entry.type;
+    const rawCardType = (typeof entryType === 'string' && entryType.trim() !== '' && entryType.trim())
       || (typeof projectType === 'string' && projectType.trim() !== '' && projectType.trim())
       || descriptor.label;
+    validateCardTypeValue(rawCardType, {
+      diagnostics, name: title || '(unknown)', file: loc.file, field: 'story-card type',
+    });
     const cardType = cardTypeAudit ? cardTypeAudit.resolve(rawCardType, loc) : rawCardType;
 
     const sub = selectComponentSections(
@@ -98,18 +106,20 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
       continue;
     }
 
-    if (!takenByType.has(cardType)) takenByType.set(cardType, new Set());
-    if (takenByType.get(cardType).has(title)) {
+    if (takenNames.has(title)) {
+      const existingType = takenNames.get(title);
+      const where = existingType === cardType
+        ? `both as ${cardType}` : `${existingType} and ${cardType}`;
       diagnostics.error(
         DIAG_CODES.CARD_NAME_COLLISION,
-        `story cards named "${title}" collide on branch "${branchLabel}" (both as ${cardType}). `
+        `story cards named "${title}" collide on branch "${branchLabel}" (${where}). `
         + 'Velvet Lattice merges story cards by name, so only one survives to AID. '
         + 'Give them distinct names.',
         loc,
       );
       continue;
     }
-    takenByType.get(cardType).add(title);
+    takenNames.set(title, cardType);
 
     const body = `${title} — copy the description field below into your scenario's ${descriptor.label}.`;
     const synthetic = { kind: 'reference', name: title, aid: { type: cardType, title } };

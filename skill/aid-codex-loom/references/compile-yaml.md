@@ -188,6 +188,8 @@ Nested branch tree. Leaf = no `branches:` sub-key, and produces one output folde
 
 **`storyCardType:` is root-only** and has no per-branch counterpart.
 
+Its values expand `{%variables}` from the completed root table, while component-name keys remain literal. A `render.storyCards` entry's `title:` and `type:` instead expand at its leaf before empty, collision, and type checks; `variant:` and `sections:` selectors remain literal.
+
 ---
 
 ## Path Resolution

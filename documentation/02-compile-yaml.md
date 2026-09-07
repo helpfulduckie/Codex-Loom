@@ -249,13 +249,13 @@ Each key writes one file. Every component except `branchFraming:` inherits down 
 
 `scripts:` is **not** a component — it is a top-level key (see [scripts](#scripts) below), folded in here only because it merges down the branch chain the same way.
 
-**`opening:`** — Written to each leaf's `Components/Opening.md`. An ordinary component: it inherits down the tree, may be a `sections:` document, and items may route into its slots. A `.md` file is copied verbatim and a spec naming no file is used as literal text, which is what most openings are. Capped at 4,000 characters (`CL0710`/`CL0711`).
+**`opening:`** — Written to each leaf's `Components/Opening.md`. An ordinary component: it inherits down the tree, may be a `sections:` document, and items may route into its slots. A `.md` file expands `{%variables}` at the leaf while preserving its other text, and a spec naming no file is used as literal text, which is what most openings are. Capped at 4,000 characters (`CL0710`/`CL0711`).
 
 **`branchFraming:`** — Written to branch-point nodes' `Components/Opening.md`. Does **not** inherit; ignored on leaf nodes with a warning. Takes the same three shapes `opening:` does, but items cannot route into it — framing sits at an interior node, where no items are resolved.
 
 **Declared at the project root — sibling to `branches:` rather than inside any branch node — `branchFraming:` writes once to `{output}/Components/Opening.md`** and otherwise behaves like framing at any interior node. It reads the project's own `roles:` and resolves `{%variable}`, `{$role}` and pronoun tokens in every shape — a literal sentence, a prose `.md`, or a `sections:` document (see [Roles](13-roles.md)). `{$protagonist}` renders as "you" only when a `protagonist` role is bound at the root; every other `{$role}` token resolves regardless.
 
-**`description:`** — The scenario blurb AID shows on the listing page. Written once to `{output}/Description.md` after all branches compile. Accepts a `.md`/`.txt` file copied verbatim, or a component document with `sections:`. Not per-branch; branch-level declarations are ignored.
+**`description:`** — The scenario blurb AID shows on the listing page. Written once to `{output}/Description.md` after all branches compile. Accepts a `.md`/`.txt` file whose `{%variables}` expand at root scope, or a component document with `sections:`. Not per-branch; branch-level declarations are ignored.
 
 **`adventureDescription:`** — The description a leaf carries, which AID applies to the adventure started from that leaf. An ordinary component: declared anywhere in the tree, inherited down it, written to each leaf's `Description.md`, and items may route into its slots. A leaf that has one and no `Opening.md` is `CL0616`, because Velvet Lattice would open the adventure on the blurb.
 
@@ -315,6 +315,8 @@ branches:
 ### `storyCardType`
 
 The AID story-card `type` that a component's `render.storyCards` alternates land under — one per component, project-wide.
+
+**`storyCardType` is root-only.** Its values expand `{%variables}` against the completed root table; its component-name keys remain literal. A branch-only variable here is out of scope. Entry-level `title:` and `type:` are separate leaf-scoped values; expansion happens before trimming, empty checks, collision checks, and type validation.
 
 ```yaml surface=config
 storyCardType:

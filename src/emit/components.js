@@ -9,7 +9,7 @@ const { sectionsForBranch, WRAP } = require('../model/component');
 const { applyWrapper } = require('../template');
 const { applyTokenPass } = require('../model/pronouns');
 const {
-  resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts,
+  resolveVariables, transformStringValues, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts,
 } = require('../util');
 
 const SLOTTED_COMPONENTS = Object.freeze([
@@ -102,10 +102,13 @@ function readPassthrough(spec) {
 const BLOCK_GAP = '\n\n';
 const LINE_GAP = '\n';
 
-function headingText(section, defaultHeadingLevel) {
+function headingText(section, defaultHeadingLevel, options) {
   if (!section.heading) return null;
   const level = section.headingLevel === undefined ? defaultHeadingLevel : section.headingLevel;
-  return level > 0 ? `${'#'.repeat(level)} ${section.heading}` : section.heading;
+  const heading = resolveVariables(String(section.heading), options.variables || {}, {
+    diagnostics: options.diagnostics, file: options.file,
+  });
+  return level > 0 ? `${'#'.repeat(level)} ${heading}` : heading;
 }
 
 function textLines(section, options) {
@@ -128,7 +131,7 @@ function textLines(section, options) {
 
 function renderSection(section, occupants, options) {
   const { defaultHeadingLevel = 0 } = options;
-  const heading = headingText(section, defaultHeadingLevel);
+  const heading = headingText(section, defaultHeadingLevel, options);
 
   if (section.isSlot) {
     const bodies = occupants.map((o) => o.text).filter((t) => t && t.trim());
@@ -192,11 +195,16 @@ function writeSectionedComponent(outputDir, descriptor, content, sink, metadata 
   fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, descriptor.file);
   const label = `component ${descriptor.file}`;
-  checkUnexpandedVariables(content, label, sink);
+  const frontmatter = renderFrontmatter(metadata);
+  checkUnexpandedVariables(`${frontmatter}${content}`, label, sink);
   checkUnresolvedFieldTokens(content, label, sink);
   checkMechanicalArtifacts(content, label, sink);
-  fs.writeFileSync(outPath, `${renderFrontmatter(metadata)}${content}\n`, 'utf8');
+  fs.writeFileSync(outPath, `${frontmatter}${content}\n`, 'utf8');
   return outPath;
+}
+
+function resolveComponentMetadata(metadata, variables, sink) {
+  return transformStringValues(metadata, (value) => resolveVariables(value, variables, sink));
 }
 
 function renderFrontmatter(metadata) {
@@ -216,4 +224,5 @@ module.exports = {
   renderSectionedComponent,
   writeSectionedComponent,
   renderFrontmatter,
+  resolveComponentMetadata,
 };

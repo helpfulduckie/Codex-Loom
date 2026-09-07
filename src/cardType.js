@@ -6,20 +6,28 @@ const { PATH_UNSAFE_CHARS } = require('./util');
 
 const INVALID_TYPE_CHARS = new RegExp('[' + PATH_UNSAFE_CHARS + '\\x00-\\x1f]');
 
-function validateCardType(item, { diagnostics }) {
-  const type = item.aid && item.aid.type;
+function validateCardTypeValue(type, {
+  diagnostics, name = '(unknown)', source = null, file = null, field = 'aid.type',
+}) {
   if (typeof type !== 'string' || type === '') return;
   const trimmed = type.trim();
-  const name = item.id || (typeof item.name === 'string' ? item.name : '(unknown)');
-  const src = item._source ? ` (${item._source})` : '';
+  const src = source ? ` (${source})` : '';
   let reason = null;
   if (trimmed === '') reason = 'is empty/whitespace';
   else if (INVALID_TYPE_CHARS.test(type)) reason = 'contains an illegal path character (one of < > : " / \\ | ? *)';
   else if (trimmed === '.' || trimmed === '..') reason = 'is "." or ".."';
   else if (/[ .]$/.test(type)) reason = 'ends with a space or period';
   if (!reason) return;
-  const message = `Invalid aid.type "${type}" for item "${name}"${src}: ${reason}. aid.type becomes a folder/file name and must be a legal path segment.`;
-  diagnostics.error(DIAG_CODES.CARD_TYPE_INVALID, message, { file: item._source });
+  const message = `Invalid ${field} "${type}" for item "${name}"${src}: ${reason}. The card type becomes a folder/file name and must be a legal path segment.`;
+  diagnostics.error(DIAG_CODES.CARD_TYPE_INVALID, message, { file: file || source });
+}
+
+function validateCardType(item, { diagnostics }) {
+  validateCardTypeValue(item.aid && item.aid.type, {
+    diagnostics,
+    name: item.id || (typeof item.name === 'string' ? item.name : '(unknown)'),
+    source: item._source,
+  });
 }
 
 const AID_BUILTIN_TYPES = new Set(['character', 'class', 'race', 'location', 'faction']);
@@ -88,6 +96,7 @@ function buildCardTypeAudit() {
 
 module.exports = {
   validateCardType,
+  validateCardTypeValue,
   normalizeCardType,
   buildCardTypeAudit,
 };

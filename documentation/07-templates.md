@@ -375,7 +375,9 @@ Codex Loom has two compile-time token families. `{%}` is the *path/value* family
 
 **Library names are auto-exposed as `{%}` variables**, so `{%characters}/Aness.yaml` resolves against a path declared under `structure.input`. That is the only naming system for these references. A library name colliding with a declared variable is an ERROR (`CL0521`), since the two share a namespace.
 
-**Scope caveat:** `{%}` in `include:`/`import:` paths uses **root** `variables:` only — includes resolve once, before branches are enumerated, so per-branch variable overrides are not in scope there. Everywhere else `{%}` uses the full root → branch merge.
+**Root-scoped exceptions:** `{%}` in `include:`/`import:` paths and `storyCardType` values uses **root** `variables:` only. Includes resolve once before branches are enumerated, and `storyCardType` is project-wide. Semantic values rendered for a branch use the full root → branch merge.
+
+**Component values use the active component scope.** Component prose, section headings, and nested `metadata:` values expand `{%}` at the root or leaf where they render. Metadata keys, section names, and variant/selectors remain literal.
 
 **Semantic-string expansion:** `{%}` expands every string value in an item, including nested mappings and arrays in `body`, `aid`, `render`, `v`, `notes`, `meta`, and `pronouns`. Only values are touched — mapping keys, branch/variant selectors, numeric fields, and boolean fields such as `render.position` remain literal.
 

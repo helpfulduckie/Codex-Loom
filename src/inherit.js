@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { branchTreeDeclares } = require('./model/branches');
-const { writeSectionedComponent } = require('./emit/components');
+const { writeSectionedComponent, renderFrontmatter } = require('./emit/components');
 const {
   writeOutput, buildBranchOutputDir, resolveBranchFolderPath,
 } = require('./outputPaths');
@@ -25,12 +25,15 @@ function placeInheritedFiles({
     && !declaredInBranches
     && new Set(perLeaf.values()).size === 1;
 
-  for (const { descriptor, metadata, perLeaf } of deferredComponents.values()) {
+  for (const { descriptor, perLeaf } of deferredComponents.values()) {
     const declaredInBranches = branchTreeDeclares(
       config.branches, (node) => node.components && node.components[descriptor.key] !== undefined,
     );
-    if (canLift(perLeaf, declaredInBranches)) {
-      const [text] = perLeaf.values();
+    const payloads = new Map(
+      [...perLeaf].map(([dir, artifact]) => [dir, `${renderFrontmatter(artifact.metadata)}${artifact.text}`]),
+    );
+    if (canLift(payloads, declaredInBranches)) {
+      const [{ text, metadata }] = perLeaf.values();
       const outPath = writeSectionedComponent(
         config._resolvedOutput, descriptor, text, { diagnostics }, metadata,
       );
@@ -39,7 +42,7 @@ function placeInheritedFiles({
         filesWritten++;
       }
     } else {
-      for (const [leafDir, text] of perLeaf) {
+      for (const [leafDir, { text, metadata }] of perLeaf) {
         const outPath = writeSectionedComponent(
           leafDir, descriptor, text, { diagnostics }, metadata,
         );

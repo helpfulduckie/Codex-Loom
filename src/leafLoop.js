@@ -9,8 +9,11 @@ const {
   resolveSectionedComponents, buildSlotIndex, warnEmptySlots,
   selectComponentSections, renderComponentStoryCards,
 } = require('./slots');
-const { renderSectionedComponent, writeSectionedComponent } = require('./emit/components');
+const {
+  renderSectionedComponent, writeSectionedComponent, resolveComponentMetadata,
+} = require('./emit/components');
 const { applyTokenPass } = require('./model/pronouns');
+const { resolveVariables } = require('./util');
 const { checkUndeclaredPlaceholders } = require('./emit/placeholders');
 const { LIMITS, checkLimit } = require('./limits');
 const { questionsForMeasurement } = require('./treeWrite');
@@ -92,13 +95,16 @@ function compileLeaf(branchPath, ctx) {
     let segments;
     let excluded = false;
     if (passthrough !== null && passthrough !== undefined) {
+      const prose = resolveVariables(passthrough, cctx.variables, {
+        diagnostics, file: String(spec),
+      });
       text = descriptor.inlineProse
-        ? applyTokenPass(passthrough, {
+        ? applyTokenPass(prose, {
           item: {}, registry, branchProtagonist,
           roles: cctx.roles, onRoleUsed: roleState.onUsed,
           onWarn: busWarner(diagnostics, { file: String(spec), branch: label }),
         })
-        : passthrough;
+        : prose;
       segments = [{ key: descriptor.label, text }];
     } else {
       warnEmptySlots(descriptor, slotIndex, filled, label, diagnostics, spec);
@@ -144,7 +150,9 @@ function compileLeaf(branchPath, ctx) {
       );
     }
 
-    const metadata = component ? component.metadata : null;
+    const metadata = component ? resolveComponentMetadata(component.metadata, cctx.variables, {
+      diagnostics, file: String(spec),
+    }) : null;
     let wrote;
     if (text && LIFT_EXCLUDED_COMPONENTS.has(descriptor.key)) {
       const outPath = writeSectionedComponent(
@@ -158,10 +166,10 @@ function compileLeaf(branchPath, ctx) {
     } else if (text) {
       let entry = deferredComponents.get(descriptor.key);
       if (!entry) {
-        entry = { descriptor, metadata, perLeaf: new Map() };
+        entry = { descriptor, perLeaf: new Map() };
         deferredComponents.set(descriptor.key, entry);
       }
-      entry.perLeaf.set(outputDir, text);
+      entry.perLeaf.set(outputDir, { text, metadata });
       wrote = true;
     } else {
       wrote = false;

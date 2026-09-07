@@ -234,7 +234,7 @@ function compileRun(configPath, options, buses) {
   const descriptionLeaves = new Set();
   const openingLeaves = new Set();
 
-  const deferredComponents = new Map(); // descriptor.key → { descriptor, metadata, perLeaf: Map(outputDir → text) }
+  const deferredComponents = new Map(); // descriptor.key → { descriptor, perLeaf: Map(outputDir → { text, metadata }) }
   const deferredScripts = new Map(); // outputDir → resolved scripts spec (a directory path)
 
   const deferredCardLeaves = [];

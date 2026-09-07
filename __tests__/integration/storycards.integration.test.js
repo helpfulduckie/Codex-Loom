@@ -155,6 +155,22 @@ describe('the card type resolves on a three-rung ladder', () => {
     expect(fs.existsSync(cardFile(tmpDir, 'xx_override'))).toBe(true);
     expect(fs.existsSync(cardFile(tmpDir, 'zz_AIN'))).toBe(false);
   });
+
+  test('entry titles/types are leaf-scoped while project storyCardType is root-scoped', () => {
+    const { tmpDir } = project([
+      '    - title: "{%cardTitle}"',
+      '      type: "{%leafType}"',
+      '    - title: Project Copy',
+    ].join('\n'), { sct: [
+      'variables: {rootType: "  Root Reference  "}',
+      'storyCardType: {aiInstructions: "{%rootType}"}',
+      'branches:',
+      '  calm: {variables: {cardTitle: Calm Copy, leafType: "  Leaf Reference  "}}',
+    ].join('\n') });
+    expect(fs.existsSync(cardFile(tmpDir, 'Leaf Reference', 'calm'))).toBe(true);
+    expect(fs.existsSync(cardFile(tmpDir, 'Root Reference', 'calm'))).toBe(true);
+    expect(read(cardFile(tmpDir, 'Leaf Reference', 'calm'))).toContain('## Calm Copy');
+  });
 });
 
 // ── Section selection ──────────────────────────────────────────────────────
@@ -295,6 +311,30 @@ describe('malformed entries are reported, not swallowed', () => {
       '      type: Character',
     ].join('\n'));
     expect(codes(diagnostics, 'CL0622')).toHaveLength(1);
+  });
+
+  test('synthetic cards collide by display name even across types', () => {
+    const { diagnostics } = project([
+      '    - {title: Shared, type: First}',
+      '    - {title: Shared, type: Second}',
+    ].join('\n'));
+    expect(codes(diagnostics, 'CL0622')).toHaveLength(1);
+  });
+
+  test('duplicate names created by leaf expansion collide across types', () => {
+    const { diagnostics } = project([
+      '    - {title: "{%first}", type: First}',
+      '    - {title: "{%second}", type: Second}',
+    ].join('\n'), { sct: 'variables: {first: Shared, second: Shared}' });
+    expect(codes(diagnostics, 'CL0622')).toHaveLength(1);
+  });
+
+  test('a synthetic card type is path-validated after leaf expansion', () => {
+    const { diagnostics } = project(
+      '    - {title: Copy, type: "{%badType}"}',
+      { sct: 'variables: {badType: "bad/type"}' },
+    );
+    expect(codes(diagnostics, 'CL0632')).toHaveLength(1);
   });
 });
 

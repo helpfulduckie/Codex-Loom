@@ -1349,3 +1349,5 @@ covers it. Later work is a task queue, not a phase — there is no Phase 18.
 | 15 | Convention packs round two: the `WTG Time Config` rule, and the vocabulary to express it (`requireCard`, `over: body`, `pattern`, `keys`-on-`record`) | §8.2.2 |
 | 16 | The `duckieConv` authoring-conventions pack and the `meta:` channel it reads; the `budget` / `count` / `mutexHint` rule primitives | §8.2.2 |
 | 17 | Audit-driven refactor: `compile.js` decomposed 3,785→1,026 lines across twelve modules; `resolver.js` / `tokens.js` deleted; `version: 4` validation; the `--migrate` duplicate-id bus fix. No output change | §3.2 |
+
+**Component expansion and identity.** `storyCardType` remains root-only: its values expand from the completed root variable table while component keys stay literal. `render.storyCards` entry titles and types expand per leaf before validation; selectors stay literal. Component prose, headings, and nested metadata values expand at their render scope. Inherited-component frontier identity is the complete emitted payload, including serialized metadata.

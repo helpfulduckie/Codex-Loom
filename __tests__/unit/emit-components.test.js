@@ -5,9 +5,10 @@ const path = require('path');
 const {
   SLOTTED_COMPONENTS,
   isPassthrough, readPassthrough,
-  renderSectionedComponent, writeSectionedComponent, renderFrontmatter,
+  renderSectionedComponent, writeSectionedComponent, renderFrontmatter, resolveComponentMetadata,
 } = require('../../src/emit/components');
 const { normalizeComponent } = require('../../src/model/component');
+const { placeInheritedFiles } = require('../../src/inherit');
 const { withTmpDir } = require('../helpers/project');
 
 let tmpDir;
@@ -41,6 +42,64 @@ describe('passthrough components', () => {
     expect(isPassthrough(write('ain.cl.yaml', 'sections: {}'))).toBe(false);
     expect(isPassthrough(null)).toBe(false);
     expect(isPassthrough({ not: 'a path' })).toBe(false);
+  });
+});
+
+describe('component variable expansion', () => {
+  test('headings and nested metadata values expand without changing metadata keys', () => {
+    const { text } = renderSectionedComponent(component({
+      scene: { heading: 'Welcome to {%place}', text: 'Begin.' },
+    }), [], new Map(), { defaultHeadingLevel: 2, variables: { place: 'Luviel' }, registry: new Map() });
+    expect(text).toBe('## Welcome to Luviel\n\nBegin.');
+    const metadata = { '{%place}': 'literal key', nested: ['{%place}'] };
+    expect(resolveComponentMetadata(metadata, { place: 'Luviel' }, {}))
+      .toEqual({ '{%place}': 'literal key', nested: ['Luviel'] });
+    expect(resolveComponentMetadata(metadata, { place: 'Karth' }, {}))
+      .toEqual({ '{%place}': 'literal key', nested: ['Karth'] });
+    expect(metadata).toEqual({ '{%place}': 'literal key', nested: ['{%place}'] });
+  });
+
+  test('the variable leak guard includes serialized frontmatter but leaves other body checks scoped to body text', () => {
+    const sink = { diagnostics: { add: jest.fn() } };
+    writeSectionedComponent(tmpDir, { dir: null, file: 'Description.md' }, 'Body {$unread}.', sink, { tag: '{%left}' });
+    const messages = sink.diagnostics.add.mock.calls.map(([, , message]) => message);
+    expect(messages.some((m) => m.includes('unexpanded variable {%left}'))).toBe(true);
+    expect(messages.some((m) => m.includes('unresolved token {$unread}'))).toBe(true);
+  });
+
+  test('inherited placement keeps equal bodies with different metadata at their leaves', () => {
+    const calm = path.join(tmpDir, 'calm');
+    const storm = path.join(tmpDir, 'storm');
+    placeInheritedFiles({
+      deferredComponents: new Map([['aiInstructions', {
+        descriptor: AIN,
+        perLeaf: new Map([
+          [calm, { text: 'Same body.', metadata: { mood: 'calm' } }],
+          [storm, { text: 'Same body.', metadata: { mood: 'storm' } }],
+        ]),
+      }]]),
+      deferredScripts: new Map(), deferredCardLeaves: [], leaves: [['calm'], ['storm']],
+      config: { _resolvedOutput: tmpDir, branches: null },
+      diagnostics: { add: jest.fn() }, log: { verbose: jest.fn() },
+    });
+    expect(fs.existsSync(path.join(tmpDir, 'Components', AIN.file))).toBe(false);
+    expect(fs.readFileSync(path.join(calm, 'Components', AIN.file), 'utf8')).toContain('mood: calm');
+    expect(fs.readFileSync(path.join(storm, 'Components', AIN.file), 'utf8')).toContain('mood: storm');
+  });
+
+  test('inherited placement still lifts fully equal component artifacts', () => {
+    const artifact = { text: 'Same body.', metadata: { mood: 'calm' } };
+    placeInheritedFiles({
+      deferredComponents: new Map([['aiInstructions', {
+        descriptor: AIN,
+        perLeaf: new Map([[path.join(tmpDir, 'calm'), artifact], [path.join(tmpDir, 'storm'), artifact]]),
+      }]]),
+      deferredScripts: new Map(), deferredCardLeaves: [], leaves: [['calm'], ['storm']],
+      config: { _resolvedOutput: tmpDir, branches: null },
+      diagnostics: { add: jest.fn() }, log: { verbose: jest.fn() },
+    });
+    expect(fs.readFileSync(path.join(tmpDir, 'Components', AIN.file), 'utf8')).toContain('mood: calm');
+    expect(fs.existsSync(path.join(tmpDir, 'calm', 'Components', AIN.file))).toBe(false);
   });
 });
 

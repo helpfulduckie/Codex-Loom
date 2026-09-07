@@ -270,6 +270,18 @@ function loadCompileConfig(configPath, options = {}) {
     }
   }
 
+  const storyCardType = config.storyCardType && typeof config.storyCardType === 'object'
+    && !Array.isArray(config.storyCardType)
+    ? Object.fromEntries(Object.entries(config.storyCardType).map(([key, value]) => [
+        key,
+        typeof value === 'string'
+          ? resolveVariables(value, variables, {
+              diagnostics, location: at('storyCardType', key), branchOnly: variableNames.branchOnly,
+            })
+          : value,
+      ]))
+    : config.storyCardType || null;
+
   return {
     _base: base,
     _resolvedOutput: resolvedOutput,
@@ -290,7 +302,7 @@ function loadCompileConfig(configPath, options = {}) {
     _variables: variables,
     render: config.render || null,
     templateFor: config.templateFor || null,
-    storyCardType: config.storyCardType || null,
+    storyCardType,
     placeholders: config.placeholders || null,
     branches: config.branches || null,
   };

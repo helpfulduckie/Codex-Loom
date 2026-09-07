@@ -362,6 +362,52 @@ describe('metadata: becomes Description.md frontmatter', () => {
     );
   });
 
+  test('scenario-description metadata resolves from root variables', () => {
+    const { tmpDir } = compileProject({
+      ...BASE,
+      'compile.yaml': config(
+        ['description: ./components/desc.cl.yaml'],
+        ['variables: {mood: reflective}'],
+      ),
+      'components/desc.cl.yaml': [
+        'metadata: {tag: "{%mood}"}',
+        'sections:',
+        '  pitch: {text: Same body.}',
+      ].join('\n'),
+    });
+    expect(read(rootDesc(tmpDir))).toContain('tag: reflective');
+  });
+
+  test('adventure-description metadata resolves per leaf and prevents lifting when only metadata differs', () => {
+    const { tmpDir } = compileProject({
+      ...BASE,
+      'compile.yaml': [
+        'version: 4',
+        'structure:',
+        '  input:',
+        '    items: [%TMP%/Codex]',
+        '    templates: [%TMP%/templates]',
+        '  output: %TMP%/output',
+        'components: {adventureDescription: ./components/adv.cl.yaml}',
+        'branches:',
+        '  calm:',
+        '    variables: {mood: calm}',
+        '    components: {opening: ./openings/calm.md}',
+        '  storm:',
+        '    variables: {mood: storm}',
+        '    components: {opening: ./openings/storm.md}',
+      ].join('\n'),
+      'components/adv.cl.yaml': [
+        'metadata: {tag: "{%mood}"}',
+        'sections:',
+        '  pitch: {text: Same body.}',
+      ].join('\n'),
+    });
+    expect(read(leafDesc(tmpDir, 'calm'))).toContain('tag: calm');
+    expect(read(leafDesc(tmpDir, 'storm'))).toContain('tag: storm');
+    expect(exists(rootDesc(tmpDir))).toBe(false);
+  });
+
   test('metadata: on a component with nowhere to put it is CL0620, once', () => {
     const { diagnostics } = compileProject({
       ...BASE,
