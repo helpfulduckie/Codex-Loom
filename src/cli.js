@@ -231,17 +231,43 @@ function main(rawArgs) {
   if (positional.length === 0 && !flags.compile && !flags.diff && !flags.annotate &&
       !flags.inventory && !flags.schemaTables &&
       !flags.leafReview && !flags.overview && !flags.seedMap && !flags.bodySizes && !flags.lint &&
-      !flags.snapshot && !flags.migrate) {
+      !flags.snapshot && !flags.migrate && !flags.renameToCl) {
     console.error(
       'Usage: codex-loom [mode flags] [compile options] [<folder | compile.yaml>]\n' +
-      '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --body-sizes|-b  --lint|-L  --snapshot  --migrate\n' +
+      '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --body-sizes|-b  --lint|-L  --snapshot  --migrate  --rename-cl\n' +
       '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-inventory|-i  --schema-tables  --clean|-c  --verbose|-v  --live\n' +
-      '  Migrate options:       --rename-cl  (§4.6: also rename compile.yaml to compile.cl.yaml)\n' +
+      '  Migrate options:       --rename-cl  (renames the whole project to .cl.yaml / .cl.yml; also runs standalone on a v4 project)\n' +
       '  Diagnostics:           --lint-level=off|error|warn  (overrides lint.level; reaches the opinion layer only)\n' +
       '  No mode flag compiles. Report modes read the existing output tree; compile options force a compile.\n' +
       '  --migrate converts a v3 project in place and does not compile — run it again once migrated.'
     );
     return 1;
+  }
+
+  if (flags.renameToCl && !flags.migrate) {
+    const renameConfigPath = resolveMigrateConfigPath(positional[0]);
+    if (!renameConfigPath) {
+      console.error(`No compile.yaml or compile.cl.yaml found at ${path.resolve(positional[0] || '.')}.`);
+      return 1;
+    }
+    try {
+      const version = migrateVersion(renameConfigPath);
+      if (version === null || version < 4) {
+        throw new Error(`Cannot --rename-cl ${renameConfigPath}: it is not a v4 project — run --migrate first.`);
+      }
+      const { renameProjectToCl } = require('./migrate');
+      const result = renameProjectToCl(renameConfigPath, {});
+      if (result.notes.length === 0) {
+        console.log(`Nothing to rename under ${path.dirname(renameConfigPath)} — already .cl.yaml.`);
+      } else {
+        for (const note of result.notes) console.log(`  ${note}`);
+        console.log(`Touched ${result.touched.length} file(s).`);
+      }
+    } catch (err) {
+      console.error(`\nFatal: ${err.message}`);
+      return 1;
+    }
+    return 0;
   }
 
   if (flags.migrate) {

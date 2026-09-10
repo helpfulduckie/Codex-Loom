@@ -269,6 +269,133 @@ function renameConfigToCl(configPath, options = {}) {
   return { notes, changed: true, configPath: target };
 }
 
+function isInside(child, parent) {
+  const rel = path.relative(parent, child);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+// null when the name is already a .cl.* file or not YAML at all; otherwise the
+// .cl-suffixed name, stem preserved (.yaml → .cl.yaml, .yml → .cl.yml).
+function clRename(name) {
+  if (/\.cl\.ya?ml$/i.test(name)) return null;
+  if (/\.yaml$/i.test(name)) return name.replace(/\.yaml$/i, '.cl.yaml');
+  if (/\.yml$/i.test(name)) return name.replace(/\.yml$/i, '.cl.yml');
+  return null;
+}
+
+function renameYamlTree(dir, projectDir, skip, options, notes, touched) {
+  if (!fs.existsSync(dir) || !isInside(dir, projectDir)) return;
+  if (skip.some((s) => s && isInside(dir, s))) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) { renameYamlTree(full, projectDir, skip, options, notes, touched); continue; }
+    if (!entry.isFile()) continue;
+    if (skip.some((s) => s && path.resolve(full) === path.resolve(s))) continue;
+    const next = clRename(entry.name);
+    if (!next) continue;
+    const target = path.join(dir, next);
+    if (fs.existsSync(target)) {
+      notes.push(`left ${path.relative(projectDir, full)} alone — ${next} already exists beside it.`);
+      continue;
+    }
+    if (!options.dryRun) fs.renameSync(full, target);
+    touched.push(target);
+    notes.push(`renamed ${path.relative(projectDir, full)} to ${next}.`);
+  }
+}
+
+// Rename every project-local .yaml/.yml the project reads — item and library
+// files (found by directory, so no reference to fix) and the component documents
+// named by path in the config (renamed with their `components:` reference
+// rewritten in step). Shared trees reached through {%loom} and the output tree
+// are left alone. The entry point is renamed last, once nothing reads it by the
+// old name.
+function renameProjectToCl(configPath, options = {}) {
+  const notes = [];
+  const touched = [];
+  const projectDir = path.dirname(configPath);
+
+  const { loadCompileConfig } = require('../config/load');
+  const { Diagnostics } = require('../diag');
+
+  const config = loadCompileConfig(configPath, { diagnostics: new Diagnostics(), live: true });
+  if (!config) {
+    notes.push(
+      'could not load the config, so only the entry point was renamed. Fix the config and '
+      + 're-run --rename-cl to reach the item, library and component files.',
+    );
+    const renamed = renameConfigToCl(configPath, options);
+    return {
+      notes: [...notes, ...renamed.notes],
+      touched: renamed.changed ? [renamed.configPath] : [],
+      configPath: renamed.configPath,
+    };
+  }
+
+  const base = config._base || projectDir;
+  const skip = [config._resolvedOutput, config._resolvedReports, configPath];
+
+  const source = fs.readFileSync(configPath, 'utf8');
+  const doc = YAML.parseDocument(source);
+
+  const rewriteComponentPaths = (nodePath) => {
+    const node = doc.getIn(nodePath, true);
+    if (!YAML.isMap(node)) return;
+    YAML.visit(node, {
+      Scalar(_key, scalar) {
+        if (typeof scalar.value !== 'string' || scalar.value.includes('{')) return;
+        if (!/\.ya?ml$/i.test(scalar.value)) return;
+        const abs = path.resolve(base, scalar.value);
+        if (!fs.existsSync(abs) || !fs.statSync(abs).isFile() || !isInside(abs, projectDir)) return;
+        const nextRef = clRename(scalar.value);
+        if (!nextRef) return;
+        const nextAbs = path.resolve(base, nextRef);
+        if (fs.existsSync(nextAbs)) {
+          notes.push(`left the ${scalar.value} reference alone — ${path.basename(nextRef)} already exists.`);
+          return;
+        }
+        if (!options.dryRun) fs.renameSync(abs, nextAbs);
+        touched.push(nextAbs);
+        notes.push(`renamed ${scalar.value} to ${nextRef} and updated its components reference.`);
+        scalar.value = nextRef;
+        delete scalar.type;
+      },
+    });
+  };
+
+  rewriteComponentPaths(['components']);
+  const walkBranches = (branchPath) => {
+    const node = doc.getIn(branchPath);
+    if (!YAML.isMap(node)) return;
+    for (const pair of node.items) {
+      const name = String(pair.key.value);
+      rewriteComponentPaths([...branchPath, name, 'components']);
+      walkBranches([...branchPath, name, 'branches']);
+    }
+  };
+  walkBranches(['branches']);
+
+  const output = doc.toString({ lineWidth: 0 });
+  if (output !== source) {
+    if (!options.dryRun) fs.writeFileSync(configPath, output, 'utf8');
+    touched.push(configPath);
+  }
+
+  for (const dir of config._resolvedItems || []) {
+    renameYamlTree(dir, projectDir, skip, options, notes, touched);
+  }
+  const librarySource = config._resolvedLibrarySource || new Map();
+  for (const dir of librarySource.values()) {
+    renameYamlTree(dir, projectDir, skip, options, notes, touched);
+  }
+
+  const renamed = renameConfigToCl(configPath, options);
+  notes.push(...renamed.notes);
+  if (renamed.changed) touched.push(renamed.configPath);
+
+  return { notes, touched, configPath: renamed.changed ? renamed.configPath : configPath };
+}
+
 function migrateProjectFully(configPath, options = {}) {
   const notes = [];
   const touched = [];
@@ -312,9 +439,9 @@ function migrateProjectFully(configPath, options = {}) {
 
   let finalConfigPath = configPath;
   if (options.renameToCl) {
-    const renamed = renameConfigToCl(configPath, options);
+    const renamed = renameProjectToCl(configPath, options);
     notes.push(...renamed.notes);
-    if (renamed.changed) touched.push(renamed.configPath);
+    touched.push(...renamed.touched);
     finalConfigPath = renamed.configPath;
   }
 
@@ -325,6 +452,6 @@ function migrateProjectFully(configPath, options = {}) {
 }
 
 module.exports = {
-  migrateProjectFully, wireNotesTemplate, renameConfigToCl,
+  migrateProjectFully, wireNotesTemplate, renameConfigToCl, renameProjectToCl,
   migratePseudoRoles, rewritePseudoRoleTokens, GENDERED_PRONOUN_RE, GENDERED_PRONOUN_WORDS,
 };

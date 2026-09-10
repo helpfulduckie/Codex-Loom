@@ -8,8 +8,8 @@ const {
   rewriteAtTokens, migrateItemDocument, migrateItemFiles,
   encodeTriggerPadding,
 } = require('../../src/migrate/v3');
-const { renameConfigToCl, migrateProjectFully } = require('../../src/migrate');
-const { withTmpDir } = require('../helpers/project');
+const { renameConfigToCl, renameProjectToCl, migrateProjectFully } = require('../../src/migrate');
+const { withTmpDir, writeTree } = require('../helpers/project');
 
 let tmpDir;
 beforeEach(() => { tmpDir = withTmpDir(); });
@@ -488,5 +488,98 @@ describe('renaming the entry point to compile.cl.yaml', () => {
     // The config transformations still landed, which is what proves the rename came last
     // rather than orphaning the stages that read `configPath`.
     expect(fs.readFileSync(result.configPath, 'utf8')).toMatch(/^version: 4$/m);
+  });
+});
+
+/**
+ * `--rename-cl` past the entry point: the item, library and component files a v4
+ * project reads all take the `.cl` suffix, so an editor can key highlighting to
+ * `*.cl.yaml`. Item and library files are found by directory and need no
+ * reference fixed; a component named by path in `components:` is renamed with
+ * its reference rewritten in step. Shared trees and the output tree are left.
+ */
+describe('renaming the whole project to .cl.yaml', () => {
+  const V4 = [
+    'version: 4',
+    'title: T',
+    'structure:',
+    '  input:',
+    '    items: [./Codex]',
+    '  output: ./out',
+    'components:',
+    '  plotEssential: ./components/pe.yaml',
+    '  opening: "Who are you?"',
+    '',
+  ].join('\n');
+
+  function project(extra = {}) {
+    writeTree(tmpDir, {
+      'compile.yaml': V4,
+      'Codex/characters.yaml': '- id: a\n  name: A\n',
+      'Codex/nested/more.yml': '- id: b\n  name: B\n',
+      'components/pe.yaml': 'sections:\n  main: hi\n',
+      'out/Placeholders.yaml': 'stale: output\n',
+      ...extra,
+    });
+    return path.join(tmpDir, 'compile.yaml');
+  }
+
+  test('item files take the suffix, stem preserved, with no reference to fix', () => {
+    renameProjectToCl(project());
+    expect(fs.existsSync(path.join(tmpDir, 'Codex/characters.cl.yaml'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'Codex/nested/more.cl.yml'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'Codex/characters.yaml'))).toBe(false);
+  });
+
+  test('a component named by path is renamed and its reference rewritten', () => {
+    const result = renameProjectToCl(project());
+    expect(fs.existsSync(path.join(tmpDir, 'components/pe.cl.yaml'))).toBe(true);
+    expect(fs.readFileSync(result.configPath, 'utf8')).toContain('plotEssential: ./components/pe.cl.yaml');
+  });
+
+  test('inline component prose that is not a path is left alone', () => {
+    const result = renameProjectToCl(project());
+    expect(fs.readFileSync(result.configPath, 'utf8')).toContain('opening: "Who are you?"');
+  });
+
+  test('the output tree is not touched', () => {
+    renameProjectToCl(project());
+    expect(fs.existsSync(path.join(tmpDir, 'out/Placeholders.yaml'))).toBe(true);
+  });
+
+  test('the entry point is renamed last and comes back as the new path', () => {
+    const result = renameProjectToCl(project());
+    expect(result.configPath).toBe(path.join(tmpDir, 'compile.cl.yaml'));
+    expect(fs.existsSync(path.join(tmpDir, 'compile.yaml'))).toBe(false);
+  });
+
+  test('a file already on .cl.yaml is left alone', () => {
+    writeTree(tmpDir, {
+      'compile.yaml': V4.replace('./components/pe.yaml', './components/pe.cl.yaml'),
+      'Codex/characters.cl.yaml': '- id: a\n  name: A\n',
+      'components/pe.cl.yaml': 'sections:\n  main: hi\n',
+    });
+    const result = renameProjectToCl(path.join(tmpDir, 'compile.yaml'));
+    expect(result.notes.some((n) => /renamed/.test(n) && /pe\./.test(n))).toBe(false);
+  });
+
+  test('a rename that would clobber an existing file is skipped with a note', () => {
+    renameProjectToCl(project({ 'Codex/characters.cl.yaml': '- id: c\n  name: C\n' }));
+    expect(fs.existsSync(path.join(tmpDir, 'Codex/characters.yaml'))).toBe(true);
+  });
+
+  test('dryRun renames nothing but reports what it would do', () => {
+    const result = renameProjectToCl(project(), { dryRun: true });
+    expect(fs.existsSync(path.join(tmpDir, 'Codex/characters.yaml'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'compile.yaml'))).toBe(true);
+    expect(result.notes).toContainEqual(expect.stringMatching(/characters\.cl\.yaml/));
+  });
+
+  test('--migrate --rename-cl carries the suffix to the item files too', () => {
+    const configPath = writeConfig(V3);
+    writeTree(tmpDir, { 'Codex/thing.yaml': '- id: t\n  name: T\n' });
+    const result = migrateProjectFully(configPath, { renameToCl: true });
+    expect(fs.existsSync(path.join(tmpDir, 'Codex/thing.cl.yaml'))).toBe(true);
+    expect(result.configPath).toBe(path.join(tmpDir, 'compile.cl.yaml'));
   });
 });

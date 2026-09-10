@@ -96,7 +96,7 @@ codex-loom -C -l -o path/to/project/
 
 **The library snapshot** (`--snapshot`, `--live`) — Shared items declared under `library:` are frozen into a committed `snapshot/` tree with a hashed manifest, so a compile reproduces byte-for-byte even when the shared source moves underneath it. Library-name `{%name}` tokens resolve against the snapshot by default; `--live` redirects them to the working library instead. See [The Library Snapshot](12-snapshot.md).
 
-**Migration** (`--migrate`, `--rename-cl`) — Converts a v3 project to the v4 schema in place and writes `migration-report.md` alongside the config, listing every file touched and a review queue of the conversions that need a human eye. It does not compile; run `codex-loom` again once the project has migrated. `--rename-cl` additionally renames `compile.yaml` to `compile.cl.yaml`. See [Migrating from v3](15-migrating-from-v3.md) for what changes and the hand edits the review queue asks for.
+**Migration** (`--migrate`, `--rename-cl`) — Converts a v3 project to the v4 schema in place and writes `migration-report.md` alongside the config, listing every file touched and a review queue of the conversions that need a human eye. It does not compile; run `codex-loom` again once the project has migrated. `--rename-cl` additionally gives every file the project reads the `.cl.yaml` / `.cl.yml` extension — the config, the item and library files, and the component documents named by path (their `components:` references are rewritten in step). It also runs on its own against an already-migrated v4 project: `codex-loom --rename-cl path/to/project/`. See [Migrating from v3](15-migrating-from-v3.md) for what changes and the hand edits the review queue asks for.
 
 **Seed map** (`-s`/`--seed-map`) — Reads compiled output and reports which items' body text contains other items' triggers. When Item A's body mentions a word from Item B's trigger list, the Storyteller AI pulling Item A into context may also pull Item B — a "seed." The seed map makes these relationships visible so you can spot unintended context cascade or find items that nothing seeds.
 
@@ -211,7 +211,7 @@ my-project/
 
 **Paths are declared, not conventional.** Nothing above is a magic directory name — `structure.input.items`, `structure.input.templates`, `structure.input.library` and `structure.output` name them, and the layout here is only what a typical project chooses. `library:` is a *mapping* of names to directories (`main: ./library/main`), and each name is auto-exposed as a `{%name}` variable, which is how a component or item refers to shared content. See [compile.yaml Reference](02-compile-yaml.md).
 
-**`.cl.yaml` is the v4 extension.** Plain `.yaml` still loads; the suffix marks a file as Codex Loom's rather than something else's, and `--migrate --rename-cl` applies it to the config too.
+**`.cl.yaml` is the v4 extension.** Plain `.yaml` still loads; the suffix marks a file as Codex Loom's rather than something else's, and `--rename-cl` applies it across a project — the config, item and library files, and path-named component documents.
 
 ---
 

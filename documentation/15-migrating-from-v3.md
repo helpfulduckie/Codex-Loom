@@ -21,10 +21,14 @@ and every component document to the v4 schema, then writes
 review queue of the conversions that need a human eye. Run `codex-loom` again
 once the report is clear.
 
-**`--migrate --rename-cl` additionally renames `compile.yaml` to
-`compile.cl.yaml`** and applies the `.cl.yaml` suffix to the files it writes.
-The suffix is optional — plain `.yaml` still loads — but it marks a file as
-Codex Loom's rather than something else's.
+**`--migrate --rename-cl` additionally gives every file the project reads the
+`.cl.yaml` / `.cl.yml` extension** — the config, every item and library file,
+and every component document named by path (its `components:` reference is
+rewritten to match). The suffix is optional — plain `.yaml` still loads — but
+it marks a file as Codex Loom's rather than something else's, which lets an
+editor key syntax highlighting to `*.cl.yaml`. If a project has already
+migrated without it, `codex-loom --rename-cl path/to/project/` applies the
+rename on its own.
 
 `--migrate` runs alone; it cannot be combined with a compile or a report mode.
 

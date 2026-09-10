@@ -595,6 +595,60 @@ describe('CLI --migrate flag', () => {
   });
 });
 
+// ── --rename-cl as a standalone mode ─────────────────────────────────────────
+
+describe('CLI --rename-cl flag (standalone)', () => {
+  let tmp;
+  beforeEach(() => { tmp = withTmpDir(); });
+  afterEach(() => { fs.rmSync(tmp, { recursive: true }); });
+
+  const V4 = `
+version: 4
+title: T
+structure:
+  input:
+    items: [./Codex]
+  output: ./output
+components:
+  plotEssential: ./components/pe.yaml
+`.trimStart();
+
+  function proj() {
+    write(path.join(tmp, 'proj', 'compile.yaml'), V4);
+    write(path.join(tmp, 'proj', 'Codex', 'characters.yaml'), '- id: a\n  name: A\n');
+    write(path.join(tmp, 'proj', 'components', 'pe.yaml'), 'sections:\n  main: hi\n');
+    return path.join(tmp, 'proj');
+  }
+
+  test('renames the project without --migrate and exits 0', () => {
+    const result = run(['--rename-cl', proj()], tmp);
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(tmp, 'proj', 'compile.cl.yaml'))).toBe(true);
+    expect(fs.existsSync(path.join(tmp, 'proj', 'Codex', 'characters.cl.yaml'))).toBe(true);
+  });
+
+  test('refuses a project that is not yet v4', () => {
+    write(path.join(tmp, 'proj', 'compile.yaml'), V3_COMPILE_YAML);
+    const result = run(['--rename-cl', path.join(tmp, 'proj')], tmp);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/not a v4 project/);
+  });
+
+  test('with no config anywhere, exits nonzero rather than doing nothing', () => {
+    const result = run(['--rename-cl', path.join(tmp, 'nowhere')], tmp);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/No compile\.yaml or compile\.cl\.yaml/);
+  });
+
+  test('a project already fully on .cl.yaml says so and exits 0', () => {
+    const dir = proj();
+    run(['--rename-cl', dir], tmp);
+    const again = run(['--rename-cl', dir], tmp);
+    expect(again.status).toBe(0);
+    expect(again.stdout).toMatch(/[Nn]othing to rename/);
+  });
+});
+
 // ── version: 4 detection on the compile path (§14.1, CL0209) ──────────────────
 //
 // --migrate above proves a v3 config is *accepted* there; here the same config compiled
