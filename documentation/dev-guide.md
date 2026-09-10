@@ -281,9 +281,9 @@ Three rules there are justified by what `velvet_lattice/loader.py` actually does
 
 **`applyTokenPass`** processes the combined regex `/{(\$[^{}]+)\}|\[(s|es|is|was|has)\]/g` left-to-right. A leading role name is rewritten via `resolveRole` first (on the item path that rewrite is already done, so it is a no-op on the resulting ids); then, in order:
 
-- `{$she}` / `{$her~}` etc. (unscoped, no dot) → resolve against item's own `pronouns:` field. Does **not** set the conjugation scope.
+- `{$she}` / `{$her~}` etc. (unscoped, no dot) → resolve against item's own effective pronoun set. Subject forms set that conjugation scope; every other form leaves the current scope unchanged.
 - `{$Id}` (registry ID, no dot) → "you" if protagonist, else display name. Sets scope: the `you`-set for the protagonist, else the `NAME_SCOPE` sentinel — a rendered name conjugates singular whatever Id's pronoun set, so `{$Zephon} answer[s]` is "Zephon answers" for they/them. `NAME_SCOPE` is deliberately absent from `PLURAL_SETS`.
-- `{$Id.pronoun}` (registry ID + pronoun token) → resolve pronoun against Id's effective pronoun set. Sets scope to Id's pronoun set — this is the form that carries they/them into a following marker.
+- `{$Id.pronoun}` (registry ID + pronoun token) → resolve pronoun against Id's effective pronoun set. Subject forms set scope to Id's pronoun set; every other form leaves the current scope unchanged.
 - `{$Id.full}` / `{$Id.display}` → full or display name. Does not set scope.
 - `{$Id.body.Field}` (registry ID + body path) → re-emitted as `{$<id>.body.Field}`. On the item path `applyCrossItemRefs` already resolved every such ref whose field exists, so a survivor is a missing field; on the other paths there is no cross-item resolution and it leaks. Either way the output sweep reports it as `CL0430`.
 - `[s]` / `[es]` / `[is]` / `[was]` / `[has]` → conjugate using the current scope (or item's own pronouns if no scope set). `NAME_SCOPE` and the singular pronoun sets take the singular form; `they`/`nonbinary`/`you` take the plural.

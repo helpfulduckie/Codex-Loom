@@ -248,8 +248,9 @@ function applyTokenPass(str, opts) {
         const refPronounSet = getEffectivePronounSet(refItem, prefixLower, branchProtagonist);
 
         const restLower = rest.toLowerCase();
-        if (PRONOUN_TOKEN_MAP[restLower] !== undefined) {
-          currentScope = refPronounSet || 'nonbinary';
+        const pronounRole = PRONOUN_TOKEN_MAP[restLower];
+        if (pronounRole !== undefined) {
+          if (pronounRole === 'subject') currentScope = refPronounSet || 'nonbinary';
           return resolvePronounToken(rest, refPronounSet);
         }
 
@@ -285,7 +286,9 @@ function applyTokenPass(str, opts) {
       return matchCase(getDisplayName(refItem), inner);
     }
 
-    if (PRONOUN_TOKEN_MAP[innerLower] !== undefined) {
+    const pronounRole = PRONOUN_TOKEN_MAP[innerLower];
+    if (pronounRole !== undefined) {
+      if (pronounRole === 'subject') currentScope = itemPronounSet;
       return resolvePronounToken(inner, itemPronounSet);
     }
 

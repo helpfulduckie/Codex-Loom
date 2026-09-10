@@ -46,7 +46,7 @@ He studies; He is admired.
 
 ## 1. Unscoped Pronoun Tokens
 
-Written as `{$she}`, `{$her~}`, etc. Resolve against the **item's own `pronouns:` field**. Do not set the conjugation scope.
+Written as `{$she}`, `{$her~}`, etc. Resolve against the **item's own `pronouns:` field**. Subject forms (`{$she}`, `{$he}`, `{$they}`) set the conjugation scope to the item's effective pronoun set; every other form leaves it unchanged.
 
 Use these in field values and templates where the token refers to the item subject (the character the item is about).
 
@@ -105,7 +105,7 @@ capital initial.
 
 ## 3. Scoped Pronoun Tokens — `{$Id.pronoun}`
 
-Written as `{$Aness.she}`, `{$Aness.her~}`, etc. Resolve against the **referenced character's `pronouns:` field**, protagonist-aware. Also sets the conjugation scope to that character.
+Written as `{$Aness.she}`, `{$Aness.her~}`, etc. Resolve against the **referenced character's `pronouns:` field**, protagonist-aware. Subject forms set the conjugation scope to that character; every other form leaves it unchanged.
 
 Use these when writing about a specific named character where you want the pronouns to track that character's settings (and protagonist mode).
 
@@ -137,7 +137,7 @@ Aness / Aness Rozen
 
 ## Verb Conjugation
 
-The markers `[s]`, `[es]`, `[is]`, `[was]`, `[has]` conjugate based on the **most recently referenced `{$Id}` or `{$Id.pronoun}` token** in the string (the "current scope").
+The markers `[s]`, `[es]`, `[is]`, `[was]`, `[has]` conjugate from the current subject scope. A bare `{$Id}` or a subject pronoun establishes that scope; every other pronoun-token form leaves it unchanged.
 
 | Marker | Singular (she/he, a name) | Plural (they/you) |
 |---|---|---|
@@ -189,9 +189,9 @@ Aness loves magic research — she instinctively leaps
 **Scope rules:**
 - `{$Id}` rendering a name sets the scope to **singular** — a name conjugates `[s]`/`[is]`/`[was]`/`[has]` regardless of the character's pronoun set
 - `{$Id}` for the **protagonist** renders "you" and sets the scope to the plural `you`-set
-- `{$Id.pronoun}` sets the scope to that character's effective pronoun set (this is the form that carries they/them into the verb)
-- `{$she}` (unscoped) does NOT set the scope
-- Scope carries forward within the string until a new `{$Id}` or `{$Id.pronoun}` is encountered
+- A subject pronoun sets the scope to its effective pronoun set, whether item-local (`{$she}`) or scoped (`{$Id.she}`)
+- Every other pronoun-token form leaves the scope unchanged, including object, possessive and reflexive forms, whether item-local (`{$her}`) or scoped (`{$Id.her}`)
+- Scope carries forward within the string until a bare `{$Id}` or subject pronoun establishes a new one
 - If no scope has been set, conjugation falls back to the item's own `pronouns:` field
 
 ---

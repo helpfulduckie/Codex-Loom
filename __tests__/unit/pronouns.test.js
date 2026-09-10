@@ -164,11 +164,31 @@ describe('applyTokenPass — unscoped pronoun tokens', () => {
       .toBe('she raised her hand');
   });
 
-  test('unscoped tokens do not affect verb scope', () => {
-    // {$she} (unscoped) followed by [s] — scope falls back to item.pronouns
-    const item = makeItem('hero', 'female');
-    expect(applyTokenPass('{$she} run[s]', { item, registry: new Map(), branchProtagonist: null }))
-      .toBe('she runs');
+  test('an unscoped subject replaces an earlier character scope', () => {
+    const hero = makeItem('hero', 'female');
+    const guide = makeItem('guide', 'male');
+    const registry = new Map([['hero', hero], ['guide', guide]]);
+    expect(applyTokenPass('{$Guide} wait[s]; {$she} run[s]', {
+      item: hero, registry, branchProtagonist: null,
+    })).toBe('Guide waits; she runs');
+  });
+
+  test('an unscoped protagonist subject replaces an earlier character scope with the you-set', () => {
+    const hero = makeItem('hero', 'female');
+    const guide = makeItem('guide', 'male');
+    const registry = new Map([['hero', hero], ['guide', guide]]);
+    expect(applyTokenPass('{$Guide} guide[s] {$her} and watch[es] as {$she} sit[s]', {
+      item: hero, registry, branchProtagonist: 'hero',
+    })).toBe('Guide guides you and watches as you sit');
+  });
+
+  test('unscoped object, possessive, and reflexive tokens do not replace the subject scope', () => {
+    const hero = makeItem('hero', 'they');
+    const guide = makeItem('guide', 'male');
+    const registry = new Map([['hero', hero], ['guide', guide]]);
+    expect(applyTokenPass('{$Guide} guide[s] {$them}, check[s] {$their~} map, and protect[s] {$themselves}', {
+      item: hero, registry, branchProtagonist: null,
+    })).toBe('Guide guides them, checks their map, and protects themselves');
   });
 });
 
@@ -337,6 +357,24 @@ describe('applyTokenPass — scoped pronoun tokens {$Id.pronoun}', () => {
     const registry = new Map([['aness', item]]);
     expect(applyTokenPass('{$Aness.she} love[s] it', { item, registry, branchProtagonist: 'aness' }))
       .toBe('you love it');
+  });
+
+  test('a scoped object does not replace an unscoped protagonist subject', () => {
+    const hero = makeItem('hero', 'female');
+    const zaveth = makeItem('zaveth', 'female');
+    const registry = new Map([['hero', hero], ['zaveth', zaveth]]);
+    expect(applyTokenPass('{$She} guide[s] {$Zaveth.him} and watch[es] as {$Zaveth.he} sit[s]', {
+      item: hero, registry, branchProtagonist: 'hero',
+    })).toBe('You guide her and watch as she sits');
+  });
+
+  test('scoped object, possessive, and reflexive tokens do not replace the subject scope', () => {
+    const hero = makeItem('hero', 'they');
+    const guide = makeItem('guide', 'male');
+    const registry = new Map([['hero', hero], ['guide', guide]]);
+    expect(applyTokenPass('{$Hero.they} guide {$Guide.him}, check {$Guide.his~} map, steady {$Guide.himself}, and remain[s] ready', {
+      item: hero, registry, branchProtagonist: null,
+    })).toBe('they guide him, check his map, steady himself, and remain ready');
   });
 });
 
