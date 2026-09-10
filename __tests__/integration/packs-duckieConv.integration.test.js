@@ -88,6 +88,26 @@ describe('CL-duckieConv/0001 — per-role character budget', () => {
     expect(hits).toHaveLength(1);
     expect(hits[0].message).toMatch(/role "anchor"/);
   });
+
+  test('a 450-char body at role: major (500) is silent', () => {
+    const { diagnostics: d } = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(ENABLED),
+      'Codex/items.yaml': item({ id: 'npc', text: 'x'.repeat(450), meta: 'duckieConv:\n  role: major' }),
+    });
+    expect(find(d, BUDGET)).toHaveLength(0);
+  });
+
+  test('a 550-char body at role: major still WARNs', () => {
+    const { diagnostics: d } = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(ENABLED),
+      'Codex/items.yaml': item({ id: 'npc', text: 'x'.repeat(550), meta: 'duckieConv:\n  role: major' }),
+    });
+    const hits = find(d, BUDGET);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].message).toMatch(/role "major"/);
+  });
 });
 
 // ── CL-duckieConv/0004 — the role annotation is a known value ────────────────
@@ -111,6 +131,15 @@ describe('CL-duckieConv/0004 — meta.duckieConv.role must be a known value', ()
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': item({ id: 'npc', text: 'short', meta: 'duckieConv:\n  role: minor' }),
+    });
+    expect(find(d, ROLE)).toHaveLength(0);
+  });
+
+  test('role: major is silent on the role rule', () => {
+    const { diagnostics: d } = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(ENABLED),
+      'Codex/items.yaml': item({ id: 'npc', text: 'short', meta: 'duckieConv:\n  role: major' }),
     });
     expect(find(d, ROLE)).toHaveLength(0);
   });

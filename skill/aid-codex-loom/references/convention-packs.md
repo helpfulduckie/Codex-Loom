@@ -156,7 +156,7 @@ and leave it default on another.
 
 ### Per-item primitives
 
-- **`budget: { anchor: 800, standard: 400, minor: 200 }`** — reads the card's role from
+- **`budget: { anchor: 800, major: 500, standard: 400, minor: 200 }`** — reads the card's role from
   `meta.<packName>.role` (absent or unrecognized → `standard`) and WARNs when the **raw
   compiled body length** exceeds the cap. Raw, not placeholder-expanded: the hard platform
   cap is `CL0712`'s job.
@@ -196,7 +196,7 @@ those conventions do.
 
 | Code | Checks |
 |---|---|
-| `CL-duckieConv/0001` | Per-role character budget — `anchor` 800, `standard` 400, `minor` 200, from `meta.duckieConv.role` |
+| `CL-duckieConv/0001` | Per-role character budget — `anchor` 800, `major` 500, `standard` 400, `minor` 200, from `meta.duckieConv.role` |
 | `CL-duckieConv/0002` | List-length caps — `vibe` 3–5, `personality.keywords` 2–4, `tagline` at most 5 words, `*` default of at most 5. Inline only |
 | `CL-duckieConv/0003` | Faction field redundancy — more than three of `overview` / `purpose` / `structure` / `methods` on one card. Inline only |
-| `CL-duckieConv/0004` | `meta.duckieConv.role`, if set, is `anchor` / `standard` / `minor` |
+| `CL-duckieConv/0004` | `meta.duckieConv.role`, if set, is `anchor` / `major` / `standard` / `minor` |

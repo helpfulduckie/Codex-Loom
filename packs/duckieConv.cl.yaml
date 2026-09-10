@@ -13,7 +13,7 @@
 # Four rules:
 #
 #   1. budget — compiled body length against a per-role character cap. The role is read
-#      from `meta.duckieConv.role` (absent → `standard`); the caps are the three size
+#      from `meta.duckieConv.role` (absent → `standard`); the caps are the four size
 #      buckets §7's five-role spectrum collapses to. Raw compiled length, not
 #      placeholder-expanded (the hard platform cap is CL0712's job, and it measures
 #      expanded).
@@ -25,7 +25,8 @@
 #      are present on one card. §7: those four "frequently overlap in practice — audit
 #      for redundancy and merge down." Unscoped, which is safe: no non-faction template
 #      exposes all four.
-#   4. role — `meta.duckieConv.role`, if set, must be one of anchor / standard / minor.
+#   4. role — `meta.duckieConv.role`, if set, must be one of anchor / major / standard /
+#      minor.
 #      A closed `map` over the `meta` sub-namespace (`over: meta`), so a typo'd key is a
 #      stray-key WARN and a bad value is an out-of-set WARN, both re-coded here.
 
@@ -36,11 +37,14 @@ rules:
   # SCHEMA.md §7 "Budget Targets" / "Card Role Spectrum": ~400 compiled characters is the
   # soft target for a standard card; an anchor (central faction/location, love interest,
   # deuteragonist) may run to 500–800+; a dead/offscreen NPC should be minimal. Collapsed
-  # to three buckets. An absent `meta.duckieConv.role` is measured as `standard`.
+  # to four buckets. An absent `meta.duckieConv.role` is measured as `standard`. `major`
+  # is a named NPC on the full character template, or a dense reference card (race,
+  # biome, faction, region), about 500.
   - id: 1
     severity: warn
     budget:
       anchor: 800
+      major: 500
       standard: 400
       minor: 200
     message: >-
@@ -95,7 +99,7 @@ rules:
     schema:
       type: map
       keys:
-        role: { type: string, values: [anchor, standard, minor] }
+        role: { type: string, values: [anchor, major, standard, minor] }
     message: >-
-      `meta.duckieConv.role` must be one of anchor / standard / minor — it selects the
-      character budget rule 1 measures this card against.
+      `meta.duckieConv.role` must be one of anchor / major / standard / minor — it
+      selects the character budget rule 1 measures this card against.

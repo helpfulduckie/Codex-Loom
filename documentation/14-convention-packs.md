@@ -213,8 +213,8 @@ pack would read `meta.statTracker.*`, and the two never collide.
 `notes:` mapping; `over: body` validates the card entry; `over: meta` validates
 `meta[<thisPack>]` — the pack's own sub-namespace, reached automatically. A rule cannot
 assert about another pack's `meta` sub-namespace through the bare route. `duckieConv`'s role
-rule is `{ over: meta, schema: { type: map, keys: { role: { values: [anchor, standard,
-minor] } } } }` — a closed `map`, so a typo'd sub-key is a stray-key finding and a bad
+rule is `{ over: meta, schema: { type: map, keys: { role: { values: [anchor, major,
+standard, minor] } } } }` — a closed `map`, so a typo'd sub-key is a stray-key finding and a bad
 `role` value is an out-of-set finding, both re-coded to `CL-duckieConv/NNNN`.
 
 ### Per-item rules — `budget`, `count`, `mutexHint`
@@ -222,7 +222,7 @@ minor] } } } }` — a closed `map`, so a typo'd sub-key is a stray-key finding a
 Three primitives added for authoring-convention checks. A primitive is a recognized rule
 key the pack engine dispatches on, the same way `forbid` / `schema` / `requireCard` are.
 
-- **`budget: { anchor: 800, standard: 400, minor: 200 }`** — per card. Reads the card's
+- **`budget: { anchor: 800, major: 500, standard: 400, minor: 200 }`** — per card. Reads the card's
   role from `meta.<packName>.role` (absent *or unrecognized* → `standard`), compares the
   **raw compiled body length** to the mapped cap, and WARNs when over. Raw, not
   placeholder-expanded: a sub-budget is a soft authorial target, and the hard platform cap
@@ -293,7 +293,7 @@ card-authoring conventions maintained separately in the `_CodexLoom` design note
 expected to drift as those conventions do. All four rules are WARN — a convention is a nudge.
 
 - **`CL-duckieConv/0001` — per-role character budget.** Compiled body length against a
-  per-role cap: `anchor` 800, `standard` 400, `minor` 200. The role is
+  per-role cap: `anchor` 800, `major` 500, `standard` 400, `minor` 200. The role is
   `meta.duckieConv.role` (absent or unrecognized → `standard`). A `budget:` rule.
 - **`CL-duckieConv/0002` — list-length caps.** `vibe` 3–5, `personality.keywords` 2–4,
   `tagline` at most 5 words (no minimum), and a `*` default of "at most 5" over every other list- or map-valued
@@ -304,6 +304,6 @@ expected to drift as those conventions do. All four rules are WARN — a convent
   is to audit for redundancy and merge down. A `mutexHint:` rule — inline only. Unscoped,
   which is safe: no non-faction template exposes all four.
 - **`CL-duckieConv/0004` — the role annotation is a known value.** `meta.duckieConv.role`,
-  if set, must be `anchor` / `standard` / `minor`. An `over: meta` closed-`map` schema.
+  if set, must be `anchor` / `major` / `standard` / `minor`. An `over: meta` closed-`map` schema.
 
 Enable it with `lint: { packs: { duckieConv: {} } }`.
