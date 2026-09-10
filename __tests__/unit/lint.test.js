@@ -399,6 +399,37 @@ describe('runLintMode', () => {
     fs.rmSync(outDir, { recursive: true });
   });
 
+  test('writes seeded compile diagnostics without rescanning the output tree', () => {
+    const tmp = makeTmp();
+    const outDir = makeTmp();
+    write(path.join(tmp, 'Story Cards', 'Character', 'aness.md'), CARD_WITH_E);
+    const bus = new Diagnostics();
+    bus.warn('CL0426', 'source-only finding', { file: 'Codex/items.cl.yaml' });
+
+    const result = runLintMode(tmp, outDir, { diagnostics: bus, scan: false });
+    const reportText = fs.readFileSync(result.reportPath, 'utf8');
+
+    expect(result.warnCount).toBe(1);
+    expect(reportText).toContain('CL0426');
+    expect(reportText).not.toContain('CL0430');
+    fs.rmSync(tmp, { recursive: true });
+    fs.rmSync(outDir, { recursive: true });
+  });
+
+  test('writes seeded loader diagnostics when no compiled tree exists', () => {
+    const tmp = makeTmp();
+    const missingRoot = path.join(tmp, 'missing-output');
+    const outDir = path.join(tmp, 'reports');
+    const bus = new Diagnostics();
+    bus.error('CL0140', 'item has no identity', { file: 'Codex/items.cl.yaml' });
+
+    const result = runLintMode(missingRoot, outDir, { diagnostics: bus, scan: false });
+
+    expect(result).toMatchObject({ errorCount: 1, warnCount: 0, fileCount: 0 });
+    expect(fs.readFileSync(result.reportPath, 'utf8')).toContain('CL0140');
+    fs.rmSync(tmp, { recursive: true });
+  });
+
   test('a fenced block with no heading is reported as an untitled card, not a crash', () => {
     // `parseCards` gives such a block `title: null`. The finding used to carry that null as
     // `card`, and both renderings branch on `card` to pick a location form — so it fell to

@@ -216,19 +216,19 @@ function runLintMode(scenarioRoot, outputDir, options = {}) {
   const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
-  const files        = findLintableFiles(rootAbs);
+  const files        = fs.existsSync(rootAbs) ? findLintableFiles(rootAbs) : [];
+  const bus = options.diagnostics || new Diagnostics();
 
-  if (files.length === 0) {
+  if (files.length === 0 && bus.isEmpty()) {
     return { written: [], reportPath: null, errorCount: 0, warnCount: 0, fileCount: 0 };
   }
 
-  const bus = options.diagnostics || new Diagnostics();
   if (options.lintLevel) bus.setLintLevel(options.lintLevel);
-  const loadedPacks = options.config
+  const loadedPacks = options.scan !== false && options.config
     ? loadDeclaredPacks(options.config, options.configPath || null, bus)
     : [];
 
-  for (const file of files) {
+  for (const file of options.scan === false ? [] : files) {
     const content  = fs.readFileSync(file, 'utf8');
     const relPath  = path.relative(rootAbs, file);
     const segs = relPath.split(path.sep);
@@ -246,7 +246,8 @@ function runLintMode(scenarioRoot, outputDir, options = {}) {
     if (raised > 0) log.verbose(`  linted: ${relPath} (${raised} finding(s))`);
   }
 
-  if (loadedPacks.some(({ pack }) => (pack.rules || []).some((r) => r.requireCard))) {
+  if (options.scan !== false
+      && loadedPacks.some(({ pack }) => (pack.rules || []).some((r) => r.requireCard))) {
     for (const leaf of leafNodes(buildTree(rootAbs))) {
       const label = leaf.branchNames.join('/') || '(root)';
       for (const { pack, packLevel } of loadedPacks) {
@@ -260,6 +261,7 @@ function runLintMode(scenarioRoot, outputDir, options = {}) {
   }
 
   const { text, errorCount, warnCount } = formatReport(rootDirName, bus);
+  fs.mkdirSync(outputDir, { recursive: true });
   const reportPath = path.join(outputDir, `${rootDirName}.lint.md`);
   fs.writeFileSync(reportPath, text, 'utf8');
 

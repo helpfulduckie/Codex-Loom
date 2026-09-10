@@ -168,13 +168,13 @@ Core lint carries only that one structural check on purpose. Rules about what a 
 
 This is pure pattern-matching — deterministic and exhaustive, with no false-negative risk from an LLM guessing at the token list. It catches the mechanical half of a QA pass; bleed, missing-information, and cross-branch consistency checks still require holding the whole branch structure in mind and are out of scope here.
 
-The same patterns run automatically on every compile (no flag needed) — each finding is a coded diagnostic (`CL0430`–`CL0437`) on the compile's diagnostics bus, printed together after the compile with every other diagnostic, and an `ERROR` among them fails the run. `--lint` is for post-hoc scanning of an already-compiled output folder; the automatic pass is for catching problems immediately during a normal compile.
+The same patterns run automatically on every compile (no flag needed) — each finding is a coded diagnostic (`CL0430`–`CL0437`) on the compile's diagnostics bus, printed together after the compile with every other diagnostic, and an `ERROR` among them fails the run. Standalone `--lint` is a post-hoc scan of an already-compiled output folder. When `--compile --lint` are requested together, the lint report instead records every diagnostic raised by that compile, including loader, rendering, placement, and inline-only convention-pack findings; its summary counts that complete run diagnostic stream. If loading fails before output can be written, the report is still produced and says that zero compiled files were scanned.
 
 One report is written to the overview folder:
 
 | File | Contents |
 |---|---|
-| `{name}.lint.md` | Every finding, grouped by file, with severity (`ERROR`/`WARN`), category, and line number(s) |
+| `{name}.lint.md` | Standalone: every output-scan finding. Combined with compile: every diagnostic raised by the compile. Grouped by file, with severity (`ERROR`/`WARN`), category, and line number(s) |
 
 `ERROR` findings are near-certain bugs (a token that should always resolve). `WARN` findings need a human glance — a bare `undefined` could theoretically be intentional prose, and an item with no triggers is legitimate when it is never meant to be pulled in by name.
 

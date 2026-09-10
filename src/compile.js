@@ -112,7 +112,9 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
       for (const f of routed) {
         const sev = clampFinding(f.severity, packLevel, branchLevel);
         if (sev === null) continue;
-        diagnostics.add(sev, f.code, f.message, loc);
+        diagnostics.add(sev, f.code, f.message, {
+          file: f.file || configPath,
+        });
       }
     }
   }

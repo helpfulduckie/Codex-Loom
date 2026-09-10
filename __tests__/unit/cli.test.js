@@ -515,6 +515,78 @@ describe('CLI --lint-level flag', () => {
   });
 });
 
+describe('CLI combined compile and lint diagnostics', () => {
+  let tmp;
+
+  beforeEach(() => {
+    tmp = withTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true });
+  });
+
+  test('-C -L reports compile-only warnings in the lint report and summary', () => {
+    write(path.join(tmp, 'compile.yaml'), MINIMAL_COMPILE_YAML);
+
+    const result = run(['-C', '-L', tmp], tmp);
+    const reportPath = path.join(tmp, 'output', 'Overview', 'lint', 'output.lint.md');
+    const report = fs.readFileSync(reportPath, 'utf8');
+
+    expect(result.status).toBe(0);
+    expect(report).toContain('CL0630');
+    expect(report).toContain('CL0631');
+    expect(result.stdout).toMatch(/Lint: 0 error\(s\), 2 warning\(s\)/);
+  });
+
+  test('-C -L includes inline-only pack findings under the item source file', () => {
+    write(path.join(tmp, 'compile.yaml'), [
+      'version: 4',
+      'structure:',
+      '  input:',
+      '    items: [./Codex]',
+      '    templates: [./templates]',
+      '  output: ./output',
+      'lint: {packs: {duckieConv: {}}}',
+      'branches: {only: {}}',
+      '',
+    ].join('\n'));
+    write(path.join(tmp, 'templates', 'Card.template'), '{$body.Tagline}\n');
+    const itemPath = path.join(tmp, 'Codex', 'items.cl.yaml');
+    write(itemPath, [
+      '- id: npc',
+      '  name: NPC',
+      '  aid: {type: Character, triggers: [NPC]}',
+      '  render: {template: Card}',
+      '  body:',
+      '    Tagline: six words run over this ceiling',
+      '',
+    ].join('\n'));
+
+    const result = run(['-C', '-L', tmp], tmp);
+    const report = fs.readFileSync(
+      path.join(tmp, 'output', 'Overview', 'lint', 'output.lint.md'), 'utf8',
+    );
+
+    expect(result.status).toBe(0);
+    expect(report).toContain('CL-duckieConv/0002');
+    expect(report).toContain(`## ${itemPath}`);
+  });
+
+  test('-C -L writes loader errors to the report even when no lintable output exists', () => {
+    write(path.join(tmp, 'compile.yaml'), MINIMAL_COMPILE_YAML.replace('items: []', 'items: [./Codex]'));
+    write(path.join(tmp, 'Codex', 'broken.cl.yaml'), '- body: {Tagline: Missing identity}\n');
+
+    const result = run(['-C', '-L', tmp], tmp);
+    const reportPath = path.join(tmp, 'output', 'Overview', 'lint', 'output.lint.md');
+    const report = fs.readFileSync(reportPath, 'utf8');
+
+    expect(result.status).toBe(1);
+    expect(report).toContain('CL0140');
+    expect(result.stdout).toMatch(/Lint: [1-9]\d* error\(s\), \d+ warning\(s\) across 0 file\(s\)/);
+  });
+});
+
 // ── --migrate flag (§14.2, Decision 4) ────────────────────────────────────────
 
 const V3_COMPILE_YAML = `

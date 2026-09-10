@@ -309,6 +309,8 @@ function main(rawArgs) {
   const { configPath, scenarioRoot, outputDir, hasConfig, configLintLevel, config: projectConfig } = resolved;
 
   const effectiveLintLevel = lintLevel || configLintLevel;
+  let compileFailure = null;
+  let compileDiagnostics = null;
 
   if (doCompile) {
     if (!hasConfig) {
@@ -323,7 +325,7 @@ function main(rawArgs) {
         return 1;
       }
     } else {
-      const compileDiagnostics = new Diagnostics();
+      compileDiagnostics = new Diagnostics();
       let failure = null;
       try {
         compile(configPath, {
@@ -339,7 +341,8 @@ function main(rawArgs) {
       printDiagnostics(compileDiagnostics);
       if (failure) {
         console.error(`\nFatal: ${failure.message}`);
-        return 1;
+        compileFailure = failure;
+        if (!doLint) return 1;
       }
     }
   }
@@ -380,7 +383,7 @@ function main(rawArgs) {
       console.error('No compile.yaml in current directory and no path given.');
       return 1;
     }
-    if (!fs.existsSync(scenarioRoot)) {
+    if (!fs.existsSync(scenarioRoot) && !(compileFailure && doLint)) {
       console.error(`Scenario root not found: ${scenarioRoot}`);
       return 1;
     }
@@ -401,7 +404,7 @@ function main(rawArgs) {
       const files = (n, what) => `${n} ${what} file${n === 1 ? '' : 's'}`;
       let lintErrors = 0;
 
-      if (doLeafReview) {
+      if (doLeafReview && !compileFailure) {
         const { runLeafReviewMode } = require('./overview');
         const dir = path.join(outputDir, 'leaf-review');
         fs.mkdirSync(dir, { recursive: true });
@@ -410,7 +413,7 @@ function main(rawArgs) {
         else console.warn('No branch leaves found — nothing to review.');
       }
 
-      if (doSeedMap) {
+      if (doSeedMap && !compileFailure) {
         const { runSeedMapMode } = require('./seedmap');
         const dir = path.join(outputDir, 'seed-map');
         fs.mkdirSync(dir, { recursive: true });
@@ -419,7 +422,7 @@ function main(rawArgs) {
         else console.warn('No branch leaves found — nothing to map.');
       }
 
-      if (doOverview) {
+      if (doOverview && !compileFailure) {
         const { runOverviewMode } = require('./overview');
         const dir = path.join(outputDir, 'overview');
         fs.mkdirSync(dir, { recursive: true });
@@ -427,7 +430,7 @@ function main(rawArgs) {
         if (result.written.length > 0) summaryParts.push(files(result.written.length, 'overview'));
       }
 
-      if (doBodySizes) {
+      if (doBodySizes && !compileFailure) {
         const { runBodySizeMode } = require('./bodysize');
         const dir = path.join(outputDir, 'body-sizes');
         fs.mkdirSync(dir, { recursive: true });
@@ -441,17 +444,18 @@ function main(rawArgs) {
         const dir = path.join(outputDir, 'lint');
         fs.mkdirSync(dir, { recursive: true });
         const lintConfig = projectConfig;
-        const lintDiagnostics = new Diagnostics();
+        const lintDiagnostics = compileDiagnostics || new Diagnostics();
         const result = runLintMode(scenarioRoot, dir, {
           log, lintLevel: effectiveLintLevel, config: lintConfig, configPath,
           diagnostics: lintDiagnostics,
+          scan: !compileDiagnostics,
         });
-        printDiagnostics(lintDiagnostics);
+        if (!doCompile) printDiagnostics(lintDiagnostics);
         if (result.written.length > 0) {
           lintErrors = result.errorCount;
           summaryParts.push(`a lint report (${result.errorCount} error(s), ${result.warnCount} warning(s))`);
           console.log(`\nLint: ${result.errorCount} error(s), ${result.warnCount} warning(s) across ${result.fileCount} file(s).`);
-        } else {
+        } else if (!compileFailure) {
           console.warn('No Story Cards/Components .md files found — nothing to lint.');
         }
       }
@@ -462,7 +466,7 @@ function main(rawArgs) {
           : summaryParts.slice(0, -1).join(', ') + ', and ' + summaryParts.at(-1);
         console.log(`\nWrote ${joined} to:\n  ${outputDir}\n`);
       }
-      if (lintErrors > 0) return 1;
+      if (compileFailure || lintErrors > 0) return 1;
     } catch (err) {
       console.error(`\nFatal: ${err.message}`);
       return 1;

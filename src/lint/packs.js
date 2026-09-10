@@ -325,6 +325,7 @@ function checkCountField(rule, pack, where, label, fieldPath, value, bounds, fin
     severity: rule.severity,
     code: rule.code,
     leaf: where.leaf,
+    file: where.file,
     detail: msg,
     message: `[${pack.name}]${where.suffix} — item "${label}", ${fieldPath}: ${msg}`,
   });
@@ -357,6 +358,7 @@ function evaluatePackItemRules(pack, items, { branchLabel = null } = {}) {
     if (!rule.count && !rule.mutexHint) continue;
 
     for (const item of list) {
+      where.file = item && item._source;
       const data = { body: (item && item.body) || {} };
       const label = (item && (item.id || (item.name && (item.name.full || item.name.display)))) || '(item)';
 
@@ -392,6 +394,7 @@ function evaluatePackItemRules(pack, items, { branchLabel = null } = {}) {
             severity: rule.severity,
             code: rule.code,
             leaf: where.leaf,
+            file: where.file,
             detail: msg,
             message: `[${pack.name}]${where.suffix} — item "${label}": ${msg} `
               + `(${present.length} of ${names.length} present: ${present.join(', ')})`,

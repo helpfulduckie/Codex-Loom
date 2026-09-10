@@ -246,7 +246,9 @@ compiled `.md` cannot give back: `overview` renders with no label, and a rendere
 [a; b; c]` line does not distinguish an authored list from an authored string. So they run
 only inside the compile pass, never from `--lint`. `budget` and the `over: meta` role check
 *do* run offline. An author who wants the full check runs a compile, not `--lint` — the
-same strict-subset shape `requireCard` already has.
+same strict-subset shape `requireCard` already has. With `--compile --lint`, those inline
+findings are written into the lint report and included in its summary; only a standalone
+`--lint` invocation is the strict subset.
 
 The `meta:` channel is branch-addressable: a variant may set `meta.<packName>.role` on one
 branch and leave it default on another, and it resolves per leaf like every other

@@ -859,7 +859,10 @@ The two bundled packs are `wtg` (`CL-wtg/0001`–`CL-wtg/0003`, the World Time G
 of card-authoring conventions — a per-role length budget, list caps, a
 faction-field redundancy nudge, and a `meta.duckieConv.role` value check). Both are all
 WARN. `duckieConv`'s `count` and `mutexHint` rules run only in the inline compile pass, not
-in offline `--lint`; its `budget` and role rules run in both.
+in offline `--lint`; its `budget` and role rules run in both. A combined
+`--compile --lint` run writes the compile's complete diagnostic stream to the lint report,
+so inline-only findings are included in that report and its summary. Standalone `--lint`
+still knows only what it can recover from the compiled tree.
 
 The pack layer's own core codes are `CL0117` (malformed pack), `CL0118` (`~` on a pack
 never inherited) and `CL0119` (`name:` disagrees with the config key) — all in the loading

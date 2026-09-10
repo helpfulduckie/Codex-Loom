@@ -392,13 +392,16 @@ describe('evaluatePackItemRules — count', () => {
     name: 'dc',
     rules: [{ id: '2', code: 'CL-dc/0002', severity: 'warn', message: 'count', count }],
   });
-  const run = (count, body, opts) => evaluatePackItemRules(packOf(count), [{ id: 'I', body }], opts);
+  const run = (count, body, opts) => evaluatePackItemRules(
+    packOf(count), [{ id: 'I', body, _source: 'Codex/items.cl.yaml' }], opts,
+  );
 
   test('a named list field below min fires', () => {
     const found = run({ fields: { vibe: { min: 3, max: 5 } } }, { vibe: ['a', 'b'] });
     expect(found).toHaveLength(1);
     expect(found[0].code).toBe('CL-dc/0002');
     expect(found[0].message).toContain('vibe');
+    expect(found[0].file).toBe('Codex/items.cl.yaml');
   });
   test('a named list field in range is silent', () => {
     expect(run({ fields: { vibe: { min: 3, max: 5 } } }, { vibe: ['a', 'b', 'c', 'd'] })).toHaveLength(0);
