@@ -230,7 +230,7 @@ key the pack engine dispatches on, the same way `forbid` / `schema` / `requireCa
   so `--lint` picks it up. A role with no entry in the map — and no `standard` fallback —
   is skipped rather than measured against nothing.
 - **`count: { default: { max: 5 }, fields: { vibe: { min: 3, max: 5 }, "personality.keywords":
-  { min: 2, max: 4 }, tagline: { words: { min: 3, max: 5 } } } }`** — per resolved item.
+  { min: 2, max: 4 }, tagline: { words: { max: 5 } } } }`** — per resolved item.
   `default` applies to every body field that resolves to a **non-empty list or map**;
   `fields` overrides by case-insensitive dotted path. `words` counts whitespace tokens on a
   string value. **A multi-value field authored as a bare `"a, b, c"` string is not split** —
@@ -294,7 +294,7 @@ expected to drift as those conventions do. All four rules are WARN — a convent
   per-role cap: `anchor` 800, `standard` 400, `minor` 200. The role is
   `meta.duckieConv.role` (absent or unrecognized → `standard`). A `budget:` rule.
 - **`CL-duckieConv/0002` — list-length caps.** `vibe` 3–5, `personality.keywords` 2–4,
-  `tagline` 3–5 words, and a `*` default of "at most 5" over every other list- or map-valued
+  `tagline` at most 5 words (no minimum), and a `*` default of "at most 5" over every other list- or map-valued
   body field. A `count:` rule — inline only, and only fields authored as YAML lists/maps are
   seen.
 - **`CL-duckieConv/0003` — faction field redundancy.** WARNs when more than three of

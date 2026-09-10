@@ -20,7 +20,7 @@
 #   2. count — list-length bounds on the fields §7 gives explicit counts for, plus a `*`
 #      default of "at most 5" over every other list- or map-valued body field. A
 #      multi-value field authored as a bare comma string is NOT split — write it as a
-#      YAML list for this rule to see it. `tagline` is word-counted (3–5 words).
+#      YAML list for this rule to see it. `tagline` is word-counted (at most 5 words).
 #   3. mutexHint — WARN when more than three of overview / purpose / structure / methods
 #      are present on one card. §7: those four "frequently overlap in practice — audit
 #      for redundancy and merge down." Unscoped, which is safe: no non-faction template
@@ -52,7 +52,8 @@ rules:
   #
   # §4 partial docs give explicit counts: `vibe` is "3–5 evocative sensory/tone
   # keywords", `personality.keywords` is "2–4 trait adjectives", `tagline` is a "3–5 word
-  # identifying descriptor". The `*` default catches an over-long list anywhere else — a
+  # identifying descriptor" — only the ceiling is enforced; a short tagline is never a
+  # problem, so the minimum was dropped on 2026-09-10. The `*` default catches an over-long list anywhere else — a
   # six-bullet `background`, a sprawling `keyPeople`. Only fields authored as YAML lists
   # or maps are counted; a bare `"a, b, c"` string is one value here.
   - id: 2
@@ -62,7 +63,7 @@ rules:
       fields:
         vibe: { min: 3, max: 5 }
         personality.keywords: { min: 2, max: 4 }
-        tagline: { words: { min: 3, max: 5 } }
+        tagline: { words: { max: 5 } }
     message: >-
       A list-valued field is outside its conventional length (SCHEMA.md §4, §7).
 

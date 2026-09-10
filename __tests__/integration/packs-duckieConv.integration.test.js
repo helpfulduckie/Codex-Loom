@@ -149,14 +149,24 @@ describe('CL-duckieConv/0002 — count', () => {
     expect(find(d, COUNT)).toHaveLength(0);
   });
 
-  test('a 2-word tagline is below the 3–5 word range → WARN', () => {
+  test('a 2-word tagline is fine — the tagline has a ceiling, not a floor', () => {
     const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': item({ id: 'npc', fields: 'tagline: The Sultan\nvibe: [a, b, c, d]' }),
     });
     const hits = find(d, COUNT);
-    expect(hits.some((h) => /tagline/.test(h.message))).toBe(true);
+    expect(hits.some((h) => /tagline/.test(h.message))).toBe(false);
+  });
+
+  test('a 6-word tagline is over the 5-word ceiling → WARN', () => {
+    const { diagnostics: d } = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(ENABLED),
+      'Codex/items.yaml': item({ id: 'npc', fields: 'tagline: the last sultan of the sands\nvibe: [a, b, c, d]' }),
+    });
+    const hits = find(d, COUNT);
+    expect(hits.some((h) => /tagline: 6 words, expected at most 5/.test(h.message))).toBe(true);
   });
 });
 
