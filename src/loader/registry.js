@@ -6,6 +6,7 @@ const path = require('path');
 
 const { findFiles, deepClone, resolveVariables, VAR_ALIASES, YAML_SUFFIXES, RESERVED_LIBRARY_BASENAMES } = require('../util');
 const { loadYamlDocument, YamlLoadError } = require('./yaml');
+const { attachOrigins } = require('../origin');
 const { validate } = require('../schema');
 const { ITEM_SCHEMA } = require('./schema');
 const { CODES } = require('../diag');
@@ -115,9 +116,7 @@ function loadItemsFromDir(dirs, options = {}) {
         }
 
         const loaded = { ...normalizeItemVarField(entry, (code, message) => warn(code, message)), _source: file };
-        const importPath = [...at, 'import'];
-        const importLocation = sourceMap && sourceMap.nearest(importPath);
-        if (importLocation && importLocation.line !== undefined) loaded._importLocation = importLocation;
+        attachOrigins(loaded, sourceMap.exportOrigins(at));
         items.push(loaded);
       });
     }
@@ -255,10 +254,7 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
       if (explicitIds.has(id)) continue; // an explicit import wins
 
       const stamped = { ...item, _source: fullPath };
-      const importLocation = sourceMap && sourceMap.nearest(
-        ...(Array.isArray(raw) ? [String(index), 'import'] : ['import'])
-      );
-      if (importLocation && importLocation.line !== undefined) stamped._importLocation = importLocation;
+      attachOrigins(stamped, sourceMap.exportOrigins(Array.isArray(raw) ? [String(index)] : []));
       if (def.importVariants) stamped._include_variants = def.importVariants;
       if (def.branches) stamped._include_branch_spec = def.branches;
       included.push(stamped);

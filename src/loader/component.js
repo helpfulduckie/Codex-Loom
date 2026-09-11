@@ -11,6 +11,7 @@ const { normalizeComponent, mergeSectionRecords, applySectionSelector } = requir
 const { resolveVariables } = require('../util');
 const { runExtractor } = require('../extract');
 const { CODES, busWarner } = require('../diag');
+const { attachOrigins } = require('../origin');
 
 function loadComponentDocument(spec, options = {}) {
   const {
@@ -66,9 +67,11 @@ function loadComponentDocument(spec, options = {}) {
   });
 
   const component = normalizeComponent({ ...doc, sections: sourced }, { onWarn });
-  return component.sections.length > 0
-    ? { ...component, rawSections: sourced, source: spec }
-    : null;
+  if (component.sections.length === 0) return null;
+  return attachOrigins(
+    { ...component, rawSections: sourced, source: spec },
+    sourceMap.exportOrigins(),
+  );
 }
 
 function resolveImports(doc, spec, options) {

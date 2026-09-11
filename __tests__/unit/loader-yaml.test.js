@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const { loadYaml, loadYamlDocument, parseYaml, SourceMap } = require('../../src/loader/yaml');
+const { attachOrigins, originAt } = require('../../src/origin');
 
 afterEach(() => jest.restoreAllMocks());
 
@@ -135,6 +136,19 @@ describe('SourceMap positions', () => {
   test('nearest() degrades to the file when nothing matches', () => {
     const { sourceMap: empty } = parseYaml('', 'blank.yaml');
     expect(empty.nearest('a', 'b')).toEqual({ file: 'blank.yaml' });
+  });
+});
+
+describe('SourceMap origin export', () => {
+  test('exports plain records relative to a selected domain root', () => {
+    const { sourceMap } = parseYaml('- id: A\n  body:\n    text: hello\n', 'items.cl.yaml');
+    const index = sourceMap.exportOrigins('0');
+    const item = attachOrigins({}, index);
+    expect(originAt(item, 'body', 'text')).toEqual({
+      file: 'items.cl.yaml', path: ['body', 'text'], line: 3, col: 5,
+    });
+    expect(JSON.stringify(index)).not.toContain('_positions');
+    expect(Object.values(index).every((record) => Object.getPrototypeOf(record) === Object.prototype)).toBe(true);
   });
 });
 

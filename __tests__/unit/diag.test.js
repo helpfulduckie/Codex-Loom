@@ -77,6 +77,28 @@ describe('Diagnostic.format', () => {
       '  "triggers" is valid under "aid:" — did you mean to nest it there?',
     ]);
   });
+
+  test('renders ordered structured related locations after the hint', () => {
+    const d = new Diagnostic({
+      code: 'CL0203', severity: SEVERITY.ERROR, message: 'duplicate', file: 'later.yaml', line: 7,
+      hint: 'Keep one.',
+      related: [
+        { label: 'first declaration', file: 'first.yaml', line: 2, col: 3 },
+        { label: 'other declaration', file: 'middle.yaml', line: 4 },
+      ],
+    });
+    expect(d.related).toEqual([
+      { label: 'first declaration', file: 'first.yaml', line: 2, col: 3 },
+      { label: 'other declaration', file: 'middle.yaml', line: 4, col: null },
+    ]);
+    expect(d.format().split('\n')).toEqual([
+      'ERROR CL0203 later.yaml:7',
+      '  duplicate',
+      '  Keep one.',
+      '  Related (first declaration): first.yaml:2:3',
+      '  Related (other declaration): middle.yaml:4',
+    ]);
+  });
 });
 
 describe('Diagnostics collection', () => {
@@ -102,6 +124,13 @@ describe('Diagnostics collection', () => {
   test('carries a hint through from opts', () => {
     diags.error('CL0210', 'bad', {}, { hint: 'try aid:' });
     expect(diags.all[0].hint).toBe('try aid:');
+  });
+
+  test('carries related locations through from opts', () => {
+    diags.error('CL0203', 'bad', {}, { related: [{ label: 'first', file: 'a.yaml', line: 2 }] });
+    expect(diags.all[0].related).toEqual([
+      { label: 'first', file: 'a.yaml', line: 2, col: null },
+    ]);
   });
 
   test('all returns a copy, so callers cannot mutate the collection', () => {

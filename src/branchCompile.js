@@ -18,6 +18,7 @@ const {
 } = require('./templateResolve');
 const { resolveCrossItemRenderFunctions } = require('./crossItem');
 const { busWarner, CODES: DIAG_CODES } = require('./diag');
+const { nearestOrigin } = require('./origin');
 const { renderCard, cardTitle } = require('./emit/vl');
 const { checkUndeclaredPlaceholders, checkPlaceholderContext } = require('./emit/placeholders');
 const { checkTargetSlot } = require('./slots');
@@ -125,7 +126,7 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagno
       diagnostics.error(
         DIAG_CODES.ITEM_RESOLUTION_FAILED,
         `item "${label}" could not be resolved: ${err.importFailure ? err.importFailure.message : err.message}`,
-        { ...(itemDef._importLocation || { file: itemDef._source }), branch },
+        { ...(nearestOrigin(itemDef, 'import') || { file: itemDef._source }), branch },
         { hint: err.hint },
       );
       continue;

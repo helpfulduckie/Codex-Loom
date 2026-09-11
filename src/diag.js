@@ -201,7 +201,7 @@ function busWarner(diagnostics, loc) {
 }
 
 class Diagnostic {
-  constructor({ code, severity, message, file, line, col, hint, branch }) {
+  constructor({ code, severity, message, file, line, col, hint, branch, related = [] }) {
     this.code = code;
     this.severity = severity;
     this.message = message;
@@ -210,6 +210,12 @@ class Diagnostic {
     this.col = typeof col === 'number' ? col : null;
     this.hint = hint || null;
     this.branch = branch || null;
+    this.related = related.map(({ label, file, line, col }) => ({
+      label: label || null,
+      file: file || null,
+      line: typeof line === 'number' ? line : null,
+      col: typeof col === 'number' ? col : null,
+    }));
   }
 
   get location() {
@@ -227,6 +233,12 @@ class Diagnostic {
     const indent = (text) => String(text).split('\n').map((l) => `  ${l}`).join('\n');
     const parts = [head, indent(this.message)];
     if (this.hint) parts.push(indent(this.hint));
+    for (const related of this.related) {
+      const location = related.file
+        ? `${related.file}${related.line === null ? '' : `:${related.line}${related.col === null ? '' : `:${related.col}`}`}`
+        : '';
+      parts.push(indent(`Related${related.label ? ` (${related.label})` : ''}${location ? `: ${location}` : ''}`));
+    }
     return parts.join('\n');
   }
 
@@ -265,6 +277,7 @@ class Diagnostics {
       col: loc.col,
       branch: loc.branch,
       hint: opts.hint,
+      related: opts.related,
     });
     this._items.push(diag);
     return diag;

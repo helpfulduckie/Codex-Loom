@@ -5,6 +5,7 @@ const fs = require('fs');
 const { buildCompileContext, resolveBranchItems } = require('../../src/branchCompile');
 const { buildRegistry } = require('../../src/loader/registry');
 const { Diagnostics } = require('../../src/diag');
+const { attachOrigins, createOriginIndex } = require('../../src/origin');
 const { withTmpDir } = require('../helpers/project');
 
 // ── buildCompileContext ───────────────────────────────────────────────────────
@@ -214,9 +215,9 @@ describe('a bare import def carries no id of its own', () => {
   test('CL0324 keeps the import hint separate and points at import:', () => {
     const diagnostics = new Diagnostics();
     resolveBranchItems(
-      [{ import: 'Anes', _source: 'items.cl.yaml', _importLocation: {
-        file: 'items.cl.yaml', line: 4, col: 3,
-      } }],
+      [attachOrigins({ import: 'Anes', _source: 'items.cl.yaml' }, createOriginIndex([{
+        file: 'items.cl.yaml', path: ['import'], line: 4, col: 3,
+      }]))],
       canon(), [], {}, diagnostics,
     );
     const finding = diagnostics.errors.find((d) => d.code === 'CL0324');

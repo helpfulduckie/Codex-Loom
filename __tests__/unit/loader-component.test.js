@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { loadComponentDocument } = require('../../src/loader/component');
+const { originAt } = require('../../src/origin');
 const { Diagnostics } = require('../../src/diag');
 const { withTmpDir } = require('../helpers/project');
 
@@ -67,6 +68,9 @@ describe('loadComponentDocument', () => {
     expect(component.sections.map((s) => s.name)).toEqual(['genre', 'you']);
     expect([...component.slots.keys()]).toEqual(['you']);
     expect(component.source).toBe(spec);
+    expect(originAt(component, 'sections', 'genre', 'text')).toMatchObject({
+      file: spec, path: ['sections', 'genre', 'text'], line: 6,
+    });
   });
 
   test('the schema runs, so an unknown key is reported with a position', () => {

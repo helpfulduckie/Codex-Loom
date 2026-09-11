@@ -5,6 +5,7 @@ const fs = require('fs');
 const YAML = require('yaml');
 const { preparse, findSwallowedTokens } = require('./preparse');
 const { CODES } = require('../diag');
+const { createOriginIndex } = require('../origin');
 
 const PATH_SEP = '\u0000';
 
@@ -29,6 +30,17 @@ class SourceMap {
       if (hit) return { file: this.file, line: hit.line, col: hit.col };
     }
     return { file: this.file };
+  }
+
+  exportOrigins(...parts) {
+    const root = (parts.length === 1 && Array.isArray(parts[0]) ? parts[0] : parts).map(String);
+    const entries = [];
+    for (const [key, hit] of this._positions) {
+      const path = key === '' ? [] : key.split(PATH_SEP);
+      if (root.some((part, index) => path[index] !== part)) continue;
+      entries.push({ file: this.file, path: path.slice(root.length), line: hit.line, col: hit.col });
+    }
+    return createOriginIndex(entries);
   }
 }
 

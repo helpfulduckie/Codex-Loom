@@ -7,6 +7,7 @@ const path = require('path');
 const { Diagnostics, CODES } = require('../diag');
 const { validate } = require('../schema');
 const { loadYamlDocument, YamlLoadError } = require('../loader/yaml');
+const { attachOrigins } = require('../origin');
 const { CONFIG_SCHEMA } = require('./schema');
 const { walkBranchTree } = require('../model/branches');
 const { resolveVariables } = require('../util');
@@ -286,7 +287,7 @@ function loadCompileConfig(configPath, options = {}) {
       ]))
     : config.storyCardType || null;
 
-  return {
+  return attachOrigins({
     _base: base,
     _resolvedOutput: resolvedOutput,
     _resolvedReports: resolvedReports,
@@ -309,7 +310,7 @@ function loadCompileConfig(configPath, options = {}) {
     storyCardType,
     placeholders: config.placeholders || null,
     branches: config.branches || null,
-  };
+  }, sourceMap.exportOrigins());
 }
 
 module.exports = {

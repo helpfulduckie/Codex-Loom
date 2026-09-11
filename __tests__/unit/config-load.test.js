@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { Diagnostics, CODES } = require('../../src/diag');
 const { loadCompileConfig } = require('../../src/config/load');
+const { originAt } = require('../../src/origin');
 const { withTmpDir } = require('../helpers/project');
 
 let tmpDir;
@@ -40,6 +41,14 @@ function load(yaml, { dirs = [], raw = false } = {}) {
 }
 
 describe('diagnostics carry source positions', () => {
+  test('normalized config retains the root document origin index privately', () => {
+    const { config, cfgPath } = load('structure:\n  output: ./out\n');
+    expect(originAt(config, 'structure', 'output')).toMatchObject({
+      file: cfgPath, path: ['structure', 'output'], line: 2,
+    });
+    expect(Object.keys(config)).not.toContain('_origins');
+  });
+
   test('an unknown key names its line and column', () => {
     const { diagnostics } = load('title: x\nbogus: y\n');
     const diag = diagnostics.errors[0];

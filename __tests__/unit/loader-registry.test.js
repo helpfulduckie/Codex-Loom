@@ -9,6 +9,7 @@ const {
 } = require('../../src/loader/registry');
 const { YAML_SUFFIXES, CONFIG_BASENAMES } = require('../../src/util');
 const { withTmpDir } = require('../helpers/project');
+const { originAt } = require('../../src/origin');
 
 let tmpDir;
 beforeEach(() => { tmpDir = withTmpDir(); });
@@ -95,10 +96,12 @@ describe('item loading', () => {
     expect(loadItemsFromDir([tmpDir])[0]._source).toBe(file);
   });
 
-  test('plain import keeps the import-key location as data', () => {
+  test('each sequence entry keeps its own root-relative origin index', () => {
     write('a.cl.yaml', '- id: A\n  import: Missing\n');
     const [item] = loadItemsFromDir([tmpDir]);
-    expect(item._importLocation).toMatchObject({ file: path.join(tmpDir, 'a.cl.yaml'), line: 2 });
+    expect(originAt(item, 'import')).toMatchObject({
+      file: path.join(tmpDir, 'a.cl.yaml'), path: ['import'], line: 2,
+    });
   });
 
   test('an empty file is skipped with a diagnostic', () => {
@@ -360,14 +363,14 @@ describe('resolveIncludes — duplicate file detection', () => {
     expect(result[0].id).toBe('ItemA');
   });
 
-  test('included plain import keeps the import-key location', () => {
+  test('included item keeps its own root-relative origin index', () => {
     const shared = path.join(tmpDir, 'shared.yaml');
     fs.writeFileSync(shared, '- id: ItemA\n  import: Missing\n', 'utf8');
     const result = resolveIncludes(
       [{ include: shared, _source: path.join(tmpDir, 'project.yaml') }],
       new Map(), makeConfig(tmpDir),
     );
-    expect(result[0]._importLocation).toMatchObject({ file: shared, line: 2 });
+    expect(originAt(result[0], 'import')).toMatchObject({ file: shared, path: ['import'], line: 2 });
   });
 
   /** Resolve with a bus and hand back the CL0131 reports beside the result. */
