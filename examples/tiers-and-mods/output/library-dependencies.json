@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-07T07:16:55.124Z",
-  "compileYaml": "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\tiers-and-mods\\compile.cl.yaml",
+  "generatedAt": "2026-09-11T04:27:42.737Z",
+  "compileYaml": "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\tiers-and-mods\\compile.cl.yaml",
   "variables": {
     "genre": "Salvage-crew space opera",
     "settingName": "The Tessene drift"
@@ -8,15 +8,15 @@
   "library": {
     "core": {
       "expression": "../library/core",
-      "resolvedPath": "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core",
+      "resolvedPath": "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\core",
       "files": [
-        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core\\characters.cl.yaml",
-        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core\\components\\ai-instructions.cl.yaml",
-        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core\\components\\authors-note.cl.yaml",
-        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core\\components\\plot-essentials.cl.yaml",
-        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core\\components\\summary.cl.yaml",
-        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core\\magic.cl.yaml",
-        "C:\\Users\\blues\\Git\\Git-AID\\Tools\\Codex-Loom\\examples\\library\\core\\settings.cl.yaml"
+        "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\core\\characters.cl.yaml",
+        "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\core\\components\\ai-instructions.cl.yaml",
+        "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\core\\components\\authors-note.cl.yaml",
+        "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\core\\components\\plot-essentials.cl.yaml",
+        "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\core\\components\\summary.cl.yaml",
+        "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\core\\magic.cl.yaml",
+        "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\core\\settings.cl.yaml"
       ]
     }
   }
