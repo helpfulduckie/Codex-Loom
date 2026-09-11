@@ -159,14 +159,44 @@ describe('CL-duckieConv/0002 — count', () => {
     expect(hits.some((h) => /vibe/.test(h.message))).toBe(true);
   });
 
-  test('a 6-item background list trips the * default (max 5) → WARN', () => {
+  test('a 7-item background list trips the * default (max 6) → WARN', () => {
+    const { diagnostics: d } = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(ENABLED),
+      'Codex/items.yaml': item({ id: 'npc', fields: 'background: [a, b, c, d, e, f, g]\nvibe: [x, y, z, w]' }),
+    });
+    const hits = find(d, COUNT);
+    expect(hits.some((h) => /background/.test(h.message))).toBe(true);
+  });
+
+  test('a 6-item background list sits at the * default (max 6) → no finding', () => {
     const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(ENABLED),
       'Codex/items.yaml': item({ id: 'npc', fields: 'background: [a, b, c, d, e, f]\nvibe: [x, y, z, w]' }),
     });
     const hits = find(d, COUNT);
-    expect(hits.some((h) => /background/.test(h.message))).toBe(true);
+    expect(hits.some((h) => /background/.test(h.message))).toBe(false);
+  });
+
+  test('a 7-entry appearance fills the Character template and sits at its own cap (max 7) → no finding', () => {
+    const { diagnostics: d } = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(ENABLED),
+      'Codex/items.yaml': item({ id: 'npc', fields: 'appearance: [a, b, c, d, e, f, g]\nvibe: [x, y, z, w]' }),
+    });
+    const hits = find(d, COUNT);
+    expect(hits.some((h) => /appearance/.test(h.message))).toBe(false);
+  });
+
+  test('an 8-entry appearance trips its own cap (max 7) → WARN', () => {
+    const { diagnostics: d } = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(ENABLED),
+      'Codex/items.yaml': item({ id: 'npc', fields: 'appearance: [a, b, c, d, e, f, g, h]\nvibe: [x, y, z, w]' }),
+    });
+    const hits = find(d, COUNT);
+    expect(hits.some((h) => /appearance: 8 items, expected at most 7/.test(h.message))).toBe(true);
   });
 
   test('a bare comma-string vibe is NOT split — one value, no finding', () => {

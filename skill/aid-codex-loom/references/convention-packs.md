@@ -160,7 +160,7 @@ and leave it default on another.
   `meta.<packName>.role` (absent or unrecognized → `standard`) and WARNs when the **raw
   compiled body length** exceeds the cap. Raw, not placeholder-expanded: the hard platform
   cap is `CL0712`'s job.
-- **`count: { default: { max: 5 }, fields: { vibe: { min: 3, max: 5 }, tagline: { words: { max: 5 } } } }`**
+- **`count: { default: { max: 6 }, fields: { appearance: { max: 7 }, vibe: { min: 3, max: 5 }, tagline: { words: { max: 5 } } } }`**
   — `default` applies to every body field resolving to a non-empty list or map; `fields`
   overrides by case-insensitive dotted path; `words` counts whitespace tokens on a string.
   **A multi-value field authored as a bare `"a, b, c"` string is not split** — write
@@ -197,6 +197,6 @@ those conventions do.
 | Code | Checks |
 |---|---|
 | `CL-duckieConv/0001` | Per-role character budget — `anchor` 800, `major` 500, `standard` 400, `minor` 200, from `meta.duckieConv.role` |
-| `CL-duckieConv/0002` | List-length caps — `vibe` 3–5, `personality.keywords` 2–4, `tagline` at most 5 words, `*` default of at most 5. Inline only |
+| `CL-duckieConv/0002` | List-length caps — `vibe` 3–5, `personality.keywords` 2–4, `tagline` at most 5 words, `appearance` at most 7, `*` default of at most 6. Inline only |
 | `CL-duckieConv/0003` | Faction field redundancy — more than three of `overview` / `purpose` / `structure` / `methods` on one card. Inline only |
 | `CL-duckieConv/0004` | `meta.duckieConv.role`, if set, is `anchor` / `major` / `standard` / `minor` |

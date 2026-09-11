@@ -18,7 +18,8 @@
 #      placeholder-expanded (the hard platform cap is CL0712's job, and it measures
 #      expanded).
 #   2. count — list-length bounds on the fields §7 gives explicit counts for, plus a `*`
-#      default of "at most 5" over every other list- or map-valued body field. A
+#      default of "at most 6" over every other list- or map-valued body field
+#      (`appearance` at most 7, one per Character-template slot). A
 #      multi-value field authored as a bare comma string is NOT split — write it as a
 #      YAML list for this rule to see it. `tagline` is word-counted (at most 5 words).
 #   3. mutexHint — WARN when more than three of overview / purpose / structure / methods
@@ -58,13 +59,20 @@ rules:
   # keywords", `personality.keywords` is "2–4 trait adjectives", `tagline` is a "3–5 word
   # identifying descriptor" — only the ceiling is enforced; a short tagline is never a
   # problem, so the minimum was dropped on 2026-09-10. The `*` default catches an over-long list anywhere else — a
-  # six-bullet `background`, a sprawling `keyPeople`. Only fields authored as YAML lists
+  # seven-bullet `background`, a sprawling `keyPeople`. Only fields authored as YAML lists
   # or maps are counted; a bare `"a, b, c"` string is one value here.
+  #
+  # Changed on 2026-09-11 because every hit so far had a legitimate reason to be long.
+  # The default went from 5 to 6, and `appearance` got its own cap of 7 to match the
+  # Character template's seven slots (race, gender, age, hair, eyes, build, other), which
+  # every fully described character fills. It is on probation: if the default is still
+  # only noise after the next canon rework, drop it.
   - id: 2
     severity: warn
     count:
-      default: { max: 5 }
+      default: { max: 6 }
       fields:
+        appearance: { max: 7 }
         vibe: { min: 3, max: 5 }
         personality.keywords: { min: 2, max: 4 }
         tagline: { words: { max: 5 } }
