@@ -4,6 +4,7 @@
 const { entryName } = require('./parse');
 const { CODES } = require('../diag');
 const { isPlainObject } = require('../util');
+const { originLocation } = require('../origin');
 
 function lookupCI(map, name) {
   if (!map || !name) return undefined;
@@ -114,7 +115,7 @@ function readablePathsFor(list, fieldTable, partials, refRoot = 'body') {
   return { content, ack, allowExtra };
 }
 
-function bodyLeafPaths(body, content) {
+function bodyLeafPaths(body, content, withPaths = false) {
   const out = [];
   const contentLc = new Set([...content].map((c) => String(c).toLowerCase()));
   const hasContentBelow = (qualifiedPrefix) => {
@@ -124,15 +125,15 @@ function bodyLeafPaths(body, content) {
   };
   const walk = (obj, prefix) => {
     for (const key of Object.keys(obj)) {
-      const p = prefix ? `${prefix}.${key}` : key;
-      const qualified = `body.${p}`;
+      const p = [...prefix, key];
+      const qualified = `body.${p.join('.')}`;
       if (contentLc.has(qualified.toLowerCase())) continue; // rendered — and so is everything under it
       const val = obj[key];
       if (isPlainObject(val) && hasContentBelow(qualified)) walk(val, p);
-      else out.push(qualified);
+      else out.push(withPaths ? { qualified, path: ['body', ...p] } : qualified);
     }
   };
-  if (isPlainObject(body)) walk(body, '');
+  if (isPlainObject(body)) walk(body, []);
   return out;
 }
 
@@ -205,7 +206,7 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
       const pa = item._projectAuthoredBody;
       acc.bodies.push({
         body,
-        file: item && item._source,
+        item, branch: opts.branch,
         projectAuthored: Array.isArray(pa) ? new Set(pa) : null,
       });
     }
@@ -216,8 +217,8 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
     for (const [itemId, acc] of perItem) {
       if (acc.allowExtra) continue;
       const { content, ack } = acc;
-      for (const { body, file, projectAuthored } of acc.bodies) {
-        for (const qualifiedLeaf of bodyLeafPaths(body, content)) {
+      for (const { body, item, branch, projectAuthored } of acc.bodies) {
+        for (const { qualified: qualifiedLeaf, path } of bodyLeafPaths(body, content, true)) {
           const leaf = qualifiedLeaf.slice('body.'.length);
           const leafLc = leaf.toLowerCase();
           if (ack.has(qualifiedLeaf.toLowerCase())) continue;
@@ -240,20 +241,20 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
             findings.set(key, {
               code: CODES.FIELD_UNREAD_MISROUTED,
               message: `body key "${leaf}" on item "${itemId}" ${where} — its content is dropped from the compiled card; include the field in a rendered template or remove it.`,
-              file,
+              loc: originLocation(item, path, { branch }),
             });
           } else {
             findings.set(key, {
               code: CODES.FIELD_UNREAD_UNKNOWN,
               message: `body key "${leaf}" on item "${itemId}" is read by no template this item renders through and no declaration names it — its content is dropped from the compiled card; remove or declare and render the key.`,
-              file,
+              loc: originLocation(item, path, { branch }),
             });
           }
         }
       }
     }
-    for (const { code, message, file } of findings.values()) {
-      diagnostics.warn(code, message, file == null ? undefined : { file: String(file) });
+    for (const { code, message, loc } of findings.values()) {
+      diagnostics.warn(code, message, loc);
     }
 
     const named = new Set();

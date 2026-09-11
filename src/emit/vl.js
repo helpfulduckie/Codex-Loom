@@ -4,6 +4,7 @@
 const YAML = require('yaml');
 const { CODES } = require('../diag');
 const { LIMITS, checkLimit } = require('../limits');
+const { originLocation } = require('../origin');
 
 const FENCE = '~~~';
 
@@ -127,13 +128,15 @@ function triggerLine(item, diagnostics, loc) {
   if (list.length === 0) return null;
 
   const written = [];
-  for (const entry of list) {
+  for (const [index, entry] of list.entries()) {
+    const entryLoc = originLocation(item, Array.isArray(raw)
+      ? ['aid', 'triggers', String(index)] : ['aid', 'triggers'], loc);
     const value = decodeTriggerPadding(entry);
     if (value.includes(',')) {
       diagnostics.error(
         CODES.TRIGGER_CONTAINS_COMMA,
         `Trigger ${JSON.stringify(value)} contains a comma, so Velvet Lattice splits it into two triggers; split it into separate entries or remove the comma.`,
-        loc,
+        entryLoc,
         {
           hint: 'Velvet Lattice joins triggers with commas into one AID keys string '
             + '(loader.py:72), so a comma inside a trigger becomes two triggers. Split it '
@@ -144,7 +147,7 @@ function triggerLine(item, diagnostics, loc) {
       diagnostics.warn(
         CODES.TRIGGER_EMPTY,
         'Trigger is empty, so AID receives an empty key; remove the empty entry or provide a trigger.',
-        loc,
+        entryLoc,
       );
     }
     written.push(writeScalar(value, { flow: true }));
@@ -174,11 +177,11 @@ function renderCard({ item, bodyText = '', notesText, diagnostics, loc = {}, que
   const body = String(bodyText === undefined || bodyText === null ? '' : bodyText);
 
   checkLimit(body, questions, LIMITS.cardBody, {
-    diagnostics: diags, loc, label: `"${cardTitle(item) || (item && item.id) || '?'}"`,
+    diagnostics: diags, loc: originLocation(item, ['body'], loc), label: `"${cardTitle(item) || (item && item.id) || '?'}"`,
   });
 
   checkLimit(notesText_, questions, LIMITS.notes, {
-    diagnostics: diags, loc, label: `"${cardTitle(item) || (item && item.id) || '?'}"`,
+    diagnostics: diags, loc: originLocation(item, ['notes'], loc), label: `"${cardTitle(item) || (item && item.id) || '?'}"`,
   });
 
   return { text: `${lines.join('\n')}\n${body}`, diagnostics: diags };

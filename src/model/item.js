@@ -6,6 +6,7 @@ const { applyFieldOp, applyFieldsDelta, applyDelta } = require('./fieldops');
 const { resolveBranchSpec } = require('./branches');
 const { resolveItemRef, describeRefFailure } = require('./refs');
 const { CODES } = require('../diag');
+const { copyOrigins, transferOrigins, originLocation } = require('../origin');
 
 const PLACEABLE_COMPONENTS = Object.freeze([
   'plotEssential', 'summary', 'aiInstructions', 'authorsNote', 'adventureDescription',
@@ -31,13 +32,15 @@ function collectVariantDeltas(itemDef, variantPath, onWarn, options = {}) {
   if (!variantPath) return deltas;
   const parts = variantPath.split('/').map(p => p.trim()).filter(Boolean);
   let variantTree = itemDef.variants;
+  let variantOriginPath = ['variants'];
 
   const src = itemDef._source ? ` (${basename(itemDef._source)})` : '';
   for (const part of parts) {
     if (!variantTree || typeof variantTree !== 'object') {
       if (warn) {
         warn(CODES.VARIANT_NOT_FOUND,
-          `variant "${part}" is not defined in the variant tree of "${itemDef.id || itemDef.name}"${src}; check the spelling or add the variant.`);
+          `variant "${part}" is not defined in the variant tree of "${itemDef.id || itemDef.name}"${src}; check the spelling or add the variant.`,
+          options.loc || originLocation(itemDef, variantOriginPath));
       }
       break;
     }
@@ -45,13 +48,15 @@ function collectVariantDeltas(itemDef, variantPath, onWarn, options = {}) {
     if (!actualKey) {
       if (warn) {
         warn(CODES.VARIANT_NOT_FOUND,
-          `variant "${part}" is not defined in the variant tree of "${itemDef.id || itemDef.name}"${src}; check the spelling or add the variant.`);
+          `variant "${part}" is not defined in the variant tree of "${itemDef.id || itemDef.name}"${src}; check the spelling or add the variant.`,
+          options.loc || originLocation(itemDef, variantOriginPath));
       }
       break;
     }
     const variantDef = variantTree[actualKey];
     if (variantDef === null) return null; // null variant (~) = exclude item
-    deltas.push(variantDef);
+    deltas.push(transferOrigins(itemDef, { ...variantDef }, [...variantOriginPath, actualKey]));
+    variantOriginPath = [...variantOriginPath, actualKey, 'variants'];
     variantTree = variantDef.variants;
   }
 
@@ -86,11 +91,26 @@ function touchedLeafPaths(before, after) {
 
 function stripMeta(item) {
   const out = {};
-  const skip = new Set(['variants', '_include_variants', '_include_variant_tree', '_importLocation']);
+  const skip = new Set(['variants', '_include_variants', '_include_variant_tree']);
   for (const [k, v] of Object.entries(item)) {
     if (!skip.has(k.toLowerCase())) out[k] = v;
   }
-  return out;
+  return copyOrigins(item, out);
+}
+
+function itemDispatch(itemDef, branchPath, onWarn) {
+  const included = Boolean(itemDef._include_branch_spec);
+  const selections = [];
+  const names = resolveBranchSpec(included ? itemDef._include_branch_spec : itemDef.branches,
+    branchPath, onWarn, { source: itemDef,
+      path: [included ? '_include_branch_spec' : 'branches'], selections });
+  return names === null ? null : selections;
+}
+
+function variantSelectors(source, key) {
+  return parseVariantsList(source[key]).map((name, i) => ({ name,
+    loc: originLocation(source, Array.isArray(source[key]) ? [key, String(i)] : [key]),
+  }));
 }
 
 function resolveItem(itemDef, registry, branchPath, onWarn) {
@@ -108,11 +128,11 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     }
     const canonItem = found.item;
 
-    item = deepClone(stripMeta(canonItem));
+    item = copyOrigins(canonItem, deepClone(stripMeta(canonItem)));
     sourceItemForVariants = canonItem;
 
-    for (const vPath of parseVariantsList(itemDef.importVariants)) {
-      const ivDeltas = collectVariantDeltas(canonItem, vPath, onWarn);
+    for (const { name: vPath, loc } of variantSelectors(itemDef, 'importVariants')) {
+      const ivDeltas = collectVariantDeltas(canonItem, vPath, onWarn, { loc });
       if (ivDeltas === null) return null; // null variant = exclude
       for (const delta of ivDeltas) {
         applyDelta(item, delta, onWarn);
@@ -128,31 +148,35 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     };
 
     if (itemDef.body) {
-      applyFieldsDelta(item, { body: itemDef.body }, onWarn);
+      applyFieldsDelta(item, copyOrigins(itemDef, { body: itemDef.body }), onWarn);
     }
     recordProjectBodyEdits();
     for (const key of ITEM_TOP_LEVEL_FIELDS) {
       if (itemDef[key] !== undefined) {
         const label = `${itemDef.id || item.id || item.name || '(unknown)'}.${key}`;
-        const newVal = applyFieldOp(item[key], itemDef[key], onWarn ? { onWarn, label } : null);
+        const newVal = applyFieldOp(item[key], itemDef[key], { onWarn, label,
+          source: itemDef, sourcePath: [key], target: item, targetPath: [key] });
         if (newVal === '__DELETE__') delete item[key]; else item[key] = newVal;
       }
     }
 
-    if (itemDef.id) item.id = itemDef.id;
+    if (itemDef.id) {
+      item.id = itemDef.id;
+      transferOrigins(itemDef, item, ['id'], ['id']);
+    }
 
-    const branchVariantNames = resolveBranchSpec(itemDef.branches, branchPath, onWarn);
+    const branchVariantNames = itemDispatch(itemDef, branchPath, onWarn);
     if (branchVariantNames === null) return null; // excluded
     item._hasVariant = branchVariantNames.length > 0;
 
-    for (const vName of branchVariantNames) {
+    for (const { name: vName, loc } of branchVariantNames) {
       const variantSource = hasVariant(itemDef, vName) ? itemDef : canonItem;
-      const deltas = collectVariantDeltas(variantSource, vName, onWarn);
+      const deltas = collectVariantDeltas(variantSource, vName, onWarn, { loc });
       if (deltas === null) return null; // null variant = exclude
       for (const delta of deltas) {
         if (delta.importVariants && canonItem) {
-          for (const cvPath of parseVariantsList(delta.importVariants)) {
-            const canonDeltas = collectVariantDeltas(canonItem, cvPath, onWarn);
+          for (const { name: cvPath, loc: canonLoc } of variantSelectors(delta, 'importVariants')) {
+            const canonDeltas = collectVariantDeltas(canonItem, cvPath, onWarn, { loc: canonLoc });
             if (canonDeltas === null) return null; // null variant = exclude
             for (const canonDelta of canonDeltas) {
               applyDelta(item, canonDelta, onWarn);
@@ -170,7 +194,7 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     });
 
   } else {
-    item = deepClone(stripMeta(itemDef));
+    item = copyOrigins(itemDef, deepClone(stripMeta(itemDef)));
     sourceItemForVariants = itemDef;
 
     if (itemDef._include_variants) {
@@ -184,16 +208,12 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     }
 
     const fannedOut = Boolean(itemDef._include_branch_spec);
-    const branchVariantNames = resolveBranchSpec(
-      itemDef._include_branch_spec || itemDef.branches,
-      branchPath,
-      onWarn
-    );
+    const branchVariantNames = itemDispatch(itemDef, branchPath, onWarn);
     if (branchVariantNames === null) return null; // excluded
     item._hasVariant = branchVariantNames.length > 0;
 
-    for (const vName of branchVariantNames) {
-      const localDeltas = collectVariantDeltas(sourceItemForVariants, vName, onWarn, { silent: fannedOut });
+    for (const { name: vName, loc } of branchVariantNames) {
+      const localDeltas = collectVariantDeltas(sourceItemForVariants, vName, onWarn, { silent: fannedOut, loc });
       if (localDeltas === null) return null; // null variant = exclude
       for (const delta of localDeltas) {
         applyDelta(item, delta, onWarn);
@@ -205,8 +225,14 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
   if (!item.aid) item.aid = {};
   if (!item.render) item.render = {};
 
-  if (!item.aid.type && item.render.template) item.aid.type = item.render.template;
-  if (!item.render.template && item.aid.type) item.render.template = item.aid.type;
+  if (!item.aid.type && item.render.template) {
+    item.aid.type = item.render.template;
+    transferOrigins(item, item, ['render', 'template'], ['aid', 'type']);
+  }
+  if (!item.render.template && item.aid.type) {
+    item.render.template = item.aid.type;
+    transferOrigins(item, item, ['aid', 'type'], ['render', 'template']);
+  }
 
   if (item.render.storyCard !== false && !item.aid.type && !item.render.template) {
     const name = item.id || (typeof item.name === 'string' ? item.name : '');
@@ -214,7 +240,7 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
       onWarn(CODES.NO_TYPE_OR_TEMPLATE,
         `item "${name}" emits a story card but has neither aid.type nor render.template, `
         + 'so no card template can be selected. Add one, or set "render.storyCard: false" '
-        + 'if the item should render only into a component.');
+        + 'if the item should render only into a component.', originLocation(item, ['aid']));
     }
   }
 
@@ -225,12 +251,15 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
       onWarn(CODES.NOTES_AND_DESCRIPTION,
         `item "${label}" declares both ${notesKeys.map((k) => `"${k}"`).join(' and ')}. `
         + '"description" is an alias for "notes", so these keys name one field. '
-        + 'Keep the correct value and delete the other key.');
+        + 'Keep the correct value and delete the other key.', originLocation(item, [notesKeys[notesKeys.length - 1]]));
     }
   }
   for (const key of notesKeys) {
     if (key !== 'notes') {
-      if (item.notes === undefined) item.notes = item[key];
+      if (item.notes === undefined) {
+        item.notes = item[key];
+        transferOrigins(item, item, [key], ['notes']);
+      }
       delete item[key];
     }
   }
@@ -239,10 +268,20 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
   if (typeof rawName === 'string' && rawName) {
     const words = rawName.trim().split(/\s+/);
     item.name = { display: words[0], full: rawName };
+    transferOrigins(item, item, ['name'], ['name', 'display'], { descendants: false });
+    transferOrigins(item, item, ['name'], ['name', 'full'], { descendants: false });
   } else if (rawName && typeof rawName === 'object' && !Array.isArray(rawName)) {
     const first = rawName.display || Object.values(rawName)[0] || item.id || '';
-    if (!rawName.display) rawName.display = first.split(/\s+/)[0];
-    if (!rawName.full)    rawName.full    = first;
+    const firstPath = rawName.display ? ['name', 'display']
+      : Object.values(rawName)[0] ? ['name', Object.keys(rawName)[0]] : ['id'];
+    if (!rawName.display) {
+      rawName.display = first.split(/\s+/)[0];
+      transferOrigins(item, item, firstPath, ['name', 'display']);
+    }
+    if (!rawName.full) {
+      rawName.full = first;
+      transferOrigins(item, item, firstPath, ['name', 'full']);
+    }
   }
 
   return item;

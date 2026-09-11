@@ -2,6 +2,24 @@
 
 const { validateCardType, normalizeCardType, buildCardTypeAudit } = require('../../src/cardType');
 const { Diagnostics, CODES: DIAG_CODES } = require('../../src/diag');
+const { parseYaml } = require('../../src/loader/yaml');
+const { attachOrigins } = require('../../src/origin');
+
+test('card type diagnostics retain the authored path and branch across normalization and collisions', () => {
+  const { value, sourceMap } = parseYaml('id: Hero\naid:\n  type: bad/type', 'type.yaml');
+  const item = attachOrigins(value, sourceMap.exportOrigins());
+  const diagnostics = new Diagnostics();
+  validateCardType(item, { diagnostics, branch: 'main' });
+  expect(diagnostics.errors[0]).toMatchObject({ file: 'type.yaml', line: 3, col: 3, branch: 'main' });
+  const audit = buildCardTypeAudit();
+  audit.resolve(' Custom', { file: 'library.yaml', line: 2, col: 3, branch: 'main' });
+  audit.resolve('custom', { file: 'project.yaml', line: 7, col: 5, branch: 'main' });
+  audit.finish(diagnostics);
+  expect(diagnostics.all.find(d => d.code === DIAG_CODES.CARD_TYPE_LEADING_SPACE)).toMatchObject({ file: 'library.yaml', line: 2, col: 3, branch: 'main' });
+  const collision = diagnostics.all.find(d => d.code === DIAG_CODES.CARD_TYPE_CASE_COLLISION);
+  expect(collision).toMatchObject({ file: 'project.yaml', line: 7, col: 5, branch: 'main' });
+  expect(collision.related[0]).toMatchObject({ file: 'library.yaml', line: 2, col: 3 });
+});
 
 // ── validateCardType (aid.type must be a legal folder/file name) ──────────────
 

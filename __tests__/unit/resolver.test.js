@@ -5,6 +5,110 @@ const { collectVariantDeltas, resolveItem } = require('../../src/model/item');
 const { enumerateLeaves, resolveBranchSpec } = require('../../src/model/branches');
 const { deepClone } = require('../../src/util');
 const { ItemRegistry } = require('../../src/loader/registry');
+const { parseYaml } = require('../../src/loader/yaml');
+const { attachOrigins, nearestOrigin, originAt, copyOrigins } = require('../../src/origin');
+
+function authored(text, file) {
+  const { value, sourceMap } = parseYaml(text, file);
+  return attachOrigins({ ...value, _source: file }, sourceMap.exportOrigins());
+}
+
+describe('authored origins follow item precedence', () => {
+  const libraryText = [
+    'id: Hero',
+    'name: Hero Vale',
+    'aid: {type: Character}',
+    'body:',
+    '  changed: red fox',
+    '  sibling: untouched',
+    '  nested: {keep: original, remove: old}',
+    'variants:',
+    '  seed:',
+    '    body: {changed: seed}',
+    '    variants:',
+    '      child:',
+    '        body: {changed: nested seed}',
+    '  library:',
+    '    body: {changed: library branch}',
+  ].join('\n');
+  const resolve = (text, branch = []) => {
+    const library = authored(libraryText, 'library.yaml');
+    const local = authored(text, 'project.yaml');
+    return { library, local, item: resolveItem(local, new Map([['hero', library]]), branch) };
+  };
+
+  test.each([
+    ['import: Hero\nbody: {changed: local}', [], 'local', 'project.yaml', 2],
+    ['import: Hero\nimportVariants: seed/child', [], 'nested seed', 'library.yaml', 13],
+    ['import: Hero\nimportVariants: seed\nbody: {changed: local}', [], 'local', 'project.yaml', 3],
+    ['import: Hero\nbody: {changed: local}\nbranches: {main: library}', ['main'], 'library branch', 'library.yaml', 15],
+    ['import: Hero\nbranches: {main: local}\nvariants:\n  local:\n    importVariants: seed\n    body: {changed: branch}', ['main'], 'branch', 'project.yaml', 6],
+  ])('keeps library siblings after resolving %s', (text, branch, value, file, line) => {
+    const { item, library } = resolve(text, branch);
+    expect(item.body.changed).toBe(value);
+    expect(nearestOrigin(item, ['body', 'changed'])).toMatchObject({ file, line });
+    expect(nearestOrigin(item, ['body', 'sibling'])).toEqual(originAt(library, ['body', 'sibling']));
+    expect(item._source).toBe('library.yaml');
+    expect(JSON.stringify(item)).not.toContain('codexLoomOrigins');
+  });
+
+  test.each([
+    ['+{blue}', ['red fox', 'blue']], ['-{red}', 'fox'], ['/{red}/{blue}', 'blue fox'],
+    ['["/{red}/{blue}", "+{tail}"]', ['blue fox', 'tail']],
+  ])('attributes the value produced by %s to the operation', (op, value) => {
+    const { item, local, library } = resolve(`import: Hero\nbody:\n  changed: ${op}`);
+    expect(item.body.changed).toEqual(value);
+    expect(nearestOrigin(item, ['body', 'changed'])).toEqual(originAt(local, ['body', 'changed']));
+    expect(nearestOrigin(item, ['body', 'sibling'])).toEqual(originAt(library, ['body', 'sibling']));
+  });
+
+  test('nested deletion retains its operation and clears obsolete child origins', () => {
+    const { item, library, local } = resolve('import: Hero\nbody:\n  nested:\n    remove: null');
+    expect(item.body.nested).toEqual({ keep: 'original' });
+    expect(nearestOrigin(item, ['body', 'nested', 'remove'])).toEqual(originAt(local, ['body', 'nested', 'remove']));
+    expect(nearestOrigin(item, ['body', 'nested', 'keep'])).toEqual(originAt(library, ['body', 'nested', 'keep']));
+    const replaced = resolve('import: Hero\nbody:\n  nested: replaced');
+    expect(originAt(replaced.item, ['body', 'nested', 'keep'])).toBeNull();
+    expect(nearestOrigin(replaced.item, ['body', 'nested', 'keep'])).toEqual(originAt(replaced.local, ['body', 'nested']));
+  });
+
+  test('no-op warnings point at the authored nested operation with its original spelling', () => {
+    const library = authored(libraryText, 'library.yaml');
+    const local = authored('import: Hero\nbranches: {main: local}\nvariants:\n  local:\n    CHANGED: -{absent}', 'project.yaml');
+    const warn = jest.fn();
+    const item = resolveItem(local, new Map([['hero', library]]), ['main'], warn);
+    expect(warn).toHaveBeenCalledWith('CL0328', expect.any(String), expect.objectContaining({ file: 'project.yaml', line: 5, col: 5 }));
+    expect(item.body.changed).toBe('red fox');
+    expect(originAt(item, ['body', 'changed'])).toMatchObject({ path: ['variants', 'local', 'CHANGED'], line: 5 });
+  });
+
+  test('normalization and copying retain scalar names and variant alias origins', () => {
+    const { item, library } = resolve('import: Hero\nbranches: {main: local}\nvariants:\n  local:\n    VARS: {Tone: quiet}\n    description: note');
+    const selected = resolveItem(authored('import: Hero\nbranches: {main: local}\nvariants:\n  local:\n    VARS: {Tone: quiet}\n    description: note', 'project.yaml'), new Map([['hero', library]]), ['main']);
+    expect(originAt(item, ['name', 'full'])).toEqual(originAt(library, ['name']));
+    expect(originAt(item, ['name', 'display'])).toEqual(originAt(library, ['name']));
+    const clone = copyOrigins(selected, deepClone(selected));
+    expect(originAt(clone, ['v', 'Tone'])).toMatchObject({ path: ['variants', 'local', 'VARS', 'Tone'], line: 5 });
+    expect(originAt(clone, ['notes'])).toMatchObject({ path: ['variants', 'local', 'description'], line: 6 });
+    expect(originAt(clone, ['render', 'template'])).toEqual(originAt(library, ['aid', 'type']));
+  });
+
+  test('a partial name override preserves the inherited full-name origin', () => {
+    const library = authored('id: Hero\nname:\n  display: Hero\n  full: Hero Vale', 'library.yaml');
+    const local = authored('import: Hero\nname:\n  display: Local', 'project.yaml');
+    const item = resolveItem(local, new Map([['hero', library]]), []);
+    expect(item.name).toEqual({ display: 'Local', full: 'Hero Vale' });
+    expect(originAt(item, ['name', 'display'])).toEqual(originAt(local, ['name', 'display']));
+    expect(originAt(item, ['name', 'full'])).toEqual(originAt(library, ['name', 'full']));
+  });
+
+  test('an empty name mapping derives its normalized name from the id', () => {
+    const source = authored('id: Hero\nname: {display: ""}', 'item.yaml');
+    const item = resolveItem(source, new Map(), []);
+    expect(item.name).toEqual({ display: 'Hero', full: 'Hero' });
+    expect(originAt(item, ['name', 'full'])).toEqual(originAt(source, ['id']));
+  });
+});
 
 describe('applyFieldOp', () => {
   test('replace: returns new value', () => {
@@ -212,7 +316,7 @@ describe('collectVariantDeltas', () => {
     const onWarn = jest.fn();
     const deltas = collectVariantDeltas(canonItem, 'human/peasant', onWarn);
     expect(deltas).toHaveLength(1);
-    expect(onWarn).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('is not defined in the variant tree'));
+    expect(onWarn).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('is not defined in the variant tree'), expect.any(Object));
   });
 
   test('an unknown segment is silent when no reporter is supplied', () => {

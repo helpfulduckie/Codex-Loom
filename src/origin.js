@@ -52,14 +52,48 @@ function nearestOrigin(value, ...parts) {
 
 function copyOrigins(source, target) {
   const index = getOrigins(source);
-  return index ? attachOrigins(target, createOriginIndex(Object.values(index))) : target;
+  return index ? attachOrigins(target, overlayOriginIndexes(null, index)) : target;
 }
 
 function overlayOriginIndexes(base, overlay) {
-  return createOriginIndex([...Object.values(base || {}), ...Object.values(overlay || {})]);
+  const index = Object.create(null);
+  for (const [key, record] of Object.entries({ ...base, ...overlay })) {
+    index[key] = { ...record, path: record.path.slice() };
+  }
+  return index;
+}
+
+// Index keys follow runtime paths; records keep the original authored YAML paths.
+function transferOrigins(source, target, sourcePath = [], targetPath = [], { replace = true, descendants = true } = {}) {
+  const sourceIndex = getOrigins(source);
+  const index = overlayOriginIndexes(null, getOrigins(target));
+  const from = pathKey(sourcePath);
+  const to = pathKey(targetPath);
+  const under = (key, prefix) => prefix === '' || key === prefix || key.startsWith(prefix + PATH_SEP);
+  if (replace) {
+    for (const key of Object.keys(index)) if (under(key, to)) delete index[key];
+  }
+  const root = nearestOrigin(source, sourcePath);
+  if (root) index[to] = root;
+  if (descendants) {
+    for (const [key, record] of Object.entries(sourceIndex || {})) {
+      if (!under(key, from)) continue;
+      const suffix = key === from ? '' : (from ? key.slice(from.length + 1) : key);
+      index[to && suffix ? to + PATH_SEP + suffix : to || suffix] = { ...record, path: record.path.slice() };
+    }
+  }
+  if (sourceIndex || getOrigins(target)) attachOrigins(target, index);
+  return target;
+}
+
+function originLocation(value, parts = [], fallback = {}) {
+  const origin = nearestOrigin(value, parts);
+  if (!origin) return value && value._source ? { ...fallback, file: value._source } : { ...fallback };
+  const { file, line, col, ...context } = fallback;
+  return { ...context, ...origin };
 }
 
 module.exports = {
   createOriginIndex, attachOrigins, getOrigins, originAt, nearestOrigin,
-  copyOrigins, overlayOriginIndexes,
+  copyOrigins, overlayOriginIndexes, transferOrigins, originLocation,
 };

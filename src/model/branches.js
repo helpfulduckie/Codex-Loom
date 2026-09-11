@@ -3,19 +3,32 @@
 
 const { deepClone, findKey } = require('../util');
 const { CODES } = require('../diag');
+const { originLocation } = require('../origin');
 
-function resolveBranchSpec(spec, branchPath, onWarn = null) {
+function resolveBranchSpec(spec, branchPath, onWarn = null, origins = {}) {
   if (!spec || typeof spec !== 'object') return [];
-  if (onWarn) warnWildcardUnbind(spec, onWarn);
+  if (onWarn) warnWildcardUnbind(spec, onWarn, origins);
 
   const variantNames = [];
-  let activeSpecs = [spec];
+  let activeSpecs = [{ spec, path: origins.path || [] }];
+  const select = (value, path) => {
+    const names = extractApplyList(value);
+    variantNames.push(...names);
+    if (!origins.selections) return;
+    const mapping = value && typeof value === 'object' && !Array.isArray(value);
+    const apply = mapping ? value.apply : value;
+    const prefix = mapping ? [...path, 'apply'] : path;
+    const indices = Array.isArray(apply) ? apply.map((v, i) => typeof v === 'string' && v ? i : null).filter(i => i !== null) : [];
+    names.forEach((name, i) => origins.selections.push({ name,
+      loc: originLocation(origins.source, Array.isArray(apply) ? [...prefix, String(indices[i])] : prefix),
+    }));
+  };
 
   for (const branch of branchPath) {
     const nextSpecs = [];
     const branchLower = branch.toLowerCase();
 
-    for (const currentSpec of activeSpecs) {
+    for (const { spec: currentSpec, path } of activeSpecs) {
       if (!currentSpec || typeof currentSpec !== 'object') continue;
 
       const exactKey = Object.keys(currentSpec).find(k => k !== '*' && k !== '_' && k.toLowerCase() === branchLower);
@@ -28,16 +41,16 @@ function resolveBranchSpec(spec, branchPath, onWarn = null) {
 
       if ('*' in currentSpec && currentSpec['*'] !== null) {
         const wildcardVal = currentSpec['*'];
-        variantNames.push(...extractApplyList(wildcardVal));
+        select(wildcardVal, [...path, '*']);
         const wildcardSub = extractSubBranches(wildcardVal);
-        if (wildcardSub) nextSpecs.push(wildcardSub);
+        if (wildcardSub) nextSpecs.push({ spec: wildcardSub, path: [...path, '*', 'branches'] });
       }
 
       if (exactKey !== undefined) {
         const exactVal = currentSpec[exactKey];
-        variantNames.push(...extractApplyList(exactVal));
+        select(exactVal, [...path, exactKey]);
         const exactSub = extractSubBranches(exactVal);
-        if (exactSub) nextSpecs.push(exactSub);
+        if (exactSub) nextSpecs.push({ spec: exactSub, path: [...path, exactKey, 'branches'] });
       }
 
       if (exactKey === undefined && '_' in currentSpec) {
@@ -45,9 +58,9 @@ function resolveBranchSpec(spec, branchPath, onWarn = null) {
         if (fallbackVal === null || fallbackVal === undefined) {
           return null;
         }
-        variantNames.push(...extractApplyList(fallbackVal));
+        select(fallbackVal, [...path, '_']);
         const fallbackSub = extractSubBranches(fallbackVal);
-        if (fallbackSub) nextSpecs.push(fallbackSub);
+        if (fallbackSub) nextSpecs.push({ spec: fallbackSub, path: [...path, '_', 'branches'] });
       }
     }
 
@@ -59,23 +72,26 @@ function resolveBranchSpec(spec, branchPath, onWarn = null) {
 
 const WARNED_WILDCARD_UNBIND = new WeakSet();
 
-function hasWildcardUnbind(map) {
+function hasWildcardUnbind(map, prefix = []) {
   if (!map || typeof map !== 'object' || Array.isArray(map)) return false;
   for (const [key, val] of Object.entries(map)) {
-    if (key === '*' && (val === null || val === undefined)) return true;
-    if (val && typeof val === 'object' && !Array.isArray(val) && hasWildcardUnbind(val.branches)) {
-      return true;
+    if (key === '*' && (val === null || val === undefined)) return [...prefix, key];
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      const nested = hasWildcardUnbind(val.branches, [...prefix, key, 'branches']);
+      if (nested) return nested;
     }
   }
   return false;
 }
 
-function warnWildcardUnbind(spec, onWarn) {
-  if (WARNED_WILDCARD_UNBIND.has(spec) || !hasWildcardUnbind(spec)) return;
+function warnWildcardUnbind(spec, onWarn, origins) {
+  const path = hasWildcardUnbind(spec, origins.path || []);
+  if (WARNED_WILDCARD_UNBIND.has(spec) || !path) return;
   WARNED_WILDCARD_UNBIND.add(spec);
   onWarn(CODES.BRANCH_WILDCARD_UNBIND,
     "branch spec maps '*' to ~. The compiler skips that null wildcard, so the item stays "
-    + 'included everywhere. Use \'_: ~\' as the catch-all to exclude branches you did not name.');
+    + 'included everywhere. Use \'_: ~\' as the catch-all to exclude branches you did not name.',
+    origins.source ? originLocation(origins.source, path) : undefined);
 }
 
 function extractApplyList(val) {

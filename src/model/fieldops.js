@@ -6,13 +6,38 @@ const {
   ITEM_TOP_LEVEL_FIELDS, normalizeNotesKey,
 } = require('../util');
 const { CODES } = require('../diag');
+const { transferOrigins, copyOrigins, originLocation } = require('../origin');
 
 function applyFieldOp(current, op, ctx = null) {
   const { value, changed, targeted } = applyOp(current, op, ctx);
   if (ctx && ctx.onWarn && typeof op === 'string' && targeted && !changed) {
-    ctx.onWarn(CODES.FIELD_OP_NOOP, standaloneNoopMessage(ctx.label, op));
+    ctx.onWarn(CODES.FIELD_OP_NOOP, standaloneNoopMessage(ctx.label, op), operationLocation(ctx));
   }
+  if (ctx && ctx.target && ctx.source) trackOrigins(current, op, ctx);
   return value;
+}
+
+function operationLocation(ctx) {
+  return ctx && ctx.source ? originLocation(ctx.source, ctx.sourcePath) : undefined;
+}
+
+function trackOrigins(current, op, ctx) {
+  const mapping = op !== null && typeof op === 'object' && !Array.isArray(op);
+  transferOrigins(ctx.source, ctx.target, ctx.sourcePath, ctx.targetPath,
+    { replace: !mapping, descendants: !mapping && !isOperationChain(op) });
+  if (!mapping) return;
+  for (const [key, value] of Object.entries(op)) {
+    const actual = current && typeof current === 'object' ? findKey(current, key) : null;
+    trackOrigins(actual === null ? undefined : current[actual], value, {
+      ...ctx, sourcePath: [...ctx.sourcePath, key], targetPath: [...ctx.targetPath, actual || key],
+    });
+  }
+}
+
+function isOperationChain(op) {
+  return Array.isArray(op) && (op.length === 0 || op.every(
+    el => typeof el === 'string' && /^\+\{|^-\{|^\/\{/.test(el.trim())
+  ));
 }
 
 const APPEND_RE = /^\+\{([\s\S]*)\}$/;
@@ -21,9 +46,7 @@ const SWAP_RE = /^\/\{([\s\S]*?)\}\/\{([\s\S]*?)\}$/;
 
 function applyOp(current, op, ctx) {
   if (Array.isArray(op)) {
-    const isOpsArray = op.length === 0 || op.every(
-      el => typeof el === 'string' && /^\+\{|^-\{|^\/\{/.test(el.trim())
-    );
+    const isOpsArray = isOperationChain(op);
     if (!isOpsArray) return { value: op, changed: true, targeted: false };
 
     let value = current;
@@ -37,7 +60,7 @@ function applyOp(current, op, ctx) {
       targeted = targeted || r.targeted;
     }
     if (ctx && ctx.onWarn && op.length > 0 && targeted && !changed) {
-      ctx.onWarn(CODES.FIELD_OP_NOOP, chainNoopMessage(ctx.label, op));
+      ctx.onWarn(CODES.FIELD_OP_NOOP, chainNoopMessage(ctx.label, op), operationLocation(ctx));
     }
     return { value, changed, targeted };
   }
@@ -54,12 +77,13 @@ function applyOp(current, op, ctx) {
         changed = true;
         continue;
       }
-      const childCtx = ctx ? { ...ctx, label: joinLabel(ctx.label, subKey) } : ctx;
+      const childCtx = ctx ? { ...ctx, label: joinLabel(ctx.label, subKey),
+        sourcePath: [...(ctx.sourcePath || []), subKey] } : ctx;
       const r = applyOp(currentSub, subOp, childCtx);
       changed = changed || r.changed;
       targeted = targeted || r.targeted;
       if (childCtx && childCtx.onWarn && typeof subOp === 'string' && r.targeted && !r.changed) {
-        childCtx.onWarn(CODES.FIELD_OP_NOOP, standaloneNoopMessage(childCtx.label, subOp));
+        childCtx.onWarn(CODES.FIELD_OP_NOOP, standaloneNoopMessage(childCtx.label, subOp), operationLocation(childCtx));
       }
       if (r.value === '__DELETE__') {
         if (actualKey !== null) delete result[actualKey];
@@ -172,14 +196,18 @@ function applyFieldsDelta(item, delta, onWarn) {
   const labelBase = item.id
     || (typeof item.name === 'string' ? item.name : (item.name && item.name.full))
     || '(unknown)';
-  const opCtx = onWarn ? (field) => ({ onWarn, label: joinLabel(labelBase, field) }) : () => null;
+  const opCtx = (field, sourceKey, targetPath) => ({
+    onWarn, label: joinLabel(labelBase, field), source: delta, sourcePath: [sourceKey],
+    target: item, targetPath,
+  });
 
   const deltaAliasKeys = Object.keys(delta).filter(k => VAR_ALIASES.has(k.toLowerCase()));
   if (deltaAliasKeys.length > 1) {
     const itemId = item.id || (typeof item.name === 'string' ? item.name : '(unknown)');
     if (onWarn) {
       onWarn(CODES.VARIANT_DELTA_VAR_ALIASES,
-        `item "${itemId}" variant delta declares multiple variable-block aliases (${deltaAliasKeys.map(k => `"${k}"`).join(', ')}). They merge with later fields winning; keep one alias.`);
+        `item "${itemId}" variant delta declares multiple variable-block aliases (${deltaAliasKeys.map(k => `"${k}"`).join(', ')}). They merge with later fields winning; keep one alias.`,
+        originLocation(delta, [deltaAliasKeys[deltaAliasKeys.length - 1]]));
     }
   }
 
@@ -193,7 +221,7 @@ function applyFieldsDelta(item, delta, onWarn) {
 
     if (isTopLevel) {
       const currentVal = getCI(item, normalizedKey);
-      const newVal = applyFieldOp(currentVal, op, opCtx(normalizedKey));
+      const newVal = applyFieldOp(currentVal, op, opCtx(normalizedKey, key, [findKey(item, normalizedKey) || normalizedKey]));
       if (newVal === '__DELETE__') {
         deleteCI(item, normalizedKey);
       } else {
@@ -201,12 +229,12 @@ function applyFieldsDelta(item, delta, onWarn) {
       }
     } else if (keyLower === 'body') {
       if (!item.body) item.body = {};
-      const newVal = applyFieldOp(item.body, op, onWarn ? { onWarn, label: labelBase } : null);
+      const newVal = applyFieldOp(item.body, op, opCtx('', key, ['body']));
       if (newVal !== '__DELETE__') item.body = newVal;
     } else {
       if (!item.body) item.body = {};
       const currentVal = getCI(item.body, key);
-      const newVal = applyFieldOp(currentVal, op, opCtx(key));
+      const newVal = applyFieldOp(currentVal, op, opCtx(key, key, ['body', findKey(item.body, key) || key]));
       if (newVal === '__DELETE__') {
         deleteCI(item.body, key);
       } else {
@@ -221,7 +249,7 @@ function applyDelta(item, delta, onWarn) {
   for (const [key, value] of Object.entries(delta)) {
     const keyLower = key.toLowerCase();
     if (['variants', 'importvariants', '_source'].includes(keyLower)) continue;
-    applyFieldsDelta(item, { [key]: value }, onWarn);
+    applyFieldsDelta(item, copyOrigins(delta, { [key]: value }), onWarn);
   }
 }
 

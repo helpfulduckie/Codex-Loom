@@ -23,6 +23,17 @@ const {
   reportUnusedPlaceholders, collectDuplicateQuestions, reportDuplicateQuestions, FILENAME,
 } = require('../../src/emit/placeholders');
 const { CODES, Diagnostics } = require('../../src/diag');
+const { parseYaml } = require('../../src/loader/yaml');
+const { attachOrigins } = require('../../src/origin');
+
+test('undeclared placeholders identify the item field that contains the token', () => {
+  const { value, sourceMap } = parseYaml('body:\n  detail:\n    - "%missing%"', 'item.yaml');
+  const item = attachOrigins(value, sourceMap.exportOrigins());
+  const diagnostics = new Diagnostics();
+  checkUndeclaredPlaceholders('rendered %missing%', {}, { diagnostics, item, where: 'body', branch: 'main' });
+  expect(diagnostics.errors[0]).toMatchObject({ file: 'item.yaml', line: 3, col: 7, branch: 'main' });
+  expect(diagnostics.errors[0].format()).toContain('item.yaml:3:7 (branch main)');
+});
 const { withTmpDir } = require('../helpers/project');
 
 describe('expandQuestions', () => {

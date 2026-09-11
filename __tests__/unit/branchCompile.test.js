@@ -3,10 +3,88 @@
 const path = require('path');
 const fs = require('fs');
 const { buildCompileContext, resolveBranchItems } = require('../../src/branchCompile');
-const { buildRegistry } = require('../../src/loader/registry');
+const { buildRegistry, buildCanonRegistry, loadItemsFromDir, resolveIncludes } = require('../../src/loader/registry');
 const { Diagnostics } = require('../../src/diag');
-const { attachOrigins, createOriginIndex } = require('../../src/origin');
-const { withTmpDir } = require('../helpers/project');
+const { attachOrigins, createOriginIndex, originAt } = require('../../src/origin');
+const { withTmpDir, writeTree } = require('../helpers/project');
+const { resolveCrossItemRenderFunctions } = require('../../src/crossItem');
+const { parseYaml } = require('../../src/loader/yaml');
+
+test('cross-item cycles retain exact dependency fields and related sources', () => {
+  const items = ['A', 'B'].map((id, i) => {
+    const { value, sourceMap } = parseYaml(`id: ${id}\nbody:\n  ref:\n    - '{join(", ", $${i === 0 ? 'B' : 'A'}.body.ref)}'`, `${id}.yaml`);
+    return attachOrigins(value, sourceMap.exportOrigins());
+  });
+  const diagnostics = new Diagnostics();
+  resolveCrossItemRenderFunctions(items, new Map(items.map(item => [item.id.toLowerCase(), item])), diagnostics, { branch: 'main' });
+  const finding = diagnostics.errors[0];
+  expect(finding).toMatchObject({ file: 'B.yaml', line: 4, col: 7, branch: 'main' });
+  expect(finding.related[0]).toMatchObject({ file: 'A.yaml', line: 4, col: 7 });
+  expect(finding.message).toContain('"B".ref → "A"');
+});
+
+describe('item diagnostics retain loader origins', () => {
+  test('programmatic items without an origin index keep their file-only warning fallback', () => {
+    const diagnostics = new Diagnostics();
+    resolveBranchItems([{ id: 'Hero', _source: 'item.yaml', body: { text: 'original' },
+      aid: { type: 'Character' }, branches: { main: 'local' }, variants: { local: { text: '-{absent}' } },
+    }], new Map(), ['main'], {}, diagnostics);
+    expect(diagnostics.all.find(d => d.code === 'CL0328')).toMatchObject({ file: 'item.yaml', line: null, branch: 'main' });
+  });
+
+  function loaded(project, library = '- id: Hero\n  name: Hero\n  aid: {type: Character}\n  body: {text: inherited}') {
+    const dir = writeTree(withTmpDir(), { 'library/items.yaml': library, 'project/items.yaml': project });
+    const diagnostics = new Diagnostics();
+    const registry = buildCanonRegistry(new Map([['canon', path.join(dir, 'library')]]), { diagnostics });
+    const defs = loadItemsFromDir(path.join(dir, 'project'), { diagnostics });
+    return { dir, diagnostics, registry, defs };
+  }
+
+  test('library registry stamping and variable aliases preserve inherited sibling locations', () => {
+    const state = loaded('- import: Hero\n  variables: {local: quiet}',
+      '- id: Hero\n  name: Hero\n  aid: {type: Character}\n  vars: {inherited: steady}\n  body: {text: inherited}');
+    const [item] = resolveBranchItems(state.defs, state.registry, ['main'], {}, state.diagnostics);
+    expect(originAt(item, ['body', 'text'])).toMatchObject({ file: path.join(state.dir, 'library/items.yaml'), line: 5 });
+    expect(originAt(item, ['v', 'inherited'])).toMatchObject({ path: ['vars', 'inherited'], line: 4 });
+    expect(originAt(item, ['v', 'local'])).toMatchObject({ file: path.join(state.dir, 'project/items.yaml'), path: ['variables', 'local'], line: 2 });
+  });
+
+  test('duplicate imports point to the rejected import and the earlier claim, with a branch', () => {
+    const state = loaded('- import: Hero\n- import: Hero');
+    resolveBranchItems(state.defs, state.registry, ['main'], {}, state.diagnostics);
+    const finding = state.diagnostics.errors.find(d => d.code === 'CL0325');
+    expect(finding).toMatchObject({ file: path.join(state.dir, 'project/items.yaml'), line: 2, col: 3, branch: 'main' });
+    expect(finding.related).toEqual([{ label: 'first definition', file: finding.file, line: 1, col: 3 }]);
+  });
+
+  test('registry conflicts retain both authored identity positions', () => {
+    const state = loaded('- id: Copy\n  name: First\n- id: Copy\n  name: Second');
+    buildRegistry(state.defs, 'project', { diagnostics: state.diagnostics });
+    const finding = state.diagnostics.errors.find(d => d.related.length);
+    expect(finding).toMatchObject({ line: 3, col: 3 });
+    expect(finding.related[0]).toMatchObject({ line: 1, col: 3 });
+  });
+
+  test('nested branch selection and operation no-ops identify the action on that branch', () => {
+    const state = loaded('- import: Hero\n  branches:\n    main:\n      apply: local\n      branches:\n        child: missing\n  variants:\n    local:\n      body:\n        text: -{absent}');
+    resolveBranchItems(state.defs, state.registry, ['main', 'child'], {}, state.diagnostics);
+    const selector = state.diagnostics.all.find(d => d.code === 'CL0321');
+    const operation = state.diagnostics.all.find(d => d.code === 'CL0328');
+    expect(selector).toMatchObject({ line: 6, col: 9, branch: 'main/child' });
+    expect(operation).toMatchObject({ line: 10, col: 9, branch: 'main/child' });
+  });
+
+  test('include dispatch belongs to the including file while item fields stay in the included file', () => {
+    const state = loaded('- include: ../library/items.yaml\n  branches:\n    main: missing\n    "*": null');
+    const included = resolveIncludes(state.defs, state.registry, { _base: path.join(state.dir, 'project') }, { diagnostics: state.diagnostics });
+    const [item] = resolveBranchItems(included, state.registry, ['main'], {}, state.diagnostics);
+    expect(originAt(item, ['body', 'text'])).toMatchObject({ file: path.join(state.dir, 'library/items.yaml'), line: 4 });
+    const selector = state.diagnostics.all.find(d => d.code === 'CL0326');
+    expect(selector).toMatchObject({ file: path.join(state.dir, 'project/items.yaml'), line: 3, branch: 'main' });
+    const wildcard = state.diagnostics.all.find(d => /null wildcard/.test(d.message));
+    expect(wildcard).toMatchObject({ file: path.join(state.dir, 'project/items.yaml'), line: 4, branch: 'main' });
+  });
+});
 
 // ── buildCompileContext ───────────────────────────────────────────────────────
 

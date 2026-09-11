@@ -14,6 +14,19 @@
  */
 
 const { buildFieldAudit, readablePathsFor, bodyLeafPaths } = require('../../src/render/field-audit');
+const { parseYaml } = require('../../src/loader/yaml');
+const { attachOrigins } = require('../../src/origin');
+const { Diagnostics } = require('../../src/diag');
+
+test('unread fields retain an exact authored key, including literal dots, and branch context', () => {
+  const { value, sourceMap } = parseYaml('id: Hero\nbody:\n  shown: text\n  literal.dot: unread', 'item.yaml');
+  const item = attachOrigins(value, sourceMap.exportOrigins());
+  const audit = buildFieldAudit({ fieldTable: { fields: { shown: {} }, templates: { Character: ['shown'] } } });
+  audit.collectForItem(item, ['shown'], { branch: 'main' });
+  const diagnostics = new Diagnostics();
+  audit.finish(diagnostics);
+  expect(diagnostics.all.find(d => d.code === 'CL0426')).toMatchObject({ file: 'item.yaml', line: 4, col: 3, branch: 'main' });
+});
 
 /** Minimal diagnostics sink — records `warn(code, message)` calls. */
 function sink() {

@@ -20,6 +20,17 @@ const path = require('path');
 const fs = require('fs');
 const { compileProject, formatAll } = require('../helpers/project');
 
+test('an item disabled by a variant points at that storyCard override on the affected branch', () => {
+  const result = compileProject({
+    'compile.yaml': 'version: 4\nstructure:\n  input:\n    items: [./Codex]\n    templates: [./templates]\n  output: ./output\nbranches:\n  main: {}',
+    'templates/Character.template': '{$body.text}',
+    'Codex/items.yaml': '- id: Hero\n  name: Hero\n  aid: {type: Character}\n  body: {text: body}\n  branches: {main: hidden}\n  variants:\n    hidden:\n      render:\n        storyCard: false',
+  });
+  const finding = result.diagnostics.errors.find(d => d.code === 'CL0610');
+  expect(finding).toMatchObject({ file: path.join(result.tmpDir, 'Codex/items.yaml'), line: 9, col: 9, branch: 'main' });
+  expect(finding.format()).toContain('items.yaml:9:9 (branch main)');
+});
+
 /**
  * Every diagnostic carrying `code`, each as one string.
  *

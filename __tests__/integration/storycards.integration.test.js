@@ -21,6 +21,21 @@ const { Diagnostics } = require('../../src/diag');
 const { scanStoryCardStructure } = require('../../src/lint');
 const { compileProject } = require('../helpers/project');
 
+test.each(['Character', 'Location'])('card collisions retain both winning titles across %s imports', (secondType) => {
+  const result = compileProject({
+    'compile.yaml': 'version: 4\nstructure:\n  input:\n    items: [./Codex]\n    library: {canon: ./library}\n    templates: [./templates]\n  output: ./output\nbranches:\n  main: {}',
+    'library/items.yaml': '- id: First\n  name: First\n  aid: {title: Shared, type: Character}\n  body: {text: first}\n- id: Second\n  name: Second\n  aid: {title: Different, type: Character}\n  body: {text: second}',
+    'Codex/items.yaml': `- id: CopyOne\n  import: First\n- id: CopyTwo\n  import: Second\n  aid:\n    title: Shared\n    type: ${secondType}`,
+    'templates/Character.template': '{$body.text}',
+    'templates/Location.template': '{$body.text}',
+  });
+  const finding = result.diagnostics.errors.find(d => d.code === 'CL0622');
+  expect(finding).toMatchObject({ file: path.join(result.tmpDir, 'Codex/items.yaml'), line: 6, col: 5, branch: 'main' });
+  expect(finding.related).toEqual([{ label: 'first card', file: path.join(result.tmpDir, 'library/items.yaml'), line: 3, col: 9 }]);
+  expect(finding.format()).toContain('items.yaml:6:5 (branch main)');
+  expect(finding.format()).toContain('Related (first card):');
+});
+
 const codes = (d, code) => d.all.filter((x) => x.code === code);
 const cardFile = (tmpDir, type, ...branch) => {
   let p = path.join(tmpDir, 'output');

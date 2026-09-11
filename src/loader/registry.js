@@ -6,7 +6,7 @@ const path = require('path');
 
 const { findFiles, deepClone, resolveVariables, VAR_ALIASES, YAML_SUFFIXES, RESERVED_LIBRARY_BASENAMES } = require('../util');
 const { loadYamlDocument, YamlLoadError } = require('./yaml');
-const { attachOrigins } = require('../origin');
+const { attachOrigins, copyOrigins, transferOrigins, originLocation } = require('../origin');
 const { validate } = require('../schema');
 const { ITEM_SCHEMA } = require('./schema');
 const { CODES } = require('../diag');
@@ -37,7 +37,8 @@ function normalizeItemVarField(entry, onWarn) {
     onWarn(
       CODES.MULTIPLE_VAR_ALIASES,
       `Item "${id}" has multiple variable-block aliases (${aliasKeys.map((k) => `"${k}"`).join(', ')}). `
-      + 'Merging — subfield conflicts resolve last-writer-wins.'
+      + 'Merging — subfield conflicts resolve last-writer-wins.',
+      originLocation(entry, [aliasKeys[aliasKeys.length - 1]])
     );
   }
 
@@ -54,6 +55,13 @@ function normalizeItemVarField(entry, onWarn) {
     out[key] = value;
   }
   out.v = merged;
+  copyOrigins(entry, out);
+  for (const key of aliasKeys) {
+    transferOrigins(entry, out, [key], ['v'], { replace: false, descendants: false });
+    for (const sub of Object.keys(entry[key] || {})) {
+      transferOrigins(entry, out, [key, sub], ['v', sub]);
+    }
+  }
   return out;
 }
 
@@ -115,8 +123,9 @@ function loadItemsFromDir(dirs, options = {}) {
           diagnostics.error(CODES.ID_CONTAINS_COLON, message, { file });
         }
 
-        const loaded = { ...normalizeItemVarField(entry, (code, message) => warn(code, message)), _source: file };
-        attachOrigins(loaded, sourceMap.exportOrigins(at));
+        attachOrigins(entry, sourceMap.exportOrigins(at));
+        const normalized = normalizeItemVarField(entry, warn);
+        const loaded = copyOrigins(normalized, { ...normalized, _source: file });
         items.push(loaded);
       });
     }
@@ -131,15 +140,19 @@ function buildRegistry(items, context, { diagnostics } = {}) {
     const id = (item.id || (typeof item.name === 'string' ? item.name : null) || '').toLowerCase();
     if (!id) {
       const message = `Item in ${context} is missing both id and name fields (source: ${item._source}), so it cannot enter the registry; add id or name.`;
-      diagnostics.error(CODES.ITEM_WITHOUT_IDENTITY, message, { file: item._source });
+      diagnostics.error(CODES.ITEM_WITHOUT_IDENTITY, message, originLocation(item));
       continue;
     }
     if (registry.has(id)) {
       const message = `Duplicate item ID "${id}" in ${context}; the later definition is skipped. Sources:\n  ${registry.get(id)._source}\n  ${item._source}`;
-      diagnostics.error(CODES.DUPLICATE_ITEM_ID, message, { file: item._source });
+      diagnostics.error(CODES.DUPLICATE_ITEM_ID, message, originLocation(item, [item.id ? 'id' : 'name']), {
+        related: [{ label: 'first definition', ...originLocation(registry.get(id), ['id']) }],
+      });
       continue; // first definition wins — the newcomer is skipped
     }
-    registry.set(id, { ...item, id: item.id || item.name });
+    const registered = copyOrigins(item, { ...item, id: item.id || item.name });
+    if (!item.id) transferOrigins(item, registered, ['name'], ['id']);
+    registry.set(id, registered);
   }
   return registry;
 }
@@ -154,7 +167,9 @@ function mergeRegistries(canonRegistry, projectRegistry, { diagnostics } = {}) {
   for (const [id, item] of projectRegistry) {
     if (merged.has(id)) {
       const message = `Item ID "${id}" exists in both a library set and the project; the project definition is skipped and the library item wins. Sources:\n  Library: ${merged.get(id)._source}\n  Project: ${item._source}`;
-      diagnostics.error(CODES.DUPLICATE_ITEM_ID, message, { file: item._source });
+      diagnostics.error(CODES.DUPLICATE_ITEM_ID, message, originLocation(item, ['id']), {
+        related: [{ label: 'library definition', ...originLocation(merged.get(id), ['id']) }],
+      });
       continue; // the library item wins — the project copy is skipped
     }
     merged.set(id, item);
@@ -178,7 +193,7 @@ function buildCanonRegistry(resolvedCanon, options = {}) {
 
     const items = loadItemsFromDir([canonPath], options);
     for (const [id, item] of buildRegistry(items, `library:${name}`, { diagnostics: options.diagnostics })) {
-      const stamped = { ...item, _canonSource: name };
+      const stamped = copyOrigins(item, { ...item, _canonSource: name });
       registry.qualified.set(`${String(name).toLowerCase()}:${id}`, stamped);
       if (!claims.has(id)) claims.set(id, []);
       claims.get(id).push(stamped);
@@ -255,8 +270,14 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
 
       const stamped = { ...item, _source: fullPath };
       attachOrigins(stamped, sourceMap.exportOrigins(Array.isArray(raw) ? [String(index)] : []));
-      if (def.importVariants) stamped._include_variants = def.importVariants;
-      if (def.branches) stamped._include_branch_spec = def.branches;
+      if (def.importVariants) {
+        stamped._include_variants = def.importVariants;
+        transferOrigins(def, stamped, ['importVariants'], ['_include_variants']);
+      }
+      if (def.branches) {
+        stamped._include_branch_spec = def.branches;
+        transferOrigins(def, stamped, ['branches'], ['_include_branch_spec']);
+      }
       included.push(stamped);
       fromThisInclude.push(stamped);
     }
@@ -270,7 +291,7 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
 function reportUnmatchedSelectors(def, items, includePath, diagnostics) {
   if (!def.importVariants || items.length === 0) return;
 
-  for (const vPath of parseVariantsList(def.importVariants)) {
+  for (const [index, vPath] of parseVariantsList(def.importVariants).entries()) {
     const matched = items.filter((item) => {
       const deltas = collectVariantDeltas(item, vPath, null);
       return deltas === null || deltas.length > 0;
@@ -282,7 +303,8 @@ function reportUnmatchedSelectors(def, items, includePath, diagnostics) {
       + `${path.basename(includePath)}. `
       + 'No item defines that variant, so the selector changes nothing; check the spelling '
       + 'or add the variant to an included item.';
-    diagnostics.warn(CODES.SELECTOR_MATCHED_NOTHING, message, { file: def._source });
+    diagnostics.warn(CODES.SELECTOR_MATCHED_NOTHING, message, originLocation(def,
+      Array.isArray(def.importVariants) ? ['importVariants', String(index)] : ['importVariants']));
   }
 }
 

@@ -17,8 +17,8 @@ const {
   renderNotesText, resolveTemplateForMaps, resolveRenderLadder, resolveBodyRender,
 } = require('./templateResolve');
 const { resolveCrossItemRenderFunctions } = require('./crossItem');
-const { busWarner, CODES: DIAG_CODES } = require('./diag');
-const { nearestOrigin } = require('./origin');
+const { busWarner, severityOf, CODES: DIAG_CODES } = require('./diag');
+const { nearestOrigin, originLocation } = require('./origin');
 const { renderCard, cardTitle } = require('./emit/vl');
 const { checkUndeclaredPlaceholders, checkPlaceholderContext } = require('./emit/placeholders');
 const { checkTargetSlot } = require('./slots');
@@ -88,11 +88,14 @@ function reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics) {
 
   const branch = branchPath.join('/') || '(root)';
   for (const [source, items] of groups) {
+    const selections = [];
     const names = resolveBranchSpec(
-      items[0]._include_branch_spec, branchPath, busWarner(diagnostics, { file: source, branch }),
+      items[0]._include_branch_spec, branchPath,
+      (code, message, loc) => diagnostics.add(severityOf(code), code, message, { file: source, ...loc, branch }),
+      { source: items[0], path: ['_include_branch_spec'], selections },
     );
     if (names === null) continue; // the whole include is excluded from this branch
-    for (const name of names) {
+    for (const { name, loc } of selections) {
       const matched = items.filter((def) => {
         const deltas = collectVariantDeltas(def, name, null);
         return deltas === null || deltas.length > 0;
@@ -104,7 +107,7 @@ function reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics) {
         + `matched none of the ${items.length} items included from ${path.basename(source)}. `
         + 'No included item defines that variant, so the dispatch changes nothing; check '
         + 'the spelling or add the variant to an included item.',
-        { file: source },
+        { ...loc, branch },
       );
     }
   }
@@ -112,7 +115,7 @@ function reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics) {
 
 function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagnostics) {
   const resolvedItems = [];
-  const claimedBy = new Map(); // lowercased resolved id → the source file that claimed it
+  const claimedBy = new Map();
 
   reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics);
 
@@ -120,7 +123,9 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagno
   for (const itemDef of allItemDefs) {
     let item;
     try {
-      item = resolveItem(itemDef, registry, branchPath, busWarner(diagnostics, { file: itemDef._source, branch }));
+      item = resolveItem(itemDef, registry, branchPath, (code, message, loc) => {
+        diagnostics.add(severityOf(code), code, message, { ...originLocation(itemDef), ...loc, branch });
+      });
     } catch (err) {
       const label = itemDef.id || itemDef.import || itemDef.name || '?';
       diagnostics.error(
@@ -139,12 +144,13 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagno
       if (claimedBy.has(claimKey)) {
         const rival = claimedBy.get(claimKey);
         const here = itemDef._source ? path.basename(itemDef._source) : null;
-        const elsewhere = rival && rival !== here ? ` (the first is in ${rival})` : '';
+        const elsewhere = rival.file && rival.file !== here ? ` (the first is in ${rival.file})` : '';
         diagnostics.error(
           DIAG_CODES.DUPLICATE_RESOLVED_ID,
           `two item definitions resolve to id "${claimKey}" on this branch${elsewhere}.`,
-          { file: itemDef._source },
+          { ...originLocation(itemDef, [itemDef.id ? 'id' : itemDef.import ? 'import' : 'name']), branch },
           {
+            related: [{ label: 'first definition', ...rival.loc }],
             hint: 'A def carrying `import:` with no `id:` of its own claims the id of the item '
               + 'it imports, so two of them — or one alongside an explicit def of that id — emit '
               + 'the same item twice. Give one of them its own `id:` to make it a copy (§17.4), '
@@ -152,7 +158,10 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagno
           },
         );
       } else {
-        claimedBy.set(claimKey, itemDef._source ? path.basename(itemDef._source) : null);
+        claimedBy.set(claimKey, {
+          file: itemDef._source ? path.basename(itemDef._source) : null,
+          loc: originLocation(itemDef, [itemDef.id ? 'id' : itemDef.import ? 'import' : 'name']),
+        });
       }
     }
 
@@ -168,6 +177,9 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
   const { fieldTable = { templates: {} }, templateFor = {} } = extra;
   const context = itemContext(item, { render: { ...(item.render || {}), wrapper: 'none' } });
   const label = item.id || (typeof item.name === 'string' ? item.name : String(item.name));
+  const ownTemplate = item.render && item.render[target.component] && item.render[target.component].template;
+  const loc = originLocation(item, ownTemplate ? ['render', target.component, 'template'] : ['render', 'template'],
+    { branch: extra.branchLabel });
 
   const type = item.aid && item.aid.type;
   const hit = resolveRenderLadder(item, templates, fieldTable, {
@@ -180,7 +192,7 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
     try {
       if (hit.kind === 'fieldList') {
         if (extra.fieldAudit) {
-          extra.fieldAudit.collectForItem(item, hit.list, { templateFor, refRoot: 'body' });
+          extra.fieldAudit.collectForItem(item, hit.list, { templateFor, refRoot: 'body', branch: extra.branchLabel });
         }
         return renderFieldList(hit.list, fieldTable, context, {
           diagnostics, file: null, name: hit.name, partials, variables,
@@ -192,7 +204,7 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
       diagnostics.error(
         DIAG_CODES.RENDER_FAILED,
       `item "${label}" failed to render into ${target.component}: ${err.message}; fix the reported template or data error, and the item remains unrendered.`,
-        { file: item._source },
+        loc,
       );
       return null;
     }
@@ -207,7 +219,7 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
     DIAG_CODES.TEMPLATE_NOT_FOUND,
     `no template found for item "${label}" rendering into ${target.component}`
     + `${target.slot ? ` slot "${target.slot}"` : ''} (template: ${target.template || 'none'}); add or select the matching template, and the item remains unrendered.`,
-    { file: item._source },
+    loc,
   );
   return null;
 }
@@ -248,13 +260,13 @@ function renderBranchItems(resolvedItems, registry, templates, partials, branchP
     registry, onWarn: busWarner(diagnostics, { branch: branchLabel }), resolvedById,
   });
 
-  resolveCrossItemRenderFunctions(resolvedItems, resolvedById, diagnostics);
+  resolveCrossItemRenderFunctions(resolvedItems, resolvedById, diagnostics, { branch: branchLabel });
 
   const grouped = new Map();
 
   const occupants = new Map();
 
-  const seenNames = new Map(); // name → { type, file }
+  const seenNames = new Map();
   const reportedCollisions = new Set(); // name
 
   for (const item of resolvedItems) {
@@ -299,7 +311,7 @@ function renderTargets(item, placement, itemId, ctx) {
     if (known && !known.slots.has(String(target.slot).toLowerCase())) continue;
     liveTargets++;
     const text = renderPlacementBody(item, target, templates, partials, variables, diagnostics, {
-      fieldTable, templateFor,
+      fieldTable, templateFor, branchLabel,
       fieldAudit: placement.storyCard ? fieldAudit : null,
     });
     if (text === null) continue;
@@ -309,13 +321,15 @@ function renderTargets(item, placement, itemId, ctx) {
         `item "${itemId}" reaches ${target.component} slot "${target.slot}" on branch `
         + `"${branchLabel}" but its body renders to nothing there. Exclude it from the `
         + 'branch with "branches:" if that is what was meant.',
-        { file: item._source },
+        originLocation(item, ['body'], { branch: branchLabel }),
       );
       continue;
     }
     const reported = checkUndeclaredPlaceholders(text, placeholders, {
       diagnostics,
       file: item._source,
+      item,
+      roots: ['body'],
       where: `item "${itemId}" rendering into ${target.component} slot "${target.slot}"`,
       branch: branchLabel,
       usage,
@@ -338,7 +352,7 @@ function renderTargets(item, placement, itemId, ctx) {
       `item "${itemId}" resolves on branch "${branchLabel}" but produces no output there: `
       + 'storyCard is false and no declared target placed it. Exclude it from the branch '
       + 'with "branches:" if that is what was meant.',
-      { file: item._source },
+      originLocation(item, ['render', 'storyCard'], { branch: branchLabel }),
     );
   }
 }
@@ -353,6 +367,7 @@ function renderStoryCard(item, itemId, questions, ctx) {
   checkPlaceholderContext(item.aid && item.aid.type, {
     diagnostics,
     file: item._source,
+    loc: originLocation(item, ['aid', 'type']),
     where: `the type of story card "${itemId}"`,
     branch: branchLabel,
     reason: 'AID does not fill placeholders in a card’s type. It is a category, and '
@@ -360,7 +375,7 @@ function renderStoryCard(item, itemId, questions, ctx) {
       + 'raw text would become part of a path.',
   });
 
-  validateCardType(item, { diagnostics });
+  validateCardType(item, { diagnostics, branch: branchLabel });
 
   const bodyRender = resolveBodyRender(item, templates, fieldTable, templateFor);
   if (!bodyRender) {
@@ -368,13 +383,13 @@ function renderStoryCard(item, itemId, questions, ctx) {
     diagnostics.error(
       DIAG_CODES.TEMPLATE_NOT_FOUND,
       `no template found for item "${itemId}" (type: ${type}); add or select the matching template, and the item remains unrendered.`,
-      { file: item._source },
+      originLocation(item, ['render', 'template'], { branch: branchLabel }),
     );
     return;
   }
 
   if (fieldAudit && bodyRender.kind === 'fieldList') {
-    fieldAudit.collectForItem(item, bodyRender.list, { templateFor, refRoot: 'body' });
+    fieldAudit.collectForItem(item, bodyRender.list, { templateFor, refRoot: 'body', branch: branchLabel });
   }
 
   const context = itemContext(item);
@@ -399,7 +414,7 @@ function renderStoryCard(item, itemId, questions, ctx) {
         `story card "${itemId}" on branch "${branchLabel}" renders an empty body: `
         + `template "${bodyRender.name}" reads no key this item carries. Use `
         + '"kind: reference" if the card is triggers and notes only.',
-        { file: item._source },
+        originLocation(item, ['body'], { branch: branchLabel }),
       );
       return;
     }
@@ -410,20 +425,20 @@ function renderStoryCard(item, itemId, questions, ctx) {
         fieldTable, templateFor,
       }),
       diagnostics,
-      loc: { file: item._source },
+      loc: originLocation(item, [], { branch: branchLabel }),
       questions,
     }).text;
   } catch (err) {
     diagnostics.error(
       DIAG_CODES.RENDER_FAILED,
       `item "${itemId}" failed to render: ${err.message}; fix the reported template or data error, and the item remains unrendered.`,
-      { file: item._source },
+      originLocation(item, ['body'], { branch: branchLabel }),
     );
     return;
   }
 
   const type = cardTypeAudit
-    ? cardTypeAudit.resolve((item.aid && item.aid.type) || 'Uncategorized', { file: item._source })
+    ? cardTypeAudit.resolve((item.aid && item.aid.type) || 'Uncategorized', originLocation(item, ['aid', 'type'], { branch: branchLabel }))
     : (item.aid && item.aid.type) || 'Uncategorized';
 
   checkCardNameCollision(item, type, branchLabel, diagnostics, seenNames, reportedCollisions);
@@ -434,7 +449,7 @@ function renderStoryCard(item, itemId, questions, ctx) {
   checkMechanicalArtifacts(rendered, `item "${itemId}" (${type})`, leakSink);
   checkUndeclaredPlaceholders(rendered, placeholders, {
     diagnostics, file: item._source, where: `story card "${itemId}"`, branch: branchLabel,
-    usage, usagePath,
+    usage, usagePath, item,
   });
   if (!grouped.has(type)) grouped.set(type, []);
   grouped.get(type).push({
@@ -453,16 +468,26 @@ function checkCardNameCollision(item, type, branchLabel, diagnostics, seenNames,
     reportedCollisions.add(cardName);
     const where = existing.type === type
       ? `both as ${type}`
-      : `${existing.type} in ${path.basename(existing.file)} and ${type} in ${path.basename(item._source)}`;
+      : `${existing.type} in ${path.basename(existing.file || '')} and ${type} in ${path.basename(item._source || '')}`;
     diagnostics.error(
       DIAG_CODES.CARD_NAME_COLLISION,
       `story cards named "${cardName}" collide on branch "${branchLabel}" (${where}). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.`,
-      { file: item._source },
+      originLocation(item, cardNamePath(item), { branch: branchLabel }),
+      { related: [{ label: 'first card', ...existing.loc }] },
     );
   }
   if (!existing) {
-    seenNames.set(cardName, { type, file: item._source });
+    seenNames.set(cardName, { type, file: item._source, loc: originLocation(item, cardNamePath(item)) });
   }
+}
+
+function cardNamePath(item) {
+  const candidates = [['aid', 'title'], ...(typeof item.name === 'string' ? [['name']] : [['name', 'full']]),
+    ['name', 'display'], ['id']];
+  return candidates.find(path => {
+    const value = path.reduce((obj, key) => obj == null ? undefined : obj[key], item);
+    return value != null && String(value).trim() !== '';
+  }) || [];
 }
 
 module.exports = {

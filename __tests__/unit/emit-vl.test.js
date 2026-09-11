@@ -20,6 +20,29 @@ const {
 } = require('../../src/emit/vl');
 const { Diagnostics, CODES } = require('../../src/diag');
 const { HAVE_GOLDENS } = require('../helpers/baselineHarness');
+const { parseYaml } = require('../../src/loader/yaml');
+const { attachOrigins } = require('../../src/origin');
+
+test('trigger diagnostics name the offending sequence entry and preserve the branch', () => {
+  const { value, sourceMap } = parseYaml('id: Hero\naid:\n  triggers:\n    - safe\n    - "bad,trigger"\n    - ""', 'triggers.yaml');
+  const item = attachOrigins(value, sourceMap.exportOrigins());
+  const diagnostics = new Diagnostics();
+  renderCard({ item, bodyText: 'body', diagnostics, loc: { branch: 'main' } });
+  expect(diagnostics.all.find(d => d.code === CODES.TRIGGER_CONTAINS_COMMA)).toMatchObject({ file: 'triggers.yaml', line: 5, col: 7, branch: 'main' });
+  expect(diagnostics.all.find(d => d.code === CODES.TRIGGER_EMPTY)).toMatchObject({ file: 'triggers.yaml', line: 6, col: 7, branch: 'main' });
+});
+
+test.each([[2100, 10100, 'CL0712', 'CL0714'], [1900, 9500, 'CL0713', 'CL0715']])(
+  'body and notes limits retain their separate authored origins at lengths %i and %i',
+  (bodyLength, notesLength, bodyCode, notesCode) => {
+    const { value, sourceMap } = parseYaml('id: Hero\nbody: {text: body}\nnotes: note', 'limits.yaml');
+    const item = attachOrigins(value, sourceMap.exportOrigins());
+    const diagnostics = new Diagnostics();
+    renderCard({ item, bodyText: 'x'.repeat(bodyLength), notesText: 'x'.repeat(notesLength), diagnostics, loc: { branch: 'main' } });
+    expect(diagnostics.all.find(d => d.code === bodyCode)).toMatchObject({ file: 'limits.yaml', line: 2, col: 1, branch: 'main' });
+    expect(diagnostics.all.find(d => d.code === notesCode)).toMatchObject({ file: 'limits.yaml', line: 3, col: 1, branch: 'main' });
+  },
+);
 
 const aness = () => ({
   id: 'Aness',

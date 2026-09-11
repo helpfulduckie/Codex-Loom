@@ -26,6 +26,19 @@ const { Diagnostics } = require('../../src/diag');
 const { CODES } = require('../../src/diag');
 const { withTmpDir, writeTree } = require('../helpers/project');
 
+test('branch variant placeholders retain their operation origin and an inherited sibling origin', () => {
+  const { compileProject } = require('../helpers/project');
+  const result = compileProject({
+    'compile.yaml': 'version: 4\nstructure:\n  input:\n    items: [./Codex]\n    library: {canon: ./library}\n    templates: [./templates]\n  output: ./output\nbranches:\n  main: {}',
+    'library/items.yaml': '- id: Hero\n  name: Hero\n  aid: {type: Character}\n  body:\n    changed: original\n    sibling: "%inherited%"',
+    'Codex/items.yaml': '- import: Hero\n  branches: {main: local}\n  variants:\n    local:\n      body:\n        changed: +{%local%}',
+    'templates/Character.template': '{join(" ", $body.changed)} {$body.sibling}',
+  });
+  const findings = result.diagnostics.all.filter(d => d.code === CODES.PLACEHOLDER_UNDECLARED);
+  expect(findings.find(d => d.message.includes('"%local%"'))).toMatchObject({ file: path.join(result.tmpDir, 'Codex/items.yaml'), line: 6, col: 9, branch: 'main' });
+  expect(findings.find(d => d.message.includes('"%inherited%"'))).toMatchObject({ file: path.join(result.tmpDir, 'library/items.yaml'), line: 6, col: 5, branch: 'main' });
+});
+
 const ITEM = [
   '- id: Anchor',
   '  name: Anchor',

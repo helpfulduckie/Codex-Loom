@@ -5,6 +5,7 @@ const { CODES: DIAG_CODES } = require('./diag');
 const { ITEM_CONTEXT_KEYS, normalizeVarKey } = require('./util');
 const { FUNCTION_NAMES } = require('./render/parse');
 const { applyFieldRenderFunctions } = require('./template');
+const { originLocation } = require('./origin');
 
 const ITEM_CONTEXT_KEY_SET = new Set(ITEM_CONTEXT_KEYS);
 
@@ -12,7 +13,7 @@ const RENDER_FN_PREFIXES = FUNCTION_NAMES.map((n) => n + '(');
 
 function scanCrossItemRefs(body, resolvedById, selfId) {
   const refs = [];
-  const scanString = (str, fieldPath) => {
+  const scanString = (str, fieldPath, displayPath = fieldPath) => {
     str.replace(/\{([^{}]+)\}/g, (match, inner) => {
       inner = inner.trim();
       if (!RENDER_FN_PREFIXES.some((prefix) => inner.startsWith(prefix))) return match;
@@ -22,7 +23,7 @@ function scanCrossItemRefs(body, resolvedById, selfId) {
         if (ITEM_CONTEXT_KEY_SET.has(first)) continue;
         if (first === selfId) continue;
         if (!resolvedById.has(first)) continue;
-        refs.push({ target: first, field: fieldPath });
+        refs.push({ target: first, field: displayPath.join('.'), path: fieldPath });
       }
       return match;
     });
@@ -31,19 +32,19 @@ function scanCrossItemRefs(body, resolvedById, selfId) {
     if (!obj || typeof obj !== 'object') return;
     for (const key of Object.keys(obj)) {
       const val = obj[key];
-      const nextPath = fieldPath ? `${fieldPath}.${key}` : key;
+      const nextPath = [...fieldPath, key];
       if (typeof val === 'string') {
         scanString(val, nextPath);
       } else if (Array.isArray(val)) {
-        for (const entry of val) {
-          if (typeof entry === 'string') scanString(entry, nextPath);
+        for (const [index, entry] of val.entries()) {
+          if (typeof entry === 'string') scanString(entry, [...nextPath, String(index)], nextPath);
         }
       } else if (typeof val === 'object' && val !== null) {
         walk(val, nextPath);
       }
     }
   };
-  walk(body, '');
+  walk(body, []);
   return refs;
 }
 
@@ -103,9 +104,10 @@ function topoOrder(graph) {
   return order;
 }
 
-function reportCycle(group, edgeFields, resolvedById, diagnostics) {
+function reportCycle(group, edgeFields, resolvedById, diagnostics, loc) {
   const groupSet = new Set(group);
   const parts = [];
+  const origins = [];
   for (const from of group) {
     for (const to of groupSet) {
       const key = `${from}->${to}`;
@@ -113,18 +115,21 @@ function reportCycle(group, edgeFields, resolvedById, diagnostics) {
       if (!fields) continue;
       const fromItem = resolvedById.get(from);
       const toItem = resolvedById.get(to);
-      for (const field of fields) {
+      for (const [field, fieldPath] of fields) {
         parts.push(`"${fromItem.id}".${field} → "${toItem.id}"`);
+        origins.push(originLocation(fromItem, ['body', ...fieldPath]));
       }
     }
   }
   diagnostics.error(
     DIAG_CODES.CROSS_ITEM_CYCLE,
     `Circular cross-item render dependency: ${parts.join(', ')}; break the reference cycle, and cyclic references remain unresolved.`,
+    { ...origins[0], ...loc },
+    { related: origins.slice(1).map(origin => ({ label: 'cycle dependency', ...origin })) },
   );
 }
 
-function resolveCrossItemRenderFunctions(resolvedItems, resolvedById, diagnostics) {
+function resolveCrossItemRenderFunctions(resolvedItems, resolvedById, diagnostics, loc = {}) {
   const graph = new Map();
   const edgeFields = new Map();
 
@@ -134,18 +139,18 @@ function resolveCrossItemRenderFunctions(resolvedItems, resolvedById, diagnostic
     const deps = graph.get(idLower) || new Set();
     graph.set(idLower, deps);
     if (!item.body) continue;
-    for (const { target, field } of scanCrossItemRefs(item.body, resolvedById, idLower)) {
+    for (const { target, field, path } of scanCrossItemRefs(item.body, resolvedById, idLower)) {
       deps.add(target);
       const key = `${idLower}->${target}`;
-      if (!edgeFields.has(key)) edgeFields.set(key, new Set());
-      edgeFields.get(key).add(field);
+      if (!edgeFields.has(key)) edgeFields.set(key, new Map());
+      if (!edgeFields.get(key).has(field)) edgeFields.get(key).set(field, path);
     }
   }
 
   const cyclic = new Set();
   for (const group of findCycles(graph)) {
     for (const id of group) cyclic.add(id);
-    reportCycle(group, edgeFields, resolvedById, diagnostics);
+    reportCycle(group, edgeFields, resolvedById, diagnostics, loc);
   }
 
   for (const id of topoOrder(graph)) {

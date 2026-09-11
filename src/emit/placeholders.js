@@ -7,6 +7,7 @@ const YAML = require('yaml');
 const { CODES } = require('../diag');
 const { resolveVariables, checkUnexpandedVariables, PLACEHOLDER_RE } = require('../util');
 const { applyTokenPass } = require('../model/pronouns');
+const { originLocation } = require('../origin');
 
 const FILENAME = 'Placeholders.yaml';
 
@@ -36,7 +37,7 @@ function findAllPlaceholders(text) {
   return found.concat(findNativePlaceholders(text));
 }
 
-function checkPlaceholderContext(text, { diagnostics, file, where, branch, severity = 'error', reason } = {}) {
+function checkPlaceholderContext(text, { diagnostics, file, loc, where, branch, severity = 'error', reason } = {}) {
   if (!text || !diagnostics) return [];
   const found = findAllPlaceholders(text);
   if (found.length === 0) return [];
@@ -46,7 +47,7 @@ function checkPlaceholderContext(text, { diagnostics, file, where, branch, sever
     diagnostics[severity === 'warn' ? 'warn' : 'error'](
       severity === 'warn' ? CODES.PLACEHOLDER_IN_TITLE : CODES.PLACEHOLDER_INVALID_CONTEXT,
       `placeholder "${occurrence}" in ${where}${branch ? ` on branch "${branch}"` : ''} — ${reason}`,
-      { file: file == null ? undefined : String(file) },
+      { file: file == null ? undefined : String(file), ...loc, ...(loc ? { branch } : {}) },
     );
   }
   return unique;
@@ -137,7 +138,7 @@ function expandQuestions(table, variables, {
   return expanded;
 }
 
-function checkUndeclaredPlaceholders(text, table, { diagnostics, file, where, branch, skip, usage, usagePath } = {}) {
+function checkUndeclaredPlaceholders(text, table, { diagnostics, file, loc, item, roots = ['body', 'aid', 'notes'], where, branch, skip, usage, usagePath } = {}) {
   if (!text || !diagnostics) return [];
 
   const declared = table || {};
@@ -167,11 +168,29 @@ function checkUndeclaredPlaceholders(text, table, { diagnostics, file, where, br
       `undeclared placeholder "%${name}%" in ${where}${branch ? ` on branch "${branch}"` : ''}`
       + ' — Velvet Lattice substitutes only declared keys, so the AI receives the literal'
       + ` token until you declare or correct "%${name}%".`,
-      { file: file == null ? undefined : String(file) },
+      { file: file == null ? undefined : String(file), ...loc,
+        ...(item ? placeholderOrigin(item, `%${name}%`, roots) : {}), ...((item || loc) ? { branch } : {}) },
       { hint },
     );
   }
   return undeclared;
+}
+
+function placeholderOrigin(item, token, roots) {
+  const visit = (value, path) => {
+    if (typeof value === 'string' && value.includes(token)) return path;
+    if (!value || typeof value !== 'object') return null;
+    for (const [key, child] of Object.entries(value)) {
+      const found = visit(child, [...path, key]);
+      if (found) return found;
+    }
+    return null;
+  };
+  for (const root of roots) {
+    const path = visit(item[root], [root]);
+    if (path) return originLocation(item, path);
+  }
+  return originLocation(item);
 }
 
 function recordUsage(usage, name, usagePath) {
