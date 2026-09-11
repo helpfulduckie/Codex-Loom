@@ -33,10 +33,28 @@ ERROR CL0542 compile.cl.yaml (branch felix/hard)
   role "LI" is bound to "Liesel", which does not resolve on this branch.
 ```
 
-**Template-level positions are imprecise until the render rewrite.** A malformed
-`{join(...)}` can be attributed to its template file but not to a span within it. This is
-a known, bounded limitation of the current render pipeline rather than a defect: precise
-spans need the deferred render rewrite.
+**Template-level positions are real token positions.** The tokenizer tracks line and
+column as it scans, so a malformed `{join(...)}` or an unclosed `{if}`/`{wrapper}` is
+located at its own line in the `.template`/`.partial` file, not merely at the file. (An
+earlier note here called this imprecise until a render rewrite; the tokenizer already
+carried the positions, they were just unverified against a multi-line fixture.)
+
+## Origins
+
+**A diagnostic's location names the best origin the compiler can correctly determine — never a fabricated line.** Four shapes cover every diagnostic in the registry:
+
+- **Exact authored origin (`file:line:col`).** The value that should change has a known YAML key, `.template`/`.partial` token, or config path. This is Decision 4's value-precedence rule: an unmodified imported value keeps its library origin; a local override, selected variant, field operation, or overlay becomes the origin of the paths it actually changes. Most CL03xx (items) and CL06xx (components) findings are exact.
+- **Generated-file location (`file:line` or `file`).** The subject is compiled output — a story card body, an `Opening.md`, a lint scan over already-rendered Markdown — where a line exists in the generated artifact but no single YAML source line applies, because the text was composed from several fields. `src/lint.js`'s standalone `--lint` pass and the `CL043x` leaked-token/artifact checks are this shape by design.
+- **File-only (`file`, no line).** A filesystem or manifest condition (`CL011x` snapshot checks), a value composed across multiple authored sources with no single controlling one (rendered card/notes text passed through `resolveVariables`), or a finding whose subject has no per-entry origin tracked (component `metadata:` values, a `storyCardType` project-level fallback). This is a final disposition, not an unfinished one — Decision 1 refuses to point a file-only finding at "the nearest convenient key" merely to look complete.
+- **Locationless.** A process-wide condition with no single file responsible (none currently reach the registry as pure locationless; every code that could apply to more than one file names at least the log-scoped location it fired from).
+
+**Multi-origin findings carry `related` records, not prose-only secondary locations** (Decision 5). `related` is ordered; the diagnostic's own `file`/`line`/`col` is the primary action — the one rejected, or the one the compiler is currently processing — and each `related` entry carries a short role label (`first definition`, `earlier type`, `Plot Essentials sections`). `Diagnostic.format()` renders both consistently. `CL0325`, `CL0611`, `CL0612`, `CL0622` and `CL0626` are the current related-location codes; a two-sided collision without a controlling side (a `CARD_NAME_COLLISION` raised by a component's grouped story-card entry) is documented as an accepted gap below rather than a fabricated relation.
+
+**Known accepted file-only gaps**, left there because closing them needs new per-entry origin infrastructure the audit judged out of scope for a documentation-and-consumer sweep:
+- Placeholder, limit and `COMPONENT_RENDERS_NOTHING` findings on a *sectioned* component name only the component file — rendered text spans sections and is not attributed to one.
+- `resolveComponentMetadata` variable findings (component frontmatter) — metadata values are not origin-tracked the way `sections:` are.
+- A `CARD_NAME_COLLISION` raised by a component story-card entry relates no item card — grouped card entries carry no origin.
+- An invalid project-level `storyCardType` fallback is located at the component file rather than the config key that set it.
 
 ## Bands
 

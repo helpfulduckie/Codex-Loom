@@ -54,7 +54,7 @@ function checkPlaceholderContext(text, { diagnostics, file, loc, where, branch, 
 }
 
 function expandQuestions(table, variables, {
-  onWarn, file, diagnostics, registry, roles, branchProtagonist, onRoleUsed,
+  onWarn, file, diagnostics, registry, roles, branchProtagonist, onRoleUsed, origin = null,
 } = {}) {
   const keys = Object.keys(table).filter((k) => table[k] !== null && table[k] !== undefined);
 
@@ -83,11 +83,12 @@ function expandQuestions(table, variables, {
       const signature = [...new Set(loop)].sort().join(' ');
       if (!reported.has(signature) && onWarn) {
         reported.add(signature);
+        const at = origin ? originLocation(origin.source, [...origin.path, loop[0]], { file }) : { file };
         onWarn(
           CODES.PLACEHOLDER_CYCLE,
           `placeholders form a reference cycle: ${loop.join(' → ')}; expansion cannot finish `
           + 'until the cycle is broken.',
-          file,
+          at,
         );
       }
       return;
@@ -298,7 +299,7 @@ function writeNodePlaceholders(nodeDir, node, mergedTable, variables, {
   }
 
   const expanded = expandQuestions(mergedTable, variables, {
-    onWarn, file, diagnostics, registry, roles, branchProtagonist, onRoleUsed,
+    onWarn, file, diagnostics, registry, roles, branchProtagonist, onRoleUsed, origin,
   });
 
   collectDuplicateQuestions(expanded, duplicates, usagePath || '');
@@ -316,7 +317,7 @@ function writeNodePlaceholders(nodeDir, node, mergedTable, variables, {
     const where = `the question text for placeholder "${key}"`;
     const loc = origin ? originLocation(origin.source, [...origin.path, key], { file }) : undefined;
     checkUndeclaredPlaceholders(question, mergedTable, { diagnostics, file, loc, where });
-    checkUnexpandedVariables(question, where, { diagnostics, file });
+    checkUnexpandedVariables(question, where, { diagnostics, file, loc });
   }
 
   fs.mkdirSync(nodeDir, { recursive: true });

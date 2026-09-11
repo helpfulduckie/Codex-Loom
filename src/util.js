@@ -252,16 +252,19 @@ function maskFencedRegions(text) {
   return require('./emit/vl').maskFences(text);
 }
 
+// `loc` names the exact authored origin of `text` (a single declared value, e.g. one
+// placeholder question); omit it when `text` is composed from several sources and no
+// single origin applies, and the file-only fallback is correct.
 function reportPattern(text, label, re, code, describe, sink = {}) {
   if (typeof text !== 'string') return false;
-  const { diagnostics, file } = sink;
+  const { diagnostics, file, loc } = sink;
   const seen = new Set();
   re.lastIndex = 0;
   let m;
   while ((m = re.exec(text)) !== null) {
     if (!seen.has(m[0])) {
       seen.add(m[0]);
-      diagnostics.add(severityOf(code), code, `${describe(m[0])} in ${label}`, { file });
+      diagnostics.add(severityOf(code), code, `${describe(m[0])} in ${label}`, { file, ...loc });
     }
     if (m[0].length === 0) re.lastIndex++;
   }

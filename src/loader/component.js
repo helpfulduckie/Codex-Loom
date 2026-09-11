@@ -10,7 +10,7 @@ const { COMPONENT_SCHEMA } = require('./component-schema');
 const { normalizeComponent, mergeSectionRecords, applySectionSelector } = require('../model/component');
 const { resolveVariables } = require('../util');
 const { runExtractor } = require('../extract');
-const { CODES, originWarner } = require('../diag');
+const { CODES, busWarner } = require('../diag');
 const {
   attachOrigins, createOriginIndex, copyOrigins, transferOrigins, originLocation,
 } = require('../origin');
@@ -59,7 +59,7 @@ function loadComponentDocument(spec, options = {}) {
 
   validate(doc, COMPONENT_SCHEMA, { diagnostics, sourceMap, context: `the ${label} component` });
 
-  const onWarn = originWarner(diagnostics, { file: spec });
+  const onWarn = busWarner(diagnostics, { file: spec });
   const document = attachOrigins({}, sourceMap.exportOrigins());
 
   const inherited = resolveImports(doc, spec, {

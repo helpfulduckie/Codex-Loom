@@ -212,6 +212,8 @@ describe('requiresRoles — computed by elimination', () => {
     const refused = diagnostics.all.find((d) => d.code === CODES.LIBRARY_ROLE_SCAN_REFUSED);
     expect(refused).toBeDefined();
     expect(refused.severity).toBe('error');
+    // File-only: the set's source directory, not a fabricated line into an item that failed to validate.
+    expect(refused.file).toBe(path.join(tmpDir, 'main-lib'));
 
     const manifest = JSON.parse(fs.readFileSync(path.join(config._resolvedSnapshot, 'manifest.json'), 'utf8'));
     expect(manifest.library.main).not.toHaveProperty('requiresRoles');
@@ -267,6 +269,8 @@ describe('checkDrift — the compile-time notice', () => {
     const hashMismatch = diagnostics.all.find((d) => d.code === CODES.SNAPSHOT_HASH_MISMATCH);
     expect(hashMismatch).toBeDefined();
     expect(hashMismatch.severity).toBe('error');
+    // File-only: the corrupted frozen file itself, named in the message and now in the location too.
+    expect(hashMismatch.file).toBe(path.join(config._resolvedSnapshot, 'main', 'thing.cl.yaml'));
   });
 
   test('a manifest entry for a config-declared library name that is missing raises CL0113', () => {
@@ -282,5 +286,26 @@ describe('checkDrift — the compile-time notice', () => {
     const missingEntry = diagnostics.all.find((d) => d.code === CODES.SNAPSHOT_MISSING_ENTRY);
     expect(missingEntry).toBeDefined();
     expect(missingEntry.severity).toBe('warn');
+    // File-only: the manifest itself, since the missing entry has no per-item origin to name.
+    expect(missingEntry.file).toBe(manifestPath);
+  });
+
+  test('an extra file under snapshot/<name>/ raises CL0114 at that file, and a deleted snapshot dir raises CL0111 at the directory', () => {
+    const { config } = buildProject();
+    syncLibrary(config);
+    fs.writeFileSync(path.join(config._resolvedSnapshot, 'main', 'extra.cl.yaml'), 'id: Extra\n', 'utf8');
+
+    const untracked = new Diagnostics();
+    checkDrift(config, untracked, NULL_LOG);
+    const fileUntracked = untracked.all.find((d) => d.code === CODES.SNAPSHOT_FILE_UNTRACKED);
+    expect(fileUntracked).toBeDefined();
+    expect(fileUntracked.file).toBe(path.join(config._resolvedSnapshot, 'main', 'extra.cl.yaml'));
+
+    fs.rmSync(path.join(config._resolvedSnapshot, 'main'), { recursive: true, force: true });
+    const dirMissing = new Diagnostics();
+    checkDrift(config, dirMissing, NULL_LOG);
+    const missingDir = dirMissing.all.find((d) => d.code === CODES.SNAPSHOT_DIR_MISSING);
+    expect(missingDir).toBeDefined();
+    expect(missingDir.file).toBe(path.join(config._resolvedSnapshot, 'main'));
   });
 });

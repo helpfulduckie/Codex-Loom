@@ -12,13 +12,33 @@
 
 const fs = require('fs');
 const path = require('path');
-const { Diagnostics } = require('../../src/diag');
-const { loadCompileConfig } = require('../../src/config/load');
+const { Diagnostics, CODES } = require('../../src/diag');
+const { loadCompileConfig, loadManifest } = require('../../src/config/load');
 const { withTmpDir, writeTree } = require('../helpers/project');
 
 let tmpDir;
 
 beforeEach(() => { tmpDir = withTmpDir(); });
+
+describe('loadManifest — unparseable manifest is located at the manifest file', () => {
+  test('invalid JSON', () => {
+    const manifestPath = path.join(tmpDir, 'manifest.json');
+    fs.writeFileSync(manifestPath, '{ not json', 'utf8');
+    const diagnostics = new Diagnostics();
+    expect(loadManifest(manifestPath, diagnostics)).toBeNull();
+    const diag = diagnostics.all.find((d) => d.code === CODES.SNAPSHOT_MANIFEST_UNPARSEABLE);
+    expect(diag.file).toBe(manifestPath);
+  });
+
+  test('wrong shape', () => {
+    const manifestPath = path.join(tmpDir, 'manifest.json');
+    fs.writeFileSync(manifestPath, JSON.stringify({ no: 'version' }), 'utf8');
+    const diagnostics = new Diagnostics();
+    expect(loadManifest(manifestPath, diagnostics)).toBeNull();
+    const diag = diagnostics.all.find((d) => d.code === CODES.SNAPSHOT_MANIFEST_UNPARSEABLE);
+    expect(diag.file).toBe(manifestPath);
+  });
+});
 
 /** A project with one library entry, `main`, already synced into `snapshot/main/`. */
 function buildSyncedProject() {

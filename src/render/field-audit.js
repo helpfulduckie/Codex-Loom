@@ -285,12 +285,13 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
       for (const entry of list) addFromEntry(entry);
     }
     const src = (table._sources && table._sources[0]) || null;
+    const fallback = src == null ? undefined : { file: String(src) };
     for (const name of Object.keys(fields)) {
       if (fields[name] === null || named.has(name.toLowerCase())) continue;
       diagnostics.warn(
         CODES.FIELD_DECLARED_UNUSED,
         `field "${name}" is declared in the field table but no template names it, directly or through a group, so the declaration has no effect; remove it or reference it.`,
-        src == null ? undefined : { file: String(src) },
+        originLocation(table, ['fields', name], fallback),
       );
     }
   }

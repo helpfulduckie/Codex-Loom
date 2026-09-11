@@ -9,6 +9,7 @@ const { entryName } = require('../render/parse');
 const { levenshtein, validate } = require('../schema');
 const { FIELD_TABLE_SCHEMA } = require('./field-table-schema');
 const { CODES } = require('../diag');
+const { attachOrigins, createOriginIndex, originLocation } = require('../origin');
 
 const FIELD_TABLE_BASENAMES = Object.freeze(['fields.cl.yaml', 'fields.cl.yml']);
 
@@ -73,6 +74,7 @@ function foldDocument(doc, file, sourceMap, acc, diagnostics) {
       if (!isPlainObject(decl)) continue;
       checkSourceConflict(decl, `Field "${name}"`, ['fields', name], sourceMap, diagnostics);
       acc.fields[name] = decl; // replace-per-entry (Decision 5), not deep
+      acc._origins.push({ ...sourceMap.nearest(['fields', name]), path: ['fields', name] });
     }
   }
 
@@ -82,6 +84,7 @@ function foldDocument(doc, file, sourceMap, acc, diagnostics) {
       if (members === null) { acc.groups[name] = null; continue; }
       if (!Array.isArray(members)) continue;
       acc.groups[name] = members;
+      acc._origins.push({ ...sourceMap.nearest(['groups', name]), path: ['groups', name] });
     }
   }
 
@@ -91,6 +94,7 @@ function foldDocument(doc, file, sourceMap, acc, diagnostics) {
       if (list === null) { acc.templates[name] = null; continue; }
       if (!Array.isArray(list)) continue;
       acc.templates[name] = list;
+      acc._origins.push({ ...sourceMap.nearest(['templates', name]), path: ['templates', name] });
     }
   }
 }
@@ -106,7 +110,7 @@ function checkReferences(table, diagnostics) {
       if (ref && !knownField(ref)) {
         diagnostics.warn(CODES.FIELD_TABLE_BAD_REF,
           `Group "${name}" names "${ref}", which is not a declared field, so the entry contributes nothing; declare or correct the name.`,
-          { file: table._sources[0] || null });
+          originLocation(table, ['groups', name], { file: table._sources[0] || null }));
       }
     }
   }
@@ -118,7 +122,7 @@ function checkReferences(table, diagnostics) {
       if (ref && !knownField(ref) && !knownGroup(ref)) {
         diagnostics.warn(CODES.FIELD_TABLE_BAD_REF,
           `Template "${name}" names "${ref}", which is not a declared field or group, so the entry contributes nothing; declare or correct the name.`,
-          { file: table._sources[0] || null });
+          originLocation(table, ['templates', name], { file: table._sources[0] || null }));
       }
     }
   }
@@ -127,7 +131,9 @@ function checkReferences(table, diagnostics) {
 function loadFieldTable(dirs, options = {}) {
   if (!Array.isArray(dirs)) dirs = [dirs];
   const { diagnostics } = options;
-  const acc = { fields: {}, groups: {}, templates: {}, _sources: [] };
+  const acc = {
+    fields: {}, groups: {}, templates: {}, _sources: [], _origins: [],
+  };
 
   for (const dir of dirs) {
     for (const file of findFiles(dir, ['.cl.yaml', '.cl.yml'])) {
@@ -160,6 +166,7 @@ function loadFieldTable(dirs, options = {}) {
     }
   }
 
+  attachOrigins(acc, createOriginIndex(acc._origins));
   checkReferences(acc, diagnostics);
   return acc;
 }

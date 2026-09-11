@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const { normalizeComponent, applySectionSelector, slotsForBranch } = require('./model/component');
-const { originWarner, CODES: DIAG_CODES } = require('./diag');
+const { busWarner, CODES: DIAG_CODES } = require('./diag');
 const { copyOrigins, originLocation } = require('./origin');
 const {
   SLOTTED_COMPONENTS, isPassthrough, readPassthrough, renderSectionedComponent,
@@ -100,7 +100,7 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
     const { text: notesText } = renderSectionedComponent(sub, branchPath, filled, {
       defaultHeadingLevel: descriptor.defaultHeadingLevel,
       variables, registry, branchProtagonist, roles, onRoleUsed,
-      onWarn: originWarner(diagnostics, loc), diagnostics, file: loc.file,
+      onWarn: busWarner(diagnostics, loc), diagnostics, file: loc.file,
     });
 
     if (!notesText || notesText.trim() === '') {

@@ -82,6 +82,18 @@ describe('loadPack', () => {
     expect(diag.errors[0].code).toBe(CODES.PACK_MALFORMED);
   });
 
+  test('a malformed or mismatched pack is located at the pack file, not the compile.yaml that references it', () => {
+    writePack('keyname', 'name: realname\nrules: []\n');
+    const loc = { file: path.join(TMP, 'compile.cl.yaml') };
+    const mismatch = new Diagnostics();
+    loadPack('keyname', { source: './keyname.cl.yaml' }, { baseDir: TMP, diagnostics: mismatch, loc });
+    expect(mismatch.errors[0].file).toBe(path.join(TMP, 'keyname.cl.yaml'));
+
+    const missing = new Diagnostics();
+    loadPack('no-such-pack', {}, { baseDir: TMP, diagnostics: missing, loc });
+    expect(missing.errors[0].file).not.toBe(loc.file);
+  });
+
   test('rule id and severity default sanely', () => {
     writePack('defaults', 'name: defaults\nrules:\n  - message: a\n  - id: 7\n    severity: warn\n    message: b\n');
     const pack = loadPack('defaults', { source: './defaults.cl.yaml' }, { baseDir: TMP, diagnostics: new Diagnostics() });

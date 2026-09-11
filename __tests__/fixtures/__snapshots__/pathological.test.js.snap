@@ -9,18 +9,18 @@ WARN CL0630 compile.cl.yaml
   branch "south" resolves no opening: and no adventureDescription:, so Velvet Lattice would start this leaf with an empty prompt. Give the branch an opening:, or one an ancestor passes down.
 WARN CL0631 compile.cl.yaml
   branch "south" resolves no aiInstructions:. Velvet Lattice writes an empty-string AI Instructions on AID's side for it, and an empty string suppresses AID's model-default instructions rather than falling back to them — the leaf plays with none at all. Give the branch an aiInstructions:, or one an ancestor passes down.
-WARN CL0426 Codex/items.cl.yaml (branch north)
+WARN CL0426 Codex/items.cl.yaml:13:5 (branch north)
   body key "strength" on item "Alba" is read by no template this item renders through and no declaration names it — its content is dropped from the compiled card; remove or declare and render the key.
-WARN CL0427 Codex/items.cl.yaml (branch north)
+WARN CL0427 Codex/items.cl.yaml:25:5 (branch north)
   body key "homeland" on item "Cairn" is a declared field in group \`origin\`, which no template this item renders through includes — its content is dropped from the compiled card; include the field in a rendered template or remove it.
-WARN CL0428 templates/fields.cl.yaml
+WARN CL0428 templates/fields.cl.yaml:8:3
   field "deadField" is declared in the field table but no template names it, directly or through a group, so the declaration has no effect; remove it or reference it."
 `;
 
 exports[`pathological fixture a committed manifest that disagrees with the config and the disk 1`] = `
-"WARN CL0113
+"WARN CL0113 snapshot/manifest.json
   Library "alpha" has no entry in manifest.json, so it cannot be checked as frozen; regenerate the snapshot manifest.
-WARN CL0114
+WARN CL0114 snapshot/beta/extra.yaml
   Library "beta": snapshot/beta/extra.yaml has no entry in the manifest, so it is outside the freeze; remove it or regenerate the snapshot.
 WARN CL0630 compile.cl.yaml
   branch "(root)" resolves no opening: and no adventureDescription:, so Velvet Lattice would start this leaf with an empty prompt. Give the branch an opening:, or one an ancestor passes down.
@@ -29,68 +29,73 @@ WARN CL0631 compile.cl.yaml
 `;
 
 exports[`pathological fixture a hand-edited snapshot file aborts the load 1`] = `
-"ERROR CL0115
+"ERROR CL0115 snapshot/main/thing.yaml
   Library "main": snapshot/main/thing.yaml does not match its manifest hash, so the snapshot is corrupted and compilation stops; restore the file or regenerate the snapshot."
 `;
 
 exports[`pathological fixture config schema violations abort the load 1`] = `
-"ERROR CL0201 compile.cl.yaml
+"ERROR CL0201 compile.cl.yaml:25:3
   Unknown key "report" under "structure"; remove it or rename/move it to a supported location, or it is ignored.
   hint: "report" is not recognized, so it is ignored; rename it to "reports".
-ERROR CL0210 compile.cl.yaml
+ERROR CL0210 compile.cl.yaml:30:1
   Unknown key "notesTemplate" at the top level; remove it or rename/move it to a supported location, or it is ignored.
   hint: "notesTemplate" is valid under "render:" — move it there so the compiler reads it; until then, it is ignored here.
-ERROR CL0201 compile.cl.yaml
+ERROR CL0201 compile.cl.yaml:33:1
   Unknown key "placeholder" at the top level; remove it or rename/move it to a supported location, or it is ignored.
   hint: "placeholder" is not recognized, so it is ignored; rename it to "placeholders"."
 `;
 
 exports[`pathological fixture placement invariants and latent placeholder content 1`] = `
-"WARN CL0326 Codex/items.cl.yaml
+"WARN CL0326 Codex/items.cl.yaml:205:26
   importVariants selector "wrm" matched none of the 3 items included from lore.cl.yaml. No item defines that variant, so the selector changes nothing; check the spelling or add the variant to an included item.
-WARN CL0327 Codex/items.cl.yaml (branch open)
+WARN CL0327 Codex/items.cl.yaml:33:5 (branch open)
   branch spec maps '*' to ~. The compiler skips that null wildcard, so the item stays included everywhere. Use '_: ~' as the catch-all to exclude branches you did not name.
-WARN CL0328 Codex/items.cl.yaml (branch open)
+WARN CL0328 Codex/items.cl.yaml:56:7 (branch open)
   field "DriftedOp.Tagline" operation "-{in a controlled bun}" targets "in a controlled bun", which the current value does not contain — it removes and replaces nothing. A \`-{}\` or \`/{}/{}\` that matches nothing is always a mistake: usually the text it was written against has drifted. Check the value, or drop the op.
-ERROR CL0325 Codex/items.cl.yaml (branch open)
+ERROR CL0325 Codex/items.cl.yaml:187:3 (branch open)
   two item definitions resolve to id "anchor" on this branch.
   hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
-ERROR CL0532 Codex/items.cl.yaml (branch open)
+  related (first definition): Codex/items.cl.yaml:8:3
+ERROR CL0532 Codex/items.cl.yaml:71:5 (branch open)
   undeclared placeholder "%ghostName%" in item "Greeter" rendering into plotEssential slot "cast" on branch "open" — Velvet Lattice substitutes only declared keys, so the AI receives the literal token until you declare or correct "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
-ERROR CL0532 Codex/items.cl.yaml (branch open)
+ERROR CL0532 Codex/items.cl.yaml:71:5 (branch open)
   undeclared placeholder "%ghostName%" in story card "Greeter" on branch "open" — Velvet Lattice substitutes only declared keys, so the AI receives the literal token until you declare or correct "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
-ERROR CL0610 Codex/items.cl.yaml (branch open)
+ERROR CL0610 Codex/items.cl.yaml:96:5 (branch open)
   item "Silent" resolves on branch "open" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
-ERROR CL0609 Codex/items.cl.yaml (branch open)
+ERROR CL0609 Codex/items.cl.yaml:105:3 (branch open)
   item "EmptyPlacement" reaches plotEssential slot "party" on branch "open" but its body renders to nothing there. Exclude it from the branch with "branches:" if that is what was meant.
-ERROR CL0609 Codex/items.cl.yaml (branch open)
+ERROR CL0609 Codex/items.cl.yaml:117:3 (branch open)
   story card "EmptyCardBody" on branch "open" renders an empty body: template "EmptyBody" reads no key this item carries. Use "kind: reference" if the card is triggers and notes only.
-ERROR CL0611 Codex/items.cl.yaml (branch open)
+ERROR CL0611 Codex/items.cl.yaml:136:7 (branch open)
   item "Typo" targets slot "casst" in Plot Essentials on branch "open", which declares no such slot. Declared here: cast, party. Correct slot: or declare it.
-ERROR CL0612 Codex/items.cl.yaml (branch open)
+  related (Plot Essentials sections): components/plot-essentials.cl.yaml:4:1
+ERROR CL0612 Codex/items.cl.yaml:149:7 (branch open)
   item "NotASlot" targets "genre" in Plot Essentials, which is a section but not a slot — only a section declaring "slot: true" can hold items. Add "slot: true" or target a real slot.
-ERROR CL0611 Codex/items.cl.yaml (branch open)
+  related (section): components/plot-essentials.cl.yaml:8:3
+ERROR CL0611 Codex/items.cl.yaml:163:7 (branch open)
   item "IntoPassthrough" targets slot "rules" in AI Instructions, which is prose copied verbatim and declares no slots. Point the component at a YAML document with "sections:" to route items into it.
-ERROR CL0533 Codex/items.cl.yaml (branch open)
+  related (AI Instructions component): components/ai-instructions.md
+ERROR CL0533 Codex/items.cl.yaml:171:5 (branch open)
   placeholder "%heroName%" in the type of story card "MistypedType" on branch "open" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
-ERROR CL0420 Codex/items.cl.yaml (branch open)
+ERROR CL0420 Codex/items.cl.yaml:171:5 (branch open)
   no template found for item "MistypedType" (type: Character-%heroName%); add or select the matching template, and the item remains unrendered.
-ERROR CL0622 Codex/items.cl.yaml (branch open)
+ERROR CL0622 Codex/items.cl.yaml:9:3 (branch open)
   story cards named "Anchor" collide on branch "open" (both as character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
-ERROR CL0712 Codex/items.cl.yaml (branch open)
+  related (first card): Codex/items.cl.yaml:9:3
+ERROR CL0712 Codex/items.cl.yaml:220:3 (branch open)
   Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play. Shorten the content or reduce its placeholder expansion.
-WARN CL0713 Codex/items.cl.yaml (branch open)
+WARN CL0713 Codex/items.cl.yaml:239:3 (branch open)
   Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
   hint: Shorten the content or reduce its placeholder expansion.
-ERROR CL0714 Codex/items.cl.yaml (branch open)
+ERROR CL0714 Codex/items.cl.yaml:255:3 (branch open)
   Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play. Shorten the content or reduce its placeholder expansion.
-ERROR CL0413 templates/Broken.template
+ERROR CL0413 templates/Broken.template:1:1
   Malformed join() call in Broken: Malformed join(): join($body.Tagline); correct the call syntax, and the malformed call remains literal.
-ERROR CL0415 templates/Unclosed.template
+ERROR CL0415 templates/Unclosed.template:1:1
   Unclosed {if $body.Tagline} block; close the block, and the opening tag remains literal.
 ERROR CL0433 Codex/items.cl.yaml
   compiled output contains leaked template tag {if $body.Tagline}; close or correct the source tag in item "UnclosedBlock" (character)
@@ -112,54 +117,59 @@ ERROR CL0430 Codex/items.cl.yaml
   compiled output contains unresolved token {$Loop}; correct the authoring reference or resolver input in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
   compiled output contains unresolved token {$Undeclared}; correct the authoring reference or resolver input in item "RoleTester" (character)
-WARN CL0715 Codex/items.cl.yaml (branch open)
+WARN CL0715 Codex/items.cl.yaml:317:3 (branch open)
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
   hint: Shorten the content or reduce its placeholder expansion.
-WARN CL0614 components/plot-essentials.cl.yaml
+WARN CL0614 components/plot-essentials.cl.yaml:26:3
   slot "party" in Plot Essentials has no items on branch "open". Add or route an item.
 WARN CL0711 components/opening-open.md
   Opening for branch "open" is 3,626 characters on upload, within 374 of the 4,000 limit. Compiled length is 3,301; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
   hint: Shorten the content or reduce its placeholder expansion.
-WARN CL0326 Codex/items.cl.yaml (branch gated)
+WARN CL0326 Codex/items.cl.yaml:209:21 (branch gated)
   branch dispatch to variant "hshed" on branch "gated" matched none of the 3 items included from rumors.cl.yaml. No included item defines that variant, so the dispatch changes nothing; check the spelling or add the variant to an included item.
-ERROR CL0325 Codex/items.cl.yaml (branch gated)
+ERROR CL0325 Codex/items.cl.yaml:187:3 (branch gated)
   two item definitions resolve to id "anchor" on this branch.
   hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
-ERROR CL0532 Codex/items.cl.yaml (branch gated)
+  related (first definition): Codex/items.cl.yaml:8:3
+ERROR CL0532 Codex/items.cl.yaml:71:5 (branch gated)
   undeclared placeholder "%ghostName%" in story card "Greeter" on branch "gated" — Velvet Lattice substitutes only declared keys, so the AI receives the literal token until you declare or correct "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
-ERROR CL0610 Codex/items.cl.yaml (branch gated)
+ERROR CL0610 Codex/items.cl.yaml:85:5 (branch gated)
   item "Ghost" resolves on branch "gated" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
-ERROR CL0610 Codex/items.cl.yaml (branch gated)
+ERROR CL0610 Codex/items.cl.yaml:96:5 (branch gated)
   item "Silent" resolves on branch "gated" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
-ERROR CL0609 Codex/items.cl.yaml (branch gated)
+ERROR CL0609 Codex/items.cl.yaml:105:3 (branch gated)
   item "EmptyPlacement" reaches plotEssential slot "party" on branch "gated" but its body renders to nothing there. Exclude it from the branch with "branches:" if that is what was meant.
-ERROR CL0609 Codex/items.cl.yaml (branch gated)
+ERROR CL0609 Codex/items.cl.yaml:117:3 (branch gated)
   story card "EmptyCardBody" on branch "gated" renders an empty body: template "EmptyBody" reads no key this item carries. Use "kind: reference" if the card is triggers and notes only.
-ERROR CL0611 Codex/items.cl.yaml (branch gated)
+ERROR CL0611 Codex/items.cl.yaml:136:7 (branch gated)
   item "Typo" targets slot "casst" in Plot Essentials on branch "gated", which declares no such slot. Declared here: cast, party. Correct slot: or declare it.
-ERROR CL0612 Codex/items.cl.yaml (branch gated)
+  related (Plot Essentials sections): components/plot-essentials.cl.yaml:4:1
+ERROR CL0612 Codex/items.cl.yaml:149:7 (branch gated)
   item "NotASlot" targets "genre" in Plot Essentials, which is a section but not a slot — only a section declaring "slot: true" can hold items. Add "slot: true" or target a real slot.
-ERROR CL0611 Codex/items.cl.yaml (branch gated)
+  related (section): components/plot-essentials.cl.yaml:8:3
+ERROR CL0611 Codex/items.cl.yaml:163:7 (branch gated)
   item "IntoPassthrough" targets slot "rules" in AI Instructions, which is prose copied verbatim and declares no slots. Point the component at a YAML document with "sections:" to route items into it.
-ERROR CL0533 Codex/items.cl.yaml (branch gated)
+  related (AI Instructions component): components/ai-instructions.md
+ERROR CL0533 Codex/items.cl.yaml:171:5 (branch gated)
   placeholder "%heroName%" in the type of story card "MistypedType" on branch "gated" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
-ERROR CL0420 Codex/items.cl.yaml (branch gated)
+ERROR CL0420 Codex/items.cl.yaml:171:5 (branch gated)
   no template found for item "MistypedType" (type: Character-%heroName%); add or select the matching template, and the item remains unrendered.
-ERROR CL0622 Codex/items.cl.yaml (branch gated)
+ERROR CL0622 Codex/items.cl.yaml:9:3 (branch gated)
   story cards named "Anchor" collide on branch "gated" (both as character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
-ERROR CL0712 Codex/items.cl.yaml (branch gated)
+  related (first card): Codex/items.cl.yaml:9:3
+ERROR CL0712 Codex/items.cl.yaml:220:3 (branch gated)
   Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play. Shorten the content or reduce its placeholder expansion.
-WARN CL0713 Codex/items.cl.yaml (branch gated)
+WARN CL0713 Codex/items.cl.yaml:239:3 (branch gated)
   Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
   hint: Shorten the content or reduce its placeholder expansion.
-ERROR CL0714 Codex/items.cl.yaml (branch gated)
+ERROR CL0714 Codex/items.cl.yaml:255:3 (branch gated)
   Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play. Shorten the content or reduce its placeholder expansion.
-ERROR CL0413 templates/Broken.template
+ERROR CL0413 templates/Broken.template:1:1
   Malformed join() call in Broken: Malformed join(): join($body.Tagline); correct the call syntax, and the malformed call remains literal.
-ERROR CL0415 templates/Unclosed.template
+ERROR CL0415 templates/Unclosed.template:1:1
   Unclosed {if $body.Tagline} block; close the block, and the opening tag remains literal.
 ERROR CL0433 Codex/items.cl.yaml
   compiled output contains leaked template tag {if $body.Tagline}; close or correct the source tag in item "UnclosedBlock" (character)
@@ -181,56 +191,61 @@ ERROR CL0430 Codex/items.cl.yaml
   compiled output contains unresolved token {$Loop}; correct the authoring reference or resolver input in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
   compiled output contains unresolved token {$Undeclared}; correct the authoring reference or resolver input in item "RoleTester" (character)
-WARN CL0715 Codex/items.cl.yaml (branch gated)
+WARN CL0715 Codex/items.cl.yaml:317:3 (branch gated)
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
   hint: Shorten the content or reduce its placeholder expansion.
-WARN CL0614 components/plot-essentials.cl.yaml
+WARN CL0614 components/plot-essentials.cl.yaml:26:3
   slot "party" in Plot Essentials has no items on branch "gated". Add or route an item.
 ERROR CL0710 components/opening-gated.md
   Opening for branch "gated" is 4,021 characters on upload (limit 4,000). Compiled length is 3,501; 8 placeholder references add 520 characters when Velvet Lattice expands them to their question text on upload.
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play. Shorten the content or reduce its placeholder expansion.
-ERROR CL0325 Codex/items.cl.yaml (branch silent)
+ERROR CL0325 Codex/items.cl.yaml:187:3 (branch silent)
   two item definitions resolve to id "anchor" on this branch.
   hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
-ERROR CL0629 components/adventure-description.cl.yaml
+  related (first definition): Codex/items.cl.yaml:8:3
+ERROR CL0629 components/adventure-description.cl.yaml:17:3
   "Adventure Description" declares advanced: in metadata:, which belongs to the scenario blurb only. Move those keys to the scenario blurb.
   hint: Velvet Lattice reads both keys at the root and nowhere else, so they do nothing at a leaf today. AID has no markdown description for an adventure, and if it gains one this frontmatter would set a field the player cannot change. Move them to the Description component; other metadata keys are fine here.
-ERROR CL0532 Codex/items.cl.yaml (branch silent)
+ERROR CL0532 Codex/items.cl.yaml:71:5 (branch silent)
   undeclared placeholder "%ghostName%" in item "Greeter" rendering into plotEssential slot "cast" on branch "silent" — Velvet Lattice substitutes only declared keys, so the AI receives the literal token until you declare or correct "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
-ERROR CL0532 Codex/items.cl.yaml (branch silent)
+ERROR CL0532 Codex/items.cl.yaml:71:5 (branch silent)
   undeclared placeholder "%ghostName%" in story card "Greeter" on branch "silent" — Velvet Lattice substitutes only declared keys, so the AI receives the literal token until you declare or correct "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
-ERROR CL0610 Codex/items.cl.yaml (branch silent)
+ERROR CL0610 Codex/items.cl.yaml:96:5 (branch silent)
   item "Silent" resolves on branch "silent" but produces no output there: storyCard is false and no declared target placed it. Exclude it from the branch with "branches:" if that is what was meant.
-ERROR CL0609 Codex/items.cl.yaml (branch silent)
+ERROR CL0609 Codex/items.cl.yaml:105:3 (branch silent)
   item "EmptyPlacement" reaches plotEssential slot "party" on branch "silent" but its body renders to nothing there. Exclude it from the branch with "branches:" if that is what was meant.
-ERROR CL0609 Codex/items.cl.yaml (branch silent)
+ERROR CL0609 Codex/items.cl.yaml:117:3 (branch silent)
   story card "EmptyCardBody" on branch "silent" renders an empty body: template "EmptyBody" reads no key this item carries. Use "kind: reference" if the card is triggers and notes only.
-ERROR CL0611 Codex/items.cl.yaml (branch silent)
+ERROR CL0611 Codex/items.cl.yaml:136:7 (branch silent)
   item "Typo" targets slot "casst" in Plot Essentials on branch "silent", which declares no such slot. Declared here: cast, party. Correct slot: or declare it.
-ERROR CL0612 Codex/items.cl.yaml (branch silent)
+  related (Plot Essentials sections): components/plot-essentials.cl.yaml:4:1
+ERROR CL0612 Codex/items.cl.yaml:149:7 (branch silent)
   item "NotASlot" targets "genre" in Plot Essentials, which is a section but not a slot — only a section declaring "slot: true" can hold items. Add "slot: true" or target a real slot.
-ERROR CL0611 Codex/items.cl.yaml (branch silent)
+  related (section): components/plot-essentials.cl.yaml:8:3
+ERROR CL0611 Codex/items.cl.yaml:163:7 (branch silent)
   item "IntoPassthrough" targets slot "rules" in AI Instructions, which is prose copied verbatim and declares no slots. Point the component at a YAML document with "sections:" to route items into it.
-ERROR CL0533 Codex/items.cl.yaml (branch silent)
+  related (AI Instructions component): components/ai-instructions.md
+ERROR CL0533 Codex/items.cl.yaml:171:5 (branch silent)
   placeholder "%heroName%" in the type of story card "MistypedType" on branch "silent" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
-ERROR CL0420 Codex/items.cl.yaml (branch silent)
+ERROR CL0420 Codex/items.cl.yaml:171:5 (branch silent)
   no template found for item "MistypedType" (type: Character-%heroName%); add or select the matching template, and the item remains unrendered.
-ERROR CL0622 Codex/items.cl.yaml (branch silent)
+ERROR CL0622 Codex/items.cl.yaml:9:3 (branch silent)
   story cards named "Anchor" collide on branch "silent" (both as character). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
-ERROR CL0712 Codex/items.cl.yaml (branch silent)
+  related (first card): Codex/items.cl.yaml:9:3
+ERROR CL0712 Codex/items.cl.yaml:220:3 (branch silent)
   Story card body for "Bloated" is 2,101 characters on upload (limit 2,000).
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play. Shorten the content or reduce its placeholder expansion.
-WARN CL0713 Codex/items.cl.yaml (branch silent)
+WARN CL0713 Codex/items.cl.yaml:239:3 (branch silent)
   Story card body for "Ledger" is 1,881 characters on upload, within 119 of the 2,000 limit.
   hint: Shorten the content or reduce its placeholder expansion.
-ERROR CL0714 Codex/items.cl.yaml (branch silent)
+ERROR CL0714 Codex/items.cl.yaml:255:3 (branch silent)
   Notes for "Verbose" is 10,051 characters on upload (limit 10,000). Compiled length is 9,466; 9 placeholder references add 585 characters when Velvet Lattice expands them to their question text on upload.
   hint: AID truncates rather than refusing, so this ships shortened and the loss shows up during play. Shorten the content or reduce its placeholder expansion.
-ERROR CL0413 templates/Broken.template
+ERROR CL0413 templates/Broken.template:1:1
   Malformed join() call in Broken: Malformed join(): join($body.Tagline); correct the call syntax, and the malformed call remains literal.
-ERROR CL0415 templates/Unclosed.template
+ERROR CL0415 templates/Unclosed.template:1:1
   Unclosed {if $body.Tagline} block; close the block, and the opening tag remains literal.
 ERROR CL0433 Codex/items.cl.yaml
   compiled output contains leaked template tag {if $body.Tagline}; close or correct the source tag in item "UnclosedBlock" (character)
@@ -252,12 +267,12 @@ ERROR CL0430 Codex/items.cl.yaml
   compiled output contains unresolved token {$Loop}; correct the authoring reference or resolver input in item "RoleTester" (character)
 ERROR CL0430 Codex/items.cl.yaml
   compiled output contains unresolved token {$Undeclared}; correct the authoring reference or resolver input in item "RoleTester" (character)
-WARN CL0715 Codex/items.cl.yaml (branch silent)
+WARN CL0715 Codex/items.cl.yaml:317:3 (branch silent)
   Notes for "Chatty" is 9,189 characters on upload, within 811 of the 10,000 limit. Compiled length is 8,864; 5 placeholder references add 325 characters when Velvet Lattice expands them to their question text on upload.
   hint: Shorten the content or reduce its placeholder expansion.
-WARN CL0614 components/plot-essentials.cl.yaml
+WARN CL0614 components/plot-essentials.cl.yaml:26:3
   slot "party" in Plot Essentials has no items on branch "silent". Add or route an item.
-WARN CL0534 compile.cl.yaml
+WARN CL0534 compile.cl.yaml:79:5
   placeholder "%heroName%" in the title of branch "gated" — a branch title half-works. AID fills the prompt and shows the answer while the player is choosing, then keeps the raw placeholder text in the saved adventure’s title. Deliberate is possible; usually it is not.
 ERROR CL0533 components/description.md
   placeholder "%heroName%" in the Description — AID does not fill placeholders in the Description. It is shown before any adventure exists to answer them, so the raw text is what a reader sees.
@@ -283,16 +298,18 @@ WARN CL0536 compile.cl.yaml
 `;
 
 exports[`pathological fixture two cards share a name across types 1`] = `
-"ERROR CL0622 Codex/items.cl.yaml (branch main)
+"ERROR CL0622 Codex/items.cl.yaml:12:3 (branch main)
   story cards named "Shared Name" collide on branch "main" (character in items.cl.yaml and location in items.cl.yaml). Velvet Lattice merges story cards by name, so only one survives to AID and which one is position-dependent under inheritance. Give them distinct names.
+  related (first card): Codex/items.cl.yaml:4:3
 WARN CL0630 compile.cl.yaml
   branch "main" resolves no opening: and no adventureDescription:, so Velvet Lattice would start this leaf with an empty prompt. Give the branch an opening:, or one an ancestor passes down.
 WARN CL0631 compile.cl.yaml
   branch "main" resolves no aiInstructions:. Velvet Lattice writes an empty-string AI Instructions on AID's side for it, and an empty string suppresses AID's model-default instructions rather than falling back to them — the leaf plays with none at all. Give the branch an aiInstructions:, or one an ancestor passes down.
-WARN CL0628 Codex/items.cl.yaml (branch main)
+WARN CL0628 Codex/items.cl.yaml:49:5 (branch main)
   aid.type " Gadget" has leading whitespace; writing it as "Gadget". Remove the whitespace.
   hint: A leading space survives in a directory name, so the type would reach AI Dungeon as a category whose name differs from the obvious one by an invisible character.
-ERROR CL0626 Codex/items.cl.yaml (branch main)
+ERROR CL0626 Codex/items.cl.yaml:36:5 (branch main)
   aid.type values "Widget" and "widget" differ only by case, and are written to the same file on a case-insensitive filesystem. Rename one type.
-  hint: Story Cards/{type}/{type}.md is one path for all of them on Windows and macOS, so the group written last overwrites the others and their cards never reach AI Dungeon. Pick one spelling."
+  hint: Story Cards/{type}/{type}.md is one path for all of them on Windows and macOS, so the group written last overwrites the others and their cards never reach AI Dungeon. Pick one spelling.
+  related (earlier type): Codex/items.cl.yaml:26:5"
 `;

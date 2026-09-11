@@ -207,6 +207,25 @@ describe('render', () => {
   });
 });
 
+describe('render — parse-failure locations are real token positions, not a template-file fallback', () => {
+  test('a malformed call is located at its own line, not line 1', () => {
+    const diagnostics = new Diagnostics();
+    const tpl = 'line one\nline two\n{join($body.Tagline)}\nline four\n';
+    render(tpl, {}, new Map(), {}, { diagnostics, file: 'multi.template', name: 'Multi' });
+    const diag = diagnostics.all.find((d) => d.code === 'CL0413');
+    expect(diag.line).toBe(3);
+    expect(diag.col).toBe(1);
+  });
+
+  test('an unclosed block is located at its opening tag\'s own line', () => {
+    const diagnostics = new Diagnostics();
+    const tpl = 'line one\n{if $show}\nline three\n';
+    render(tpl, { show: 'true' }, new Map(), {}, { diagnostics, file: 'multi.template', name: 'Multi' });
+    const diag = diagnostics.all.find((d) => d.code === 'CL0415');
+    expect(diag.line).toBe(2);
+  });
+});
+
 // ── applyFieldRenderFunctions ─────────────────────────────────────────────────
 
 describe('applyFieldRenderFunctions', () => {

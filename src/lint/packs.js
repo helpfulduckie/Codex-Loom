@@ -29,7 +29,7 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
     diagnostics.error(
       CODES.PACK_MALFORMED,
       `Convention pack "${name}" ${why}, so its rules are unavailable; provide a readable pack with the required shape.`,
-      { file: filePath, ...loc },
+      { ...loc, file: filePath },
       {
         hint: source
           ? `Declared as lint.packs.${name} with source: ${source}`
@@ -61,7 +61,7 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
       CODES.PACK_NAME_MISMATCH,
       `Convention pack loaded as "${name}" declares name: "${doc.name}". `
       + 'The pack is unavailable until the config key and name match; this keeps diagnostic codes and suppressions portable.',
-      { file: filePath, ...loc },
+      { ...loc, file: filePath },
     );
     return null;
   }

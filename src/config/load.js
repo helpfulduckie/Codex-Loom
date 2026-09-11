@@ -102,7 +102,7 @@ function loadManifest(manifestPath, diagnostics) {
     diagnostics.warn(
       CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
       `Snapshot manifest ${path.basename(manifestPath)} is not valid JSON, so snapshot tracking is skipped; repair or regenerate manifest.json.`,
-      {}
+      { file: manifestPath }
     );
     return null;
   }
@@ -110,7 +110,7 @@ function loadManifest(manifestPath, diagnostics) {
     diagnostics.warn(
       CODES.SNAPSHOT_MANIFEST_UNPARSEABLE,
       `Snapshot manifest ${path.basename(manifestPath)} has the wrong shape, so snapshot tracking is skipped; repair or regenerate manifest.json.`,
-      {}
+      { file: manifestPath }
     );
     return null;
   }

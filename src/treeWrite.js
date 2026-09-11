@@ -6,7 +6,7 @@ const {
   resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts,
 } = require('./util');
 const {
-  busWarner, originWarner, severityOf, CODES: DIAG_CODES,
+  busWarner, severityOf, CODES: DIAG_CODES,
 } = require('./diag');
 const { originLocation } = require('./origin');
 const { walkBranchTree, mergePlaceholders, mergeUnbindable } = require('./model/branches');
@@ -95,7 +95,7 @@ function writeFramingRecursive(rootNode, outputBase, opts = {}) {
         defaultHeadingLevel: FRAMING_DESCRIPTOR.defaultHeadingLevel,
         variables: vars, registry, branchProtagonist,
         roles, onRoleUsed,
-        onWarn: originWarner(diagnostics, at),
+        onWarn: busWarner(diagnostics, at),
         diagnostics, file: String(resolvedSpec),
       });
       return { text, at };
@@ -106,7 +106,7 @@ function writeFramingRecursive(rootNode, outputBase, opts = {}) {
     return {
       text: applyTokenPass(literal, {
         item: {}, registry, branchProtagonist, roles, onRoleUsed,
-        onWarn: originWarner(diagnostics, at),
+        onWarn: busWarner(diagnostics, at),
       }),
       at,
     };
@@ -200,7 +200,7 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
           item: {}, registry, branchProtagonist,
           roles: rolesDeclared ? roles : null,
           onRoleUsed,
-          onWarn: originWarner(diagnostics, titleAt),
+          onWarn: busWarner(diagnostics, titleAt),
         },
       );
       const labelPath = path.join(nodeOutput, 'Label.md');
@@ -238,7 +238,7 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
         item: {}, registry, branchProtagonist,
         roles: rolesDeclared ? roles : null,
         onRoleUsed,
-        onWarn: originWarner(diagnostics, titleAt),
+        onWarn: busWarner(diagnostics, titleAt),
       },
     );
     checkUndeclaredPlaceholders(labelText, table, {
@@ -280,8 +280,8 @@ function writePlaceholdersRecursive(rootNode, outputBase, opts = {}) {
     variables, configPath, diagnostics, log, usage = null, declarations = null, duplicates = null,
     registry = null, onRoleUsed = null, roleStateByPath = null,
   } = opts;
-  const onWarn = (code, message, file) => diagnostics.add(
-    severityOf(code), code, message, { file: file || configPath },
+  const onWarn = (code, message, at) => diagnostics.add(
+    severityOf(code), code, message, (at && at.file) ? at : { file: configPath },
   );
 
   walkBranchTree(rootNode, ({ name, node, path: path_, isRoot, state }) => {
@@ -409,7 +409,7 @@ function writeScenarioBlurb({
             defaultHeadingLevel: DESCRIPTION_DESCRIPTOR.defaultHeadingLevel,
             variables: rootVariables || {}, registry, branchProtagonist: null,
             roles: rootRolesDeclared ? rootRoles : null, onRoleUsed: roleState.onUsed,
-            onWarn: originWarner(diagnostics, { file: String(descSpec) }),
+            onWarn: busWarner(diagnostics, { file: String(descSpec) }),
             diagnostics, file: String(descSpec),
           },
         ));

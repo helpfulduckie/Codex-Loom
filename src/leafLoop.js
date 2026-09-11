@@ -1,7 +1,7 @@
 'use strict';
 
 const { walkBranchChain } = require('./model/branches');
-const { originWarner, CODES: DIAG_CODES } = require('./diag');
+const { busWarner, CODES: DIAG_CODES } = require('./diag');
 const {
   buildCompileContext, resolveBranchItems, renderBranchItems,
 } = require('./branchCompile');
@@ -42,7 +42,7 @@ function compileLeaf(branchPath, ctx) {
   const folderPath = chain.folderPath;
   const outputDir = buildBranchOutputDir(config._resolvedOutput, folderPath);
   const cctx = buildCompileContext(config, branchPath, {
-    onWarn: originWarner(diagnostics, { file: configPath, branch: label }),
+    onWarn: busWarner(diagnostics, { file: configPath, branch: label }),
     diagnostics,
     configPath,
     roleStateByPath,
@@ -104,7 +104,7 @@ function compileLeaf(branchPath, ctx) {
         ? applyTokenPass(prose, {
           item: {}, registry, branchProtagonist,
           roles: cctx.roles, onRoleUsed: roleState.onUsed,
-          onWarn: originWarner(diagnostics, { ...textAt, branch: label }),
+          onWarn: busWarner(diagnostics, { ...textAt, branch: label }),
         })
         : prose;
       segments = [{ key: descriptor.label, text }];
@@ -122,7 +122,7 @@ function compileLeaf(branchPath, ctx) {
           defaultHeadingLevel: descriptor.defaultHeadingLevel,
           variables: cctx.variables, registry, branchProtagonist,
           roles: cctx.roles, onRoleUsed: roleState.onUsed,
-          onWarn: originWarner(diagnostics, { file: String(spec), branch: label }),
+          onWarn: busWarner(diagnostics, { file: String(spec), branch: label }),
           diagnostics, file: String(spec),
         },
       ));

@@ -196,12 +196,9 @@ function applyLintLevel(severity, level) {
   return SEVERITY_RANK[clamped] < SEVERITY_RANK[ceiling] ? null : clamped;
 }
 
-function busWarner(diagnostics, loc) {
-  return (code, message) => diagnostics.add(severityOf(code), code, message, loc || {});
-}
-
-// A caller-supplied location replaces the fallback's file/line/col but keeps its branch.
-function originWarner(diagnostics, fallback = {}) {
+// A caller-supplied third-argument location replaces the fallback's file/line/col but
+// keeps its branch; callers that never have a more exact location than the fallback omit it.
+function busWarner(diagnostics, fallback = {}) {
   return (code, message, at) => {
     const { file, line, col, ...context } = fallback;
     const loc = at && at.file ? { ...context, ...at } : { ...fallback, ...(at || {}) };
@@ -345,6 +342,6 @@ class Diagnostics {
 }
 
 module.exports = {
-  Diagnostic, Diagnostics, SEVERITY, SEVERITY_LABEL, REGISTRY, CODES, severityOf, busWarner, originWarner,
+  Diagnostic, Diagnostics, SEVERITY, SEVERITY_LABEL, REGISTRY, CODES, severityOf, busWarner,
   isOpinion, LINT_LEVELS, applyLintLevel,
 };

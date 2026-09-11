@@ -91,6 +91,13 @@ describe('loadFieldTable', () => {
       expect(badRefs.map((d) => d.message).join('\n')).toMatch(/alsoMissing/);
     });
 
+    test('a bad group/template ref is located at its own declaring key, not the field table\'s first file', () => {
+      const [groupRef, templateRef] = diagnostics.warnings
+        .filter((d) => d.code === CODES.FIELD_TABLE_BAD_REF);
+      expect(groupRef.line).toBe(13);
+      expect(templateRef.line).toBe(16);
+    });
+
     test('a misspelled fields.cl.yaml is a CL0425 WARN and is ignored', () => {
       const stray = diagnostics.warnings.filter((d) => d.code === CODES.FIELD_TABLE_STRAY_FILE);
       expect(stray).toHaveLength(1);
