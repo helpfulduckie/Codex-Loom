@@ -1,7 +1,7 @@
 'use strict';
 
 const { walkBranchChain } = require('./model/branches');
-const { busWarner, CODES: DIAG_CODES } = require('./diag');
+const { originWarner, CODES: DIAG_CODES } = require('./diag');
 const {
   buildCompileContext, resolveBranchItems, renderBranchItems,
 } = require('./branchCompile');
@@ -42,7 +42,7 @@ function compileLeaf(branchPath, ctx) {
   const folderPath = chain.folderPath;
   const outputDir = buildBranchOutputDir(config._resolvedOutput, folderPath);
   const cctx = buildCompileContext(config, branchPath, {
-    onWarn: busWarner(diagnostics, { file: configPath, branch: label }),
+    onWarn: originWarner(diagnostics, { file: configPath, branch: label }),
     diagnostics,
     configPath,
     roleStateByPath,
@@ -89,20 +89,22 @@ function compileLeaf(branchPath, ctx) {
 
   const sectionedWritten = {};
   const sectionedSegments = {};
-  for (const { descriptor, spec, component, passthrough } of sectionedForLeaf) {
+  for (const { descriptor, spec, component, passthrough, inline, origin } of sectionedForLeaf) {
     const filled = occupants.get(descriptor.key) || new Map();
+    // Inline prose is authored at its config key; its spec is the text, not a file.
+    const textAt = inline ? (origin || { file: configPath }) : { file: String(spec) };
     let text;
     let segments;
     let excluded = false;
     if (passthrough !== null && passthrough !== undefined) {
       const prose = resolveVariables(passthrough, cctx.variables, {
-        diagnostics, file: String(spec),
+        diagnostics, location: textAt,
       });
       text = descriptor.inlineProse
         ? applyTokenPass(prose, {
           item: {}, registry, branchProtagonist,
           roles: cctx.roles, onRoleUsed: roleState.onUsed,
-          onWarn: busWarner(diagnostics, { file: String(spec), branch: label }),
+          onWarn: originWarner(diagnostics, { ...textAt, branch: label }),
         })
         : prose;
       segments = [{ key: descriptor.label, text }];
@@ -120,14 +122,15 @@ function compileLeaf(branchPath, ctx) {
           defaultHeadingLevel: descriptor.defaultHeadingLevel,
           variables: cctx.variables, registry, branchProtagonist,
           roles: cctx.roles, onRoleUsed: roleState.onUsed,
-          onWarn: busWarner(diagnostics, { file: String(spec), branch: label }),
+          onWarn: originWarner(diagnostics, { file: String(spec), branch: label }),
           diagnostics, file: String(spec),
         },
       ));
     }
     checkUndeclaredPlaceholders(text, cctx.placeholders, {
       diagnostics,
-      file: String(spec),
+      file: textAt.file,
+      loc: inline ? textAt : undefined,
       where: `component "${descriptor.label}"`,
       branch: label,
       skip: placeholderNoise.get(descriptor.key),
@@ -144,7 +147,7 @@ function compileLeaf(branchPath, ctx) {
         LIMITS[descriptor.limitKey],
         {
           diagnostics,
-          loc: { file: String(spec) },
+          loc: { ...textAt },
           label: branchPath.length ? `branch "${branchPath[branchPath.length - 1]}"` : 'the project root',
         },
       );

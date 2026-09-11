@@ -2,7 +2,8 @@
 
 const fs = require('fs');
 const { normalizeComponent, applySectionSelector, slotsForBranch } = require('./model/component');
-const { busWarner, CODES: DIAG_CODES } = require('./diag');
+const { originWarner, CODES: DIAG_CODES } = require('./diag');
+const { copyOrigins, originLocation } = require('./origin');
 const {
   SLOTTED_COMPONENTS, isPassthrough, readPassthrough, renderSectionedComponent,
 } = require('./emit/components');
@@ -30,7 +31,8 @@ function selectComponentSections(component, variant, entrySections, onUnknownSec
     raw = applySectionSelector(raw, variant.trim()).sections;
   }
 
-  return normalizeComponent({ sections: raw, branches: component && component.branches }, {});
+  return copyOrigins(component,
+    normalizeComponent({ sections: raw, branches: component && component.branches }, {}));
 }
 
 function renderComponentStoryCards(component, descriptor, branchPath, filled, grouped, options) {
@@ -53,30 +55,35 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
     for (const card of cards) takenNames.set(card.name, type);
   }
 
-  for (const entry of entries) {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+  entries.forEach((entry, index) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+    const entryAt = (...parts) => originLocation(
+      component, ['render', 'storyCards', String(index), ...parts], loc,
+    );
 
     const title = typeof entry.title === 'string'
-      ? resolveVariables(entry.title, variables, { diagnostics, file: loc.file }).trim() : '';
+      ? resolveVariables(entry.title, variables, { diagnostics, location: entryAt('title') }).trim() : '';
     if (title === '') {
       diagnostics.error(
         DIAG_CODES.STORY_CARD_ENTRY_NO_TITLE,
         `a render.storyCards entry on component "${descriptor.label}" declares no title: — `
         + 'the title is the card\'s AID name and its place in the frontier index. Add title:.',
-        loc,
+        entryAt('title'),
       );
-      continue;
+      return;
     }
 
     const entryType = typeof entry.type === 'string'
-      ? resolveVariables(entry.type, variables, { diagnostics, file: loc.file }) : entry.type;
-    const rawCardType = (typeof entryType === 'string' && entryType.trim() !== '' && entryType.trim())
+      ? resolveVariables(entry.type, variables, { diagnostics, location: entryAt('type') }) : entry.type;
+    const ownType = typeof entryType === 'string' && entryType.trim() !== '' && entryType.trim();
+    const rawCardType = ownType
       || (typeof projectType === 'string' && projectType.trim() !== '' && projectType.trim())
       || descriptor.label;
+    const typeLoc = ownType ? entryAt('type') : loc;
     validateCardTypeValue(rawCardType, {
-      diagnostics, name: title || '(unknown)', file: loc.file, field: 'story-card type',
+      diagnostics, name: title || '(unknown)', file: loc.file, loc: typeLoc, field: 'story-card type',
     });
-    const cardType = cardTypeAudit ? cardTypeAudit.resolve(rawCardType, loc) : rawCardType;
+    const cardType = cardTypeAudit ? cardTypeAudit.resolve(rawCardType, typeLoc) : rawCardType;
 
     const sub = selectComponentSections(
       component,
@@ -86,14 +93,14 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
         DIAG_CODES.STORY_CARD_ENTRY_UNKNOWN_SECTION,
         `render.storyCards entry "${title}" names section "${name}", which component `
         + `"${descriptor.label}" does not declare — it is dropped from this entry. Correct sections: or declare the section.`,
-        loc,
+        entryAt('sections', String(entry.sections.indexOf(name))),
       ),
     );
 
     const { text: notesText } = renderSectionedComponent(sub, branchPath, filled, {
       defaultHeadingLevel: descriptor.defaultHeadingLevel,
       variables, registry, branchProtagonist, roles, onRoleUsed,
-      onWarn: busWarner(diagnostics, loc), diagnostics, file: loc.file,
+      onWarn: originWarner(diagnostics, loc), diagnostics, file: loc.file,
     });
 
     if (!notesText || notesText.trim() === '') {
@@ -101,9 +108,9 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
         DIAG_CODES.STORY_CARD_ENTRY_RENDERS_NOTHING,
         `render.storyCards entry "${title}" renders no text on branch "${branchLabel}" — `
         + 'its variant:/sections: selectors left nothing. No card is written; correct the selectors or add content.',
-        loc,
+        entryAt(),
       );
-      continue;
+      return;
     }
 
     if (takenNames.has(title)) {
@@ -115,76 +122,79 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
         `story cards named "${title}" collide on branch "${branchLabel}" (${where}). `
         + 'Velvet Lattice merges story cards by name, so only one survives to AID. '
         + 'Give them distinct names.',
-        loc,
+        entryAt('title'),
       );
-      continue;
+      return;
     }
     takenNames.set(title, cardType);
 
     const body = `${title} — copy the description field below into your scenario's ${descriptor.label}.`;
     const synthetic = { kind: 'reference', name: title, aid: { type: cardType, title } };
     const rendered = renderCard({
-      item: synthetic, bodyText: body, notesText, diagnostics, loc, questions,
+      item: synthetic, bodyText: body, notesText, diagnostics, loc: entryAt(), questions,
     }).text;
 
     if (!grouped.has(cardType)) grouped.set(cardType, []);
     grouped.get(cardType).push({
       sortKey: title.toLowerCase(), rendered, id: null, name: title,
     });
-  }
+  });
 }
 
 function resolveSectionedComponents(compileContext, label, { loadSectioned, recordGap }) {
   const resolved = [];
+  const origins = compileContext.componentOrigins || {};
   for (const descriptor of SLOTTED_COMPONENTS) {
     const spec = compileContext.componentRefs[descriptor.key];
     if (!spec) continue;
+    const origin = origins[descriptor.key] || null;
     if (typeof spec === 'string' && /\{%/.test(spec)) {
-      recordGap(label, descriptor.label, spec, 'unexpanded compile variable {%…} — the spec named a path that did not resolve');
+      recordGap(label, descriptor.label, spec, 'unexpanded compile variable {%…} — the spec named a path that did not resolve', origin);
       continue;
     }
 
     if (descriptor.inlineProse && !(typeof spec === 'string' && fs.existsSync(spec))) {
       const text = String(spec).trimEnd();
       if (!text) {
-        recordGap(label, descriptor.label, spec, 'inline text is empty');
+        recordGap(label, descriptor.label, spec, 'inline text is empty', origin);
         continue;
       }
-      resolved.push({ descriptor, spec, component: null, passthrough: text });
+      resolved.push({ descriptor, spec, component: null, passthrough: text, inline: true, origin });
       continue;
     }
 
     if (isPassthrough(spec)) {
       if (!fs.existsSync(spec)) {
-        recordGap(label, descriptor.label, spec, 'source not found');
+        recordGap(label, descriptor.label, spec, 'source not found', origin);
         continue;
       }
       const text = readPassthrough(spec);
       if (text === null) {
-        recordGap(label, descriptor.label, spec, 'source is empty');
+        recordGap(label, descriptor.label, spec, 'source is empty', origin);
         continue;
       }
-      resolved.push({ descriptor, spec, component: null, passthrough: text });
+      resolved.push({ descriptor, spec, component: null, passthrough: text, origin });
       continue;
     }
 
-    const component = loadSectioned(spec, descriptor);
+    const component = loadSectioned(spec, descriptor, origin);
     if (!component) {
-      recordGap(label, descriptor.label, spec, 'source declared no sections (missing or empty file)');
+      recordGap(label, descriptor.label, spec, 'source declared no sections (missing or empty file)', origin);
       continue;
     }
-    resolved.push({ descriptor, spec, component, passthrough: null });
+    resolved.push({ descriptor, spec, component, passthrough: null, origin });
   }
   return resolved;
 }
 
 function buildSlotIndex(sectionedForLeaf, branchPath) {
   const index = new Map();
-  for (const { descriptor, component, passthrough } of sectionedForLeaf) {
+  for (const { descriptor, spec, component, passthrough, inline, origin } of sectionedForLeaf) {
     if (passthrough !== null && passthrough !== undefined) {
       index.set(descriptor.key, {
-        slots: new Map(), documentSlots: new Set(), sections: new Set(),
+        slots: new Map(), documentSlots: new Set(), sections: new Map(),
         label: descriptor.label, passthrough: true,
+        origin: inline ? origin : { file: String(spec) },
       });
       continue;
     }
@@ -195,17 +205,21 @@ function buildSlotIndex(sectionedForLeaf, branchPath) {
     const documentSlots = new Set(
       component.sections.filter((s) => s.isSlot).map((s) => s.name.toLowerCase()),
     );
-    const sections = new Set(component.sections.map((s) => s.name.toLowerCase()));
+    const sections = new Map(component.sections.map((s) => [s.name.toLowerCase(), s]));
     index.set(descriptor.key, {
       slots, documentSlots, sections, label: descriptor.label, passthrough: false,
+      origin: originLocation(component, ['sections'], { file: spec == null ? undefined : String(spec) }),
     });
   }
   return index;
 }
 
-function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, file) {
+// `at` is the item's placement origin; the component side of a mismatch is related.
+function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, at) {
   const known = slotIndex.get(target.component);
   if (!known) return true;
+  const loc = typeof at === 'string' || at == null ? { file: at } : at;
+  const related = (role, origin) => (origin && origin.file ? { related: [{ label: role, ...origin }] } : {});
 
   if (known.passthrough) {
     diagnostics.error(
@@ -213,7 +227,8 @@ function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, file) {
       `item "${itemId}" targets slot "${target.slot || '(unnamed)'}" in ${known.label}, which is `
       + 'prose copied verbatim and declares no slots. Point the component at a YAML '
         + 'document with "sections:" to route items into it.',
-      { file },
+      loc,
+      related(`${known.label} component`, known.origin),
     );
     return false;
   }
@@ -223,7 +238,7 @@ function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, file) {
       DIAG_CODES.TARGET_NAMES_NO_SLOT,
       `item "${itemId}" renders into ${known.label} without naming a slot — `
       + `add "slot:" naming one of: ${[...known.documentSlots].join(', ') || '(the component declares none)'}.`,
-      { file },
+      loc,
     );
     return false;
   }
@@ -236,7 +251,8 @@ function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, file) {
       DIAG_CODES.TARGET_NOT_A_SLOT,
       `item "${itemId}" targets "${target.slot}" in ${known.label}, which is a section but `
       + 'not a slot — only a section declaring "slot: true" can hold items. Add "slot: true" or target a real slot.',
-      { file },
+      loc,
+      related('section', originLocation(known.sections.get(key), [], known.origin || {})),
     );
     return false;
   }
@@ -245,7 +261,8 @@ function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, file) {
     DIAG_CODES.TARGET_UNDECLARED_SLOT,
     `item "${itemId}" targets slot "${target.slot}" in ${known.label} on branch "${label}", `
     + `which declares no such slot. Declared here: ${[...known.documentSlots].join(', ') || '(none)'}. Correct slot: or declare it.`,
-    { file },
+    loc,
+    related(`${known.label} sections`, known.origin),
   );
   return false;
 }
@@ -253,13 +270,13 @@ function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, file) {
 function warnEmptySlots(descriptor, slotIndex, filled, label, diagnostics, file) {
   const known = slotIndex.get(descriptor.key);
   if (!known) return;
-  for (const name of known.slots.keys()) {
+  for (const [name, section] of known.slots) {
     const placed = filled.get(name);
     if (placed && placed.length > 0) continue;
     diagnostics.warn(
       DIAG_CODES.SLOT_EMPTY,
       `slot "${name}" in ${known.label} has no items on branch "${label}". Add or route an item.`,
-      { file: file == null ? undefined : String(file) },
+      originLocation(section, [], { file: file == null ? undefined : String(file) }),
     );
   }
 }

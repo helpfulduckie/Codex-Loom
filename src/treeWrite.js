@@ -5,7 +5,10 @@ const path = require('path');
 const {
   resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts,
 } = require('./util');
-const { busWarner, severityOf, CODES: DIAG_CODES } = require('./diag');
+const {
+  busWarner, originWarner, severityOf, CODES: DIAG_CODES,
+} = require('./diag');
+const { originLocation } = require('./origin');
 const { walkBranchTree, mergePlaceholders, mergeUnbindable } = require('./model/branches');
 const {
   FRAMING_DESCRIPTOR, DESCRIPTION_DESCRIPTOR, isPassthrough, readPassthrough,
@@ -49,6 +52,11 @@ function writeComponentFile(outputDir, filename, content, sink) {
   return outPath;
 }
 
+// The config path of a branch node, from the branch names walkBranchTree yields.
+function nodeConfigPath(nodePath) {
+  return nodePath.flatMap((name) => ['branches', name]);
+}
+
 function nodeVisitPrologue(name, node, isRoot, state) {
   const outputBase = isRoot ? state.outputBase : path.join(state.outputBase, 'Branches', name);
   const variables = (node && node.variables)
@@ -71,33 +79,37 @@ function writeFramingRecursive(rootNode, outputBase, opts = {}) {
   } = opts;
   if (!rootNode || typeof rootNode !== 'object') return;
 
-  const framingSink = { diagnostics, file: configPath };
-  const renderFraming = (spec, nodePath, vars, table, name, roles, branchProtagonist) => {
-    const resolvedSpec = resolveComponentSpec(spec, configBase, vars, framingSink);
+  // Framing read from a file is located in that file; inline framing at its config key.
+  const renderFraming = (spec, framingAt, nodePath, vars, table, name, roles, branchProtagonist) => {
+    const resolvedSpec = resolveComponentSpec(spec, configBase, vars, { diagnostics, location: framingAt });
     const isFile = typeof resolvedSpec === 'string' && fs.existsSync(resolvedSpec)
       && fs.statSync(resolvedSpec).isFile();
+    const at = isFile ? { file: String(resolvedSpec) } : framingAt;
 
     if (isFile && !isPassthrough(resolvedSpec)) {
       const component = loadSectioned
-        ? loadSectioned(resolvedSpec, FRAMING_DESCRIPTOR)
+        ? loadSectioned(resolvedSpec, FRAMING_DESCRIPTOR, framingAt)
         : null;
-      if (!component) return null;
+      if (!component) return { text: null, at };
       const { text } = renderSectionedComponent(component, nodePath, new Map(), {
         defaultHeadingLevel: FRAMING_DESCRIPTOR.defaultHeadingLevel,
         variables: vars, registry, branchProtagonist,
         roles, onRoleUsed,
-        onWarn: busWarner(diagnostics, { file: String(resolvedSpec) }),
+        onWarn: originWarner(diagnostics, at),
         diagnostics, file: String(resolvedSpec),
       });
-      return text;
+      return { text, at };
     }
     const literal = isFile
-      ? resolveVariables(fs.readFileSync(resolvedSpec, 'utf8').trimEnd(), vars, framingSink)
+      ? resolveVariables(fs.readFileSync(resolvedSpec, 'utf8').trimEnd(), vars, { diagnostics, location: at })
       : String(resolvedSpec).trimEnd();
-    return applyTokenPass(literal, {
-      item: {}, registry, branchProtagonist, roles, onRoleUsed,
-      onWarn: busWarner(diagnostics, { file: configPath }),
-    });
+    return {
+      text: applyTokenPass(literal, {
+        item: {}, registry, branchProtagonist, roles, onRoleUsed,
+        onWarn: originWarner(diagnostics, at),
+      }),
+      at,
+    };
   };
 
   walkBranchTree(rootNode, ({ name, node, path: nodePath, isLeaf, isRoot, state }) => {
@@ -117,28 +129,33 @@ function writeFramingRecursive(rootNode, outputBase, opts = {}) {
     const branchProtagonist = roleInfo ? roleInfo.protagonist : null;
 
     if (framing != null) {
+      const framingAt = originLocation(
+        rootNode, [...nodeConfigPath(nodePath), 'components', 'branchFraming'], { file: configPath },
+      );
       if (isLeaf) {
         diagnostics.warn(
           DIAG_CODES.BRANCH_FRAMING_IGNORED,
           isRoot
             ? 'root branchFraming with no branches — ignoring'
             : `branchFraming on leaf branch "${name}" — ignoring`,
-          { file: configPath },
+          framingAt,
         );
       } else {
-        const framingText = renderFraming(
-          framing, nodePath, branchVars, table, name,
+        const { text: framingText, at: textAt } = renderFraming(
+          framing, framingAt, nodePath, branchVars, table, name,
           rolesDeclared ? roles : null, branchProtagonist,
         );
         if (framingText) {
           checkUndeclaredPlaceholders(framingText, table, {
-            diagnostics, where: isRoot ? 'the project root (framing)' : `the branch framing on "${name}"`,
+            diagnostics, file: textAt.file, loc: textAt,
+            where: isRoot ? 'the project root (framing)' : `the branch framing on "${name}"`,
             usage, usagePath: nodePath.join('/'),
           });
           checkLimit(framingText, questionsForMeasurement(table, branchVars, {
             registry, roles: rolesDeclared ? roles : null, branchProtagonist, onRoleUsed,
           }), LIMITS.opening, {
-            diagnostics, label: isRoot ? 'the project root (framing)' : `branch "${name}" (framing)`,
+            diagnostics, loc: { ...textAt },
+            label: isRoot ? 'the project root (framing)' : `branch "${name}" (framing)`,
           });
           const outPath = writeComponentFile(nodeOutput, 'Opening.md', framingText, { diagnostics });
           log.verbose(isRoot ? `    OK: Root OpeningChoice → ${outPath}` : `    OK: BranchFraming → ${outPath}`);
@@ -176,23 +193,25 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
           outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
         };
       }
+      const titleAt = originLocation(node, ['title'], { file: configPath });
       const rootLabel = applyTokenPass(
-        resolveVariables(String(node.title), rootVariables, { diagnostics, file: configPath }),
+        resolveVariables(String(node.title), rootVariables, { diagnostics, location: titleAt }),
         {
           item: {}, registry, branchProtagonist,
           roles: rolesDeclared ? roles : null,
           onRoleUsed,
-          onWarn: busWarner(diagnostics, { file: configPath }),
+          onWarn: originWarner(diagnostics, titleAt),
         },
       );
       const labelPath = path.join(nodeOutput, 'Label.md');
       checkUndeclaredPlaceholders(rootLabel, table, {
-        diagnostics, file: configPath, where: 'the project title',
+        diagnostics, file: configPath, loc: titleAt, where: 'the project title',
         usage, usagePath: '',
       });
       checkPlaceholderContext(rootLabel, {
         diagnostics,
         file: configPath,
+        loc: titleAt,
         where: 'the scenario title',
         severity: 'warn',
         reason: 'AID never fills a placeholder in the scenario title. The title names the '
@@ -208,19 +227,22 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
     }
 
     const rawTitle = (node && node.title) || name;
+    // An untitled branch is labelled by its key, so the key is where its label is authored.
+    const titleAt = originLocation(rootNode,
+      [...nodeConfigPath(path_), ...(node && node.title ? ['title'] : [])], { file: configPath });
     fs.mkdirSync(nodeOutput, { recursive: true });
     const outPath = path.join(nodeOutput, 'Label.md');
     const labelText = applyTokenPass(
-      resolveVariables(rawTitle, branchVars, { diagnostics, file: configPath }),
+      resolveVariables(rawTitle, branchVars, { diagnostics, location: titleAt }),
       {
         item: {}, registry, branchProtagonist,
         roles: rolesDeclared ? roles : null,
         onRoleUsed,
-        onWarn: busWarner(diagnostics, { file: configPath }),
+        onWarn: originWarner(diagnostics, titleAt),
       },
     );
     checkUndeclaredPlaceholders(labelText, table, {
-      diagnostics, file: configPath, where: `the title of branch "${name}"`,
+      diagnostics, file: configPath, loc: titleAt, where: `the title of branch "${name}"`,
       usage, usagePath: path_.join('/'),
     });
     // Only a leaf title reaches the saved adventure's name. An interior node's title is
@@ -230,6 +252,7 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
       checkPlaceholderContext(labelText, {
         diagnostics,
         file: configPath,
+        loc: titleAt,
         where: `the title of branch "${name}"`,
         severity: 'warn',
         reason: 'a branch title half-works. AID fills the prompt and shows the answer while '
@@ -284,6 +307,7 @@ function writePlaceholdersRecursive(rootNode, outputBase, opts = {}) {
     const outPath = writeNodePlaceholders(nodeOutput, node, table, branchVars, {
       onWarn, file: configPath, diagnostics, usage, usagePath: path_.join('/'), duplicates,
       registry, roles: rolesDeclared ? roles : null, branchProtagonist, onRoleUsed,
+      origin: { source: rootNode, path: [...nodeConfigPath(path_), 'placeholders'] },
     });
     if (outPath) log.verbose(`    OK: Placeholders → ${outPath}`);
 
@@ -343,14 +367,16 @@ function writeScenarioBlurb({
   rootVariables, registry, placeholderState, roleState, roleStateByPath, componentLoader, gaps, descriptionLeaves,
 }) {
   const descRequested = config.components && config.components.description != null;
+  const componentAt = (key) => originLocation(config, ['components', key], { file: configPath });
+  const descAt = componentAt('description');
   const descSpec = descRequested
     ? resolveComponentSpec(
         config.components.description, config._base,
-        config._variables || config.variables || null, { diagnostics, file: configPath },
+        config._variables || config.variables || null, { diagnostics, location: descAt },
       )
     : null;
   if (descRequested && !(descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec))) {
-    gaps.record('(project)', 'Description', descSpec, 'source not found');
+    gaps.record('(project)', 'Description', descSpec, 'source not found', descAt);
   } else if (descSpec && typeof descSpec === 'string' && fs.existsSync(descSpec)) {
     let combined = null;
     let descMetadata = null;
@@ -372,7 +398,7 @@ function writeScenarioBlurb({
         }) || null;
       }
     } else {
-      const descComponent = componentLoader.load(descSpec, DESCRIPTION_DESCRIPTOR);
+      const descComponent = componentLoader.load(descSpec, DESCRIPTION_DESCRIPTOR, descAt);
       if (descComponent) {
         descMetadata = resolveComponentMetadata(descComponent.metadata, rootVariables || {}, {
           diagnostics, file: String(descSpec),
@@ -383,7 +409,7 @@ function writeScenarioBlurb({
             defaultHeadingLevel: DESCRIPTION_DESCRIPTOR.defaultHeadingLevel,
             variables: rootVariables || {}, registry, branchProtagonist: null,
             roles: rootRolesDeclared ? rootRoles : null, onRoleUsed: roleState.onUsed,
-            onWarn: busWarner(diagnostics, { file: String(descSpec) }),
+            onWarn: originWarner(diagnostics, { file: String(descSpec) }),
             diagnostics, file: String(descSpec),
           },
         ));
@@ -414,10 +440,11 @@ function writeScenarioBlurb({
           + 'branches, so the root is its own leaf and both write the same Description.md. '
           + 'The scenario blurb is what survives. Drop one, or add the branch the '
           + 'adventure description was written for. Keep one key or add branches.',
-          { file: configPath },
+          descAt,
+          { related: [{ label: 'adventureDescription', ...componentAt('adventureDescription') }] },
         );
       }
-    } else gaps.record('(project)', 'Description', descSpec, 'compiled to empty content');
+    } else gaps.record('(project)', 'Description', descSpec, 'compiled to empty content', descAt);
   }
 }
 

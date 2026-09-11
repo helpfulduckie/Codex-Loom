@@ -31,6 +31,7 @@ function buildCompileContext(config, branchPath, options = {}) {
     rootRoles: config.roles || {},
     rootLint: config.lint || null,
     onWarn: options.onWarn || null,
+    source: config,
   });
   const variables = chain.variables;
   const roleInfo = options.roleStateByPath
@@ -48,10 +49,17 @@ function buildCompileContext(config, branchPath, options = {}) {
     'description', 'adventureDescription', 'scripts',
   ];
   const componentRefs = {};
-  const componentSpecSink = { diagnostics: options.diagnostics, file: options.configPath || null };
+  const componentOrigins = {};
+  const configFile = { file: options.configPath || undefined };
   for (const type of componentTypes) {
     const spec = components[type] !== undefined ? components[type] : null;
-    componentRefs[type] = resolveComponentSpec(spec, config._base, variables, componentSpecSink);
+    const authored = type === 'scripts'
+      ? (chain.scripts !== undefined ? chain.paths.scripts : ['scripts'])
+      : (chain.paths.components[type] || ['components', type]);
+    componentOrigins[type] = originLocation(config, authored, configFile);
+    componentRefs[type] = resolveComponentSpec(spec, config._base, variables, {
+      diagnostics: options.diagnostics, location: componentOrigins[type],
+    });
   }
 
   const templateFor = {};
@@ -71,7 +79,7 @@ function buildCompileContext(config, branchPath, options = {}) {
   }
 
   return {
-    variables, componentRefs, render, templateFor, placeholders: chain.placeholders, roles,
+    variables, componentRefs, componentOrigins, render, templateFor, placeholders: chain.placeholders, roles,
     branchProtagonist: roleInfo ? roleInfo.protagonist : null,
     lint: chain.lint,
   };
@@ -306,7 +314,8 @@ function renderTargets(item, placement, itemId, ctx) {
   let liveTargets = 0;
 
   for (const target of placement.targets) {
-    if (!checkTargetSlot(target, itemId, slotIndex, branchLabel, diagnostics, item._source)) continue;
+    const targetAt = originLocation(item, ['render', target.component, 'slot'], { branch: branchLabel });
+    if (!checkTargetSlot(target, itemId, slotIndex, branchLabel, diagnostics, targetAt)) continue;
     const known = slotIndex.get(target.component);
     if (known && !known.slots.has(String(target.slot).toLowerCase())) continue;
     liveTargets++;

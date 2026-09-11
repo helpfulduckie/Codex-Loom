@@ -3,6 +3,7 @@
 const { CODES: DIAG_CODES } = require('./diag');
 const { loadComponentDocument } = require('./loader/component');
 const { DESCRIPTION_DESCRIPTOR } = require('./emit/components');
+const { originLocation } = require('./origin');
 
 
 class PlaceholderTracker {
@@ -24,8 +25,8 @@ class RoleTracker {
 class GapList {
   constructor() {
     this.entries = [];
-    this.record = (leaf, component, spec, reason) => this.entries.push({
-      leaf, component, spec: spec == null ? '(none)' : String(spec), reason,
+    this.record = (leaf, component, spec, reason, loc = null) => this.entries.push({
+      leaf, component, spec: spec == null ? '(none)' : String(spec), reason, loc,
     });
   }
 
@@ -42,7 +43,8 @@ class ComponentLoader {
     this._docs = new Map();
     this.dependencyLedger = new Set();
 
-    this.load = (spec, descriptor) => {
+    // A cached document reports once, so a missing file names its first requester.
+    this.load = (spec, descriptor, requestedAt = null) => {
       if (!this._docs.has(spec)) {
         const loaded = loadComponentDocument(spec, {
           diagnostics: this._diagnostics,
@@ -50,14 +52,16 @@ class ComponentLoader {
           variables: this._variables,
           base: this._base,
           dependencyLedger: this.dependencyLedger,
+          requestedAt: requestedAt && requestedAt.file ? requestedAt : null,
         });
+        const metadataAt = (...parts) => originLocation(loaded, ['metadata', ...parts], { file: String(spec) });
         if (loaded && loaded.metadata && !descriptor.frontmatter) {
           this._diagnostics.warn(
             DIAG_CODES.COMPONENT_METADATA_UNSUPPORTED,
             `"${descriptor.label}" declares metadata:, which is written as frontmatter and `
             + `only ${DESCRIPTION_DESCRIPTOR.file} carries any — Velvet Lattice reads scenario `
             + 'tags from there. The metadata is ignored here.',
-            { file: String(spec) },
+            metadataAt(),
           );
         }
         if (loaded && loaded.metadata && descriptor.key === 'adventureDescription') {
@@ -68,7 +72,7 @@ class ComponentLoader {
               DIAG_CODES.ADVENTURE_DESCRIPTION_ADVANCED,
               `"${descriptor.label}" declares ${offending.map((k) => `${k}:`).join(' and ')} in `
               + 'metadata:, which belongs to the scenario blurb only. Move those keys to the scenario blurb.',
-              { file: String(spec) },
+              metadataAt(offending[0]),
               {
                 hint: 'Velvet Lattice reads both keys at the root and nowhere else, so they do '
                   + 'nothing at a leaf today. AID has no markdown description for an adventure, '

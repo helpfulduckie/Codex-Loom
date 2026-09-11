@@ -189,7 +189,7 @@ function finalizeDiagnostics({
     diagnostics.error(
       DIAG_CODES.COMPONENT_NO_OUTPUT,
       `[${g.leaf}] ${g.component}: ${g.reason} (spec: ${g.spec})`,
-      { file: configPath },
+      g.loc && g.loc.file ? g.loc : { file: configPath },
     );
   }
 }

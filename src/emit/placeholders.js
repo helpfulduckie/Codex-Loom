@@ -275,7 +275,7 @@ function localKeysOf(node) {
 
 function writeNodePlaceholders(nodeDir, node, mergedTable, variables, {
   onWarn, file, diagnostics, usage, usagePath, duplicates,
-  registry, roles, branchProtagonist, onRoleUsed,
+  registry, roles, branchProtagonist, onRoleUsed, origin = null,
 } = {}) {
   const keys = localKeysOf(node);
   const outPath = path.join(nodeDir, FILENAME);
@@ -314,7 +314,8 @@ function writeNodePlaceholders(nodeDir, node, mergedTable, variables, {
 
   for (const [key, question] of Object.entries(emitted)) {
     const where = `the question text for placeholder "${key}"`;
-    checkUndeclaredPlaceholders(question, mergedTable, { diagnostics, file, where });
+    const loc = origin ? originLocation(origin.source, [...origin.path, key], { file }) : undefined;
+    checkUndeclaredPlaceholders(question, mergedTable, { diagnostics, file, loc, where });
     checkUnexpandedVariables(question, where, { diagnostics, file });
   }
 

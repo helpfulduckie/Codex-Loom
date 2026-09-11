@@ -67,11 +67,11 @@ ERROR CL0609 Codex/items.cl.yaml (branch open)
   item "EmptyPlacement" reaches plotEssential slot "party" on branch "open" but its body renders to nothing there. Exclude it from the branch with "branches:" if that is what was meant.
 ERROR CL0609 Codex/items.cl.yaml (branch open)
   story card "EmptyCardBody" on branch "open" renders an empty body: template "EmptyBody" reads no key this item carries. Use "kind: reference" if the card is triggers and notes only.
-ERROR CL0611 Codex/items.cl.yaml
+ERROR CL0611 Codex/items.cl.yaml (branch open)
   item "Typo" targets slot "casst" in Plot Essentials on branch "open", which declares no such slot. Declared here: cast, party. Correct slot: or declare it.
-ERROR CL0612 Codex/items.cl.yaml
+ERROR CL0612 Codex/items.cl.yaml (branch open)
   item "NotASlot" targets "genre" in Plot Essentials, which is a section but not a slot — only a section declaring "slot: true" can hold items. Add "slot: true" or target a real slot.
-ERROR CL0611 Codex/items.cl.yaml
+ERROR CL0611 Codex/items.cl.yaml (branch open)
   item "IntoPassthrough" targets slot "rules" in AI Instructions, which is prose copied verbatim and declares no slots. Point the component at a YAML document with "sections:" to route items into it.
 ERROR CL0533 Codex/items.cl.yaml (branch open)
   placeholder "%heroName%" in the type of story card "MistypedType" on branch "open" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
@@ -136,11 +136,11 @@ ERROR CL0609 Codex/items.cl.yaml (branch gated)
   item "EmptyPlacement" reaches plotEssential slot "party" on branch "gated" but its body renders to nothing there. Exclude it from the branch with "branches:" if that is what was meant.
 ERROR CL0609 Codex/items.cl.yaml (branch gated)
   story card "EmptyCardBody" on branch "gated" renders an empty body: template "EmptyBody" reads no key this item carries. Use "kind: reference" if the card is triggers and notes only.
-ERROR CL0611 Codex/items.cl.yaml
+ERROR CL0611 Codex/items.cl.yaml (branch gated)
   item "Typo" targets slot "casst" in Plot Essentials on branch "gated", which declares no such slot. Declared here: cast, party. Correct slot: or declare it.
-ERROR CL0612 Codex/items.cl.yaml
+ERROR CL0612 Codex/items.cl.yaml (branch gated)
   item "NotASlot" targets "genre" in Plot Essentials, which is a section but not a slot — only a section declaring "slot: true" can hold items. Add "slot: true" or target a real slot.
-ERROR CL0611 Codex/items.cl.yaml
+ERROR CL0611 Codex/items.cl.yaml (branch gated)
   item "IntoPassthrough" targets slot "rules" in AI Instructions, which is prose copied verbatim and declares no slots. Point the component at a YAML document with "sections:" to route items into it.
 ERROR CL0533 Codex/items.cl.yaml (branch gated)
   placeholder "%heroName%" in the type of story card "MistypedType" on branch "gated" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.
@@ -207,11 +207,11 @@ ERROR CL0609 Codex/items.cl.yaml (branch silent)
   item "EmptyPlacement" reaches plotEssential slot "party" on branch "silent" but its body renders to nothing there. Exclude it from the branch with "branches:" if that is what was meant.
 ERROR CL0609 Codex/items.cl.yaml (branch silent)
   story card "EmptyCardBody" on branch "silent" renders an empty body: template "EmptyBody" reads no key this item carries. Use "kind: reference" if the card is triggers and notes only.
-ERROR CL0611 Codex/items.cl.yaml
+ERROR CL0611 Codex/items.cl.yaml (branch silent)
   item "Typo" targets slot "casst" in Plot Essentials on branch "silent", which declares no such slot. Declared here: cast, party. Correct slot: or declare it.
-ERROR CL0612 Codex/items.cl.yaml
+ERROR CL0612 Codex/items.cl.yaml (branch silent)
   item "NotASlot" targets "genre" in Plot Essentials, which is a section but not a slot — only a section declaring "slot: true" can hold items. Add "slot: true" or target a real slot.
-ERROR CL0611 Codex/items.cl.yaml
+ERROR CL0611 Codex/items.cl.yaml (branch silent)
   item "IntoPassthrough" targets slot "rules" in AI Instructions, which is prose copied verbatim and declares no slots. Point the component at a YAML document with "sections:" to route items into it.
 ERROR CL0533 Codex/items.cl.yaml (branch silent)
   placeholder "%heroName%" in the type of story card "MistypedType" on branch "silent" — AID does not fill placeholders in a card’s type. It is a category, and Codex Loom also makes it a folder and file name in the compiled tree, so the raw text would become part of a path.

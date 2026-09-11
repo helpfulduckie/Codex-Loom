@@ -5,6 +5,38 @@ const { resolveBranchSpec } = require('./branches');
 const { applyFieldOp } = require('./fieldops');
 const { findKey, setCI } = require('../util');
 const { CODES } = require('../diag');
+const {
+  transferOrigins, copyOrigins, originAt, originLocation, getOrigins,
+} = require('../origin');
+
+function isMapping(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function dropOrigin(target, path) {
+  if (getOrigins(target)) transferOrigins(null, target, [], path);
+}
+
+// A nested delta read on its own, carrying the owner's origins rebased to its root.
+function originView(owner, path, value) {
+  return isMapping(value) ? transferOrigins(owner, { ...value }, path, []) : value;
+}
+
+function sectionVariant(section, key) {
+  return originView(section, ['variants', key], section.variants[key]);
+}
+
+// Authored path → normalized field. A default has no authored path, so its lookup
+// falls back to the section key.
+const NORMALIZED_ORIGINS = [
+  [['slot'], ['isSlot']], [['text'], ['text']], [['heading'], ['heading']],
+  [['headingLevel'], ['headingLevel']], [['render', 'position'], ['position']],
+  [['render', 'wrapper'], ['wrapper']], [['render', 'wrap'], ['wrap']],
+  [['render', 'compact'], ['compact']], [['render', 'bullet'], ['bullet']],
+  [['branches'], ['branches']], [['variants'], ['variants']],
+];
+
+const VARIANT_RENDER_KEYS = ['position', 'wrapper', 'wrap', 'compact', 'bullet'];
 
 const WRAP = Object.freeze({
   EACH: 'each',
@@ -50,7 +82,8 @@ function normalizeSection(name, def, index, onWarn) {
   if (isSlot && hasText) {
     onWarn(CODES.SECTION_TEXT_AND_SLOT,
       `section "${name}" declares both "text:" and "slot: true" — a section is one or the other. `
-      + 'Move the text into its own section positioned ahead of the slot.');
+      + 'Move the text into its own section positioned ahead of the slot.',
+      originLocation(raw, ['slot']));
   }
 
   if (!isSlot && !hasText && !hasHeading) {
@@ -60,17 +93,19 @@ function normalizeSection(name, def, index, onWarn) {
       + (importedFrom
         ? ` (inherited from ${importedFrom}, which already reports this for its own copy of `
           + 'the section — fix it there; this is the same section, merged.)'
-        : '') + ' Add content, make it a slot, or remove it.');
+        : '') + ' Add content, make it a slot, or remove it.',
+      originLocation(raw, []));
   }
 
   let wrap = render.wrap === undefined ? WRAP.EACH : String(render.wrap).toLowerCase();
   if (wrap !== WRAP.EACH && wrap !== WRAP.ALL) {
     onWarn(CODES.SECTION_WRAP_UNKNOWN,
-      `section "${name}" sets wrap: "${render.wrap}", which is neither "each" nor "all" — using "each". Change it to "each" or "all".`);
+      `section "${name}" sets wrap: "${render.wrap}", which is neither "each" nor "all" — using "each". Change it to "each" or "all".`,
+      originLocation(raw, ['render', 'wrap']));
     wrap = WRAP.EACH;
   }
 
-  return {
+  const section = {
     name,
     index,
     isSlot,
@@ -85,32 +120,43 @@ function normalizeSection(name, def, index, onWarn) {
     branches: raw.branches || null,
     variants: raw.variants || null,
   };
+  if (getOrigins(raw)) {
+    transferOrigins(raw, section, [], [], { replace: false, descendants: false });
+    for (const [from, to] of NORMALIZED_ORIGINS) {
+      if (originAt(raw, from)) transferOrigins(raw, section, from, to);
+    }
+  }
+  return section;
 }
 
 function applySectionVariant(section, delta) {
   if (!delta || typeof delta !== 'object' || Array.isArray(delta)) return section;
-  const result = { ...section };
+  const result = copyOrigins(section, { ...section });
+  const take = (from, to = from) => transferOrigins(delta, result, from, to);
+  const opCtx = (path) => ({ source: delta, sourcePath: path, target: result, targetPath: path });
 
   if (delta.text !== undefined) {
     if (delta.text === null) {
       result.text = null;
+      take(['text']);
     } else if (typeof delta.text === 'string') {
-      const next = applyFieldOp(result.text, delta.text);
+      const next = applyFieldOp(result.text, delta.text, opCtx(['text']));
       result.text = next === '__DELETE__' ? null : next;
     } else if (typeof delta.text === 'object') {
-      const base = (result.text && typeof result.text === 'object' && !Array.isArray(result.text))
-        ? { ...result.text } : {};
+      const keyed = isMapping(result.text);
+      const base = keyed ? { ...result.text } : {};
+      transferOrigins(delta, result, ['text'], ['text'], { replace: !keyed, descendants: false });
       for (const [key, op] of Object.entries(delta.text)) {
-        if (op === null) { delete base[key]; continue; }
-        const next = applyFieldOp(base[key], op);
-        if (next === '__DELETE__') delete base[key]; else base[key] = next;
+        if (op === null) { delete base[key]; dropOrigin(result, ['text', key]); continue; }
+        const next = applyFieldOp(base[key], op, opCtx(['text', key]));
+        if (next === '__DELETE__') { delete base[key]; dropOrigin(result, ['text', key]); } else base[key] = next;
       }
       result.text = base;
     }
   }
 
-  if (delta.heading !== undefined) result.heading = delta.heading;
-  if (delta.headingLevel !== undefined) result.headingLevel = delta.headingLevel;
+  if (delta.heading !== undefined) { result.heading = delta.heading; take(['heading']); }
+  if (delta.headingLevel !== undefined) { result.headingLevel = delta.headingLevel; take(['headingLevel']); }
 
   const render = (delta.render && typeof delta.render === 'object') ? delta.render : null;
   if (render) {
@@ -119,6 +165,9 @@ function applySectionVariant(section, delta) {
     if (render.wrap !== undefined) result.wrap = String(render.wrap).toLowerCase();
     if (render.compact !== undefined) result.compact = render.compact === true;
     if (render.bullet !== undefined) result.bullet = render.bullet === true;
+    for (const key of VARIANT_RENDER_KEYS) {
+      if (render[key] !== undefined) take(['render', key], [key]);
+    }
   }
 
   return result;
@@ -130,31 +179,48 @@ const CONTENT_KEYS = ['text', 'file', 'from'];
 function layerSectionDef(base, over) {
   const from = (base && typeof base === 'object' && !Array.isArray(base)) ? base : {};
   const raw = (over && typeof over === 'object' && !Array.isArray(over)) ? over : {};
-  const result = { ...from };
+  const result = copyOrigins(from, { ...from });
+  // The section key stays with the base: an overlay changes the paths it names, not the
+  // section it lands on.
+  if (!originAt(result, []) && originAt(raw, [])) {
+    transferOrigins(raw, result, [], [], { replace: false, descendants: false });
+  }
+  const take = (path) => transferOrigins(raw, result, path, path);
+  const takeContainer = (key) => transferOrigins(raw, result, [key], [key],
+    { replace: false, descendants: false });
 
   const overridesContent = CONTENT_KEYS.filter((k) => k in raw);
   if (overridesContent.length > 0) {
     for (const key of CONTENT_KEYS) {
-      if (!overridesContent.includes(key)) delete result[key];
+      if (!overridesContent.includes(key)) { delete result[key]; dropOrigin(result, [key]); }
     }
   }
 
   for (const [key, value] of Object.entries(raw)) {
     if (key === 'text') {
-      if (value === null) { result.text = null; continue; }
-      const next = applyFieldOp(from.text, value);
+      if (value === null) { result.text = null; take(['text']); continue; }
+      const next = applyFieldOp(from.text, value, {
+        source: raw, sourcePath: ['text'], target: result, targetPath: ['text'],
+      });
       result.text = next === '__DELETE__' ? null : next;
     } else if (key === 'render') {
       result.render = Object.assign({}, from.render || {}, value || {});
+      if (isMapping(value)) {
+        takeContainer('render');
+        for (const child of Object.keys(value)) take(['render', child]);
+      }
     } else if (key === 'variants') {
       const merged = { ...(from.variants || {}) };
+      if (isMapping(value)) takeContainer('variants');
       for (const [name, delta] of Object.entries(value || {})) {
         const existing = findKey(merged, name);
         if (existing !== null) merged[existing] = delta; else setCI(merged, name, delta);
+        transferOrigins(raw, result, ['variants', name], ['variants', existing !== null ? existing : name]);
       }
       result.variants = merged;
     } else {
       result[key] = value;
+      take([key]);
     }
   }
   return result;
@@ -176,7 +242,8 @@ function mergeSectionRecords(base, over, onWarn = () => {}) {
         onWarn(CODES.IMPORT_DELETE_UNKNOWN,
           `section "${name}" is deleted with ~ but no import provided it — nothing was `
           + `removed. A bare "${name}:" with no body also parses as ~, which is usually `
-          + 'the cause. Remove the deletion or import the section first.');
+          + 'the cause. Remove the deletion or import the section first.',
+          originLocation(over, [name]));
       } else {
         delete merged[existing];
         keyOf.delete(name.toLowerCase());
@@ -209,7 +276,7 @@ function applySectionSelector(sections, name) {
       continue;
     }
     matched += 1;
-    result[sectionName] = layerSectionDef(def, variants[key]);
+    result[sectionName] = layerSectionDef(def, originView(def, ['variants', key], variants[key]));
   }
 
   return { sections: result, matched };
@@ -221,23 +288,33 @@ function findSectionVariant(section, name) {
     .find((k) => k.toLowerCase() === String(name).toLowerCase());
 }
 
-function sectionsForBranch(component, branchPath, onWarn = () => {}) {
-  const fanned = resolveBranchSpec(component.branches, branchPath, onWarn);
+// A null onWarn also silences resolveBranchSpec's once-per-spec wildcard warning, which a
+// no-op callback would otherwise consume before the rendering pass can report it.
+function sectionsForBranch(component, branchPath, onWarn = null) {
+  const warn = onWarn || (() => {});
+  const selections = [];
+  const fanned = resolveBranchSpec(component.branches, branchPath, onWarn,
+    { source: component, path: ['branches'], selections });
   if (fanned === null) return null; // component-level ~ — excluded from this branch
 
-  for (const name of fanned) {
+  fanned.forEach((name, i) => {
     const matched = component.sections.filter((s) => findSectionVariant(s, name) !== undefined);
-    if (matched.length > 0) continue;
-    onWarn(CODES.COMPONENT_DISPATCH_MATCHED_NOTHING,
+    if (matched.length > 0) return;
+    warn(CODES.COMPONENT_DISPATCH_MATCHED_NOTHING,
       `the component dispatches to variant "${name}" on this branch, and none of its `
       + `${component.sections.length} sections define it. A component-level dispatch names `
       + 'every section (§7.6.2a), so it is silent on the ones that do not define the name — '
-          + 'which makes this the only report a misspelling produces. Correct the variant name or define it.');
-  }
+          + 'which makes this the only report a misspelling produces. Correct the variant name or define it.',
+      selections[i] && selections[i].loc);
+  });
 
   const applicable = [];
   for (const section of component.sections) {
-    const variants = section.branches ? resolveBranchSpec(section.branches, branchPath, onWarn) : [];
+    const sectionSelections = [];
+    const variants = section.branches
+      ? resolveBranchSpec(section.branches, branchPath, onWarn,
+        { source: section, path: ['branches'], selections: sectionSelections })
+      : [];
     if (variants === null) continue;
 
     let resolved = section;
@@ -245,18 +322,19 @@ function sectionsForBranch(component, branchPath, onWarn = () => {}) {
     for (const name of fanned) {
       const key = findSectionVariant(section, name);
       if (key === undefined) continue;
-      resolved = applySectionVariant(resolved, section.variants[key]);
+      resolved = applySectionVariant(resolved, sectionVariant(section, key));
     }
 
-    for (const name of variants) {
+    variants.forEach((name, i) => {
       const key = findSectionVariant(section, name);
       if (key === undefined) {
-        onWarn(CODES.SECTION_VARIANT_NOT_FOUND,
-          `section "${section.name}" dispatches to variant "${name}", which it does not define. Correct the variant name or define it.`);
-        continue;
+        warn(CODES.SECTION_VARIANT_NOT_FOUND,
+          `section "${section.name}" dispatches to variant "${name}", which it does not define. Correct the variant name or define it.`,
+          sectionSelections[i] && sectionSelections[i].loc);
+        return;
       }
-      resolved = applySectionVariant(resolved, section.variants[key]);
-    }
+      resolved = applySectionVariant(resolved, sectionVariant(section, key));
+    });
     applicable.push({ section: resolved, variants: [...fanned, ...variants] });
   }
   applicable.sort((a, b) => (a.section.position - b.section.position)

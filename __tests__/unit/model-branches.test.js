@@ -296,3 +296,57 @@ describe('model/ purity', () => {
   );
 
 });
+
+describe('walkBranchChain source paths', () => {
+  const { loadYamlDocument } = require('../../src/loader/yaml');
+  const { attachOrigins } = require('../../src/origin');
+  const { withTmpDir } = require('../helpers/project');
+
+  function loadConfig() {
+    const file = path.join(withTmpDir(), 'compile.yaml');
+    fs.writeFileSync(file, [
+      'components:',
+      '  plotEssential: ./root.yaml',
+      'branches:',
+      '  a:',
+      '    components:',
+      '      plotEssential: ./a.yaml',
+      '    variables:',
+      '      ghost: ~',
+      '    branches:',
+      '      b:',
+      '        placeholders:',
+      '          lost: ~',
+      '      c:',
+      '        components:',
+      '          plotEssential: ./c.yaml',
+      '  d: {}',
+    ].join('\n'), 'utf8');
+    const { value, sourceMap } = loadYamlDocument(file);
+    return { file, config: attachOrigins(value, sourceMap.exportOrigins()) };
+  }
+
+  test('the deepest branch declaring a component is the path that wins', () => {
+    const { config } = loadConfig();
+    const walk = (leaf) => walkBranchChain(config.branches, leaf, { source: config }).paths.components;
+    expect(walk(['a', 'b']).plotEssential).toEqual(['branches', 'a', 'components', 'plotEssential']);
+    expect(walk(['a', 'c']).plotEssential)
+      .toEqual(['branches', 'a', 'branches', 'c', 'components', 'plotEssential']);
+    // The root value is not on the chain; the caller falls back to it.
+    expect(walk(['d']).plotEssential).toBeUndefined();
+  });
+
+  test('an unbind of something never inherited is reported at its own branch key', () => {
+    const { file, config } = loadConfig();
+    const seen = [];
+    walkBranchChain(config.branches, ['a', 'b'], {
+      source: config, onWarn: (code, message, loc) => seen.push({ code, ...loc }),
+    });
+    expect(seen.find((d) => d.code === CODES.VARIABLE_UNBIND_UNKNOWN)).toMatchObject({
+      file, line: 8, path: ['branches', 'a', 'variables', 'ghost'],
+    });
+    expect(seen.find((d) => d.code === CODES.PLACEHOLDER_UNBIND_UNKNOWN)).toMatchObject({
+      file, line: 12, path: ['branches', 'a', 'branches', 'b', 'placeholders', 'lost'],
+    });
+  });
+});

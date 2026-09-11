@@ -129,10 +129,12 @@ function enumerateLeaves(branches, prefix) {
   return leaves;
 }
 
+// `source` is the config carrying origins for `branches`; `paths` records the authored
+// config path of each branch value that wins, so a caller can locate the controlling key.
 function walkBranchChain(branches, branchPath, options = {}) {
   const {
     rootPlaceholders = null, rootVariables = null, rootRoles = null, rootLint = null,
-    onWarn = null,
+    onWarn = null, source = null,
   } = options;
   const result = {
     nodes: [],
@@ -145,9 +147,11 @@ function walkBranchChain(branches, branchPath, options = {}) {
     placeholders: Object.assign({}, rootPlaceholders || {}),
     lint: { packs: Object.assign({}, (rootLint && rootLint.packs) || {}), level: null },
     node: null,
+    paths: { components: {}, scripts: null },
   };
 
   let currentMap = branches;
+  let nodePath = [];
   for (const segment of (branchPath || [])) {
     const actualKey = currentMap && typeof currentMap === 'object'
       ? findKey(currentMap, String(segment))
@@ -160,25 +164,35 @@ function walkBranchChain(branches, branchPath, options = {}) {
     }
 
     const node = currentMap[actualKey];
+    nodePath = [...nodePath, 'branches', actualKey];
     result.folderPath.push(actualKey);
     result.nodes.push(node);
     result.node = node || null;
 
     if (node && typeof node === 'object') {
+      const at = (...parts) => (source ? { source, path: [...nodePath, ...parts] } : null);
       result.variables = mergeUnbindable(result.variables, node.variables, {
-        code: CODES.VARIABLE_UNBIND_UNKNOWN, kind: 'variable', onWarn,
+        code: CODES.VARIABLE_UNBIND_UNKNOWN, kind: 'variable', onWarn, origin: at('variables'),
       });
       if (node.roles) result.rolesDeclared = true;
       result.roles = mergeUnbindable(result.roles, node.roles, {
-        code: CODES.ROLE_UNBIND_UNKNOWN, kind: 'role', onWarn,
+        code: CODES.ROLE_UNBIND_UNKNOWN, kind: 'role', onWarn, origin: at('roles'),
       });
-      if (node.components) Object.assign(result.components, node.components);
+      if (node.components) {
+        Object.assign(result.components, node.components);
+        for (const key of Object.keys(node.components)) {
+          result.paths.components[key] = [...nodePath, 'components', key];
+        }
+      }
       if (node.render) Object.assign(result.render, node.render);
-      result.placeholders = mergePlaceholders(result.placeholders, node, onWarn);
-      if (node.scripts !== undefined) result.scripts = node.scripts;
+      result.placeholders = mergePlaceholders(result.placeholders, node, onWarn, at('placeholders'));
+      if (node.scripts !== undefined) {
+        result.scripts = node.scripts;
+        result.paths.scripts = [...nodePath, 'scripts'];
+      }
       if (node.lint && typeof node.lint === 'object') {
         result.lint.packs = mergeUnbindable(result.lint.packs, node.lint.packs, {
-          code: CODES.PACK_UNBIND_UNKNOWN, kind: 'convention pack', onWarn,
+          code: CODES.PACK_UNBIND_UNKNOWN, kind: 'convention pack', onWarn, origin: at('lint', 'packs'),
         });
         if (node.lint.level !== undefined && node.lint.level !== null) {
           result.lint.level = node.lint.level;
@@ -192,7 +206,11 @@ function walkBranchChain(branches, branchPath, options = {}) {
   return result;
 }
 
-function mergePlaceholders(table, node, onWarn = null) {
+function unbindLocation(origin, key) {
+  return origin ? originLocation(origin.source, [...origin.path, key]) : undefined;
+}
+
+function mergePlaceholders(table, node, onWarn = null, origin = null) {
   const merged = Object.assign({}, table || {});
   const local = node && node.placeholders;
   if (!local || typeof local !== 'object') return merged;
@@ -205,6 +223,7 @@ function mergePlaceholders(table, node, onWarn = null) {
           `placeholder "${key}" is unbound with ~ but was never inherited here — `
           + 'nothing was removed; remove ~ or inherit the placeholder. A bare "' + key
           + ':" with no question also parses as ~, which is usually the cause.',
+          unbindLocation(origin, key),
         );
       }
       delete merged[key];
@@ -215,7 +234,7 @@ function mergePlaceholders(table, node, onWarn = null) {
   return merged;
 }
 
-function mergeUnbindable(table, local, { code, kind, onWarn = null }) {
+function mergeUnbindable(table, local, { code, kind, onWarn = null, origin = null }) {
   const merged = Object.assign({}, table || {});
   if (!local || typeof local !== 'object') return merged;
 
@@ -226,6 +245,7 @@ function mergeUnbindable(table, local, { code, kind, onWarn = null }) {
           code,
           `${kind} "${key}" is unbound with ~ but was never inherited here — nothing was `
           + 'removed; remove ~ or inherit it.',
+          unbindLocation(origin, key),
         );
       }
       delete merged[key];

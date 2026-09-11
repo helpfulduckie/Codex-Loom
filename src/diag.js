@@ -200,6 +200,15 @@ function busWarner(diagnostics, loc) {
   return (code, message) => diagnostics.add(severityOf(code), code, message, loc || {});
 }
 
+// A caller-supplied location replaces the fallback's file/line/col but keeps its branch.
+function originWarner(diagnostics, fallback = {}) {
+  return (code, message, at) => {
+    const { file, line, col, ...context } = fallback;
+    const loc = at && at.file ? { ...context, ...at } : { ...fallback, ...(at || {}) };
+    diagnostics.add(severityOf(code), code, message, loc);
+  };
+}
+
 class Diagnostic {
   constructor({ code, severity, message, file, line, col, hint, branch, related = [] }) {
     this.code = code;
@@ -336,6 +345,6 @@ class Diagnostics {
 }
 
 module.exports = {
-  Diagnostic, Diagnostics, SEVERITY, SEVERITY_LABEL, REGISTRY, CODES, severityOf, busWarner,
+  Diagnostic, Diagnostics, SEVERITY, SEVERITY_LABEL, REGISTRY, CODES, severityOf, busWarner, originWarner,
   isOpinion, LINT_LEVELS, applyLintLevel,
 };

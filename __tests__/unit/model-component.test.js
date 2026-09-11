@@ -528,3 +528,120 @@ describe('applySectionSelector', () => {
     expect(applySectionSelector(sections(), 'DARK').matched).toBe(1);
   });
 });
+
+describe('dispatch and variant origins', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { loadComponentDocument } = require('../../src/loader/component');
+  const { originAt } = require('../../src/origin');
+  const { Diagnostics } = require('../../src/diag');
+  const { withTmpDir } = require('../helpers/project');
+
+  function load(lines) {
+    const spec = path.join(withTmpDir(), 'component.yaml');
+    fs.writeFileSync(spec, lines.join('\n'), 'utf8');
+    return { spec, component: loadComponentDocument(spec, { diagnostics: new Diagnostics() }) };
+  }
+
+  function located() {
+    const seen = [];
+    return { seen, onWarn: (code, message, loc) => seen.push({ code, ...loc }) };
+  }
+
+  const DOC = [
+    'branches:',
+    '  dark:',
+    '    apply: [night, misspelt]',
+    'sections:',
+    '  intro:',
+    '    heading: Intro',
+    '    text: Day',
+    '    variants:',
+    '      night:',
+    '        text: Night',
+    '        render: {position: 1}',
+    '  list:',
+    '    text:',
+    '      a: One',
+    '      b: Two',
+    '      c: Three',
+    '    variants:',
+    '      night:',
+    '        text:',
+    '          a: ~',
+    '          b: Deux',
+    '  cast:',
+    '    slot: true',
+    '    branches:',
+    '      dark: nobody',
+  ];
+
+  test('a selected variant owns only the paths it changes', () => {
+    const { spec, component } = load(DOC);
+    const resolved = Object.fromEntries(
+      sectionsForBranch(component, ['dark']).map(({ section }) => [section.name, section]),
+    );
+    expect(resolved.intro).toMatchObject({ text: 'Night', heading: 'Intro', position: 1 });
+    expect(originAt(resolved.intro, 'text')).toMatchObject({
+      file: spec, line: 10, path: ['sections', 'intro', 'variants', 'night', 'text'],
+    });
+    expect(originAt(resolved.intro, 'position')).toMatchObject({ file: spec, line: 11 });
+    expect(originAt(resolved.intro, 'heading')).toMatchObject({ file: spec, line: 6 });
+
+    expect(resolved.list.text).toEqual({ b: 'Deux', c: 'Three' });
+    expect(originAt(resolved.list, 'text', 'b')).toMatchObject({ line: 21 });
+    expect(originAt(resolved.list, 'text', 'c')).toMatchObject({ line: 16 });
+    expect(originAt(resolved.list, 'text', 'a')).toBeNull();
+  });
+
+  test('dispatch misses are reported at the selector that named them', () => {
+    const { spec, component } = load(DOC);
+    const { seen, onWarn } = located();
+    sectionsForBranch(component, ['dark'], onWarn);
+    expect(seen.find((d) => d.code === CODES.COMPONENT_DISPATCH_MATCHED_NOTHING)).toMatchObject({
+      file: spec, line: 3, path: ['branches', 'dark', 'apply', '1'],
+    });
+    expect(seen.find((d) => d.code === CODES.SECTION_VARIANT_NOT_FOUND)).toMatchObject({
+      file: spec, line: 25, path: ['sections', 'cast', 'branches', 'dark'],
+    });
+  });
+
+  test('an overlay replaces the origins it overrides and prunes the content it displaces', () => {
+    const { attachOrigins, createOriginIndex } = require('../../src/origin');
+    const at = (file, entries) => createOriginIndex(entries.map(([p, line]) => ({ file, path: p, line })));
+    const base = attachOrigins({
+      file: './story.txt', heading: 'H', render: { position: 2, wrapper: 'square' },
+      variants: { Night: { text: 'N' }, dawn: { text: 'D' } },
+    }, at('base', [[[], 1], [['file'], 2], [['heading'], 3], [['render'], 4], [['render', 'position'], 4],
+      [['render', 'wrapper'], 4], [['variants'], 5], [['variants', 'Night'], 6], [['variants', 'dawn'], 7]]));
+    const over = attachOrigins({
+      text: 'Local', render: { position: 1 }, variants: { night: { text: 'n' } },
+    }, at('over', [[[], 10], [['text'], 11], [['render'], 12], [['render', 'position'], 12],
+      [['variants'], 13], [['variants', 'night'], 14]]));
+
+    const layered = layerSectionDef(base, over);
+    expect(originAt(layered, 'text')).toMatchObject({ file: 'over', line: 11 });
+    expect(originAt(layered, 'file')).toBeNull();
+    expect(originAt(layered, 'heading')).toMatchObject({ file: 'base', line: 3 });
+    expect(originAt(layered, 'render', 'position')).toMatchObject({ file: 'over', line: 12 });
+    expect(originAt(layered, 'render', 'wrapper')).toMatchObject({ file: 'base', line: 4 });
+    // The base spelling survives a case-insensitive merge, and its origin moves to the overlay.
+    expect(originAt(layered, 'variants', 'Night')).toMatchObject({ file: 'over', line: 14 });
+    expect(originAt(layered, 'variants', 'dawn')).toMatchObject({ file: 'base', line: 7 });
+    expect(originAt(layered, [])).toMatchObject({ file: 'base', line: 1 });
+  });
+
+  test('indexing slots first does not consume the wildcard-unbind warning', () => {
+    const { spec, component } = load([
+      'branches:',
+      "  '*': ~",
+      'sections:',
+      '  cast:',
+      '    slot: true',
+    ]);
+    slotsForBranch(component, ['x']);
+    const { seen, onWarn } = located();
+    sectionsForBranch(component, ['x'], onWarn);
+    expect(seen.find((d) => d.code === CODES.BRANCH_WILDCARD_UNBIND)).toMatchObject({ file: spec, line: 2 });
+  });
+});
