@@ -288,8 +288,9 @@ function findSectionVariant(section, name) {
     .find((k) => k.toLowerCase() === String(name).toLowerCase());
 }
 
-// A null onWarn also silences resolveBranchSpec's once-per-spec wildcard warning, which a
-// no-op callback would otherwise consume before the rendering pass can report it.
+// Pass null, not a no-op, when not reporting: resolveBranchSpec warns about a wildcard
+// unbind once per spec, and a no-op callback spends that once before the rendering pass
+// (vault assumption "A No-Op Warner Spends The Wildcard-Unbind Warning").
 function sectionsForBranch(component, branchPath, onWarn = null) {
   const warn = onWarn || (() => {});
   const selections = [];

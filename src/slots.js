@@ -218,7 +218,7 @@ function buildSlotIndex(sectionedForLeaf, branchPath) {
 function checkTargetSlot(target, itemId, slotIndex, label, diagnostics, at) {
   const known = slotIndex.get(target.component);
   if (!known) return true;
-  const loc = typeof at === 'string' || at == null ? { file: at } : at;
+  const loc = at || {};
   const related = (role, origin) => (origin && origin.file ? { related: [{ label: role, ...origin }] } : {});
 
   if (known.passthrough) {
