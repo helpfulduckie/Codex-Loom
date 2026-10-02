@@ -6,7 +6,7 @@ picks different items: every character gains a Magic field on a `magical` leaf a
 on a `mundane` one. This is the first example project that reads `examples/library/`.
 
 ```bash
-node src/cli.js ./examples/variants-and-fieldops --clean
+node src/cli.js ./examples/variants-and-fieldops
 ```
 
 A clean run prints six branch rows, no `ERROR` and no `WARN`.

@@ -8,6 +8,7 @@ const { CODES } = require('../diag');
 const { resolveVariables, checkUnexpandedVariables, PLACEHOLDER_RE } = require('../util');
 const { applyTokenPass } = require('../model/pronouns');
 const { originLocation } = require('../origin');
+const { recordWrite } = require('../outputLedger');
 
 const FILENAME = 'Placeholders.yaml';
 
@@ -322,6 +323,7 @@ function writeNodePlaceholders(nodeDir, node, mergedTable, variables, {
 
   fs.mkdirSync(nodeDir, { recursive: true });
   fs.writeFileSync(outPath, YAML.stringify(emitted), 'utf8');
+  recordWrite(outPath);
   return outPath;
 }
 

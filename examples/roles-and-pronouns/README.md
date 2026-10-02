@@ -8,7 +8,7 @@ characters plus the stranger. This is the second example project that reads
 `examples/library/`, and it reads the `core` set only.
 
 ```bash
-node src/cli.js ./examples/roles-and-pronouns --clean
+node src/cli.js ./examples/roles-and-pronouns
 ```
 
 A clean run prints ten branch rows, no `ERROR` and no `WARN`.

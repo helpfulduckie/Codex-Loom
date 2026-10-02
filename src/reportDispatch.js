@@ -5,6 +5,7 @@ const path = require('path');
 const { CODES: DIAG_CODES } = require('./diag');
 const { isOutOfBase, normalize } = require('./config/load');
 const { reportUnusedPlaceholders, reportDuplicateQuestions } = require('./emit/placeholders');
+const { recordWrite } = require('./outputLedger');
 
 function reportUnusedRoles(declarations, usage, { diagnostics, file }) {
   const unused = [];
@@ -158,6 +159,7 @@ function finalizeDiagnostics({
       library: libraryManifest,
     };
     fs.writeFileSync(manifestPath, JSON.stringify(manifestData, null, 2), 'utf8');
+    recordWrite(manifestPath);
     log.verbose(`  OK: Library manifest → ${manifestPath}`);
   }
 

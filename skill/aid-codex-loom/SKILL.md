@@ -97,7 +97,6 @@ existing output tree.
 | `-V` / `--with-variance` | Per item: each distinct rendered card once, which branches get it, and a rendered-text diff along its variant chain |
 | `--schema-tables` | Generate `schema-tables.md` from `fields.cl.yaml` |
 | `--live` | Read the live library instead of the snapshot, for this run |
-| `-c` / `--clean` | Clear output folders first |
 | `-v` / `--verbose` | Per-file logging |
 
 `--lint-level=off|error|warn` overrides `lint.level` and reaches the opinion layer only.

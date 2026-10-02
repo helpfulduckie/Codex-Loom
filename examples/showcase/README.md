@@ -5,14 +5,14 @@ project exists so those snippets are executable rather than merely plausible: if
 example is wrong, this project stops compiling cleanly.
 
 ```bash
-node src/cli.js ./examples/showcase --clean
+node src/cli.js ./examples/showcase
 ```
 
 A clean run prints three branch rows, no `ERROR` and no `WARN`. Anything else is a
 regression — either in the compiler or in a documentation snippet this project copies.
 
 Every report mode also runs against it. Each post-hoc mode needs its own flag, and
-`--clean` clears `output/` but never `Review/` — so a partial invocation leaves stale
+a compile sweeps stale files from `output/` but never touches `Review/` — so a partial invocation leaves stale
 report directories behind rather than removing them:
 
 ```bash

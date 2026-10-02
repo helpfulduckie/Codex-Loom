@@ -13,7 +13,8 @@ const { buildCardTypeAudit } = require('./cardType');
 const {
   checkConfigNotesTemplates, gatherTierTemplates,
 } = require('./templateResolve');
-const { cleanAndArchive } = require('./outputPaths');
+const { sweepOutput } = require('./outputPaths');
+const { startOutputLedger, takeOutputLedger } = require('./outputLedger');
 const {
   loadItemsFromDir, buildRegistry, mergeRegistries,
   resolveIncludes, buildCanonRegistry,
@@ -152,6 +153,7 @@ function compile(configPath, options = {}) {
   try {
     return compileRun(configPath, options, buses);
   } finally {
+    takeOutputLedger(); // a run that threw before its sweep leaves no ledger behind
     if (options.diagnostics) {
       if (buses.load) options.diagnostics.merge(buses.load);
       if (buses.compile) options.diagnostics.merge(buses.compile);
@@ -228,12 +230,8 @@ function compileRun(configPath, options, buses) {
 
   const leaves = enumerateLeaves(config.branches);
 
-  if (options.clean) {
-    log.info('\nClean build: clearing output folders...');
-    cleanAndArchive(config, leaves, log);
-  }
-
   log.info(`\nCompiling ${leaves.length} branch leaf/leaves...`);
+  startOutputLedger();
 
   let totalFiles = 0;
   const allItemIds = new Set();
@@ -298,6 +296,11 @@ function compileRun(configPath, options, buses) {
     registry, rootDirName, fieldTable, tierTemplates,
     captureReports, leafData, inventoryData, allItemDefs,
   });
+
+  // Every output file is written by now, so what the compiler owns and did not write is
+  // stale. The errors below describe a complete tree, so they do not stop the sweep; an
+  // exception before this point skips it and leaves the previous output in place.
+  sweepOutput(config, leaves, takeOutputLedger(), log);
 
   if (gaps.length > 0) {
     throw new Error(

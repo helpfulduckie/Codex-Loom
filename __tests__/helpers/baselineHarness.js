@@ -103,10 +103,9 @@ function normalizeManifest(raw, rootDir) {
  * baseline would survive there as a stale file the file-set assertion could not tell from a
  * real one. OUTPUT_SUBDIR ("Velvet Lattice/") is excluded for a third: it is compiler output,
  * gitignored and absent on a clean clone, but on a checkout where someone ran the CLI against
- * a project directly it survives the copy — and compile does not run with --clean here — so a
- * stale per-leaf dir the current compiler no longer writes would linger as an orphan and break
- * the file-set assertion. Phase 12 Session D hit this with the Scripts/ lift and deleted the
- * local dirs by hand; excluding it here is the fix.
+ * a project directly it survives the copy. The compile's own sweep would remove what it owns,
+ * but anything else left there — a `.short_id`, an archived node — would break the file-set
+ * assertion, so the comparison starts from no output at all.
  *
  * `prefix` is the mkdtemp prefix — how someone reading `os.tmpdir()` tells a stuck test run
  * from a stuck regeneration, so the two callers keep their own.

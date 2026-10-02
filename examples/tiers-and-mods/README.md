@@ -10,7 +10,7 @@ is the third example project that reads `examples/library/`, and it reads the `c
 only.
 
 ```bash
-node src/cli.js ./examples/tiers-and-mods --clean
+node src/cli.js ./examples/tiers-and-mods
 ```
 
 A clean run prints six branch rows, no `ERROR` and no `WARN`.

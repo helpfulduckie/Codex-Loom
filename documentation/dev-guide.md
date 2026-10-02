@@ -48,7 +48,8 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/slots.js` | The sections one `render.storyCards`/`render.component` entry renders; slot index; empty-slot warnings (§7.8) |
 | `src/leafLoop.js` | The per-leaf compile loop: branch-chain merge, sectioned components, slot index, card + slot render in one pass |
 | `src/inherit.js` | Component and script inheritance down the branch tree; story-card placement with overrides, `placeWithOverrides` (§7.3a) |
-| `src/outputPaths.js` | Where a branch node's folder lands on disk; the pre-build sweep that wipes output folders and archives stale nodes |
+| `src/outputPaths.js` | Where a branch node's folder lands on disk; the post-write sweep that removes output the compile did not write and archives stale nodes |
+| `src/outputLedger.js` | The files a compile has written, recorded by every output writer for the sweep (§8.7) |
 | `src/treeWrite.js` | Recursive writers for interior-node framing, labels, placeholders and descriptions; component-spec resolution |
 | `src/compiledTree.js` | The one compiled-output-tree traversal `seedmap`/`bodysize`/`overview` are built from — child lists, ancestor walk, per-node merge (§7.3a) |
 | `src/reportDispatch.js` | End-of-compile report dispatch and the load-diagnostic replay; the `CL0545` unused-role check |

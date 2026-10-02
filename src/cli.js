@@ -162,6 +162,7 @@ function main(rawArgs) {
     ['variance',   ['--with-variance', '--variance', '-V']],
     ['inventory',  ['--with-inventory', '--inventory', '-i']],
     ['schemaTables', ['--schema-tables']],
+    // Accepted so existing invocations keep working; every compile now sweeps its output.
     ['clean',      ['--clean',      '-c']],
     ['verbose',    ['--verbose',    '-v']],
     ['live',       ['--live']],
@@ -236,7 +237,7 @@ function main(rawArgs) {
     console.error(
       'Usage: codex-loom [mode flags] [compile options] [<folder | compile.yaml>]\n' +
       '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --body-sizes|-b  --lint|-L  --snapshot  --migrate  --rename-cl\n' +
-      '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-variance|-V  --with-inventory|-i  --schema-tables  --clean|-c  --verbose|-v  --live\n' +
+      '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-variance|-V  --with-inventory|-i  --schema-tables  --verbose|-v  --live\n' +
       '  Migrate options:       --rename-cl  (renames the whole project to .cl.yaml / .cl.yml; also runs standalone on a v4 project)\n' +
       '  Diagnostics:           --lint-level=off|error|warn  (overrides lint.level; reaches the opinion layer only)\n' +
       '  No mode flag compiles. Report modes read the existing output tree; compile options force a compile.\n' +
@@ -328,9 +329,12 @@ function main(rawArgs) {
     } else {
       compileDiagnostics = new Diagnostics();
       let failure = null;
+      if (flags.clean) {
+        log.info('Note: --clean is no longer needed. Every compile removes output it did not write.');
+      }
       try {
         compile(configPath, {
-          clean: flags.clean, log,
+          log,
           diff: flags.diff, annotate: flags.annotate, variance: flags.variance, inventory: flags.inventory,
           schemaTables: flags.schemaTables,
           lintLevel, live: flags.live,

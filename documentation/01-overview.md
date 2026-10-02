@@ -28,10 +28,6 @@ codex-loom path/to/project/
 codex-loom --verbose path/to/project/
 codex-loom -v path/to/project/
 
-# Compile and wipe stale branch folders first
-codex-loom --clean path/to/project/
-codex-loom -c path/to/project/
-
 # Generate one leaf-review file per branch leaf
 codex-loom --leafReview path/to/project/
 codex-loom -l path/to/project/
@@ -69,7 +65,7 @@ codex-loom -C -l -o path/to/project/
 
 **Mode flags** — `-C`/`--compile`, `-l`/`--leafReview`, `-o`/`--overview`, `-s`/`--seed-map`, `-b`/`--body-sizes`, `-L`/`--lint`, `--snapshot`, `--migrate` — control what runs. Any combination is valid except `--migrate`, which runs alone.
 
-**Compile options** — `-d`/`--with-diff`, `-a`/`--with-annotate`, `-V`/`--with-variance`, `-i`/`--with-inventory`, `-c`/`--clean`, `-v`/`--verbose`, `--live` — modify a compile rather than selecting one. The first four emit review reports from data that only exists in memory during compilation, so any of them forces a compile. (`--diff`, `--annotate`, `--variance` and `--inventory` are accepted as aliases.)
+**Compile options** — `-d`/`--with-diff`, `-a`/`--with-annotate`, `-V`/`--with-variance`, `-i`/`--with-inventory`, `-v`/`--verbose`, `--live` — modify a compile rather than selecting one. The first four emit review reports from data that only exists in memory during compilation, so any of them forces a compile. (`--diff`, `--annotate`, `--variance` and `--inventory` are accepted as aliases.)
 
 **Diagnostics** — `--lint-level=off|error|warn` (also `--lint-level warn`) overrides `lint.level` from `compile.yaml`. It reaches the opinion layer only — the quality heuristics (trigger-less cards, prose guesses, unused or duplicated placeholder declarations, convention-pack findings) — and never silences a factual error like a leaked token or a platform-cap overflow. It is deliberately separate from `--verbose`: verbosity is about compile progress, this is about which diagnostics an author wants to hear.
 
@@ -92,7 +88,9 @@ codex-loom -C -l -o path/to/project/
 | `-C -L` | Compile, then lint |
 | `-C -l -o` | Compile, then both review modes |
 
-`-c`/`--clean` and `-v`/`--verbose` only apply to the compile step.
+`-v`/`--verbose` only applies to the compile step.
+
+**Every compile cleans up after itself.** Once everything is written, the compiler deletes any output file it owns and did not write this run — a card file whose item is gone, a copy left at a leaf after the card moved up the tree — and removes branch folders the config no longer has. A removed branch folder that still holds something the compiler did not write, such as Velvet Lattice's `.short_id`, is moved to `Archive/<timestamp>/` instead of deleted. A compile that fails while writing skips the cleanup, so the previous output stays in place. `--clean` is still accepted and does nothing.
 
 **The library snapshot** (`--snapshot`, `--live`) — Shared items declared under `library:` are frozen into a committed `snapshot/` tree with a hashed manifest, so a compile reproduces byte-for-byte even when the shared source moves underneath it. Library-name `{%name}` tokens resolve against the snapshot by default; `--live` redirects them to the working library instead. See [The Library Snapshot](12-snapshot.md).
 

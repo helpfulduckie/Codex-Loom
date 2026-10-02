@@ -7,11 +7,13 @@ const { writeSectionedComponent, renderFrontmatter } = require('./emit/component
 const {
   writeOutput, buildBranchOutputDir, resolveBranchFolderPath,
 } = require('./outputPaths');
+const { recordTree } = require('./outputLedger');
 
 function copyScripts(srcDir, targetDir) {
   if (!srcDir || !fs.existsSync(srcDir)) return;
   const dest = path.join(targetDir, 'Scripts');
   fs.cpSync(srcDir, dest, { recursive: true });
+  recordTree(dest);
 }
 
 /** The branch tree as nodes keyed by path prefix; `leaf` is the leaf index ending there. */

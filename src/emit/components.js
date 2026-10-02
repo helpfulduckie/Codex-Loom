@@ -8,6 +8,7 @@ const YAML = require('yaml');
 const { sectionsForBranch, WRAP } = require('../model/component');
 const { applyWrapper } = require('../template');
 const { applyTokenPass } = require('../model/pronouns');
+const { recordWrite } = require('../outputLedger');
 const {
   resolveVariables, transformStringValues, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts,
 } = require('../util');
@@ -200,6 +201,7 @@ function writeSectionedComponent(outputDir, descriptor, content, sink, metadata 
   checkUnresolvedFieldTokens(content, label, sink);
   checkMechanicalArtifacts(content, label, sink);
   fs.writeFileSync(outPath, `${frontmatter}${content}\n`, 'utf8');
+  recordWrite(outPath);
   return outPath;
 }
 

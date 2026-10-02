@@ -3,7 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const {
-  writeOutput, buildBranchOutputDir, cleanAndArchive,
+  writeOutput, buildBranchOutputDir, sweepOutput,
 } = require('../../src/outputPaths');
 const { NULL_LOG } = require('../../src/log');
 const { withTmpDir } = require('../helpers/project');
@@ -53,15 +53,18 @@ describe('writeOutput', () => {
 });
 
 /**
- * The clean sweep visits branch *nodes*, not branch leaves.
+ * The sweep visits branch *nodes*, not branch leaves.
  *
- * It swept only leaves until Phase 4's `Placeholders.yaml` made the hole visible. An
- * interior node owns a `Label.md` — and now a `Placeholders.yaml` — and Velvet Lattice
- * reads both and inherits them down the subtree, so a declaration deleted from an interior
- * node survived in the output and went on being inherited. The root had the same hole from
- * the other end: it entered the expected set only when the project had no branches at all.
+ * An interior node owns a `Label.md` and a `Placeholders.yaml`, and Velvet Lattice reads
+ * both and inherits them down the subtree, so a declaration deleted from an interior node
+ * would survive in the output and go on being inherited. The root is a node too.
+ *
+ * These pass an empty ledger — a compile that wrote nothing — so everything the compiler
+ * owns is stale; the next block covers what the ledger keeps.
  */
-describe('cleanAndArchive sweeps every node, not just leaves', () => {
+const sweepAll = (cfg, leaves) => sweepOutput(cfg, leaves, new Set(), NULL_LOG);
+
+describe('sweepOutput visits every node, not just leaves', () => {
   let outDir;
 
   /** An output tree: root, one interior node, two leaves under it. */
@@ -87,7 +90,7 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
 
   test('an interior node is swept', () => {
     const nodes = buildTree();
-    cleanAndArchive(config(TIER), [['tier', 'alpha'], ['tier', 'beta']], NULL_LOG);
+    sweepAll(config(TIER), [['tier', 'alpha'], ['tier', 'beta']]);
 
     expect(fs.existsSync(path.join(nodes.interior, 'Placeholders.yaml'))).toBe(false);
     expect(fs.existsSync(path.join(nodes.interior, 'Label.md'))).toBe(false);
@@ -96,7 +99,7 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
 
   test('the root of a branched project is swept too', () => {
     const nodes = buildTree();
-    cleanAndArchive(config(TIER), [['tier', 'alpha'], ['tier', 'beta']], NULL_LOG);
+    sweepAll(config(TIER), [['tier', 'alpha'], ['tier', 'beta']]);
 
     expect(fs.existsSync(path.join(nodes.root, 'Placeholders.yaml'))).toBe(false);
     expect(fs.existsSync(path.join(nodes.root, 'Label.md'))).toBe(false);
@@ -104,7 +107,7 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
 
   test('leaves are still swept, and the tree itself survives', () => {
     const nodes = buildTree();
-    cleanAndArchive(config(TIER), [['tier', 'alpha'], ['tier', 'beta']], NULL_LOG);
+    sweepAll(config(TIER), [['tier', 'alpha'], ['tier', 'beta']]);
 
     expect(fs.existsSync(path.join(nodes.alpha, 'Placeholders.yaml'))).toBe(false);
     expect(fs.existsSync(nodes.alpha)).toBe(true);
@@ -116,7 +119,7 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
     // Nothing but compiler output, so there is nothing to keep. Archiving is for what the
     // compiler does not own; see the next test.
     const nodes = buildTree();
-    cleanAndArchive(config({ tier: { branches: { alpha: {} } } }), [['tier', 'alpha']], NULL_LOG);
+    sweepAll(config({ tier: { branches: { alpha: {} } } }), [['tier', 'alpha']]);
 
     expect(fs.existsSync(nodes.beta)).toBe(false);
     expect(fs.existsSync(nodes.alpha)).toBe(true);
@@ -127,7 +130,7 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
     const nodes = buildTree();
     fs.writeFileSync(path.join(nodes.beta, 'notes.txt'), 'written by hand', 'utf8');
 
-    cleanAndArchive(config({ tier: { branches: { alpha: {} } } }), [['tier', 'alpha']], NULL_LOG);
+    sweepAll(config({ tier: { branches: { alpha: {} } } }), [['tier', 'alpha']]);
 
     const archive = path.join(outDir, 'Archive');
     const stamp = fs.readdirSync(archive)[0];
@@ -140,7 +143,7 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
     // Ancestors of a live leaf are live, so a stale node can never hold one — which is
     // what makes taking an interior node whole safe rather than destructive.
     buildTree();
-    cleanAndArchive(config({ other: {} }), [['other']], NULL_LOG);
+    sweepAll(config({ other: {} }), [['other']]);
 
     expect(fs.existsSync(path.join(outDir, 'Branches', 'tier'))).toBe(false);
   });
@@ -152,11 +155,56 @@ describe('cleanAndArchive sweeps every node, not just leaves', () => {
     const nodes = buildTree();
     fs.writeFileSync(path.join(nodes.alpha, 'notes.txt'), 'written by hand', 'utf8');
 
-    cleanAndArchive(config({ other: {} }), [['other']], NULL_LOG);
+    sweepAll(config({ other: {} }), [['other']]);
 
     const archive = path.join(outDir, 'Archive');
     const stamp = fs.readdirSync(archive)[0];
     expect(fs.readdirSync(path.join(archive, stamp, 'Branches'))).toEqual(['tier']);
     expect(fs.existsSync(path.join(outDir, 'Branches', 'tier'))).toBe(false);
+  });
+});
+
+describe('sweepOutput keeps what this compile wrote', () => {
+  let outDir;
+  const write = (rel, text = 'x') => {
+    const file = path.join(outDir, ...rel.split('/'));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text, 'utf8');
+    return path.resolve(file);
+  };
+  const exists = (rel) => fs.existsSync(path.join(outDir, ...rel.split('/')));
+  const config = { branches: { a: {} } };
+
+  beforeEach(() => {
+    outDir = withTmpDir();
+    config._resolvedOutput = outDir;
+  });
+
+  test('a file in the ledger survives; an owned file beside it that is not goes', () => {
+    const kept = new Set([write('Branches/a/Story Cards/npc/npc.md')]);
+    write('Branches/a/Story Cards/faction/faction.md');
+    sweepOutput(config, [['a']], kept, NULL_LOG);
+    expect(exists('Branches/a/Story Cards/npc/npc.md')).toBe(true);
+    expect(exists('Branches/a/Story Cards/faction')).toBe(false);
+  });
+
+  test('Description.md and the root manifests are owned, under their old names too', () => {
+    write('Description.md');
+    write('library-dependencies.json');
+    write('canon-dependencies.json');
+    sweepOutput(config, [['a']], new Set(), NULL_LOG);
+    expect(exists('Description.md')).toBe(false);
+    expect(exists('library-dependencies.json')).toBe(false);
+    expect(exists('canon-dependencies.json')).toBe(false);
+  });
+
+  test("a live node keeps files the compiler does not own, such as VL's .short_id", () => {
+    write('Branches/a/.short_id', 'abc123');
+    write('Branches/a/Label.md');
+    write('notes.txt');
+    sweepOutput(config, [['a']], new Set(), NULL_LOG);
+    expect(exists('Branches/a/.short_id')).toBe(true);
+    expect(exists('notes.txt')).toBe(true);
+    expect(exists('Branches/a/Label.md')).toBe(false);
   });
 });

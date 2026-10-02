@@ -20,6 +20,7 @@ const {
   expandQuestions,
 } = require('./emit/placeholders');
 const { LIMITS, checkLimit } = require('./limits');
+const { recordWrite } = require('./outputLedger');
 
 function resolveComponentSpec(spec, base, variables, sink) {
   if (spec == null) return null;
@@ -49,6 +50,7 @@ function writeComponentFile(outputDir, filename, content, sink) {
   checkUnresolvedFieldTokens(content, `component ${filename}`, sink);
   checkMechanicalArtifacts(content, `component ${filename}`, sink);
   fs.writeFileSync(outPath, content + '\n', 'utf8');
+  recordWrite(outPath);
   return outPath;
 }
 
@@ -220,6 +222,7 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
           + 'joke, but never substituted.',
       });
       fs.writeFileSync(labelPath, rootLabel + '\n', 'utf8');
+      recordWrite(labelPath);
       log.verbose(`  OK: Label → ${labelPath}`);
       return {
         outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
@@ -262,6 +265,7 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
     }
     if (labelText !== name) {
       fs.writeFileSync(outPath, labelText + '\n', 'utf8');
+      recordWrite(outPath);
       log.verbose(`    OK: Label → ${outPath}`);
     } else if (fs.existsSync(outPath)) {
       fs.rmSync(outPath);

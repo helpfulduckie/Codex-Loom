@@ -713,23 +713,36 @@ quote against 1.1's resolver, not 1.2's). `type` is not recoverable from the tex
 takes it from the containing directory name — so callers that know the directory pass it
 in.
 
-### §8.7 The output tree is swept by node
+### §8.7 The output tree is swept by node, after every compile
 
-**`--clean` sweeps every node in the output tree — root, interior nodes, and leaves
-alike.** A node owns `Label.md` and `Placeholders.yaml` in addition to its `Story
-Cards/`, `Components/` and `Scripts/` directories, and VL reads and inherits both
-node-level files down the subtree. Before this was the emitter's job the sweep was
-inherited from v3 and touched leaves only, so a placeholder declaration deleted from an
-interior node survived in the output and went on being inherited.
+**Every compile sweeps the output tree after writing it, at every node — root, interior
+nodes and leaves alike.** Each writer records the files it writes in a ledger
+(`src/outputLedger.js`); once the last file is written, `sweepOutput` deletes whatever
+the compiler owns and the ledger does not hold. A node owns its `Story Cards/`,
+`Components/` and `Scripts/` directories and its `Label.md`, `Placeholders.yaml` and
+`Description.md`; the root also owns `library-dependencies.json` (and
+`canon-dependencies.json`, its earlier name). VL reads and inherits node-level files down
+the subtree, so a placeholder declaration deleted from an interior node would otherwise
+survive in the output and go on being inherited.
 
-The failure is confined to what the compiler *stops* emitting: every file it writes is
-overwritten next compile, so a stale node-level file only appears when a key or title is
-*removed* from an interior node — the exact edit whose purpose is to make the output stop
-carrying it. Ancestors of a live leaf are live; a node not in that set can hold no live
-descendant, so a dropped interior node is taken whole with its subtree. A stale node
-holding nothing but compiler output is removed; one holding anything else is archived
+**Stale output is only ever what the compiler stopped emitting,** since every file it
+writes is overwritten next compile: a card whose item was removed, a copy left at a leaf
+after placement moved the card up the tree, a key or title removed from a node. Each is
+the exact edit whose purpose is to make the output stop carrying it, which is why the
+sweep is not optional.
+
+**The sweep runs after writing, never before.** A compile that throws while writing skips
+it, so the previous output stays whole rather than half-deleted under a half-written
+replacement; the ledger is discarded either way. A compile that finishes writing but
+reports errors is swept — its tree is complete, only wrong — so the output still says
+exactly what this source produced.
+
+**Ancestors of a live leaf are live; a node not in that set can hold no live
+descendant,** so a dropped interior node is taken whole with its subtree. A stale node
+holding nothing but compiler output is removed; one holding anything else — in practice
+Velvet Lattice's `.short_id`, which links the folder to a published scenario — is archived
 under `Archive/<timestamp>/`, since the compiler may delete what it wrote and may not
-delete what it did not.
+delete what it did not. Files the compiler does not own are never touched at a live node.
 
 ---
 

@@ -64,8 +64,8 @@ codex-loom path/to/project/
 ```
 
 The positional argument is a `compile.yaml` or a folder containing one; omitted, it uses the
-current directory. Flags are combinable — `--verbose`, `--clean`, `--overview`, `--seed-map`,
-`--card-sizes`, `--lint`. See [documentation/01-overview.md](documentation/01-overview.md)
+current directory. Flags are combinable — `--verbose`, `--overview`, `--seed-map`,
+`--body-sizes`, `--lint`. Every compile removes output it no longer writes. See [documentation/01-overview.md](documentation/01-overview.md)
 for the full CLI and [documentation/](documentation/) for the YAML surface.
 
 ---
