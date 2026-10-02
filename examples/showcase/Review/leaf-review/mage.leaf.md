@@ -1,4 +1,4 @@
-# output: mage
+# The Showcase: mage
 
 ## Opening
 

@@ -126,6 +126,15 @@ function prepareTempTree(set, prefix) {
   return tmpDir;
 }
 
+function reportOptionsForConfig(configPath) {
+  const diagnostics = new Diagnostics();
+  const config = loadCompileConfig(configPath, { diagnostics, live: true });
+  if (!config || diagnostics.hasErrors()) {
+    throw new Error(`Unable to load report title from ${configPath}`);
+  }
+  return { title: config.title };
+}
+
 /**
  * Where `structure.reports` resolves for a config, read back via `loadCompileConfig` — a
  * second, side-effect-free parse of the same file. `compile()` writes reports there and
@@ -252,10 +261,11 @@ function describeBaselineSet(options) {
       // Reports run post-hoc against the tree compile just wrote, which is how the CLI
       // invokes them — so what is frozen is what a user would get.
       const scenarioRoot = path.join(tmpDir, project.dir, OUTPUT_SUBDIR);
+      const reportOptions = reportOptionsForConfig(configPath);
       for (const mode of project.reports) {
         const dir = reportsDirFor(project, configPath, mode);
         fs.mkdirSync(dir, { recursive: true });
-        REPORT_MODES[mode]()(scenarioRoot, dir);
+        REPORT_MODES[mode]()(scenarioRoot, dir, reportOptions);
       }
 
       if (!REPORTS_IN_PLACE) collectCompileReports(project, configPath, tmpDir, set);
@@ -437,5 +447,6 @@ function describeBaselineSet(options) {
 
 module.exports = {
   describeBaselineSet, DEFAULT_REPORT_MODES, prepareTempTree, resolvedReportsDir, collectCompileReports,
+  reportOptionsForConfig,
   GOLDEN_DIR, HAVE_GOLDENS,
 };

@@ -7,7 +7,7 @@ const path = require('path');
 const { buildTree, flattenNodes, resolveAt } = require('./compiledTree');
 const { LIMITS, measure }                    = require('./limits');
 const { NULL_LOG }                           = require('./log');
-const { csvCell, branchLabel }               = require('./report');
+const { csvCell, reportIdentity, branchLabel } = require('./report');
 
 
 function discoverNodes(nodeDir) {
@@ -47,8 +47,9 @@ function measureRow(text, questions, limit, { branchLabel, target, title, kind }
   };
 }
 
-function collectRows(rootAbs, rootDirName, { log = NULL_LOG } = {}) {
+function collectRows(rootAbs, rootDirName, { log = NULL_LOG, rootLabel = rootDirName } = {}) {
   const rows  = [];
+  const rootRows = [];
   const nodes = discoverNodes(rootAbs);
 
   for (const node of nodes) {
@@ -68,6 +69,7 @@ function collectRows(rootAbs, rootDirName, { log = NULL_LOG } = {}) {
           kind: node.isLeaf ? 'leaf' : 'framing',
         },
       ));
+      if (node.branchNames.length === 0) rootRows.push(rows[rows.length - 1]);
     }
 
     if (!node.isLeaf) continue;
@@ -80,6 +82,7 @@ function collectRows(rootAbs, rootDirName, { log = NULL_LOG } = {}) {
         title: card.title === null || card.title === undefined ? '' : card.title,
         kind: card.kind,
       }));
+      if (node.branchNames.length === 0) rootRows.push(rows[rows.length - 1]);
     }
     log.verbose(`  sized: ${label} (${cards.length} cards)`);
   }
@@ -89,6 +92,7 @@ function collectRows(rootAbs, rootDirName, { log = NULL_LOG } = {}) {
     || a.branchLabel.localeCompare(b.branchLabel)
     || a.title.localeCompare(b.title)
   ));
+  for (const row of rootRows) row.branchLabel = rootLabel;
 
   return { rows, nodes };
 }
@@ -192,18 +196,19 @@ function runBodySizeMode(scenarioRoot, outputDir, options = {}) {
   const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
+  const identity    = reportIdentity(options.title, rootDirName);
 
-  const { rows, nodes } = collectRows(rootAbs, rootDirName, { log });
+  const { rows, nodes } = collectRows(rootAbs, rootDirName, { log, rootLabel: identity.label });
 
   if (rows.length === 0) return { written: [] };
 
   const leafless = nodes.length === 1 && nodes[0].branchNames.length === 0;
 
-  const csvPath = path.join(outputDir, `${rootDirName}.bodysize.csv`);
-  const mdPath  = path.join(outputDir, `${rootDirName}.bodysize.md`);
+  const csvPath = path.join(outputDir, `${identity.stem}.bodysize.csv`);
+  const mdPath  = path.join(outputDir, `${identity.stem}.bodysize.md`);
 
   fs.writeFileSync(csvPath, formatBodySizeCsv(leafless, rows) + '\n', 'utf8');
-  fs.writeFileSync(mdPath,  formatBodySizeMd(rootDirName, leafless, rows) + '\n', 'utf8');
+  fs.writeFileSync(mdPath,  formatBodySizeMd(identity.label, leafless, rows) + '\n', 'utf8');
 
   return { written: [csvPath, mdPath], csvPath, mdPath };
 }

@@ -14,6 +14,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { reportIdentity } = require('./report');
 
 const { resolveBranchSpec } = require('./model/branches');
 const { collectVariantDeltas, parseVariantsList } = require('./model/item');
@@ -383,9 +384,10 @@ function buildVarianceDoc(leafData, allItemDefs, title) {
   return [...head, ...entries.map(renderItem)].join('\n');
 }
 
-function runVarianceMode(leafData, allItemDefs, outputDir, title) {
-  const doc = buildVarianceDoc(leafData, allItemDefs, title);
-  const outPath = path.join(outputDir, `${title}.variance.md`);
+function runVarianceMode(leafData, allItemDefs, outputDir, title, fallbackName = title) {
+  const identity = reportIdentity(title, fallbackName);
+  const doc = buildVarianceDoc(leafData, allItemDefs, identity.label);
+  const outPath = path.join(outputDir, `${identity.stem}.variance.md`);
   fs.writeFileSync(outPath, doc.trimEnd() + '\n', 'utf8');
   return { written: [outPath] };
 }

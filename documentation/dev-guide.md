@@ -119,7 +119,7 @@ writeFramingRecursive()          → Components/Opening.md at every branch node 
                                     roles resolve in every shape (sentence, prose .md, sections:)
 Root Description                 → Description.md, roles resolve, branchProtagonist always null
 runLeafReviewMode()              → Overview/*.leaf.md
-runProvenanceMode()               → Overview/<root>.provenance.{md,csv}  (always, §17.2)
+runProvenanceMode()               → <reports>/<reportStem>.provenance.{md,csv}  (always, §17.2)
 (if --with-inventory) runInventoryMode() → Overview/Inventory.md
 (if --with-diff)      runDiffMode()      → Overview/Shared.md + Overview/*.delta.md
 (if --with-annotate)  runAnnotateMode()  → Overview/*.annotate.md
@@ -379,11 +379,19 @@ Library path resolution no longer needs a bespoke two-pass. v3 resolved plain-pa
 
 ---
 
+## Report Files
+
+### Report filenames
+
+**Project reports share one identity rule.** A config-backed writer uses the trimmed literal root `title:` as its readable label and a safe form of that label as its filename stem. Variable and role tokens are not expanded. A missing or blank title uses the compiled output folder basename; offline writers always use that basename, regardless of `Label.md`. Unsafe characters, control characters, trailing dots/spaces, and Windows device names are handled by the report-specific stem helper, leaving the general filename sanitizer and compiled paths unchanged. Earlier reports remain in place after a title changes.
+
+**Seed-map branch pairs live under `seed-map/leaves/`.** The overall Markdown/CSV pair stays directly in `seed-map/`; every per-branch pair is below `leaves/`, using its ordinary branch stem where unique and a paired ` (leaf)` suffix for collisions. The directory boundary keeps a title equal to a branch from replacing the overall pair.
+
 ## Provenance Report (§17.2)
 
 **Answers "where did this item come from" for every item the registry resolved** — its library set (or `project`), its source file, and, for a renamed import, the id it was imported from. Unlike the three reports below, it is not gated behind a flag: `runProvenanceMode` (`provenance.js`) runs unconditionally at the end of `compile()` and writes to `config._resolvedReports` (falling back to `<output>/Overview`, same as every other report).
 
-**`<rootDirName>.provenance.md` + `.provenance.csv`**, one row per registry entry. Columns: `ID`, `Source` (`library:<set>` or `project`), `File` (`_source`, the absolute path), `Via` (the `import:` value, for rename-on-import — §17.4), `Status` (`resolved` or `ambiguous`).
+**`<reportStem>.provenance.md` + `.provenance.csv`**, one row per registry entry. Columns: `ID`, `Source` (`library:<set>` or `project`), `File` (`_source`, the absolute path), `Via` (the `import:` value, for rename-on-import — §17.4), `Status` (`resolved` or `ambiguous`).
 
 **Reads the registry, not the compiled tree**, so it needs no leaf loop and costs nothing per branch — one pass over `registry` (the plain, uniquely-resolved keys) and one over `registry.ambiguous` (§17.3's contested ids, one row per rival rather than a single winner, since there isn't one). An id that exists in both a library set and the project is a load-time ERROR (`mergeRegistries`) and never reaches this report.
 
@@ -405,7 +413,7 @@ Partition rule (`buildSharedAndDeltas`): for each item id and each component blo
 **`--with-annotate` → `Overview/<leaf>.annotate.md`** (`runAnnotateMode`).
 Per leaf, per item, field-level diff of `resolveItem(itemDef, registry, branchPath)` against the **project base** `resolveItem(itemDef, registry, [])` (empty branch path = project imports/overrides applied, no branch dispatch — *not* library base). Because both sides share the same source tokens/variables, the only differences are branch-variant effects. Each changed field is attributed to the applied variant(s) whose delta touches that path (`collectDeltaKeyPaths` + prefix match), or flagged `unexplained` (the bleed signal). `~`-nulled items are reported explicitly; items identical to base with no variants are omitted (they live in `Shared.md`).
 
-**`--with-variance` → `<reports>/variance/<title>.variance.md`** (`runVarianceMode` in `variance.js`).
+**`--with-variance` → `<reports>/variance/<reportStem>.variance.md`** (`runVarianceMode` in `variance.js`).
 Per item, across leaves — the transpose of diff and annotate, which are per leaf and so repeat a difference shared by many leaves once per leaf. Each distinct rendered story card of an item is one *version*, listed once with the leaves that receive it, its body size and its `meta` role; leaves the item is absent from get their own row. Items are keyed by id, so a variant that renames a card stays in one entry. A version is labeled by the variants that produced it (dispatched names plus `importVariants`, filtered on an include to names the item defines), plus any role binding shared by all its leaves and not by all the item's leaves — which is how a protagonist branch is told apart. Versions are diffed along that chain: a nested path counts its parents (`major/anchor` builds on `major`), and each version diffs against the version whose chain is its longest prefix. The base prints in full.
 Diffs are of rendered text, not fields, because the question is what AID receives; annotate answers which YAML key did it. Only changed lines print, with `…` for a skipped stretch. A line keeps its `Label:` and marks the changed words of its value; changes separated only by punctuation or one short word merge into one ~~removed~~ **added** pair, so a rewrite does not alternate word by word. Separators and a bullet's `- ` stay outside the marks, because GFM will not open `~~`/`**` between a letter and punctuation. A bullet or an unlabeled continuation line is preceded by the labeled line it hangs from. The fence's `meta:` block is left out; it never reaches AID.
 

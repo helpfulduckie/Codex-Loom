@@ -6,7 +6,7 @@ const path = require('path');
 const { buildTree, flattenNodes, leafNodes, collectMdFiles } = require('./compiledTree');
 const { readFileTrim } = require('./util');
 const { NULL_LOG } = require('./log');
-const { sanitizeFilename, shiftHeadings, leafFileName } = require('./report');
+const { reportIdentity, shiftHeadings, leafFileName } = require('./report');
 
 
 function buildStoryCardsBlock(storyCardsDir, headingLevel) {
@@ -119,7 +119,8 @@ function collectOverviewSections(rootDir, rootDirName) {
 }
 
 
-function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log = NULL_LOG) {
+function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log = NULL_LOG,
+  identity = reportIdentity(null, rootDirName), filename = null) {
   const { branchNames, cards, leafDir } = leaf; // `cards` is the merged block, or null
 
   let dir      = leafDir;
@@ -143,11 +144,13 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log = NULL_LOG)
   }
 
   const title = branchNames.length > 0
-    ? `${rootDirName}: ${branchNames.join(' - ')}`
-    : rootDirName;
+    ? `${identity.label}: ${branchNames.join(' - ')}`
+    : identity.label;
 
-  const filename = leafFileName(branchNames, rootDirName, isSingleLeaf);
-  const outPath  = path.join(outputDir, filename);
+  const chosenFilename = filename || (isSingleLeaf && branchNames.length === 0
+    ? `${identity.stem}.leaf.md`
+    : leafFileName(branchNames, rootDirName, isSingleLeaf));
+  const outPath  = path.join(outputDir, chosenFilename);
 
   const parts = [];
   parts.push(`# ${title}`);
@@ -158,7 +161,7 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log = NULL_LOG)
   if (cards) parts.push(`## Story Cards\n\n${cards}`);
 
   fs.writeFileSync(outPath, parts.join('\n\n'), 'utf8');
-  log.verbose(`  ✓  ${filename}`);
+  log.verbose(`  ✓  ${chosenFilename}`);
 }
 
 
@@ -166,6 +169,7 @@ function runLeafReviewMode(scenarioRoot, outputDir, options = {}) {
   const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
+  const identity    = reportIdentity(options.title, rootDirName);
   const leaves      = discoverLeaves(rootAbs);
 
   if (leaves.length === 0) return { written: [] };
@@ -175,10 +179,12 @@ function runLeafReviewMode(scenarioRoot, outputDir, options = {}) {
 
   for (const leaf of leaves) {
     const { branchNames } = leaf;
-    const filename  = leafFileName(branchNames, rootDirName, isSingleLeaf);
+    const filename  = isSingleLeaf && branchNames.length === 0
+      ? `${identity.stem}.leaf.md`
+      : leafFileName(branchNames, rootDirName, isSingleLeaf);
     written.push(path.join(outputDir, filename));
 
-    compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log);
+    compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log, identity, filename);
   }
 
   return { written };
@@ -188,11 +194,12 @@ function runOverviewMode(scenarioRoot, outputDir, options = {}) {
   const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
-  const filename    = sanitizeFilename(rootDirName) + '.overview.md';
+  const identity    = reportIdentity(options.title, rootDirName);
+  const filename    = identity.stem + '.overview.md';
   const outPath     = path.join(outputDir, filename);
 
-  const sections = collectOverviewSections(rootAbs, rootDirName);
-  const doc = [`# ${rootDirName}`, ...sections].join('\n\n');
+  const sections = collectOverviewSections(rootAbs, identity.label);
+  const doc = [`# ${identity.label}`, ...sections].join('\n\n');
   fs.writeFileSync(outPath, doc, 'utf8');
   log.verbose(`  ✓  ${filename}`);
   return { written: [outPath], outPath };

@@ -1,5 +1,6 @@
 'use strict';
 
+const path = require('path');
 
 const { PATH_UNSAFE_CHARS } = require('./util');
 
@@ -16,6 +17,25 @@ const UNSAFE_FILENAME_CHARS = new RegExp('[' + PATH_UNSAFE_CHARS + ']', 'g');
 
 function sanitizeFilename(name) {
   return name.replace(UNSAFE_FILENAME_CHARS, '_').trim();
+}
+
+const REPORT_CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
+const WINDOWS_DEVICE_STEM = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i;
+
+function reportStem(name) {
+  const stem = String(name == null ? '' : name)
+    .replace(UNSAFE_FILENAME_CHARS, '_')
+    .replace(REPORT_CONTROL_CHARS, '_')
+    .replace(/[ .]+$/g, '');
+  if (!stem || /^\.+$/.test(stem)) return '';
+  return WINDOWS_DEVICE_STEM.test(stem) ? `_${stem}` : stem;
+}
+
+function reportIdentity(title, fallbackName) {
+  const fallback = path.basename(String(fallbackName == null ? '' : fallbackName)).trim();
+  const authored = typeof title === 'string' && title.trim() ? title.trim() : fallback;
+  const label = authored || 'report';
+  return { label, stem: reportStem(label) || reportStem(fallback) || 'report' };
 }
 
 
@@ -43,6 +63,8 @@ function leafFileName(branchNames, rootDirName, isSingleLeaf) {
 module.exports = {
   csvCell,
   sanitizeFilename,
+  reportIdentity,
+  reportStem,
   shiftHeadings,
   branchLabel,
   leafFileName,

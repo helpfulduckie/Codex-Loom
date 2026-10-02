@@ -227,7 +227,7 @@ describe('two library sets that both define magic, coexisting', () => {
 
   test('a renamed import is provenanced to the project, an unrenamed one to its set', () => {
     const rows = fs.readFileSync(
-      path.join(projectDir, 'Review', 'output.provenance.csv'), 'utf8',
+      path.join(projectDir, 'Review', 'Library Consumer.provenance.csv'), 'utf8',
     ).trim().split(/\r?\n/).slice(1).map((line) => line.split(','));
 
     // §17.4: only the id moves, and the row reads `project` with the library ref in `Via`.

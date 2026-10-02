@@ -3,7 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { csvCell } = require('./report');
+const { csvCell, reportIdentity } = require('./report');
 
 function sourceLabel(item) {
   if (item._canonSource) return `library:${item._canonSource}`;
@@ -85,14 +85,15 @@ function formatProvenanceCsv(rows) {
   return lines.join('\n');
 }
 
-function runProvenanceMode(registry, reportBase, rootDirName, baseDir) {
+function runProvenanceMode(registry, reportBase, rootDirName, baseDir, options = {}) {
   fs.mkdirSync(reportBase, { recursive: true });
   const rows = collectRows(registry, baseDir);
+  const identity = reportIdentity(options.title, rootDirName);
 
-  const mdPath = path.join(reportBase, `${rootDirName}.provenance.md`);
-  const csvPath = path.join(reportBase, `${rootDirName}.provenance.csv`);
+  const mdPath = path.join(reportBase, `${identity.stem}.provenance.md`);
+  const csvPath = path.join(reportBase, `${identity.stem}.provenance.csv`);
 
-  fs.writeFileSync(mdPath, formatProvenanceMd(rootDirName, rows) + '\n', 'utf8');
+  fs.writeFileSync(mdPath, formatProvenanceMd(identity.label, rows) + '\n', 'utf8');
   fs.writeFileSync(csvPath, formatProvenanceCsv(rows) + '\n', 'utf8');
 
   return { written: [mdPath, csvPath] };

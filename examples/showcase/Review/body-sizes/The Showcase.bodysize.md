@@ -1,4 +1,4 @@
-# Body Sizes — output
+# Body Sizes — The Showcase
 
 | Target | Measured | Over | Near | Tightest |
 |---|---|---|---|---|

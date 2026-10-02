@@ -1,4 +1,4 @@
-# output: knight
+# The Showcase: knight
 
 ## Opening
 

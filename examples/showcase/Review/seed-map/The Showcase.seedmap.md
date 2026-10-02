@@ -1,4 +1,4 @@
-# Seed Map — output
+# Seed Map — The Showcase
 
 ## Branch: knight
 

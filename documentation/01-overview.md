@@ -69,6 +69,8 @@ codex-loom -C -l -o path/to/project/
 
 **Diagnostics** — `--lint-level=off|error|warn` (also `--lint-level warn`) overrides `lint.level` from `compile.yaml`. It reaches the opinion layer only — the quality heuristics (trigger-less cards, prose guesses, unused or duplicated placeholder declarations, convention-pack findings) — and never silences a factual error like a leaked token or a platform-cap overflow. It is deliberately separate from `--verbose`: verbosity is about compile progress, this is about which diagnostics an author wants to hear.
 
+**Report names use the authored root `title:` when available.** The report label is the trimmed literal title from `compile.yaml`; `{%variable}` and `{$role}` tokens stay literal in report text even though compilation expands them in `Label.md`. A missing or blank title uses the compiled output folder name. Offline report commands use that folder name even when `Label.md` exists. Filenames use a safe version of the label, while headings keep the readable label. Renaming a title can leave earlier report files beside the new ones.
+
 | Flags | What happens |
 |---|---|
 | *(none)* | Compile only (default) |
@@ -98,12 +100,14 @@ codex-loom -C -l -o path/to/project/
 
 **Seed map** (`-s`/`--seed-map`) — Reads compiled output and reports which items' body text contains other items' triggers. When Item A's body mentions a word from Item B's trigger list, the Storyteller AI pulling Item A into context may also pull Item B — a "seed." The seed map makes these relationships visible so you can spot unintended context cascade or find items that nothing seeds.
 
-Two files are written to the overview folder:
+The overall pair is written directly under `<reports>/seed-map/`; branch pairs go under `<reports>/seed-map/leaves/`:
 
 | File | Contents |
 |---|---|
 | `{name}.seedmap.md` | Per-branch listing of every item with its trigger list and which other items seed it |
 | `{name}.seedmap.csv` | `Branch, Title, Triggers, Seeded By` — sort by **Seeded By** ascending to find items that never get seeded |
+
+An unbranched project writes only the overall pair. Branch files retain their branch names when those names are unique; collisions receive a ` (leaf)` suffix and later numbers. The overall and branch reports remain separate even when a project title matches a branch name.
 
 "Seeded By" counts distinct seeder items, not individual trigger matches. Items with a count of 0 are never organically pulled in by another item's body text.
 

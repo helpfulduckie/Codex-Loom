@@ -11,6 +11,7 @@ const { classifyDiff, OPAQUE } = require('../__tests__/helpers/diffShape');
 
 const {
   DEFAULT_REPORT_MODES, prepareTempTree, resolvedReportsDir, collectCompileReports,
+  reportOptionsForConfig,
 } = require('../__tests__/helpers/baselineHarness');
 
 const SETS = {
@@ -104,10 +105,11 @@ function buildTempTree(projects, set) {
       : path.join(tmpDir, project.dir, REPORTS_SUBDIR);
 
     const scenarioRoot = path.join(tmpDir, project.dir, OUTPUT_SUBDIR);
+    const reportOptions = reportOptionsForConfig(configPath);
     for (const mode of project.reports) {
       const dir = path.join(reportBase, mode);
       fs.mkdirSync(dir, { recursive: true });
-      REPORT_MODES[mode]()(scenarioRoot, dir);
+      REPORT_MODES[mode]()(scenarioRoot, dir, reportOptions);
     }
 
     if (!REPORTS_IN_PLACE) collectCompileReports(project, configPath, tmpDir, set);

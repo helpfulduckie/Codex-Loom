@@ -1,4 +1,4 @@
-# Seed Map — output
+# Seed Map — The Showcase
 
 **Kaiden Ross** `[Kaiden, Ross]`
 — _(no inbound seeds)_

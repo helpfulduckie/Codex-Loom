@@ -6,6 +6,7 @@ const { CODES: DIAG_CODES } = require('./diag');
 const { isOutOfBase, normalize } = require('./config/load');
 const { reportUnusedPlaceholders, reportDuplicateQuestions } = require('./emit/placeholders');
 const { recordWrite } = require('./outputLedger');
+const { reportIdentity } = require('./report');
 
 function reportUnusedRoles(declarations, usage, { diagnostics, file }) {
   const unused = [];
@@ -41,17 +42,18 @@ function runReports({
 }) {
   const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
   const reportSummary = [];
+  const identity = reportIdentity(config.title, rootDirName);
 
   const { runProvenanceMode } = require('./provenance');
   const provenanceResult = runProvenanceMode(
-    registry, reportBase, rootDirName, path.dirname(configPath),
+    registry, reportBase, rootDirName, path.dirname(configPath), { title: config.title },
   );
   reportSummary.push(`${provenanceResult.written.length} provenance file(s)`);
 
   if (options.schemaTables) {
     const { runSchemaTablesMode } = require('./schematables');
     const w = runSchemaTablesMode(fieldTable, path.join(reportBase, 'schema-tables'),
-      { title: config.title || rootDirName, tierTemplates });
+      { title: identity.label, tierTemplates });
     reportSummary.push(`${w.written.length} schema-tables file(s)`);
   }
 
@@ -78,7 +80,7 @@ function runReports({
       const varianceDir = path.join(reportBase, 'variance');
       fs.mkdirSync(varianceDir, { recursive: true });
       const w = require('./variance').runVarianceMode(
-        leafData, allItemDefs, varianceDir, config.title || rootDirName,
+        leafData, allItemDefs, varianceDir, identity.label, rootDirName,
       );
       reportSummary.push(`${w.written.length} variance file(s)`);
     }

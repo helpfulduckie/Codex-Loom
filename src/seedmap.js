@@ -6,7 +6,7 @@ const path = require('path');
 const { discoverLeaves } = require('./overview');
 const { resolveAt } = require('./compiledTree');
 const { NULL_LOG } = require('./log');
-const { csvCell, sanitizeFilename, branchLabel } = require('./report');
+const { csvCell, reportIdentity, reportStem, branchLabel } = require('./report');
 
 
 function escapeRegex(str) {
@@ -136,11 +136,38 @@ function formatSeedMapCsv(rootDirName, leafResults) {
   return rows.join('\n');
 }
 
+function allocateLeafStems(leafResults, rootDirName) {
+  const candidates = leafResults.map(({ branchNames }) =>
+    reportStem(branchLabel(branchNames, rootDirName)) || 'leaf');
+  const reserved = new Set(candidates.map((candidate) => candidate.toLowerCase()));
+  const seen = new Set();
+  const used = new Set();
+
+  return candidates.map((candidate) => {
+    const folded = candidate.toLowerCase();
+    if (!seen.has(folded) && !used.has(folded)) {
+      seen.add(folded);
+      used.add(folded);
+      return candidate;
+    }
+    let suffix = ' (leaf)';
+    let number = 2;
+    while (used.has(`${candidate}${suffix}`.toLowerCase())
+        || reserved.has(`${candidate}${suffix}`.toLowerCase())) {
+      suffix = ` (leaf ${number++})`;
+    }
+    const allocated = `${candidate}${suffix}`;
+    used.add(allocated.toLowerCase());
+    return allocated;
+  });
+}
+
 
 function runSeedMapMode(scenarioRoot, outputDir, options = {}) {
   const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
+  const identity    = reportIdentity(options.title, rootDirName);
   const leaves      = discoverLeaves(rootAbs);
 
   if (leaves.length === 0) return { written: [] };
@@ -155,28 +182,29 @@ function runSeedMapMode(scenarioRoot, outputDir, options = {}) {
     const relations                = buildSeedRelations(cards, peText);
     const seededInOpening          = buildOpeningFlags(cards, openingText);
     leafResults.push({ branchNames: leaf.branchNames, cards, relations, seededInOpening });
-    const label = branchLabel(leaf.branchNames, rootDirName);
+    const label = branchLabel(leaf.branchNames, identity.label);
     log.verbose(`  mapped: ${label} (${cards.length} cards, ${relations.length} seeds)`);
   }
 
-  const mdPath  = path.join(outputDir, `${rootDirName}.seedmap.md`);
-  const csvPath = path.join(outputDir, `${rootDirName}.seedmap.csv`);
+  const mdPath  = path.join(outputDir, `${identity.stem}.seedmap.md`);
+  const csvPath = path.join(outputDir, `${identity.stem}.seedmap.csv`);
   const written = [mdPath, csvPath];
 
-  fs.writeFileSync(mdPath,  formatSeedMap(rootDirName, leafResults) + '\n', 'utf8');
-  fs.writeFileSync(csvPath, formatSeedMapCsv(rootDirName, leafResults) + '\n', 'utf8');
+  fs.writeFileSync(mdPath,  formatSeedMap(identity.label, leafResults) + '\n', 'utf8');
+  fs.writeFileSync(csvPath, formatSeedMapCsv(identity.label, leafResults) + '\n', 'utf8');
 
   const singleLeaf = leafResults.length === 1 && leafResults[0].branchNames.length === 0;
   if (!singleLeaf) {
-    for (const leafResult of leafResults) {
-      const fileBase   = branchLabel(leafResult.branchNames, rootDirName);
-      const stem       = sanitizeFilename(fileBase);
-      const leafMd     = path.join(outputDir, `${stem}.seedmap.md`);
-      const leafCsv    = path.join(outputDir, `${stem}.seedmap.csv`);
+    fs.mkdirSync(path.join(outputDir, 'leaves'), { recursive: true });
+    const stems = allocateLeafStems(leafResults, identity.label);
+    for (const [index, leafResult] of leafResults.entries()) {
+      const stem       = stems[index];
+      const leafMd     = path.join(outputDir, 'leaves', `${stem}.seedmap.md`);
+      const leafCsv    = path.join(outputDir, 'leaves', `${stem}.seedmap.csv`);
       written.push(leafMd, leafCsv);
       const asSingle   = [{ ...leafResult, branchNames: [] }];
-      fs.writeFileSync(leafMd,  formatSeedMap(rootDirName, asSingle) + '\n', 'utf8');
-      fs.writeFileSync(leafCsv, formatSeedMapCsv(rootDirName, asSingle) + '\n', 'utf8');
+      fs.writeFileSync(leafMd,  formatSeedMap(identity.label, asSingle) + '\n', 'utf8');
+      fs.writeFileSync(leafCsv, formatSeedMapCsv(identity.label, asSingle) + '\n', 'utf8');
     }
   }
 

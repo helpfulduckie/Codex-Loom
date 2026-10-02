@@ -17,6 +17,7 @@ const {
 } = require('./lint/packs');
 const { buildTree, leafNodes, collectMdFiles } = require('./compiledTree');
 const { NULL_LOG } = require('./log');
+const { reportIdentity } = require('./report');
 
 
 const CHECKS = [
@@ -216,6 +217,7 @@ function runLintMode(scenarioRoot, outputDir, options = {}) {
   const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
+  const identity    = reportIdentity(options.title || options.config?.title, rootDirName);
   const files        = fs.existsSync(rootAbs) ? findLintableFiles(rootAbs) : [];
   const bus = options.diagnostics || new Diagnostics();
 
@@ -260,9 +262,9 @@ function runLintMode(scenarioRoot, outputDir, options = {}) {
     }
   }
 
-  const { text, errorCount, warnCount } = formatReport(rootDirName, bus);
+  const { text, errorCount, warnCount } = formatReport(identity.label, bus);
   fs.mkdirSync(outputDir, { recursive: true });
-  const reportPath = path.join(outputDir, `${rootDirName}.lint.md`);
+  const reportPath = path.join(outputDir, `${identity.stem}.lint.md`);
   fs.writeFileSync(reportPath, text, 'utf8');
 
   return { written: [reportPath], reportPath, errorCount, warnCount, fileCount: files.length };

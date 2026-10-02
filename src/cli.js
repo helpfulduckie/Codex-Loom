@@ -413,7 +413,7 @@ function main(rawArgs) {
         const { runLeafReviewMode } = require('./overview');
         const dir = path.join(outputDir, 'leaf-review');
         fs.mkdirSync(dir, { recursive: true });
-        const result = runLeafReviewMode(scenarioRoot, dir, { log });
+        const result = runLeafReviewMode(scenarioRoot, dir, { log, title: projectConfig?.title });
         if (result.written.length > 0) summaryParts.push(files(result.written.length, 'leaf review'));
         else console.warn('No branch leaves found — nothing to review.');
       }
@@ -422,7 +422,7 @@ function main(rawArgs) {
         const { runSeedMapMode } = require('./seedmap');
         const dir = path.join(outputDir, 'seed-map');
         fs.mkdirSync(dir, { recursive: true });
-        const result = runSeedMapMode(scenarioRoot, dir, { log });
+        const result = runSeedMapMode(scenarioRoot, dir, { log, title: projectConfig?.title });
         if (result.written.length > 0) summaryParts.push(files(result.written.length, 'seed map'));
         else console.warn('No branch leaves found — nothing to map.');
       }
@@ -431,7 +431,7 @@ function main(rawArgs) {
         const { runOverviewMode } = require('./overview');
         const dir = path.join(outputDir, 'overview');
         fs.mkdirSync(dir, { recursive: true });
-        const result = runOverviewMode(scenarioRoot, dir, { log });
+        const result = runOverviewMode(scenarioRoot, dir, { log, title: projectConfig?.title });
         if (result.written.length > 0) summaryParts.push(files(result.written.length, 'overview'));
       }
 
@@ -439,7 +439,7 @@ function main(rawArgs) {
         const { runBodySizeMode } = require('./bodysize');
         const dir = path.join(outputDir, 'body-sizes');
         fs.mkdirSync(dir, { recursive: true });
-        const result = runBodySizeMode(scenarioRoot, dir, { log });
+        const result = runBodySizeMode(scenarioRoot, dir, { log, title: projectConfig?.title });
         if (result.written.length > 0) summaryParts.push(files(result.written.length, 'body size'));
         else console.warn('No cards or Openings found — nothing to size.');
       }
@@ -452,6 +452,7 @@ function main(rawArgs) {
         const lintDiagnostics = compileDiagnostics || new Diagnostics();
         const result = runLintMode(scenarioRoot, dir, {
           log, lintLevel: effectiveLintLevel, config: lintConfig, configPath,
+          title: projectConfig?.title,
           diagnostics: lintDiagnostics,
           scan: !compileDiagnostics,
         });

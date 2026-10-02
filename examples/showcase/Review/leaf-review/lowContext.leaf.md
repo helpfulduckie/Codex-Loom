@@ -1,4 +1,4 @@
-# output: lowContext
+# The Showcase: lowContext
 
 ## Opening
 

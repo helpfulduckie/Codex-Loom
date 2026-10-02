@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { withTmpDir, writeTree } = require('../helpers/project');
-const { prepareTempTree } = require('../helpers/baselineHarness');
+const { prepareTempTree, reportOptionsForConfig } = require('../helpers/baselineHarness');
 const { listFilesRelative } = require('../../src/util');
 
 describe('prepareTempTree', () => {
@@ -61,5 +61,24 @@ describe('prepareTempTree', () => {
       expect(fs.existsSync(path.join(tempRoot, rel))).toBe(false);
     }
     expect(fs.existsSync(path.join(tempRoot, 'Baseline', 'empty-source-dir'))).toBe(true);
+  });
+});
+
+describe('reportOptionsForConfig', () => {
+  test('returns only the literal title from the loaded config', () => {
+    const root = withTmpDir();
+    writeTree(root, {
+      'compile.yaml': `version: 4
+structure:
+  input:
+    items: []
+  output: ./output
+title: "{%setting} {$protagonist}"
+`,
+    });
+
+    expect(reportOptionsForConfig(path.join(root, 'compile.yaml'))).toEqual({
+      title: '{%setting} {$protagonist}',
+    });
   });
 });

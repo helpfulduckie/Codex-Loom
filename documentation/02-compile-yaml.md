@@ -198,6 +198,8 @@ misused role raises.
 
 Optional scenario title. Written once to `{output}/Label.md` after all branches compile, expanding `{%variable}` tokens against root `variables`. This is distinct from a branch's own `title:` field, which writes `Label.md` into that branch's own output folder (see [Branch Tree & Variant Dispatch](05-branches-and-variants.md)) — the root `title` only ever produces the single top-level file, alongside `Description.md`.
 
+The authored root title also names generated reports: its trimmed literal value supplies their readable headings and filename stems. Report naming does not expand variable or role tokens; a title such as `{%setting}` appears literally in a report. A missing, empty, or whitespace-only title falls back to the compiled output folder name. Offline report commands always use that folder name because they have no config title. Filename stems replace unsafe characters and protect reserved Windows names; the readable heading remains unchanged. Earlier reports are left in place after a title change.
+
 ```yaml surface=config
 title: The Royal Academy
 ```

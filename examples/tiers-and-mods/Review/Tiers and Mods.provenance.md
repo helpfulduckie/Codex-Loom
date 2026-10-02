@@ -1,4 +1,4 @@
-# Item Provenance — output
+# Item Provenance — Tiers and Mods
 
 | ID | Source | File | Via | Status |
 |---|---|---|---|---|
