@@ -108,12 +108,18 @@ directory with no parent in scope, so they still land at every node that needs t
 Collapsing `Description.md` alongside the rest would silently empty every leaf's adventure
 description.
 
-**Story cards are placed by frontier, and the key is `(type, name)` — never the item id.**
-For each card and each distinct rendered text, the emitter finds the minimal set of nodes
-whose subtrees partition exactly the leaves that produced that text, and writes one copy per
-frontier node. A `variants:` item keeps one id while its name and type differ per branch, so
-keying placement on id files a card under the wrong type. This cost a real bug on the first
-pass.
+**Story cards are placed per name, with overrides, and the key is the card name — never the
+item id.** VL resolves a leaf's card by name, nearest copy first, so `placeWithOverrides`
+writes each name's versions (distinct type + rendered text) where every leaf resolves to its
+own version in the fewest copies: the common version once at the ancestor, the odd leaf
+overriding it. A leaf that lacks the card blocks any copy above it, since VL cannot remove
+an inherited card. Ties go to the layout without overrides. A `variants:` item keeps one id
+while its name and type differ per branch, so keying placement on id files a card under the
+wrong type — this cost a real bug on the first pass.
+
+**Anything that reads a leaf's cards from the compiled tree must merge by name**
+(`compiledTree.resolveAt`). Concatenating ancestor folders lists an overridden card twice;
+leaf-review did exactly that until it was fixed.
 
 **A duplicate card name on one leaf is a compile ERROR (`CL0622`), cross-type or not.** VL
 merges cards by name alone, so only one ever reaches AID and an author who wrote two is

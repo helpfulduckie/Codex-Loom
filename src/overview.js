@@ -39,9 +39,10 @@ function buildStoryCardsBlock(storyCardsDir, headingLevel) {
   return lines.join('\n\n');
 }
 
+/** `storyCardsDirs` runs root to leaf; a deeper card replaces an inherited one by name, as VL does. */
 function buildMergedStoryCardsBlock(storyCardsDirs, headingLevel) {
   const hashes = '#'.repeat(headingLevel);
-  const byType = new Map(); // type name → [{ title, chunk }]
+  const byTitle = new Map(); // card title → { type, title, chunk }
 
   for (const dir of storyCardsDirs) {
     if (!fs.existsSync(dir)) continue;
@@ -54,12 +55,19 @@ function buildMergedStoryCardsBlock(storyCardsDirs, headingLevel) {
         const chunk = raw.trim();
         if (!chunk) continue;
         const title = (chunk.match(/^##\s+(.*)/) || [, ''])[1].trim();
-        if (!byType.has(type)) byType.set(type, []);
-        byType.get(type).push({ title, chunk: shiftHeadings(chunk, headingLevel - 1) });
+        // Text with no card heading has no name to override by, so each chunk stands alone.
+        const key = title || Symbol('untitled');
+        byTitle.set(key, { type, title, chunk: shiftHeadings(chunk, headingLevel - 1) });
       }
     }
   }
-  if (byType.size === 0) return null;
+  if (byTitle.size === 0) return null;
+
+  const byType = new Map(); // type name → [{ title, chunk }]
+  for (const card of byTitle.values()) {
+    if (!byType.has(card.type)) byType.set(card.type, []);
+    byType.get(card.type).push(card);
+  }
 
   const lines = [];
   for (const type of [...byType.keys()].sort((a, b) => a.localeCompare(b))) {

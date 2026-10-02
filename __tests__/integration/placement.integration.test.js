@@ -13,6 +13,7 @@
 const path = require('path');
 const fs = require('fs');
 const { compileProject } = require('../helpers/project');
+const { resolveAt } = require('../../src/compiledTree');
 
 let tmpDir;
 
@@ -20,18 +21,16 @@ const read = (...parts) => fs.readFileSync(path.join(tmpDir, 'output', ...parts)
 const exists = (...parts) => fs.existsSync(path.join(tmpDir, 'output', ...parts));
 const plotEssentials = (branch) => read('Branches', branch, 'Components', 'Plot Essentials.md');
 
-// Phase 11 Step 5: a story card constant across the branch tree is written once at the
-// node that owns it and inherited down, so a leaf need not hold its own copy. Read it the
-// way Velvet Lattice resolves it — nearest `Story Cards/<type>/<type>.md` from the leaf up.
+// A story card may sit at any node above the leaf, and a leaf's own card overrides an
+// inherited one by name. Read the leaf the way Velvet Lattice resolves it, through
+// `resolveAt`, and return every card of `type` it ends up with.
 const branchCard = (branch, type) => {
-  const base = path.join(tmpDir, 'output');
-  let dir = path.join(base, 'Branches', branch);
-  for (;;) {
-    const candidate = path.join(dir, 'Story Cards', type, `${type}.md`);
-    if (fs.existsSync(candidate)) return fs.readFileSync(candidate, 'utf8');
-    if (dir === base) throw new Error(`no ${type}.md from Branches/${branch} up to output root`);
-    dir = path.dirname(path.dirname(dir));
-  }
+  const { resolved } = resolveAt(path.join(tmpDir, 'output', 'Branches', branch));
+  const cards = resolved.cards.filter(
+    (card) => path.basename(path.dirname(card.file)).toLowerCase() === type.toLowerCase(),
+  );
+  if (cards.length === 0) throw new Error(`no ${type} cards resolve on Branches/${branch}`);
+  return cards.map((card) => `## ${card.title}\n${card.body}`).join('\n');
 };
 
 beforeAll(() => {

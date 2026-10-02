@@ -1,16 +1,3 @@
-## Aness Kolar
-~~~
-triggers: [Aness, Kolar]
-encapsulate: false
-~~~
-Aness Kolar - Fixer; knows who owes whom
-Vibe: [dry; unhurried; well-connected]
-Appearance: female; mid 30s; black hair, cropped short
-Personality: dry, patient, transactional
-Aness keeps a ledger she never shows anyone.
-Relationships: Has done work for every faction and joined none.
-[Hidden Info: The ledger is not about money.]
-
 ## Zephon Adrel
 ~~~
 triggers: [Zephon, Adrel]

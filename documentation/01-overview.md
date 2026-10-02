@@ -252,7 +252,7 @@ A project with no `branches:` key produces a single root-level output with no `B
 
 **Two files never inherit and are written at every node that needs one:** `Label.md` and `Description.md`. Velvet Lattice reads both from the node's own directory with no parent in scope. `Label.md` is additionally omitted whenever the rendered label equals the directory segment, because VL falls back to the directory name when the file is absent.
 
-**Story cards are placed by frontier.** For each card and each distinct rendered text, the compiler finds the minimal set of nodes whose subtrees cover exactly the leaves that produced that text. A card constant everywhere lands at the root; a card scoped to one subtree lands once per subtree; a card with per-branch variant bodies gets one copy per version. This is why a leaf folder can contain far fewer cards than the branch actually plays with — the rest are inherited.
+**Story cards are placed as few times as possible, using overrides.** Velvet Lattice gives each leaf the nearest copy of a card by name, so a leaf's own card replaces one it inherits. A card constant everywhere lands at the root. A card that one branch renders differently lands once at the common ancestor, and that branch carries its own version, which overrides it. A card that some leaf does not have at all is never written above that leaf, because an inherited card cannot be removed. This is why a leaf folder holds only what that branch changes or adds — the rest is inherited.
 
 **Reading the output tree is not how you check what a branch contains.** Use `--leafReview`, which resolves each leaf through its ancestor chain and writes one file showing everything that branch actually gets.
 

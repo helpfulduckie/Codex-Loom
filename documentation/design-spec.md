@@ -466,19 +466,36 @@ redundancy rule, not an inheritance one. Collapsing `Description.md` alongside t
 inheriting categories would silently empty every leaf's adventure description, and it is
 the one mistake in this area that produces no diagnostic.
 
-**Story cards are placed by frontier.** For each `(type, name)` pair and each distinct
-rendered text, the emitter (`src/inherit.js`) computes the minimal set of nodes whose
-subtrees partition exactly the leaves that produced that text, and writes one copy per
-frontier node. A card constant everywhere lands at the output root; a card scoped to a
-subtree lands once per subtree; a card with per-branch variant bodies has each version
-placed on its own frontier.
+**Story cards are placed per name, with overrides.** VL resolves a leaf's card by name,
+nearest copy first, so a leaf's own card replaces the one it inherits. For each card name
+the emitter (`src/inherit.js`, `placeWithOverrides`) treats each distinct `(type, rendered
+text)` as one version and chooses the nodes to write them at so that every leaf resolves
+to exactly its own version, using the fewest copies. A card constant everywhere lands at
+the output root; a card that one branch renders differently lands once at the common
+ancestor, with the odd branch carrying its own version as an override.
 
-**The frontier keys on `(type, name)`, never on item id.** A `variants:` item keeps one
-id while its name and its `aid.type` differ per branch, so keying placement on id files
-one variant under another's type. This was the one real bug found implementing the step,
-and it is silent — the misfiled card still renders and still resolves somewhere.
+**A leaf without the card blocks every copy above it.** VL can override an inherited
+card but cannot remove one, so a card a leaf excludes, or renames, is never written at
+any ancestor of that leaf. Those versions fall back to one copy per maximal subtree that
+renders them, which is the frontier the emitter used before overrides.
 
-**The frontier is computed from rendered output, not from `branches:`.** It reads which
+**On a tie the layout without overrides wins.** Overrides are taken only where they
+save a copy, so a two-branch project whose branches differ still writes one copy per
+branch, as it always did. The solver is a small dynamic program over (node, inherited
+version); it is exact, and fast enough because a name rarely has more than a few versions.
+
+**Placement keys on the card name, never on item id.** A `variants:` item keeps one id
+while its name and its `aid.type` differ per branch, so keying placement on id files one
+variant under another's type. This was the one real bug found implementing frontier
+placement, and it is silent — the misfiled card still renders and still resolves
+somewhere. A version records its own type, so an override may sit under a different type
+folder from the card it replaces; VL matches by name and does not care.
+
+**Every reader of the compiled tree must merge by name.** `compiledTree.resolveAt` does,
+and every report that shows a leaf's cards goes through it or matches it. A reader that
+concatenates ancestor folders instead lists an overridden card twice.
+
+**Placement is computed from rendered output, not from `branches:`.** It reads which
 leaves produced byte-identical text and finds the covering nodes. Predicting placement
 from the branch tree before compiling is possible and deliberately not done: the
 byte-identity check is what makes the placement safe, and a prediction that disagreed
@@ -487,8 +504,10 @@ with it would be wrong in exactly the cases that matter.
 **A duplicate card name on one leaf is `CL0622`, an ERROR, cross-type or not.** VL's
 registry is keyed on name alone, so only one card ever reaches AID and there is no winner
 worth preserving. Under copy-to-every-leaf a collision resolved identically everywhere;
-under frontier placement the winner would depend on where each card was declared in the
-tree, so making it an error is what closes that failure mode.
+under tree placement the winner would depend on where each card was declared in the
+tree, so making it an error is what closes that failure mode. A name that collides on a
+leaf is placed without overrides, version by version, since which copy should win is
+exactly what is undecided.
 
 ### §7.4 Placement rules
 

@@ -119,7 +119,7 @@ The card's AID `type` resolves on three rungs, most specific first:
 
 `storyCardType` values are root-scoped; alternate entry `title:` and `type:` values are leaf-scoped and are expanded before validation. `variant:` and `sections:` are literal selectors. Component prose, headings, and nested metadata values expand at their emitting root/leaf; metadata keys stay literal, and component lifting compares the complete frontmatter-plus-body payload.
 
-**Placement uses the ordinary frontier mechanism.** An alternate rendering identically across a subtree is written once at that subtree's root; one that varies per branch has each version placed on its own frontier. Two entries whose titles collide under one type are `CL0622`, the same as any two story cards sharing a name.
+**Placement uses the ordinary story-card mechanism.** An alternate rendering identically across a subtree is written once at that subtree's root; one that varies per branch is written once at the common ancestor where that saves copies, with the odd branches overriding it by name. Two entries whose titles collide under one type are `CL0622`, the same as any two story cards sharing a name.
 
 ### Prose passthrough
 

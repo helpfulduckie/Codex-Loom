@@ -75,7 +75,7 @@ branches:
 - **Identical at every leaf, redeclared by no branch, in a project with more than one leaf** — written once to `{output}/Components/Opening.md`, and VL inherits it down.
 - **Anything else** — written into each leaf's own `Components/` folder.
 
-The lift is to the output root or not at all; components have no intermediate-node placement. (Story cards do — they are placed on a computed frontier, which is a different mechanism. See [design-spec §7.3a](design-spec.md).) A single-leaf project always writes per leaf, because its one leaf already *is* the root.
+The lift is to the output root or not at all; components have no intermediate-node placement. (Story cards do — they are placed per name, with overrides, which is a different mechanism. See [design-spec §7.3a](design-spec.md).) A single-leaf project always writes per leaf, because its one leaf already *is* the root.
 
 **A leaf with an adventure description and no opening is `CL0616`.** Velvet Lattice reads a node's prompt as its Opening or, failing that, its description, so the pairing produces the blurb as the first scene. See [Description](#description).
 
@@ -488,7 +488,7 @@ The card's AID `type` — which groups it in the story-card editor — resolves 
 
 `storyCardType` values are root-scoped; an entry's `title:` and `type:` are leaf-scoped and expand before validation. Entry selectors (`variant:` and `sections:`) remain literal.
 
-Placement is the ordinary frontier mechanism: an alternate that renders identically across a subtree is written once at that subtree's root; one that varies per branch has each version placed on its own frontier. Two entries whose titles collide under one type are an ERROR (`CL0622`), the same as any two story cards sharing a name.
+Placement is the ordinary story-card mechanism: an alternate that renders identically across a subtree is written once at that subtree's root; one that varies per branch is written once at the common ancestor where that saves copies, with the odd branches carrying their own version as an override. Two entries whose titles collide under one type are an ERROR (`CL0622`), the same as any two story cards sharing a name.
 
 ---
 

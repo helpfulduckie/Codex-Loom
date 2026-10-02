@@ -102,6 +102,27 @@ describe('discoverLeaves', () => {
 
     fs.rmSync(tmp, { recursive: true });
   });
+
+  test("a leaf's own card replaces the inherited card of the same name, as VL does", () => {
+    const tmp = makeTmp();
+    write(path.join(tmp, 'Story Cards', 'Char', 'Char.md'), '## Elder\nFull version\n\n## Guard\nGuard card');
+    write(path.join(tmp, 'Branches', 'Terse', 'Story Cards', 'NPC', 'NPC.md'), '## Elder\nTerse version');
+    write(path.join(tmp, 'Branches', 'Full', 'Story Cards', 'Char', 'Char.md'), '## Other\nOther card');
+
+    const leaves = discoverLeaves(tmp);
+    const terse = leaves.find((l) => l.branchNames[0] === 'Terse');
+    const full = leaves.find((l) => l.branchNames[0] === 'Full');
+
+    expect(terse.cards).toContain('Terse version');
+    expect(terse.cards).not.toContain('Full version');
+    expect(terse.cards.match(/^#### Elder$/gm)).toHaveLength(1);
+    // the override is listed under its own type, and the inherited sibling card stays
+    expect(terse.cards).toMatch(/### NPC\s+#### Elder/);
+    expect(terse.cards).toContain('Guard card');
+    expect(full.cards).toContain('Full version');
+
+    fs.rmSync(tmp, { recursive: true });
+  });
 });
 
 // ── compileLeaf ───────────────────────────────────────────────────────────────

@@ -1,8 +1,5 @@
 # Seed Map — output
 
-**Felicia Grayls** `[Felicia, Grayls]`
-— _(no inbound seeds)_
-
 **Kaiden Ross** `[Kaiden, Ross]`
 — _(no inbound seeds)_
 
@@ -19,6 +16,9 @@
 - seeded by **The Warrens** · via _Academy_
 - seeded by _Plot Essentials_ · via _Academy_
 - seeded by _Plot Essentials_ · via _Royal Academy_
+
+**Felicia Grayls** `[Felicia, Grayls]`
+— _(no inbound seeds)_
 
 **The Warrens** `[Warrens]`
 — _(no inbound seeds)_
