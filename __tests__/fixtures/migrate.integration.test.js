@@ -2,17 +2,16 @@
 
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const YAML = require('yaml');
 
 const { compile } = require('../../src/compile');
 const { migrateProjectFully } = require('../../src/migrate');
-const { GOLDEN_DIR, HAVE_GOLDENS } = require('../helpers/baselineHarness');
+const { GOLDEN_DIR, HAVE_GOLDENS, prepareTempTree } = require('../helpers/baselineHarness');
 
-const { PROJECTS, OUTPUT_SUBDIR, BASELINE_SUBDIR } = HAVE_GOLDENS
+const { PROJECTS, OUTPUT_SUBDIR, BASELINE_SUBDIR, REPORTS_SUBDIR } = HAVE_GOLDENS
   ? require('../../goldenFixtures/projects')
-  : { PROJECTS: [{ name: 'goldenFixtures/ is not cloned — see .gitignore', dir: '' }], OUTPUT_SUBDIR: '', BASELINE_SUBDIR: '' };
+  : { PROJECTS: [{ name: 'goldenFixtures/ is not cloned — see .gitignore', dir: '' }], OUTPUT_SUBDIR: '', BASELINE_SUBDIR: '', REPORTS_SUBDIR: '' };
 const LOOM_SUBDIR = 'Loom';
 
 function listMarkdown(dir) {
@@ -45,8 +44,7 @@ function migrateAndCompile(tmpDir, project) {
   const results = new Map();
 
   beforeAll(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loom-migrate-'));
-    fs.cpSync(GOLDEN_DIR, tmpDir, { recursive: true });
+    tmpDir = prepareTempTree({ root: GOLDEN_DIR, OUTPUT_SUBDIR, BASELINE_SUBDIR, REPORTS_SUBDIR }, 'codex-loom-migrate-');
     for (const project of PROJECTS) results.set(project.name, migrateAndCompile(tmpDir, project));
   }, 120000);
 
