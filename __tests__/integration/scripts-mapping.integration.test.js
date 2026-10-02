@@ -25,6 +25,34 @@ function compile(scripts, extra = {}) {
   });
 }
 
+function resolved(tmpDir, branchPath) {
+  const output = path.join(tmpDir, 'out');
+  const files = new Map();
+  const readNode = (dir) => {
+    const scriptsDir = path.join(dir, 'Scripts');
+    if (!fs.existsSync(scriptsDir)) return;
+    const walk = (current, prefix = '') => {
+      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+        const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+        const full = path.join(current, entry.name);
+        if (entry.isDirectory()) walk(full, relative);
+        else files.set(relative, fs.readFileSync(full));
+      }
+    };
+    walk(scriptsDir);
+  };
+  readNode(output);
+  for (let depth = 1; depth <= branchPath.length; depth += 1) {
+    readNode(path.join(output, ...branchPath.slice(0, depth).flatMap((name) => ['Branches', name])));
+  }
+  return files;
+}
+
+function expectResolved(tmpDir, branchPath, expected) {
+  expect(resolved(tmpDir, branchPath)).toEqual(new Map(Object.entries(expected)
+    .map(([name, value]) => [name, Buffer.isBuffer(value) ? value : Buffer.from(value)])));
+}
+
 test('hook mappings emit the selected bytes under canonical hook filenames', () => {
   const result = compile('{input: ./input-source.js, library: ./library-source.js}');
   expect(result.threw).toBe(null);
@@ -44,9 +72,8 @@ test('branch mapping hooks inherit the base directory and override named hooks',
     ].join('\n'),
   });
   expect(result.threw).toBe(null);
-  expect(fs.readFileSync(path.join(result.tmpDir, 'out', 'Branches', 'alpha', 'Scripts', 'input.js'), 'utf8')).toBe('branch input');
-  expect(fs.readFileSync(path.join(result.tmpDir, 'out', 'Branches', 'alpha', 'Scripts', 'output.js'), 'utf8')).toBe('base output');
-  expect(fs.readFileSync(path.join(result.tmpDir, 'out', 'Branches', 'beta', 'Scripts', 'input.js'), 'utf8')).toBe('base input');
+  expectResolved(result.tmpDir, ['alpha'], { 'input.js': 'branch input', 'output.js': 'base output' });
+  expectResolved(result.tmpDir, ['beta'], { 'input.js': 'base input', 'output.js': 'base output' });
 });
 
 test('root hook paths resolve against each leaf final variable table', () => {
@@ -61,8 +88,8 @@ test('root hook paths resolve against each leaf final variable table', () => {
     ].join('\n'),
   });
   expect(result.threw).toBe(null);
-  expect(fs.readFileSync(path.join(result.tmpDir, 'out', 'Branches', 'alpha', 'Scripts', 'input.js'), 'utf8')).toBe('alpha value');
-  expect(fs.readFileSync(path.join(result.tmpDir, 'out', 'Branches', 'beta', 'Scripts', 'input.js'), 'utf8')).toBe('beta value');
+  expectResolved(result.tmpDir, ['alpha'], { 'input.js': 'alpha value' });
+  expectResolved(result.tmpDir, ['beta'], { 'input.js': 'beta value' });
 });
 
 test('nested branches restore only hooks named after an ancestor whole-null', () => {
@@ -79,7 +106,7 @@ test('nested branches restore only hooks named after an ancestor whole-null', ()
   expect(result.threw).toBe(null);
   const restored = path.join(result.tmpDir, 'out', 'Branches', 'Main', 'Branches', 'Restored', 'Scripts');
   const empty = path.join(result.tmpDir, 'out', 'Branches', 'Main', 'Branches', 'Empty', 'Scripts');
-  expect(fs.readdirSync(restored)).toEqual(['library.js']);
-  expect(fs.readFileSync(path.join(restored, 'library.js'), 'utf8')).toBe('restored library');
+  expectResolved(result.tmpDir, ['Main', 'Restored'], { 'library.js': 'restored library' });
+  expect(fs.existsSync(restored)).toBe(true);
   expect(fs.existsSync(empty)).toBe(false);
 });

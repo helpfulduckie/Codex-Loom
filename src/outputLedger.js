@@ -9,7 +9,6 @@
  * `takeOutputLedger` bracket it, and outside that bracket recording does nothing.
  */
 
-const fs = require('fs');
 const path = require('path');
 
 let ledger = null;
@@ -22,13 +21,4 @@ function recordWrite(filePath) {
   if (ledger) ledger.add(path.resolve(filePath));
 }
 
-/** Record every file under a directory the compiler copied in whole. */
-function recordTree(dir) {
-  if (!ledger || !fs.existsSync(dir)) return;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) recordTree(full); else recordWrite(full);
-  }
-}
-
-module.exports = { startOutputLedger, takeOutputLedger, recordWrite, recordTree };
+module.exports = { startOutputLedger, takeOutputLedger, recordWrite };

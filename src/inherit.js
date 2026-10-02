@@ -9,20 +9,6 @@ const {
 } = require('./outputPaths');
 const { recordWrite } = require('./outputLedger');
 
-function copyScripts(files, targetDir) {
-  for (const [relative, source] of files) {
-    const dest = path.join(targetDir, 'Scripts', ...relative.split(/[\\/]/));
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(source, dest);
-    recordWrite(dest);
-  }
-}
-
-function scriptSelectionSignature(files) {
-  return JSON.stringify([...files].map(([relative, source]) => [relative, path.resolve(source)])
-    .sort(([a], [b]) => a.localeCompare(b)));
-}
-
 /** The branch tree as nodes keyed by path prefix; `leaf` is the leaf index ending there. */
 function buildPlacementTree(leafPaths) {
   const root = { path: [], children: new Map(), leaf: null };
@@ -40,12 +26,12 @@ function buildPlacementTree(leafPaths) {
 }
 
 /**
- * Where to write one card name's versions so every leaf resolves to its own version.
+ * Where to write one file's versions so every leaf resolves to its own version.
  *
  * Velvet Lattice resolves a leaf to the nearest copy on its path, and cannot remove an
- * inherited card, so a leaf without the card forbids any copy above it. Among layouts that
+ * inherited value, so a leaf without the file forbids any copy above it. Among layouts that
  * resolve correctly this picks the fewest copies, and on a tie the fewest copies that
- * shadow an inherited one — so a card gains an override only when it saves a copy.
+ * shadow an inherited one — so a file gains an override only when it saves a copy.
  *
  * `leafVersion` maps leaf index -> version index; returns [{ path, version }].
  */
@@ -135,20 +121,51 @@ function placeInheritedFiles({
     }
   }
 
-  if ([...deferredScripts.values()].some((files) => files.size > 0)) {
-    const scriptsDeclaredInBranches = branchTreeDeclares(
-      config.branches, (node) => node.scripts !== undefined,
-    );
-    const scriptsCanLift = leaves.length > 1
-      && deferredScripts.size === leaves.length
-      && !scriptsDeclaredInBranches
-      && new Set([...deferredScripts.values()].map(scriptSelectionSignature)).size === 1;
-    if (scriptsCanLift) {
-      const [files] = deferredScripts.values();
-      copyScripts(files, config._resolvedOutput);
-      log.verbose(`    OK: Scripts/ (inherited from root) → ${path.join(config._resolvedOutput, 'Scripts')}`);
-    } else {
-      for (const [leafDir, files] of deferredScripts) copyScripts(files, leafDir);
+  const scriptLeaves = leaves.map((branchPath) => {
+    const folderPath = resolveBranchFolderPath(config.branches, branchPath);
+    const outputDir = buildBranchOutputDir(config._resolvedOutput, folderPath);
+    return { branchPath, outputDir, files: deferredScripts.get(outputDir) || new Map() };
+  });
+  const scriptNames = [...new Set(scriptLeaves.flatMap(({ files }) => [...files.keys()]))]
+    .sort((a, b) => a.localeCompare(b));
+  if (scriptNames.length > 0) {
+    const sourceBuffers = new Map();
+    const getBuffer = (source) => {
+      const absolute = path.resolve(source);
+      if (!sourceBuffers.has(absolute)) sourceBuffers.set(absolute, fs.readFileSync(absolute));
+      return sourceBuffers.get(absolute);
+    };
+    const tree = buildPlacementTree(scriptLeaves.map(({ branchPath }) => branchPath));
+    const ownedScripts = new Map();
+    for (const filename of scriptNames) {
+      const versions = [];
+      const leafVersion = new Map();
+      for (let li = 0; li < scriptLeaves.length; li += 1) {
+        const source = scriptLeaves[li].files.get(filename);
+        if (!source) continue;
+        const buffer = getBuffer(source);
+        let version = versions.findIndex((candidate) => candidate.equals(buffer));
+        if (version < 0) {
+          version = versions.length;
+          versions.push(buffer);
+        }
+        leafVersion.set(li, version);
+      }
+      for (const { path: nodePath, version } of placeWithOverrides(tree, leafVersion, versions.length)) {
+        const outputDir = buildBranchOutputDir(
+          config._resolvedOutput, resolveBranchFolderPath(config.branches, nodePath),
+        );
+        if (!ownedScripts.has(outputDir)) ownedScripts.set(outputDir, []);
+        ownedScripts.get(outputDir).push([filename, versions[version]]);
+      }
+    }
+    for (const [outputDir, files] of ownedScripts) {
+      for (const [filename, buffer] of files) {
+        const dest = path.join(outputDir, 'Scripts', ...filename.split(/[\\/]/));
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.writeFileSync(dest, buffer);
+        recordWrite(dest);
+      }
     }
   }
 
