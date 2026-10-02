@@ -95,6 +95,28 @@ describe('readablePathsFor', () => {
     expect(content.has('body.personality')).toBe(false);
   });
 
+  test('a presence guard acknowledges its reference without making it a content read', () => {
+    const table = { fields: {}, groups: {}, templates: { Raw: [
+      { raw: '{if present($body.optional)}shown{/if}' },
+      { raw: '{if present( $notes.known )}marker{/if}' },
+      { raw: '{if present($body.Field Name)}spaced{/if}' },
+    ] } };
+    const { content, ack } = readablePathsFor(table.templates.Raw, table, new Map());
+    expect(ack).toEqual(new Set(['body.optional', 'notes.known', 'body.field name']));
+    expect(content).toEqual(new Set());
+  });
+
+  test('presence guards in nested partials are acknowledged but separately rendered refs are reads', () => {
+    const partials = new Map([
+      ['outer', { content: '{include inner}{$body.value}' }],
+      ['inner', { content: '{if present ( $body.flag )}ok{/if}' }],
+    ]);
+    const { content, ack } = readablePathsFor([{ include: 'outer' }], TABLE, partials);
+    expect(ack.has('body.flag')).toBe(true);
+    expect(content.has('body.flag')).toBe(false);
+    expect(content.has('body.value')).toBe(true);
+  });
+
   test('{ allowExtra: true } sets the flag', () => {
     expect(readablePathsFor(TABLE.templates.Open, TABLE, PARTIALS).allowExtra).toBe(true);
     expect(readablePathsFor(TABLE.templates.Person, TABLE, PARTIALS).allowExtra).toBe(false);

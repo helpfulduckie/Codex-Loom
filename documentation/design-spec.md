@@ -1097,6 +1097,8 @@ when `originalAppearance` is also present, its before-and-after premise, and a s
 label cannot express it. **A field's declaration never varies by branch**; there is
 exactly one `appearance` declaration in a project.
 
+**Generated declaration guards use normalized presence.** Missing, null, blank, and recursively empty values are absent; zero and false are present. Handwritten `{if $ref}` keeps its truth semantics, while `{if present($ref)}` explicitly tests presence in a template.
+
 ### §13.3 Groups and template lists
 
 **A group is a named sub-list** — what a partial's grouping role becomes. **A template is

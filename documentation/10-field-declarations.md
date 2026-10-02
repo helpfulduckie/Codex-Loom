@@ -67,12 +67,12 @@ vibe: { label: Vibe, join: "; ", wrap: "[]" }
 ```
 
 ``` expect=stanza-vibe
-{if $body.vibe}
+{if present($body.vibe)}
 Vibe: [{join("; ", $body.vibe)}]
 {/if}
 ```
 
-**An empty value is absent by default:** a scalar that is empty or whitespace-only is absent, and arrays and mappings lose empty members recursively before their presence is tested. A non-empty aggregate retains its non-empty members unchanged; `false` and `0` retain their direct-render and conditional behavior. A declaration whose refs are absent emits nothing — no empty label, separator or wrapper. `always: true` is the explicit blank-form exception: it renders that declaration's literal scaffolding deliberately, whether it is declaration sugar or explicit `parts:`:
+**A declaration emits whenever any source is present after normalization.** Empty or whitespace-only scalars and recursively empty arrays or mappings are absent; numeric/string zero and boolean/string false are present and render their values. A declaration whose refs are absent emits nothing — no empty label, separator or wrapper. `always: true` is the explicit blank-form exception: it renders that declaration's literal scaffolding deliberately, whether it is declaration sugar or explicit `parts:`:
 
 ```yaml transform=stanza-source id=stanza-always
 tagline: { label: Tagline, always: true }
@@ -82,15 +82,15 @@ tagline: { label: Tagline, always: true }
 Tagline: {$body.tagline}
 ```
 
-**A `labelWhen` entry compiles to a nested `{if}` on the label**, so the alternate label shows only when its key is present:
+**A `labelWhen` entry compiles to a nested presence guard on the label**, so the alternate label shows whenever its key is present, including when its value is zero or false:
 
 ```yaml transform=stanza-source id=stanza-labelwhen
 appearance: { label: Appearance, join: "; ", labelWhen: { originalAppearance: Current Appearance } }
 ```
 
 ``` expect=stanza-labelwhen
-{if $body.appearance}
-{if $body.originalAppearance}Current Appearance{else}Appearance{/if}: {join("; ", $body.appearance)}
+{if present($body.appearance)}
+{if present($body.originalAppearance)}Current Appearance{else}Appearance{/if}: {join("; ", $body.appearance)}
 {/if}
 ```
 
@@ -111,15 +111,15 @@ stacked: { label: Vibe, wrap: "[]", block: true }
 ```
 
 ``` expect=stanza-wrap-shapes
-{if $body.plain}
+{if present($body.plain)}
 Vibe: [{$body.plain}]
 {/if}
 
-{if $body.inside}
+{if present($body.inside)}
 [Vibe: {$body.inside}]
 {/if}
 
-{if $body.stacked}
+{if present($body.stacked)}
 Vibe:
 [{$body.stacked}]
 {/if}
@@ -152,7 +152,7 @@ fields:
 
 **A literal renders iff every adjacent ref that exists in the list renders.** A middle literal has two neighbors and needs both; a head or tail literal has one neighbor and needs that one. A nested declaration counts as one neighbor and is present when any of its own refs is, so a nested group drops together rather than per-ref.
 
-**"Present" is the same test `{if}` uses.** A missing key; an empty or whitespace-only scalar; a recursively empty list or mapping; `false`; and `0` all count as absent. Mixed aggregates omit their empty members before this test. `always: true` is the narrow override: its own literal scaffolding is deliberately present even when its refs are absent, including when that declaration is nested inside another `parts:` list.
+**`parts:` adjacency uses normalized presence, while handwritten `{if $ref}` remains a truth test.** Missing, null, blank, and recursively empty values are absent; zero and false are present. Mixed aggregates omit empty members before the presence test. `always: true` is the narrow override: its own literal scaffolding is deliberately present even when its refs are absent, including when that declaration is nested inside another `parts:` list.
 
 | Shape | Ref present? | Output |
 |---|---|---|
@@ -181,8 +181,8 @@ tag: { parts: [$body.a, " {preserve}{{lit}}{/preserve}"] }
 ```
 
 ``` expect=stanza-parts-literal-source
-{if $body.a}
-{$body.a}{if $body.a} {preserve}{{lit}}{/preserve}{/if}
+{if present($body.a)}
+{$body.a}{if present($body.a)} {preserve}{{lit}}{/preserve}{/if}
 {/if}
 ```
 
@@ -190,7 +190,7 @@ tag: { parts: [$body.a, " {preserve}{{lit}}{/preserve}"] }
 
 ## `try:` — Rendering the First Source That Resolves
 
-**`try:` is an ordered list of sources; the first one that resolves renders, and the rest are never reached.** It is the operation the field table has never had — do not confuse it with `from: [a, b]`, which renders **both**, joined:
+**`try:` is an ordered list of sources; the first present source renders, and the rest are never reached.** Zero and false count as present. Do not confuse it with `from: [a, b]`, which renders **both**, joined:
 
 | Key | Given `content` absent, `entries` present | Given both present |
 |---|---|---|
@@ -216,10 +216,10 @@ directory: { try: [content, entries], render: list }
 ```
 
 ``` expect=stanza-try-directory
-{if $body.content}
-{if $body.content}{list($body.content)}{else}{list($body.entries)}{/if}
-{else}{if $body.entries}
-{if $body.content}{list($body.content)}{else}{list($body.entries)}{/if}
+{if present($body.content)}
+{if present($body.content)}{list($body.content)}{else}{list($body.entries)}{/if}
+{else}{if present($body.entries)}
+{if present($body.content)}{list($body.content)}{else}{list($body.entries)}{/if}
 {/if}{/if}
 ```
 
@@ -271,6 +271,14 @@ templates:
 ```
 
 `{ allowExtra: true }` opts out of the unread-field audit below — used where a template composes its body from author-shaped sub-keys the field table cannot enumerate. The marker sits in one template's list, and any item that renders through that template is opted out. Both `include` and `raw` interleave freely with field and group names.
+
+**Keep a truth guard for an optional notes marker such as `[e]`.** A false `known` value remains present to field declarations but should not emit the marker:
+
+```yaml surface=fieldtable
+templates:
+  Notes:
+    - { raw: '{if $notes.known}[e]{/if}' }
+```
 
 ---
 

@@ -84,14 +84,15 @@ Each declaration becomes one conditional stanza. `vibe: { label: Vibe, join: "; 
 generates:
 
 ```
-{if $body.vibe}
+{if present($body.vibe)}
 Vibe: [{join("; ", $body.vibe)}]
 {/if}
 ```
 
-**Empty values are absent by default.** An empty or whitespace-only scalar is absent, as is
-an array or mapping whose members are recursively empty; mixed aggregates omit empty members.
-A declaration with only absent refs emits nothing — no label, separator or wrapper.
+**Generated declaration guards test normalized presence.** Empty or whitespace-only scalars
+and recursively empty arrays or mappings are absent; zero and false are present and render
+their values. Handwritten `{if $ref}` remains a truth test; use `{if present($ref)}` when
+existence matters. A declaration with only absent refs emits nothing — no label, separator or wrapper.
 `always: true` is the explicit blank-form exception: it deliberately preserves that
 declaration's literal scaffolding, whether it uses ordinary declaration sugar or `parts:`.
 

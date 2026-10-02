@@ -28,11 +28,13 @@ const FIELDS = `
 fields:
   name: { label: Name }
   vibe: { label: Vibe, join: "; " }
+  count: { label: Count }
+  flag: { label: Flag }
   secret: { label: Hidden, wrap: "[]", wrapLabel: true }
 groups:
   head: [name, vibe]
 templates:
-  Character: [head, secret]
+  Character: [head, secret, count, flag]
   Faction: [name]
 `;
 
@@ -56,9 +58,12 @@ structure:
     items:
       - ./items
   output: ./out
+components:
+  plotEssential: components/plot.cl.yaml
 templateFor:
   base: fields.cl.yaml
   notes: [notes-root.cl.yaml]
+  plotEssential: [fields.cl.yaml]
 branches:
   plain: {}
   modA:
@@ -70,9 +75,13 @@ const ITEMS = `
 - id: Aness
   name: Aness
   aid: { type: Character, triggers: [Aness] }
-  notes: { known: enrolled }
+  render:
+    plotEssential: { slot: roster }
+  notes: { known: false }
   body:
     vibe: [warm, unhurried]
+    count: 0
+    flag: false
     secret: sealed the vault
 `;
 
@@ -81,6 +90,7 @@ beforeAll(() => {
     'templates/fields.cl.yaml': FIELDS.trimStart(),
     'templates/notes-root.cl.yaml': NOTES_ROOT.trimStart(),
     'templates/notes-modA.cl.yaml': NOTES_MODA.trimStart(),
+    'components/plot.cl.yaml': 'sections:\n  roster: { slot: true }\n',
     'compile.cl.yaml': CONFIG.trimStart(),
     'items/items.cl.yaml': ITEMS.trimStart(),
   });
@@ -91,8 +101,26 @@ function cardText(branch) {
   return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null;
 }
 
+function findFile(root, name) {
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const full = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      const found = findFile(full, name);
+      if (found) return found;
+    } else if (entry.name === name) return full;
+  }
+  return null;
+}
+
 describe('templateFor.base renders story cards through the field-list emitter', () => {
-  beforeAll(() => { compile(path.join(dir, 'compile.cl.yaml')); });
+  beforeAll(() => {
+    const diagnostics = new Diagnostics();
+    try {
+      compile(path.join(dir, 'compile.cl.yaml'), { diagnostics });
+    } catch (error) {
+      throw new Error(`${error.message}\n${diagnostics.all.map((d) => d.format()).join('\n')}`);
+    }
+  });
 
   test('the body is the field list, not a verbatim dump', () => {
     const text = cardText('plain');
@@ -100,11 +128,19 @@ describe('templateFor.base renders story cards through the field-list emitter', 
     expect(text).toContain('[Hidden: sealed the vault]');
     // Name has no value on this item, so its conditional stanza produced nothing.
     expect(text).not.toMatch(/Name:/);
+    expect(text).toContain('Count: 0');
+    expect(text).toContain('Flag: false');
   });
 
   test('the notes ladder resolves templateFor.notes on the plain branch (root entry)', () => {
-    // notes-root.cl.yaml renders `known` under the label "Status".
-    expect(cardText('plain')).toMatch(/Status: enrolled/);
+    // The notes field list preserves false, whose truth value remains false.
+    expect(cardText('plain')).toMatch(/Status: false/);
+  });
+
+  test('component-slot field lists preserve zero and false', () => {
+    const p = findFile(path.join(dir, 'out'), 'Plot Essentials.md');
+    expect(p).toBeTruthy();
+    expect(fs.readFileSync(p, 'utf8')).toContain('Count: 0\nFlag: false');
   });
 
   test('modA overrides Character notes but inherits Faction from the root entry', () => {

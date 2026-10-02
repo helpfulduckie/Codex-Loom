@@ -26,7 +26,7 @@ function qualify(path, refRoot) {
   return s.startsWith('$') ? s.slice(1) : `${refRoot}.${s}`;
 }
 
-const IF_GUARD_RE = /\{if\s+\$(body|notes)\.([\w.]+)/g;
+const IF_GUARD_RE = /\{if\s+(?:present\s*\(\s*)?\$(body|notes)\.([^)}]+?)\s*\)?\s*\}/g;
 const IF_TAG_RE = /\{\/?if\b[^}]*\}/g;
 const BODY_REF_RE = /\$(body|notes)\.([\w.]+)/g;
 const INCLUDE_RE = /\{include\s+([\w.-]+)\s*\}/g;
@@ -39,7 +39,7 @@ function readablePathsFor(list, fieldTable, partials, refRoot = 'body') {
   const scanRaw = (str) => {
     let m;
     IF_GUARD_RE.lastIndex = 0;
-    while ((m = IF_GUARD_RE.exec(str)) !== null) ack.add(`${m[1]}.${m[2]}`.toLowerCase());
+    while ((m = IF_GUARD_RE.exec(str)) !== null) ack.add(`${m[1]}.${m[2].trim()}`.toLowerCase());
     const stripped = String(str).replace(IF_TAG_RE, ' ');
     BODY_REF_RE.lastIndex = 0;
     while ((m = BODY_REF_RE.exec(stripped)) !== null) content.add(`${m[1]}.${m[2]}`.toLowerCase());

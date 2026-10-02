@@ -231,8 +231,10 @@ function renderFuncCall(node, data, ctx) {
 }
 
 function renderIf(node, data, ctx) {
-  const truthy = isTruthy(node.cond, data);
-  const branch = truthy ? node.then : (node.else || []);
+  const matches = node.condMode === 'present'
+    ? resolveField(node.cond, data) !== null
+    : isTruthy(node.cond, data);
+  const branch = matches ? node.then : (node.else || []);
   return branch.map(child => renderNode(child, data, ctx)).join('');
 }
 

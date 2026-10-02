@@ -36,6 +36,45 @@ describe('conditionals', () => {
     expect(render('{if $body.flag}yes{else}no{/if}', { body: { flag: false } }, new Map())).toBe('no');
     expect(render('{if $body.count}yes{else}no{/if}', { body: { count: 0 } }, new Map())).toBe('no');
   });
+
+  test.each([
+    ['number zero', 0], ['string zero', '0'], ['boolean false', false], ['string false', 'false'],
+  ])('presence retains %s while truth still rejects it', (_label, value) => {
+    const data = { body: { value } };
+    expect(render('{if present($body.value)}yes{else}no{/if}', data, new Map())).toBe('yes');
+    expect(render('{if $body.value}yes{else}no{/if}', data, new Map())).toBe('no');
+  });
+
+  test('presence rejects normalized absent values and retains mixed aggregates', () => {
+    const tmpl = '{if present($body.value)}yes{else}no{/if}';
+    for (const value of [undefined, null, '', '  ', [], {}, [' ', null], { x: '' }]) {
+      expect(render(tmpl, { body: { value } }, new Map())).toBe('no');
+    }
+    expect(render(tmpl, { body: { value: ['', false, 0] } }, new Map())).toBe('yes');
+  });
+
+  test('presence supports case-insensitive paths, aliases, else, and nesting', () => {
+    const tmpl = '{if present($BODY.Flag)}{if $body.Flag}truth{else}present{/if}{else}absent{/if}';
+    expect(render(tmpl, { body: { flag: false } }, new Map())).toBe('present');
+    expect(render('{if present($variables.foo)}yes{/if}', { v: { foo: 0 } }, new Map())).toBe('yes');
+    expect(render('{if present($body.Field Name)}yes{/if}', { body: { 'Field Name': false } }, new Map())).toBe('yes');
+  });
+
+  test('present() is only a conditional predicate', () => {
+    expect(render('{present($body.value)}', { body: { value: 'x' } }, new Map())).toBe('{present($body.value)}');
+  });
+
+  test.each([
+    '{if present()}x{/if}', '{if present($body.x, $body.y)}x{/if}',
+    '{if present($body.x $body.y)}x{/if}',
+    '{if present(value)}x{/if}', '{if present($body.x}x{/if}', '{if present $body.x}x{/if}',
+  ])('malformed presence predicate remains literal and reports its opener: %s', (source) => {
+    const diagnostics = new Diagnostics();
+    const result = render(`before\n${source}`, {}, new Map(), null, { diagnostics, file: 'bad.template' });
+    expect(result).toContain(source.slice(0, source.indexOf('}') + 1));
+    expect(diagnostics.all).toHaveLength(1);
+    expect(diagnostics.all[0]).toMatchObject({ code: 'CL0413', file: 'bad.template', line: 2, col: 1 });
+  });
 });
 
 describe('wrapper blocks', () => {

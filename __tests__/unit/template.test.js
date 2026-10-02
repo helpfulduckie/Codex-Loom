@@ -21,6 +21,7 @@ const {
   evaluateKeys,
 } = require('../../src/render/eval');
 const { Diagnostics } = require('../../src/diag');
+const { checkMechanicalArtifacts } = require('../../src/util');
 
 describe('resolveField', () => {
   const data = {
@@ -413,6 +414,14 @@ describe('render — whitespace and wrapper', () => {
     const tmpl = 'before\n{preserve}\nline1\n\nline2\n{/preserve}\nafter';
     const result = render(tmpl, data, new Map());
     expect(result).toBe('before\nline1\n\nline2\nafter');
+  });
+
+  test('presence predicates in partials work inside wrapper and preserve blocks', () => {
+    const partials = new Map([[
+      'conditional', { content: '{wrapper}{if present($body.value)}{preserve}\n{$body.value}\n{/preserve}{/if}{/wrapper}' },
+    ]]);
+    expect(render('{include conditional}', { body: { value: 0 }, render: { wrapper: 'square' } }, partials))
+      .toBe('[\n0\n]');
   });
 
   test('auto-wrapper applied to entire output when template has no {wrapper} block', () => {
@@ -808,6 +817,27 @@ describe('render — diagnostics', () => {
     // (per the Phase 9 Session A handoff's Unknowns: both reports are correct).
     expect(result).toBe('{if $body.x}yes');
     expect(diagnostics.all.map(d => d.code)).toEqual(['CL0415']);
+  });
+
+  test('an unclosed presence block reports CL0415 and retains its literal opener', () => {
+    const diagnostics = new Diagnostics();
+    const result = render('{if present($body.x)}yes', { body: { x: false } }, new Map(), null, {
+      diagnostics, file: 'UnclosedPresence.template',
+    });
+    expect(result).toBe('{if present($body.x)}yes');
+    expect(diagnostics.all.map((d) => d.code)).toEqual(['CL0415']);
+  });
+
+  test.each([
+    ['malformed', '{if present()}yes{/if}', 'CL0413'],
+    ['unclosed', '{if present($body.x)}yes', 'CL0415'],
+  ])('%s presence tags remain detectable as leaked template artifacts', (_label, source, code) => {
+    const diagnostics = new Diagnostics();
+    const output = render(source, { body: { x: false } }, new Map(), null, { diagnostics });
+    expect(diagnostics.all.map((d) => d.code)).toContain(code);
+    const artifacts = new Diagnostics();
+    expect(checkMechanicalArtifacts(output, 'presence template', { diagnostics: artifacts })).toBe(true);
+    expect(artifacts.all.map((d) => d.code)).toContain('CL0433');
   });
 
   test('an unknown partial reports CL0417 instead of throwing', () => {

@@ -291,6 +291,8 @@ Nothing hidden here.
 
 **Falsy values:** a field is falsy if it is missing, empty or whitespace-only, the string `"false"`, the string `"0"`, or an array or mapping whose members are recursively empty. Empty aggregate members are omitted before rendering; a non-empty aggregate remains present, including one containing `false` or `0`. Everything else is truthy.
 
+**Use `{if present($ref)}` when a value's existence matters.** Presence means the normalized reference is non-null, so numeric/string zero and boolean/string false take the present branch while missing, null, blank, and recursively empty values take the absent branch. Ordinary `{if $ref}` keeps its truth test and continues to reject zero and false. `present` accepts one field reference and is only valid as an `if` predicate.
+
 Conditionals nest to any depth. The template is parsed into a tree, so each `{if}` is matched to its own `{/if}` by the parser rather than by repeated text substitution; an `{if}` whose closer never arrives is `CL0415`, and the unmatched tag renders as literal text.
 
 ---
@@ -417,7 +419,7 @@ Template diagnostics all report through the render bus. Most name the template f
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `CL0413` | ERROR | A render-function call does not parse (e.g. `{join($body.x)}` is missing its quoted separator). |
+| `CL0413` | ERROR | A render-function call or conditional predicate does not parse (e.g. `{join($body.x)}` is missing its quoted separator); the malformed call remains literal. |
 | `CL0414` | ERROR | A template uses a function name that is not one of `inline`, `join`, `list`, `and`, `prose`, `block`, or `keys`. |
 | `CL0415` | ERROR | An `{if}`, `{wrapper}`, or `{preserve}` block was opened but never closed. The block is emitted as literal text, so the downstream `CL0433` leak sweep may also fire. |
 | `CL0416` | ERROR | A partial includes itself, directly or indirectly. The failing directive is replaced with empty text and rendering continues. |

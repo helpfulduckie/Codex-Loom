@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * The declaration-driven emitter (v4 spec §13.2–§13.3, Phase 12 Step 1).
+ * The declaration-driven emitter.
  *
  * The load-bearing test is byte-identity: the same item rendered through a hand-written
  * `.template` and through the field list that replaces it must produce the same string,
@@ -63,7 +63,7 @@ describe('renderFieldList', () => {
     expect(viaFieldList).toBe('Name: Solia\nPersonality: quiet');
   });
 
-  test('labelWhen: originalAppearance present flips the label to "Current Appearance"', () => {
+  test('labelWhen: a present originalAppearance flips the label to "Current Appearance"', () => {
     const withOriginal = {
       id: 'Y', name: 'Y', aid: { type: 'Character' },
       body: { appearance: ['scarred'], originalAppearance: ['unmarked'] },
@@ -81,6 +81,14 @@ describe('renderFieldList', () => {
     const { viaFieldList } = bothWays(plain);
     expect(viaFieldList).toMatch(/^Appearance: scarred$/m);
     expect(viaFieldList).not.toMatch(/Current Appearance/);
+  });
+
+  test.each([false, 0])('labelWhen selects the alternate label for present value %s', (originalAppearance) => {
+    const item = {
+      id: 'Y', name: 'Y', aid: { type: 'Character' },
+      body: { appearance: 'scarred', originalAppearance },
+    };
+    expect(bothWays(item).viaFieldList).toBe('Current Appearance: scarred');
   });
 
   test('block: true puts the value on its own line beneath the label', () => {
@@ -104,50 +112,47 @@ describe('renderFieldList', () => {
     expect(out).toBe('Cass\nNote: hi\nFOOTER');
   });
 
-  // Decision 6 (2026-09-03 handoff): label/block/wrap/wrapLabel lower internally to a parts
-  // node list rendered through one path instead of five string-concat branches. These pin
-  // `stanzaSource`'s generated source directly, one per branch of the correspondence table —
-  // the sugar's proof, alongside the golden/example byte-identity that catches drift at scale.
-  describe('label/wrap/block sugar lowers to parts (Decision 6)', () => {
+  // Pin the source generated for each label and wrapping shape.
+  describe('label/wrap/block sugar lowers to parts', () => {
     const src = (decl) => stanzaSource({ name: 'x', decl }, 'body');
 
     test('label, no wrap → [label, ": ", value]', () => {
       expect(src({ label: 'Abilities' })).toBe(
-        '{if $body.x}\nAbilities: {$body.x}\n{/if}',
+        '{if present($body.x)}\nAbilities: {$body.x}\n{/if}',
       );
     });
 
     test('label + block → [label, ":\\n", value]', () => {
       expect(src({ label: 'Pantheon', block: true })).toBe(
-        '{if $body.x}\nPantheon:\n{$body.x}\n{/if}',
+        '{if present($body.x)}\nPantheon:\n{$body.x}\n{/if}',
       );
     });
 
     test('wrap + wrapLabel (bracket outside the whole label:value body)', () => {
       expect(src({ label: 'Hidden Info', wrap: '[]', wrapLabel: true })).toBe(
-        '{if $body.x}\n[Hidden Info: {$body.x}]\n{/if}',
+        '{if present($body.x)}\n[Hidden Info: {$body.x}]\n{/if}',
       );
     });
 
     test('wrap, no wrapLabel → [label, ": ", open, value, close]', () => {
       expect(src({ label: 'Vibe', wrap: '[]' })).toBe(
-        '{if $body.x}\nVibe: [{$body.x}]\n{/if}',
+        '{if present($body.x)}\nVibe: [{$body.x}]\n{/if}',
       );
     });
 
     test('wrap + block, no wrapLabel → [label, ":\\n", open, value, close]', () => {
       expect(src({ label: 'Pantheon', wrap: '[]', block: true })).toBe(
-        '{if $body.x}\nPantheon:\n[{$body.x}]\n{/if}',
+        '{if present($body.x)}\nPantheon:\n[{$body.x}]\n{/if}',
       );
     });
 
     test('wrap with no label → [open, value, close]', () => {
-      expect(src({ wrap: '[]' })).toBe('{if $body.x}\n[{$body.x}]\n{/if}');
+      expect(src({ wrap: '[]' })).toBe('{if present($body.x)}\n[{$body.x}]\n{/if}');
     });
 
-    test('labelWhen lowers to a single literal part carrying the labelExpr conditional', () => {
+    test('labelWhen lowers to a single literal part carrying the labelExpr presence conditional', () => {
       expect(src({ label: 'Appearance', labelWhen: { originalAppearance: 'Current Appearance' } })).toBe(
-        '{if $body.x}\n{if $body.originalAppearance}Current Appearance{else}Appearance{/if}: {$body.x}\n{/if}',
+        '{if present($body.x)}\n{if present($body.originalAppearance)}Current Appearance{else}Appearance{/if}: {$body.x}\n{/if}',
       );
     });
 
@@ -172,10 +177,8 @@ describe('renderFieldList', () => {
     );
   });
 
-  // Decision 5 (2026-09-03 handoff): the stanza guard is "any ref present", not "the first
-  // ref present". `magic: { from: [magic.affinity, magic.effect] }` used to render nothing
-  // for an item with an effect and no affinity — the effect text silently vanished.
-  describe('multi-path `from:` guard (Decision 5)', () => {
+  // Each source in `from:` can satisfy the stanza's presence guard.
+  describe('multi-path `from:` guard', () => {
     test('a later path resolves and renders even when the first path is absent', () => {
       const effectOnly = {
         id: 'M', name: 'M', aid: { type: 'Character' },
@@ -194,12 +197,12 @@ describe('renderFieldList', () => {
       expect(viaFieldList).not.toMatch(/Magic/);
     });
 
-    test('a single-path `from:` (or none) keeps the exact prior guard form', () => {
+    test('a single-path `from:` uses a presence guard', () => {
       const { stanzaSource } = require('../../src/render/field-list');
       const single = stanzaSource(
         { name: 'abilities', decl: fieldTable.fields.abilities }, 'body',
       );
-      expect(single).toBe('{if $body.abilities}\nAbilities: {$body.abilities}\n{/if}');
+      expect(single).toBe('{if present($body.abilities)}\nAbilities: {$body.abilities}\n{/if}');
     });
 
     test('three or more refs chain through nested {if}/{else} and produce one guard hit', () => {
@@ -242,7 +245,7 @@ describe('renderFieldList', () => {
       expect(render1(['$name.full'], {})).toBe('Tam');
     });
 
-    describe('literal drop at list boundaries — the Decision 9 table', () => {
+    describe('literal drop at list boundaries', () => {
       test('head literal, its one neighbor present → renders', () => {
         expect(render1(['PRE-', '$body.a'], { a: 'A' })).toBe('PRE-A');
       });
@@ -264,14 +267,13 @@ describe('renderFieldList', () => {
       });
     });
 
-    // Deliberately left to nested parts (2026-09-03 ruling): both literals lose a neighbor
-    // and drop, rather than the missing middle ref collapsing its two separators into one.
+    // Each literal drops when one of its adjacent refs is absent.
     test('[A, "-", B, "-", C] with B absent yields "AC", not "A-C" or "A--C"', () => {
       const out = render1(['$body.a', '-', '$body.b', '-', '$body.c'], { a: 'A', c: 'C' });
       expect(out).toBe('AC');
     });
 
-    describe('a part may itself be a declaration (Decision 4 — general recursion)', () => {
+    describe('a part may itself be a declaration', () => {
       test('a nested declaration whose refs are all absent drops and takes its adjacent literal with it', () => {
         const parts = ['$body.a', ' - ', { from: ['tag1', 'tag2'], join: '; ' }];
         expect(render1(parts, { a: 'A' })).toBe('A');
@@ -288,8 +290,7 @@ describe('renderFieldList', () => {
           groups: {}, templates: {},
         };
         const ctx = itemContext({ id: 'T', name: 'T', aid: { type: 'X' }, body: { tag1: 'T1' } });
-        // No `always:` here — this is the Decision 5 outer guard, and its only present ref
-        // is nested two levels down inside the part.
+        // The only present ref is nested two levels down inside the part.
         const out = renderFieldList([{ field: 'x' }], table, ctx, {});
         expect(out).toBe('T1');
       });
@@ -344,12 +345,11 @@ describe('renderFieldList', () => {
     });
   });
 
-  // `try:` composition (Decision 7 — 2026-09-03 handoff): an ordered list of sources, the
-  // first that resolves renders and the rest are never reached. Unlike `parts:`, every entry
+  // `try:` is an ordered list of sources; the first present source renders. Unlike `parts:`, every entry
   // is a source (a bare string follows `from:`'s root-relative rule, a `$`-prefixed string is
   // absolute, a mapping is a nested declaration) — `from: [a, b]` renders both joined, which
   // is why the mutual-exclusion tests live in `field-table.test.js`, not here.
-  describe('try: composition (Decision 7)', () => {
+  describe('try: composition', () => {
     const tryTable = (decl) => ({ fields: { x: decl }, groups: {}, templates: {} });
     const ctxFor = (body, name) => itemContext({
       id: 'T', name: name || 'T', aid: { type: 'X' }, body,
@@ -392,20 +392,16 @@ describe('renderFieldList', () => {
       expect(fallback).toBe('Tam');
     });
 
-    // The worked example the handoff pins `try:` against — `Directory`'s hand-written `raw:`
-    // escape, `{if $body.content}{list($body.content)}{else}{list($body.entries)}{/if}` — as
-    // a declaration. Retiring the fixture's own `raw:` is step 5's job; this only proves a
-    // `try:` declaration would generate the same first-non-empty behavior.
-    describe('reproduces the Directory raw: shape as a declaration', () => {
+    describe('first-present fallback source selection', () => {
       const decl = { try: ['content', 'entries'], render: 'list' };
 
-      test('the generated stanza source is pinned', () => {
+      test('the generated stanza source uses presence guards', () => {
         const src = stanzaSource({ name: 'directory', decl }, 'body');
         expect(src).toBe(
-          '{if $body.content}\n'
-          + '{if $body.content}{list($body.content)}{else}{list($body.entries)}{/if}\n'
-          + '{else}{if $body.entries}\n'
-          + '{if $body.content}{list($body.content)}{else}{list($body.entries)}{/if}\n'
+          '{if present($body.content)}\n'
+          + '{if present($body.content)}{list($body.content)}{else}{list($body.entries)}{/if}\n'
+          + '{else}{if present($body.entries)}\n'
+          + '{if present($body.content)}{list($body.content)}{else}{list($body.entries)}{/if}\n'
           + '{/if}{/if}',
         );
       });
@@ -427,4 +423,41 @@ describe('renderFieldList', () => {
       });
     });
   });
+
+  test('zero and false count as values for multi-source declarations', () => {
+    const table = {
+      fields: { x: { label: 'X', from: ['a', 'b'], join: '; ' } }, groups: {}, templates: {},
+    };
+    const ctx = (body) => itemContext({ id: 'T', name: 'T', aid: { type: 'X' }, body });
+    expect(renderFieldList(['x'], table, ctx({ a: 0 }), {})).toBe('X: 0');
+    expect(renderFieldList(['x'], table, ctx({ b: false }), {})).toBe('X: false');
+  });
+
+  test('zero and false retain neighboring parts separators', () => {
+    const table = { fields: { x: { parts: ['$body.a', ' / ', '$body.b'] } }, groups: {}, templates: {} };
+    const ctx = itemContext({ id: 'T', name: 'T', aid: { type: 'X' }, body: { a: 0, b: false } });
+    expect(renderFieldList(['x'], table, ctx, {})).toBe('0 / false');
+  });
+
+  test('nested parts and each adjacent separator retain zero and false', () => {
+    const table = {
+      fields: { x: { parts: ['$body.a', ' / ', { parts: ['$body.b', ' / ', '$body.c'] }] } },
+      groups: {}, templates: {},
+    };
+    const ctx = itemContext({ id: 'T', name: 'T', aid: { type: 'X' }, body: { a: 0, b: false, c: 0 } });
+    expect(renderFieldList(['x'], table, ctx, {})).toBe('0 / false / 0');
+  });
+
+  test('zero satisfies the first-present try source', () => {
+    const table = { fields: { x: { label: 'X', try: ['a', 'b'] } }, groups: {}, templates: {} };
+    const ctx = itemContext({ id: 'T', name: 'T', aid: { type: 'X' }, body: { a: 0, b: 'fallback' } });
+    expect(renderFieldList(['x'], table, ctx, {})).toBe('X: 0');
+  });
+
+  test('false satisfies the first-present try source instead of falling through', () => {
+    const table = { fields: { x: { label: 'X', try: ['a', 'b'] } }, groups: {}, templates: {} };
+    const ctx = itemContext({ id: 'T', name: 'T', aid: { type: 'X' }, body: { a: false, b: 'fallback' } });
+    expect(renderFieldList(['x'], table, ctx, {})).toBe('X: false');
+  });
+
 });

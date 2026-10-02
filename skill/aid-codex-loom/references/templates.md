@@ -192,6 +192,8 @@ Background:
 **Falsy:** missing, empty string, `"false"`, `"0"`, empty array, empty mapping. Everything
 else is truthy. Conditionals process innermost-first and nest.
 
+**`present($ref)` tests normalized presence inside an `if` opener.** Zero and false are present; missing, null, blank strings, and recursively empty aggregates are absent. `{if $ref}` remains a truth test. The predicate accepts one field reference and is not a rendered function.
+
 ---
 
 ## Wrapper Blocks

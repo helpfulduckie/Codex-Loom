@@ -55,8 +55,8 @@ function isRefEntry(entry) {
 function inlineGuard(refs, body) {
   if (!refs || refs.length === 0) return body;
   const [first, ...rest] = refs;
-  if (rest.length === 0) return `{if ${first}}${body}{/if}`;
-  return `{if ${first}}${body}{else}${inlineGuard(rest, body)}{/if}`;
+  if (rest.length === 0) return `{if present(${first})}${body}{/if}`;
+  return `{if present(${first})}${body}{else}${inlineGuard(rest, body)}{/if}`;
 }
 
 function buildPartNode(entry, refRoot) {
@@ -111,8 +111,8 @@ function tryChain(nodes) {
     const fallback = build(i + 1);
     const orGuard = (rs) => {
       const [first, ...rest] = rs;
-      if (rest.length === 0) return `{if ${first}}${body}{else}${fallback}{/if}`;
-      return `{if ${first}}${body}{else}${orGuard(rest)}{/if}`;
+      if (rest.length === 0) return `{if present(${first})}${body}{else}${fallback}{/if}`;
+      return `{if present(${first})}${body}{else}${orGuard(rest)}{/if}`;
     };
     return orGuard(presenceRefs);
   };
@@ -150,7 +150,7 @@ function labelExpr(decl, refRoot) {
   if (decl.labelWhen && typeof decl.labelWhen === 'object') {
     const [whenKey, altLabel] = Object.entries(decl.labelWhen)[0] || [];
     if (whenKey) {
-      return `{if ${bodyRef(whenKey, refRoot)}}${altLabel}{else}${decl.label || ''}{/if}`;
+      return `{if present(${bodyRef(whenKey, refRoot)})}${altLabel}{else}${decl.label || ''}{/if}`;
     }
   }
   return decl.label !== undefined && decl.label !== null ? String(decl.label) : null;
@@ -205,8 +205,8 @@ function stanzaSource({ name, decl }, refRoot) {
 }
 
 function guardedStanza(refs, body) {
-  if (refs.length <= 1) return `{if ${refs[0]}}\n${body}\n{/if}`;
-  return `{if ${refs[0]}}\n${body}\n{else}${guardedStanza(refs.slice(1), body)}{/if}`;
+  if (refs.length <= 1) return `{if present(${refs[0]})}\n${body}\n{/if}`;
+  return `{if present(${refs[0]})}\n${body}\n{else}${guardedStanza(refs.slice(1), body)}{/if}`;
 }
 
 function renderFieldList(list, table, context, options = {}) {

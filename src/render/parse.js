@@ -100,7 +100,15 @@ function classifyTag(inner, raw, line, column) {
   const trimmed = inner.trim();
 
   if (inner.startsWith('if ')) {
-    return { ...base, type: 'IF_OPEN', cond: inner.slice(3).trim() };
+    const cond = inner.slice(3).trim();
+    if (/^present\b/.test(cond)) {
+      const match = cond.match(/^present\s*\(\s*(\$[^$(),]+?)\s*\)$/);
+      if (!match || !match[1].slice(1).trim()) {
+        return { ...base, type: 'IF_INVALID', cond };
+      }
+      return { ...base, type: 'IF_OPEN', cond, condMode: 'present', condRef: match[1].trim() };
+    }
+    return { ...base, type: 'IF_OPEN', cond, condMode: 'truth', condRef: cond };
   }
   if (trimmed === 'else') return { ...base, type: 'ELSE' };
   if (trimmed === '/if') return { ...base, type: 'IF_CLOSE' };
@@ -175,6 +183,10 @@ function parse(tokens, report) {
       }
       case 'IF_OPEN':
         return parseIf(tok);
+      case 'IF_INVALID':
+        pos++;
+        report(CODES.TEMPLATE_PARSE_FAILED, 'Malformed present() conditional predicate; use {if present($ref)}, and the malformed call remains literal.', tok);
+        return literal(tok);
       case 'WRAPPER_OPEN':
         return parseWrapper(tok);
       case 'PRESERVE_OPEN':
@@ -204,7 +216,7 @@ function parse(tokens, report) {
     if (peek() && peek().type === 'IF_CLOSE') {
       pos++; // consume IF_CLOSE
       return {
-        type: 'If', cond: openTok.cond, then: thenNodes, else: elseNodes,
+        type: 'If', cond: openTok.condRef, condMode: openTok.condMode, then: thenNodes, else: elseNodes,
         line: openTok.line, column: openTok.column,
       };
     }

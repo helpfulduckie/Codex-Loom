@@ -276,7 +276,7 @@ are always mistakes, and they are what drift produces.
 | `CL0429` | ERROR | Two template files resolve to one case-insensitive name, so loading stops without choosing a winner; remove or rename one. |
 | `CL0411` | ERROR | compile.yaml names an unloaded notes template, so configured notes rendering cannot run; add or rename the notes template, and the notes fallback is used. |
 | `CL0412` | ERROR | An item names an unloaded notes template, so its requested notes rendering cannot run; add or rename the item’s notes template, and the item renders without it. |
-| `CL0413` | ERROR | A render-function call cannot be parsed, so affected text cannot render; correct the call syntax, and the malformed call remains literal. |
+| `CL0413` | ERROR | A render-function call or conditional predicate cannot be parsed, so affected text cannot render; correct the call syntax, and the malformed call remains literal. |
 | `CL0414` | ERROR | A template calls an unknown render function, so the call cannot render; replace the call with a supported function, and the unknown call remains literal. |
 | `CL0415` | ERROR | A template control block has no closer, so its intended behavior cannot apply; close the block, and the opening tag remains literal. |
 | `CL0416` | ERROR | Partials include one another in a cycle, so expansion cannot finish; break the include cycle, and the directive renders empty. |
