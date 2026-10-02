@@ -228,6 +228,37 @@ describe('an included item', () => {
     });
     expect(compiled(tmpDir)).toContain('Religion of Heliador');
   });
+
+  test('schema errors in admitted included items abort before cards or components compile', () => {
+    const { diagnostics, tmpDir, threw } = compileProject({
+      ...BASE,
+      'canon/broken.yaml': [
+        '- id: "bad:item"',
+        '  unknown: value',
+        '  aid: {type: Character, template: WrongPlace}',
+        '  render: {plotEssential: {order: wrong}}',
+        '  variables: {home: Vale}',
+      ].join('\n'),
+      'Codex/items.yaml': `- include: '{%here}/canon/broken.yaml'`,
+    });
+    expect(threw).toMatchObject({ message: '4 errors while loading; nothing was compiled.' });
+    expect(diagnostics.errors.map((d) => d.code)).toEqual([
+      'CL0201', 'CL0210', 'CL0202', 'CL0144',
+    ]);
+    expect(diagnostics.errors.map((d) => d.line)).toEqual([2, 3, 4, 1]);
+    expect(fs.existsSync(path.join(tmpDir, 'output', 'Branches', 'plain', 'Story Cards'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, 'output', 'Branches', 'plain', 'Components'))).toBe(false);
+  });
+
+  test('a numeric included id is reported as a schema error before compilation', () => {
+    const { diagnostics, threw } = compileProject({
+      ...BASE,
+      'canon/broken.yaml': '- id: 42\n  name: Numeric\n',
+      'Codex/items.yaml': `- include: '{%here}/canon/broken.yaml'`,
+    });
+    expect(threw).toMatchObject({ message: '1 error while loading; nothing was compiled.' });
+    expect(diagnostics.errors.map((d) => d.code)).toEqual(['CL0202']);
+  });
 });
 
 // ── The arity-1 half, unchanged ──────────────────────────────────────────────

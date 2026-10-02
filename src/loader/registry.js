@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { findFiles, deepClone, resolveVariables, VAR_ALIASES, YAML_SUFFIXES, RESERVED_LIBRARY_BASENAMES } = require('../util');
+const { findFiles, deepClone, resolveVariables, isPlainObject, VAR_ALIASES, YAML_SUFFIXES, RESERVED_LIBRARY_BASENAMES } = require('../util');
 const { loadYamlDocument, YamlLoadError } = require('./yaml');
 const { attachOrigins, copyOrigins, transferOrigins, originLocation } = require('../origin');
 const { validate } = require('../schema');
@@ -73,6 +73,29 @@ function isComponentDocument(entry) {
     && (entry.name === undefined || typeof entry.name !== 'string');
 }
 
+function prepareItem(entry, { file, index, path: entryPath, sourceMap, diagnostics }) {
+  const label = entry && (entry.id || (typeof entry.name === 'string' ? entry.name : null));
+  validate(entry, ITEM_SCHEMA, {
+    diagnostics,
+    sourceMap,
+    path: entryPath,
+    displayOffset: entryPath.length,
+    context: label ? `item "${label}"` : `item ${index + 1} of ${path.basename(file)}`,
+  });
+
+  if (!isPlainObject(entry)) return null;
+
+  attachOrigins(entry, sourceMap.exportOrigins(entryPath));
+  if (typeof entry.id === 'string' && entry.id.includes(':')) {
+    const message = `Item id "${entry.id}" contains ":", so it cannot be referenced unambiguously with library-qualified ids; remove the colon.`;
+    diagnostics.error(CODES.ID_CONTAINS_COLON, message, originLocation(entry, ['id'], { file }));
+  }
+
+  const warn = (code, message, at) => diagnostics.warn(code, message, at || { file });
+  const normalized = normalizeItemVarField(entry, warn);
+  return copyOrigins(normalized, { ...normalized, _source: file });
+}
+
 function loadItemsFromDir(dirs, options = {}) {
   const { diagnostics } = options;
   const dirList = Array.isArray(dirs) ? dirs : [dirs];
@@ -91,43 +114,23 @@ function loadItemsFromDir(dirs, options = {}) {
         continue;
       }
 
-      const warn = (code, message, at) => {
-        diagnostics.warn(code, message, at || { file });
-      };
-
       if (data === null || data === undefined) {
-        warn(CODES.YAML_EMPTY_FILE, `Empty file skipped: ${file}; add YAML content or remove the file.`);
+        diagnostics.warn(CODES.YAML_EMPTY_FILE, `Empty file skipped: ${file}; add YAML content or remove the file.`, { file });
         continue;
       }
 
       const entries = Array.isArray(data) ? data : [data];
       entries.forEach((entry, index) => {
         if (entry === null || entry === undefined) {
-          warn(CODES.YAML_NULL_DOCUMENT, `Null document in "${file}" — it contributes no items; add content or remove the empty document.`);
+          diagnostics.warn(CODES.YAML_NULL_DOCUMENT, `Null document in "${file}" — it contributes no items; add content or remove the empty document.`, { file });
           return;
         }
 
         if (isComponentDocument(entry)) return;
 
-        const at = Array.isArray(data) ? [String(index)] : [];
-        const label = entry.id || (typeof entry.name === 'string' ? entry.name : null);
-        validate(entry, ITEM_SCHEMA, {
-          diagnostics,
-          sourceMap,
-          path: at,
-          displayOffset: at.length,
-          context: label ? `item "${label}"` : `item ${index + 1} of ${path.basename(file)}`,
-        });
-
-        if (typeof entry.id === 'string' && entry.id.includes(':')) {
-          const message = `Item id "${entry.id}" contains ":", so it cannot be referenced unambiguously with library-qualified ids; remove the colon.`;
-          diagnostics.error(CODES.ID_CONTAINS_COLON, message, { file });
-        }
-
-        attachOrigins(entry, sourceMap.exportOrigins(at));
-        const normalized = normalizeItemVarField(entry, warn);
-        const loaded = copyOrigins(normalized, { ...normalized, _source: file });
-        items.push(loaded);
+        const entryPath = Array.isArray(data) ? [String(index)] : [];
+        const loaded = prepareItem(entry, { file, index, path: entryPath, sourceMap, diagnostics });
+        if (loaded) items.push(loaded);
       });
     }
   }
@@ -218,9 +221,12 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
     if (def.include) {
       includeDefs.push(def);
     } else if (def.import) {
-      explicitIds.add(def.id ? String(def.id).toLowerCase() : splitRef(def.import).id);
-    } else if (def.id || def.name) {
-      explicitIds.add(((def.id || (typeof def.name === 'string' ? def.name : '')) || '').toLowerCase());
+      explicitIds.add(typeof def.id === 'string' && def.id
+        ? def.id.toLowerCase() : splitRef(def.import).id);
+    } else {
+      const identity = typeof def.id === 'string' && def.id ? def.id
+        : (typeof def.name === 'string' ? def.name : null);
+      if (identity !== null) explicitIds.add(identity.toLowerCase());
     }
   }
 
@@ -302,16 +308,17 @@ function includeFile(file, def, includeKey, { seenFiles, explicitIds, diagnostic
       continue;
     }
     if (isComponentDocument(item)) continue;
-    const id = ((item.id || (typeof item.name === 'string' ? item.name : '')) || '').toLowerCase();
+    const id = typeof item.id === 'string' && item.id ? item.id.toLowerCase()
+      : (typeof item.name === 'string' ? item.name.toLowerCase() : '');
     if (explicitIds.has(id)) continue; // an explicit import wins
+
+    const entryPath = Array.isArray(raw) ? [String(index)] : [];
+    const prepared = prepareItem(item, { file, index, path: entryPath, sourceMap, diagnostics });
+    if (!prepared) continue;
 
     // `_include_key` names the directive, which for a directory include spans many files;
     // the per-branch CL0326 check groups on it rather than on `_source`.
-    const loaded = { ...item, _source: file, _include_key: includeKey };
-    attachOrigins(loaded, sourceMap.exportOrigins(Array.isArray(raw) ? [String(index)] : []));
-    // The same `variables:` / `vars:` → `v` folding a library or project item gets; without
-    // it every `{$v.…}` in an included item renders empty.
-    const stamped = normalizeItemVarField(loaded, (code, message, at) => diagnostics.warn(code, message, at || { file }));
+    const stamped = copyOrigins(prepared, { ...prepared, _include_key: includeKey });
     if (def.importVariants) {
       stamped._include_variants = def.importVariants;
       transferOrigins(def, stamped, ['importVariants'], ['_include_variants']);

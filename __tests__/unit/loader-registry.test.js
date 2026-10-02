@@ -190,6 +190,28 @@ describe('item schema validation', () => {
     expect(loadWithDiagnostics().diagnostics.hasErrors()).toBe(false);
   });
 
+  test('a later invalid sequence entry retains schema and alias origins', () => {
+    const file = write('a.cl.yaml', [
+      '- id: First',
+      '- id: "bad:item"',
+      '  unknown: value',
+      '  aid: {type: Character, template: WrongPlace}',
+      '  render: {plotEssential: {order: wrong}}',
+      '  variables: {home: Vale}',
+    ].join('\n'));
+    const { items, diagnostics } = loadWithDiagnostics();
+    const second = items[1];
+    const schema = diagnostics.errors.filter((d) => d.code !== CODES.ID_CONTAINS_COLON);
+    expect(schema.map((d) => [d.code, d.line])).toEqual([
+      [CODES.UNKNOWN_KEY, 3], [CODES.MISPLACED_KEY, 4], [CODES.WRONG_TYPE, 5],
+    ]);
+    expect(diagnostics.errors.find((d) => d.code === CODES.ID_CONTAINS_COLON)).toMatchObject({
+      file, line: 2, col: 3,
+    });
+    expect(originAt(second, 'variables')).toMatchObject({ file, path: ['variables'], line: 6 });
+    expect(originAt(second, 'v', 'home')).toMatchObject({ file, path: ['variables', 'home'], line: 6 });
+  });
+
   test('aid.known and aid.encapsulate are gone, not silently accepted', () => {
     // Both left with the envelope (§8.2.1, §8.4). A project that still declares one is
     // half-migrated, and an unknown-key ERROR naming the key is the useful answer.
@@ -371,6 +393,137 @@ describe('resolveIncludes — duplicate file detection', () => {
       new Map(), makeConfig(tmpDir),
     );
     expect(originAt(result[0], 'import')).toMatchObject({ file: shared, path: ['import'], line: 2 });
+  });
+
+  test.each([
+    ['single mapping', 'id: "bad:item"\nunknown: value\naid: {type: Character, template: WrongPlace}\nrender: {plotEssential: {order: wrong}}\nvariables: {home: Vale}\n', 1, 1, 2],
+    ['later sequence entry', '- id: First\n- id: "bad:item"\n  unknown: value\n  aid: {type: Character, template: WrongPlace}\n  render: {plotEssential: {order: wrong}}\n  variables: {home: Vale}\n', 2, 3, 3],
+  ])('%s has identical ordinary and include validation diagnostics', (_label, source, idLine, idCol, unknownLine) => {
+    const file = path.join(tmpDir, 'authored.cl.yaml');
+    fs.writeFileSync(file, source, 'utf8');
+    const ordinaryDiagnostics = new Diagnostics();
+    const ordinary = loadItemsFromDir([tmpDir], { diagnostics: ordinaryDiagnostics });
+    const includeDiagnostics = new Diagnostics();
+    const included = resolveIncludes(
+      [{ include: file, _source: path.join(tmpDir, 'project.yaml') }],
+      new Map(), makeConfig(tmpDir), { diagnostics: includeDiagnostics },
+    );
+    const projectDiagnostics = ordinaryDiagnostics.all.map((d) => [
+      d.code, d.severity, d.message, d.hint, d.file, d.line, d.col,
+    ]);
+    const includeRows = includeDiagnostics.all.map((d) => [
+      d.code, d.severity, d.message, d.hint, d.file, d.line, d.col,
+    ]);
+    expect(includeRows).toEqual(projectDiagnostics);
+    const authoredLines = source.split('\n');
+    const columnOf = (line, key) => authoredLines[line - 1].indexOf(key) + 1;
+    expect(projectDiagnostics.map(([code, severity, , , diagnosticFile, line, col]) => [code, severity, diagnosticFile, line, col])).toEqual([
+      [CODES.UNKNOWN_KEY, 'error', file, unknownLine, columnOf(unknownLine, 'unknown')],
+      [CODES.MISPLACED_KEY, 'error', file, unknownLine + 1, columnOf(unknownLine + 1, 'template')],
+      [CODES.WRONG_TYPE, 'error', file, unknownLine + 2, columnOf(unknownLine + 2, 'order')],
+      [CODES.ID_CONTAINS_COLON, 'error', file, idLine, idCol],
+    ]);
+    expect(ordinaryDiagnostics.errors[1].hint).toContain('"template" is valid under "render:"');
+    expect(ordinaryDiagnostics.errors.slice(0, 3).every((d) => d.message.includes('in item "bad:item"'))).toBe(true);
+    expect(ordinaryDiagnostics.errors.find((d) => d.code === CODES.ID_CONTAINS_COLON)).toMatchObject({
+      file, line: idLine, col: idCol,
+    });
+    expect(ordinary).toHaveLength(included.length);
+    const prepared = included.find((item) => item.id === 'bad:item');
+    expect(prepared._source).toBe(file);
+    expect(originAt(prepared, 'v')).toMatchObject({
+      file, path: ['variables'], line: unknownLine + 3, col: columnOf(unknownLine + 3, 'variables'),
+    });
+    expect(originAt(prepared, 'v', 'home')).toMatchObject({
+      file, path: ['variables', 'home'], line: unknownLine + 3, col: columnOf(unknownLine + 3, 'home'),
+    });
+  });
+
+  test('an explicit identity suppresses a malformed included copy before validation', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: Kept\n  unknown: ignored\n', 'utf8');
+    const diagnostics = new Diagnostics();
+    const result = resolveIncludes([
+      { id: 'Kept', _source: path.join(tmpDir, 'project.yaml') },
+      { include: shared, _source: path.join(tmpDir, 'project.yaml') },
+    ], new Map(), makeConfig(tmpDir), { diagnostics });
+    expect(result).toEqual([]);
+    expect(diagnostics.all).toEqual([]);
+  });
+
+  test('an explicit empty id falls back to its string name for suppression', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: Kept\n  name: Kept\n  unknown: ignored\n', 'utf8');
+    const diagnostics = new Diagnostics();
+    const result = resolveIncludes([
+      { id: '', name: 'Kept', _source: path.join(tmpDir, 'project.yaml') },
+      { include: shared, _source: path.join(tmpDir, 'project.yaml') },
+    ], new Map(), makeConfig(tmpDir), { diagnostics });
+    expect(result).toEqual([]);
+    expect(diagnostics.all).toEqual([]);
+  });
+
+  test('an admitted numeric id is schema-diagnosed and retained without throwing', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, '- id: 42\n  name: Numeric\n', 'utf8');
+    const diagnostics = new Diagnostics();
+    let result;
+    expect(() => {
+      result = resolveIncludes(
+        [{ include: shared, _source: path.join(tmpDir, 'project.yaml') }],
+        new Map(), makeConfig(tmpDir), { diagnostics },
+      );
+    }).not.toThrow();
+    expect(diagnostics.errors.map((d) => d.code)).toContain(CODES.WRONG_TYPE);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe(42);
+  });
+
+  test('a non-mapping sequence entry is diagnosed and skipped by either loading route', () => {
+    const file = write('authored.cl.yaml', '- id: First\n- 42\n- id: Last\n');
+    const ordinary = loadWithDiagnostics();
+    const diagnostics = new Diagnostics();
+    const included = resolveIncludes(
+      [{ include: file, _source: path.join(tmpDir, 'project.yaml') }],
+      new Map(), makeConfig(tmpDir), { diagnostics },
+    );
+    expect(ordinary.items.map((item) => item.id)).toEqual(['First', 'Last']);
+    expect(included.map((item) => item.id)).toEqual(['First', 'Last']);
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0]).toMatchObject({ code: CODES.WRONG_TYPE, file, line: 2, col: 3 });
+    expect(diagnostics.errors[0].message).toContain('item 2 of authored.cl.yaml');
+    expect(diagnostics.errors[0].format()).toBe(ordinary.diagnostics.errors[0].format());
+  });
+
+  test('null and component documents are skipped while include namespaces stay open', () => {
+    const shared = path.join(tmpDir, 'shared.yaml');
+    fs.writeFileSync(shared, [
+      '- ~',
+      '- sections: {intro: {text: Hello}}',
+      '- id: Open',
+      '  body: {Arbitrary: value}',
+      '  variables: {x: 1}',
+    ].join('\n'), 'utf8');
+    const diagnostics = new Diagnostics();
+    const result = resolveIncludes(
+      [{ include: shared, _source: path.join(tmpDir, 'project.yaml') }],
+      new Map(), makeConfig(tmpDir), { diagnostics },
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ id: 'Open', v: { x: 1 } });
+    expect(diagnostics.all.map((d) => d.code)).toEqual([CODES.YAML_NULL_DOCUMENT]);
+  });
+
+  test('directory includes exclude reserved library manifests', () => {
+    const folder = path.join(tmpDir, 'lore');
+    fs.mkdirSync(folder);
+    fs.writeFileSync(path.join(folder, 'library.cl.yaml'), '- id: Reserved\n', 'utf8');
+    fs.writeFileSync(path.join(folder, 'item.yaml'), '- id: Included\n', 'utf8');
+    const result = resolveIncludes(
+      [{ include: folder, _source: path.join(tmpDir, 'project.yaml') }],
+      new Map(), makeConfig(tmpDir), { diagnostics: new Diagnostics() },
+    );
+    expect(result.map((item) => item.id)).toEqual(['Included']);
   });
 
   /** Resolve with a bus and hand back the CL0131 reports beside the result. */
