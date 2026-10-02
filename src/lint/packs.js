@@ -83,6 +83,11 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
         );
       }
     }
+    const badSchema = findInvalidKeyPattern(rule.schema);
+    if (badSchema) {
+      return fail(`rule ${id} has an invalid ${badSchema.keyword} regex "${badSchema.spec}" — `
+        + `${badSchema.error.message.split('\n')[0]}`);
+    }
 
     if (rule.severity !== undefined && rule.severity !== 'warn' && rule.severity !== 'error') {
       return fail(
@@ -109,6 +114,28 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
   }
 
   return { name, rules: normalized };
+}
+
+function findInvalidKeyPattern(node) {
+  if (!node || typeof node !== 'object') return null;
+  if (node.keyPattern !== undefined) {
+    if (typeof node.keyPattern !== 'string') {
+      return { keyword: 'keyPattern', spec: node.keyPattern, error: new TypeError('expected a string') };
+    }
+    try {
+      new RegExp(node.keyPattern);
+    } catch (error) {
+      return { keyword: 'keyPattern', spec: node.keyPattern, error };
+    }
+  }
+  if (node.keys && typeof node.keys === 'object') {
+    for (const child of Object.values(node.keys)) {
+      const bad = findInvalidKeyPattern(child);
+      if (bad) return bad;
+    }
+  }
+  if (node.of && typeof node.of === 'object') return findInvalidKeyPattern(node.of);
+  return null;
 }
 
 

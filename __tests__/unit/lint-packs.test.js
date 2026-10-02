@@ -66,6 +66,27 @@ describe('loadPack', () => {
     expect(diag.errors[0].code).toBe(CODES.PACK_MALFORMED);
   });
 
+  test.each([
+    ['at root', 'keyPattern: "["'],
+    ['under keys', 'keys: { child: { type: record, keyPattern: "[" } }'],
+    ['under of', 'of: { type: record, keys: { child: { type: record, keyPattern: "[" } } }'],
+  ])('a malformed keyPattern nested %s rejects the pack as CL0117', (_where, schemaPart) => {
+    writePack('bad-key-pattern', `name: bad-key-pattern\nrules:\n  - schema:\n      type: record\n      ${schemaPart}\n`);
+    const diag = new Diagnostics();
+    expect(loadPack('bad-key-pattern', { source: './bad-key-pattern.cl.yaml' },
+      { baseDir: TMP, diagnostics: diag })).toBeNull();
+    expect(diag.errors[0].code).toBe(CODES.PACK_MALFORMED);
+    expect(diag.errors[0].message).toContain('invalid keyPattern regex');
+  });
+
+  test('a non-string keyPattern rejects the pack as CL0117', () => {
+    writePack('bad-key-pattern-type', 'name: bad-key-pattern-type\nrules:\n  - schema: { type: record, keyPattern: 12 }\n');
+    const diag = new Diagnostics();
+    expect(loadPack('bad-key-pattern-type', { source: './bad-key-pattern-type.cl.yaml' },
+      { baseDir: TMP, diagnostics: diag })).toBeNull();
+    expect(diag.errors[0].code).toBe(CODES.PACK_MALFORMED);
+  });
+
   test('a name: that disagrees with the config key is a CL0119 ERROR', () => {
     writePack('keyname', 'name: realname\nrules: []\n');
     const diag = new Diagnostics();
@@ -287,6 +308,12 @@ describe('evaluatePack', () => {
     expect(found).toHaveLength(1);
     expect(found[0].code).toBe('CL-t/0001');
     expect(found[0].message).toContain('Speed');
+  });
+  test('record key-pattern findings are re-coded to the pack rule', () => {
+    const rule = { schema: { type: 'record', keyPattern: '^[a-z_]+$', of: { type: 'string' } } };
+    const found = runRule(rule, card({ notes: 'Bad-Key: 42' }));
+    expect(found).toHaveLength(2);
+    expect(found.map((f) => f.code)).toEqual(['CL-t/0001', 'CL-t/0001']);
   });
   test('the finding message names the pack, the card, and the branch', () => {
     const pack = { name: 'wtg', rules: [{ id: '1', code: 'CL-wtg/0001', severity: 'error', message: 'boom', forbid: {} }] };

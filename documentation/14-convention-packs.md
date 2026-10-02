@@ -183,10 +183,13 @@ understands:
   them for a union).
 - **`keys`** — for `map`: the declared key set is the whole set; an undeclared key is a
   `CL0201` ERROR with a Damerau-Levenshtein typo suggestion. Also honored on `record`,
-  where it means the opposite: the declared keys are validated and everything else passes
-  untouched. Use `map` for "these keys and no others," `record` + `keys` for "these keys,
-  plus anything."
-- **`of`** — for `seq` / `record`: the descriptor every element or value must match.
+  where declared keys use their own descriptors and other keys remain allowed. Use `map`
+  for "these keys and no others," `record` + `keys` for "these keys, plus anything."
+- **`of`** — for `seq` / `record`: the descriptor every element or value must match. On a
+  record that also has `keys`, it validates only undeclared values; declared values use their
+  `keys` descriptor.
+- **`keyPattern`** — for `record`: a case-sensitive regex every key name must match,
+  including declared keys. A mismatch is `CL0208` at the key's source location.
 - **`required`** — the key must be present.
 - **`values`** — a closed set; a value outside it is `CL0206`.
 - **`min`** / **`max`** — inclusive numeric bounds; a value outside them is `CL0207`.

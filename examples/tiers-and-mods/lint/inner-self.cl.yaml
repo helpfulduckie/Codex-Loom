@@ -7,7 +7,7 @@
 # Inner Self reads an NPC brain card's notes: valid string-valued JSON, or (v1.0.2+)
 # a simpler line-delimited `key: value` form. Every value is a string — a
 # first-person thought — and the keys are meant to be snake_case. This pack checks
-# what it can.
+# checks the lower_snake_case key and string-value contract.
 
 name: innerSelf
 rules:
@@ -27,14 +27,15 @@ rules:
   #
   # An open `record` whose every value must be a string: the notes may carry any
   # keys, but each value is a single first-person thought, never a list or a nested
-  # map. A value that is not a string is CL0202, demoted to WARN and re-coded here.
+  # map. A key outside lower_snake_case or a value that is not a string is reported here.
   - id: 2
     severity: warn
     appliesTo: { titleMatch: '^@' }
     over: notes
     schema:
       type: record
+      keyPattern: '^[a-z][a-z0-9_]*$'
       of: { type: string }
     message: >-
       An Inner Self brain card's notes must be a flat set of string-valued thoughts.
-      A list or nested map here does not survive the mod's parse.
+      Use lower_snake_case keys and string values; lists and nested maps do not survive the mod's parse.

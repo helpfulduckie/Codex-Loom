@@ -132,7 +132,11 @@ markdown cannot give back. An author who wants the full check runs a compile, no
   ERROR with a typo suggestion. On `record`, the declared keys are validated and everything
   else passes. **Use `map` for "these keys and no others," `record` + `keys` for "these
   keys, plus anything."**
-- **`of`** — for `seq` / `record`: the descriptor every element or value must match.
+- **`of`** — for `seq` / `record`: the descriptor every element or value must match. On a
+  record that also has `keys`, it validates only undeclared values; declared values use their
+  `keys` descriptor.
+- **`keyPattern`** — for `record`: a case-sensitive regex every key name must match,
+  including declared keys. A mismatch is `CL0208` at the key's source location.
 - **`required`** — the key must be present.
 - **`values`** — a closed set.
 - **`min`** / **`max`** — inclusive numeric bounds.

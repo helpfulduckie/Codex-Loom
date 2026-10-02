@@ -46,7 +46,7 @@ const REGISTRY = Object.freeze({
   SUPERSEDED_KEY:               { id: 'CL0205', severity: WARN,  summary: 'A key uses an older spelling; replace it with the current spelling so the configuration keeps working if the old spelling is removed.' },
   VALUE_NOT_ALLOWED:            { id: 'CL0206', severity: ERROR, summary: 'A key has a value outside its allowed set, so the value is rejected; replace it with one of the listed values.' },
   VALUE_OUT_OF_RANGE:           { id: 'CL0207', severity: ERROR, summary: "A number is outside its descriptor's inclusive min/max bounds, so the value is rejected; change it to a value within the bounds." },
-  PATTERN_MISMATCH:             { id: 'CL0208', severity: ERROR, summary: "A string does not match its descriptor's pattern, so the value is rejected; change it to match the required regex." },
+  PATTERN_MISMATCH:             { id: 'CL0208', severity: ERROR, summary: "A string value or record key does not match its descriptor's pattern, so the value or key is rejected; change it to match the required regex." },
   UNSUPPORTED_VERSION:          { id: 'CL0209', severity: ERROR, summary: 'The project is not declared as v4, so configuration loading stops; set version: 4 or run --migrate for a v3 project.' },
   MISPLACED_KEY:                { id: 'CL0210', severity: ERROR, summary: 'A valid key is at the wrong level, so it is ignored there; move it to the reported level.' },
 

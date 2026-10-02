@@ -234,6 +234,24 @@ function validate(value, schema, options = {}) {
     }
 
     if (isPlainObject(normalized)) {
+      const record = types.includes(TYPES.RECORD);
+      const declaredKeys = record && descriptor.keys ? descriptor.keys : {};
+      if (record && descriptor.keyPattern !== undefined) {
+        let keyRe;
+        try { keyRe = new RegExp(String(descriptor.keyPattern)); } catch (err) { keyRe = null; }
+        if (keyRe) {
+          for (const key of Object.keys(normalized)) {
+            if (!keyRe.test(key)) {
+              diagnostics.error(
+                CODES.PATTERN_MISMATCH,
+                `Key "${key}" under "${display(currentPath) || '<root>'}" must match `
+                + `${JSON.stringify(String(descriptor.keyPattern))}${inContext}; rename it to match the pattern.`,
+                locate([...currentPath, key])
+              );
+            }
+          }
+        }
+      }
       if (types.includes(TYPES.MAP) && descriptor.keys) {
         const declared = Object.keys(descriptor.keys);
 
@@ -284,14 +302,20 @@ function validate(value, schema, options = {}) {
 
       if (types.includes(TYPES.RECORD) && descriptor.keys) {
         for (const [key, child] of Object.entries(descriptor.keys)) {
-          if (normalized[key] !== undefined) {
-            normalized[key] = walk(normalized[key], child, [...currentPath, key]);
-          } else if (child.required && diagnostics) {
+          if (normalized[key] !== undefined) normalized[key] = walk(normalized[key], child, [...currentPath, key]);
+          else if (child.required && diagnostics) {
             diagnostics.error(
               CODES.MISSING_REQUIRED,
               `Missing required key "${key}"${display(currentPath) ? ` under "${display(currentPath)}"` : ''}${inContext}; add it or validation of this value fails.`,
               locate(currentPath)
             );
+          }
+        }
+        if (descriptor.of) {
+          for (const key of Object.keys(normalized)) {
+            if (!Object.prototype.hasOwnProperty.call(declaredKeys, key)) {
+              normalized[key] = walk(normalized[key], descriptor.of, [...currentPath, key]);
+            }
           }
         }
         return normalized;

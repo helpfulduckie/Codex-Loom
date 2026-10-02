@@ -225,8 +225,7 @@ describe('closed value sets', () => {
 });
 
 /**
- * `pattern:` — a case-insensitive regex on a string field, added in Phase 15 for
- * convention-pack schemas over human-typed mod-config values (§8.2.2).
+ * `pattern:` is case-insensitive for string values.
  */
 describe('string pattern', () => {
   const desc = { type: TYPES.MAP, keys: { d: { type: TYPES.STRING, pattern: '^(AD|CE|BC|BCE)$' } } };
@@ -292,6 +291,44 @@ describe('keys on a record', () => {
 
   test('a missing required declared key is CL0203', () => {
     expect(codesFor({ Known: '1' })).toEqual([CODES.MISSING_REQUIRED]);
+  });
+
+  test('keyPattern checks every key, including declared keys, at the key location', () => {
+    const d = new Diagnostics();
+    const sourceMap = { nearest: (p) => ({ file: 'card.yaml', line: p[p.length - 1] === 'Bad-Key' ? 9 : 4 }) };
+    validate({ known: '1', 'Bad-Key': '2' },
+      { type: TYPES.RECORD, keys: { known: { type: TYPES.STRING }, 'Bad-Key': { type: TYPES.STRING } }, keyPattern: '^[a-z_]+$' },
+      { diagnostics: d, sourceMap });
+    expect(d.all.filter((x) => x.code === CODES.PATTERN_MISMATCH)).toHaveLength(1);
+    expect(d.all.find((x) => x.message.includes('Bad-Key'))).toMatchObject({ file: 'card.yaml', line: 9 });
+  });
+
+  test('lower snake case passes and uppercase, spaces, and hyphens fail', () => {
+    const descriptor = { type: TYPES.RECORD, keyPattern: '^[a-z][a-z0-9_]*$' };
+    const passDiagnostics = new Diagnostics();
+    validate({ lower_snake2: 'ok' }, descriptor, { diagnostics: passDiagnostics });
+    expect(passDiagnostics.all).toEqual([]);
+    for (const key of ['Uppercase', 'two words', 'two-words']) {
+      const d = new Diagnostics();
+      validate({ [key]: 'ok' }, descriptor, { diagnostics: d });
+      expect(d.all.map((x) => x.code)).toEqual([CODES.PATTERN_MISMATCH]);
+    }
+  });
+
+  test('a key mismatch does not stop value validation', () => {
+    const d = new Diagnostics();
+    validate({ 'Bad-Key': 42 }, { type: TYPES.RECORD, keyPattern: '^[a-z_]+$', of: { type: TYPES.STRING } },
+      { diagnostics: d });
+    expect(d.all.map((x) => x.code)).toEqual([CODES.PATTERN_MISMATCH, CODES.WRONG_TYPE]);
+  });
+
+  test('record keys and of validate declared and fallback values once', () => {
+    const d = new Diagnostics();
+    validate({ known: 7, extra: 8 }, { type: TYPES.RECORD,
+      keys: { known: { type: TYPES.NUMBER, required: true } }, of: { type: TYPES.STRING } }, { diagnostics: d });
+    expect(d.errors).toHaveLength(1);
+    expect(d.errors[0].code).toBe(CODES.WRONG_TYPE);
+    expect(d.errors[0].message).toContain('extra');
   });
 });
 
