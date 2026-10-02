@@ -78,6 +78,13 @@ const LINT = {
   },
 };
 
+// Whether the project is a playable scenario is a whole-project fact, so only the root
+// `lint:` accepts `scenario:`.
+const ROOT_LINT = {
+  type: TYPES.MAP,
+  keys: { ...LINT.keys, scenario: { type: TYPES.BOOLEAN } },
+};
+
 const BRANCH_NODE = {
   type: TYPES.MAP,
   keys: {
@@ -127,7 +134,7 @@ const CONFIG_SCHEMA = {
     roles: { type: TYPES.RECORD, of: STRING },
     placeholders: STRING_RECORD,
     scripts: SCRIPTS,
-    lint: LINT,
+    lint: ROOT_LINT,
     components: COMPONENTS,
     render: RENDER,
     templateFor: TEMPLATE_FOR,

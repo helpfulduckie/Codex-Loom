@@ -55,6 +55,7 @@ render:
 
 lint:
   level: warn                     # off | error | warn — the opinion-layer ceiling
+  scenario: true                  # root only; false = not playable, drops CL0630/CL0631 and pack requireCard
   packs:
     wtg: {}
 

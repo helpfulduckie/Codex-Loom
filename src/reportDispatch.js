@@ -100,7 +100,10 @@ function finalizeDiagnostics({
     );
   }
 
-  for (const s of leafSummaries) {
+  // `lint.scenario: false` declares a project nobody plays, so a leaf without an opening or
+  // AI Instructions is expected there.
+  const isScenario = !(config.lint && config.lint.scenario === false);
+  for (const s of isScenario ? leafSummaries : []) {
     if (!openingLeaves.has(s.label) && !descriptionLeaves.has(s.label)) {
       diagnostics.warn(
         DIAG_CODES.LEAF_NO_OPENING,

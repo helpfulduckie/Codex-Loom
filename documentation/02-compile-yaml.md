@@ -368,6 +368,20 @@ branch's subtree, and a finding it clamps names the branch that raised it. The o
 ceilings is per-pack `level:`, then per-branch `lint.level`, then project-level
 `lint.level`; the tightest wins.
 
+**`lint.scenario: false` declares a project nobody plays**, such as one that renders a
+shared library at several variants so it can be read and measured. It drops the checks that
+only make sense for a playable leaf: `CL0630` (no opening), `CL0631` (no AI Instructions)
+and every pack's `requireCard` existence check. Per-card and per-item pack rules, and
+everything the compiler knows is wrong, still run. The key is accepted at the root only;
+the default is `true`.
+
+```yaml surface=config
+lint:
+  scenario: false
+  packs:
+    duckieConv: {}
+```
+
 ### `branches`
 
 The branch tree. Each key is a branch name; each value is a branch config object. A branch with no `branches:` sub-key is a **leaf** — the compiler produces one output folder for it. A branch with a `branches:` sub-key is a **node** — its children are enumerated recursively.

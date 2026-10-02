@@ -90,6 +90,13 @@ A per-branch `lint.level` composes on top of the per-pack ceiling, and the proje
 `lint.level` composes on top of that — tightest wins. A branch-ceilinged finding names the
 branch it fired on.
 
+**A finding raised identically on several leaves is reported once.** A card that renders
+the same on every leaf raises the same finding on each, so the compile groups findings that
+agree on pack, code, severity, file and message, and names the branches instead:
+`on branch "a"` for one, `on branches "a", "c"` for some, `on all 12 branches` for every
+leaf the pack ran on. A card whose text differs between branches gives different findings,
+so each stays separate. The offline `--lint` arm reports per card and is unaffected.
+
 ---
 
 ## Diagnostic codes
@@ -135,7 +142,8 @@ resolved item and are **inline only** — see [Per-item rules](#per-item-rules--
 `forbid` / `require` / `schema` are *per-card* — they run against every card a rule's
 `appliesTo` matches. `requireCard: <predicate>` is the existential: on a branch leaf that
 binds the pack and resolves **no** card satisfying the predicate, the rule contributes one
-finding naming that branch (the same per-leaf cadence as `CL0118`).
+finding naming that branch (the same per-leaf cadence as `CL0118`). A project declaring
+`lint.scenario: false` skips the check entirely, since no leaf of it is played.
 
 The compiler cannot detect where a mod is active, so a rule that requires a mod's config
 card fires on every leaf by default; an author who does not run that mod on a branch

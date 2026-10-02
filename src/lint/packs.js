@@ -246,13 +246,17 @@ function evaluatePack(pack, cards, { branchLabel = null } = {}) {
     for (const rule of pack.rules) {
       if (!evalPredicate(rule.appliesTo, view)) continue;
 
-      const emit = (f) => findings.push({
-        severity: f.severity,
-        code: f.code,
-        card: card.title,
-        detail: f.message,
-        message: `[${pack.name}] card "${card.title}"${where}: ${f.message}`,
-      });
+      const emit = (f) => {
+        const relabel = (w) => `[${pack.name}] card "${card.title}"${w}: ${f.message}`;
+        findings.push({
+          severity: f.severity,
+          code: f.code,
+          card: card.title,
+          detail: f.message,
+          message: relabel(where),
+          relabel,
+        });
+      };
 
       if (rule.forbid && evalPredicate(rule.forbid, view)) {
         emit({ severity: rule.severity, code: rule.code, message: rule.message });
@@ -301,12 +305,14 @@ function evaluatePackExistence(pack, cards, { branchLabel = null } = {}) {
     }));
     if (satisfied) continue;
 
+    const relabel = (w) => `[${pack.name}]${w}: ${rule.message}`;
     findings.push({
       severity: rule.severity,
       code: rule.code,
       leaf: branchLabel || '(root)',
       detail: rule.message,
-      message: `[${pack.name}]${where}: ${rule.message}`,
+      message: relabel(where),
+      relabel,
     });
   }
   return findings;
@@ -321,14 +327,18 @@ function collectionSize(value) {
 
 function checkCountField(rule, pack, where, label, fieldPath, value, bounds, findings) {
   if (!bounds || typeof bounds !== 'object') return;
-  const push = (msg) => findings.push({
-    severity: rule.severity,
-    code: rule.code,
-    leaf: where.leaf,
-    file: where.file,
-    detail: msg,
-    message: `[${pack.name}]${where.suffix} — item "${label}", ${fieldPath}: ${msg}`,
-  });
+  const push = (msg) => {
+    const relabel = (w) => `[${pack.name}]${w} — item "${label}", ${fieldPath}: ${msg}`;
+    findings.push({
+      severity: rule.severity,
+      code: rule.code,
+      leaf: where.leaf,
+      file: where.file,
+      detail: msg,
+      message: relabel(where.suffix),
+      relabel,
+    });
+  };
 
   if (bounds.words && typeof bounds.words === 'object') {
     if (typeof value !== 'string') return;
@@ -390,14 +400,16 @@ function evaluatePackItemRules(pack, items, { branchLabel = null } = {}) {
         const present = names.filter((f) => resolveField(`$body.${f}`, data) !== null);
         if (present.length > max) {
           const msg = mh.message || rule.message;
+          const relabel = (w) => `[${pack.name}]${w} — item "${label}": ${msg} `
+            + `(${present.length} of ${names.length} present: ${present.join(', ')})`;
           findings.push({
             severity: rule.severity,
             code: rule.code,
             leaf: where.leaf,
             file: where.file,
             detail: msg,
-            message: `[${pack.name}]${where.suffix} — item "${label}": ${msg} `
-              + `(${present.length} of ${names.length} present: ${present.join(', ')})`,
+            message: relabel(where.suffix),
+            relabel,
           });
         }
       }

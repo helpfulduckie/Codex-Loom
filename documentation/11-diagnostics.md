@@ -451,6 +451,9 @@ interpolated value, and the property belongs to the template, not to each field.
 | `CL0634` | ERROR | A requested component produces no output anywhere, so the compiled scenario is missing it; provide renderable content or correct its source. |
 | `CL0635` | WARN | A story card has no triggers, so AID cannot pull it into context; add triggers or use `kind: reference`. |
 
+`CL0630` and `CL0631` are not raised in a project that declares `lint.scenario: false`
+([compile.yaml → lint](02-compile-yaml.md#lint)), because no leaf of it is played.
+
 `CL0601` is an error rather than a resolved precedence because the two readings differ in
 output and neither is obviously right: text inside a slot could sit before or after the
 occupants, and could fall inside or outside the slot's wrapper. A preamble is already

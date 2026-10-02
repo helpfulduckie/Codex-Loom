@@ -69,6 +69,7 @@ placeholders:
 # Phase 5. The mapping form at root; a branch below writes the empty-collection form.
 lint:
   level: warn
+  scenario: true
   packs:
     wtg: {}
     stat-tracker:

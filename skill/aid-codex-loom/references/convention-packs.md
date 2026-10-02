@@ -58,6 +58,10 @@ from it. A mismatch is a `CL0119` ERROR naming both.
 the key it flags. A per-branch `lint.level` composes on top of the per-pack ceiling, and the
 project-level `lint.level` on top of that — tightest wins.
 
+**A finding raised identically on several leaves is reported once**, naming the branches
+(`on branches "a", "c"`, or `on all 12 branches`). A card that renders differently per
+branch gives distinct findings, which stay separate.
+
 ---
 
 ## Diagnostic Codes
