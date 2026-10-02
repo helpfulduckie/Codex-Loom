@@ -119,11 +119,36 @@ function buildTempTree(projects, set) {
 
 
 function diffTree(actualDir, expectedDir, { markdownOnly }) {
-  const actual = new Set(listFilesRelative(actualDir));
-  const expected = new Set(listFilesRelative(expectedDir));
+  const actualFiles = listFilesRelative(actualDir);
+  const expectedFiles = listFilesRelative(expectedDir);
+  const actual = new Set(actualFiles);
+  const expected = new Set(expectedFiles);
   const report = {
-    changed: [], added: [], removed: [], relocated: [], derived: [], classes: new Set(),
+    changed: [], added: [], removed: [], relocated: [], derived: [], caseRenames: [], caseCollisions: [],
+    classes: new Set(),
   };
+
+  const folded = (files) => {
+    const groups = new Map();
+    for (const rel of files) {
+      const key = rel.toLowerCase();
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(rel);
+    }
+    return groups;
+  };
+  const actualByFold = folded(actualFiles);
+  const expectedByFold = folded(expectedFiles);
+  for (const key of new Set([...actualByFold.keys(), ...expectedByFold.keys()])) {
+    const actualGroup = actualByFold.get(key) || [];
+    const expectedGroup = expectedByFold.get(key) || [];
+    if (actualGroup.length > 1 || expectedGroup.length > 1) {
+      report.caseCollisions.push({ key, actual: actualGroup, expected: expectedGroup });
+    } else if (actualGroup.length === 1 && expectedGroup.length === 1
+      && actualGroup[0] !== expectedGroup[0]) {
+      report.caseRenames.push({ from: expectedGroup[0], to: actualGroup[0] });
+    }
+  }
 
   for (const rel of expected) if (!actual.has(rel)) report.removed.push(rel);
   for (const rel of actual) if (!expected.has(rel)) report.added.push(rel);
@@ -205,14 +230,22 @@ function diffTree(actualDir, expectedDir, { markdownOnly }) {
 function printReport(label, report, { verbose }) {
   const reloc = report.relocated || [];
   const derived = report.derived || [];
+  const caseRenames = report.caseRenames || [];
+  const caseCollisions = report.caseCollisions || [];
   const counts = `${report.changed.length} changed, ${report.added.length} added, ${report.removed.length} removed`
     + (reloc.length ? `, ${reloc.length} relocated` : '')
-    + (derived.length ? `, ${derived.length} derived` : '');
+    + (derived.length ? `, ${derived.length} derived` : '')
+    + (caseRenames.length ? `, ${caseRenames.length} case rename(s)` : '')
+    + (caseCollisions.length ? `, ${caseCollisions.length} case collision(s)` : '');
   console.log(`\n  ${label}: ${counts}`);
   for (const rel of report.added) console.log(`    + ${rel}`);
   for (const rel of report.removed) console.log(`    - ${rel}`);
   for (const move of reloc) console.log(`    ⇄ ${move.to}  (was ${move.from.length}× under Branches/)`);
   for (const d of derived) console.log(`    ${d.kind === 'remove' ? '−' : '~'} ${d.rel}  (derived output, regenerated)`);
+  for (const rename of caseRenames) console.log(`    CASE ${rename.from} → ${rename.to}`);
+  for (const collision of caseCollisions) {
+    console.log(`    CASE COLLISION ${collision.key}: actual [${collision.actual.join(', ')}]; expected [${collision.expected.join(', ')}]`);
+  }
 
   const byClass = new Map();
   for (const change of report.changed) {
@@ -244,6 +277,61 @@ function reportUnits(project, set, tmpDir) {
     from: path.join(actual, mode),
     to: path.join(expected, mode),
   }));
+}
+
+function writeBaselines(results, set, tmpDir) {
+  for (const { project, output, reports } of results) {
+    const diffs = [
+      { label: `${project.name} — output`, diff: output },
+      ...reports.map((unit) => ({ label: `${project.name} — report: ${unit.label}`, diff: unit.diff })),
+    ];
+    const structural = diffs.flatMap(({ label, diff }) => [
+      ...(diff.caseRenames || []).map((rename) => `${label}: case-only path change ${rename.from} → ${rename.to}`),
+      ...(diff.caseCollisions || []).map((collision) => `${label}: ambiguous case-folded paths ${collision.key} (actual: ${collision.actual.join(', ') || 'none'}; expected: ${collision.expected.join(', ') || 'none'})`),
+    ]);
+    if (structural.length > 0) {
+      throw new Error(`rebaseline: refusing to write baselines because path casing is ambiguous or changed:\n${structural.map((line) => `  ${line}`).join('\n')}`);
+    }
+  }
+
+  const { root, OUTPUT_SUBDIR, BASELINE_SUBDIR } = set;
+  for (const { project, output, reports } of results) {
+    const from = path.join(tmpDir, project.dir, OUTPUT_SUBDIR);
+    const to = path.join(root, project.dir, BASELINE_SUBDIR);
+    let written = 0;
+    for (const change of [...output.changed, ...output.added.map((rel) => ({ rel }))]) {
+      if (!change.rel.endsWith('.md')) continue;
+      copyFile(path.join(from, ...change.rel.split('/')), path.join(to, ...change.rel.split('/')));
+      written++;
+    }
+    for (const rel of output.removed) {
+      if (!rel.endsWith('.md')) continue;
+      fs.rmSync(path.join(to, ...rel.split('/')), { force: true });
+      written++;
+    }
+    for (const move of output.relocated || []) {
+      copyFile(path.join(from, ...move.to.split('/')), path.join(to, ...move.to.split('/')));
+      for (const old of move.from) fs.rmSync(path.join(to, ...old.split('/')), { force: true });
+      written += 1 + move.from.length;
+    }
+    for (const d of output.derived || []) {
+      const dest = path.join(to, ...d.rel.split('/'));
+      if (d.kind === 'remove') fs.rmSync(dest, { force: true });
+      else copyFile(path.join(from, ...d.rel.split('/')), dest);
+      written++;
+    }
+    for (const unit of reports) {
+      for (const change of [...unit.diff.changed, ...unit.diff.added.map((rel) => ({ rel }))]) {
+        copyFile(path.join(unit.from, ...change.rel.split('/')), path.join(unit.to, ...change.rel.split('/')));
+        written++;
+      }
+      for (const rel of unit.diff.removed) {
+        fs.rmSync(path.join(unit.to, ...rel.split('/')), { force: true });
+        written++;
+      }
+    }
+    console.log(`  ${project.name}: wrote ${written} file(s)`);
+  }
 }
 
 function main() {
@@ -322,47 +410,7 @@ function main() {
       return;
     }
 
-    for (const { project, output, reports } of results) {
-      const from = path.join(tmpDir, project.dir, OUTPUT_SUBDIR);
-      const to = path.join(root, project.dir, BASELINE_SUBDIR);
-      let written = 0;
-      for (const change of [...output.changed, ...output.added.map((rel) => ({ rel }))]) {
-        if (!change.rel.endsWith('.md')) continue;
-        copyFile(path.join(from, ...change.rel.split('/')), path.join(to, ...change.rel.split('/')));
-        written++;
-      }
-      for (const rel of output.removed) {
-        if (!rel.endsWith('.md')) continue;
-        fs.rmSync(path.join(to, ...rel.split('/')), { force: true });
-        written++;
-      }
-
-      for (const move of output.relocated || []) {
-        copyFile(path.join(from, ...move.to.split('/')), path.join(to, ...move.to.split('/')));
-        for (const old of move.from) fs.rmSync(path.join(to, ...old.split('/')), { force: true });
-        written += 1 + move.from.length;
-      }
-
-      for (const d of output.derived || []) {
-        const dest = path.join(to, ...d.rel.split('/'));
-        if (d.kind === 'remove') fs.rmSync(dest, { force: true });
-        else copyFile(path.join(from, ...d.rel.split('/')), dest);
-        written++;
-      }
-
-      for (const unit of reports) {
-        for (const change of [...unit.diff.changed, ...unit.diff.added.map((rel) => ({ rel }))]) {
-          copyFile(path.join(unit.from, ...change.rel.split('/')), path.join(unit.to, ...change.rel.split('/')));
-          written++;
-        }
-        for (const rel of unit.diff.removed) {
-          fs.rmSync(path.join(unit.to, ...rel.split('/')), { force: true });
-          written++;
-        }
-      }
-
-      console.log(`  ${project.name}: wrote ${written} file(s)`);
-    }
+    writeBaselines(results, set, tmpDir);
 
     console.log('\nBaselines written. Review the diff before committing — that review is the point.');
   } finally {
@@ -379,4 +427,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { diffTree };
+module.exports = { diffTree, writeBaselines };
