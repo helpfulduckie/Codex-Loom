@@ -24,6 +24,7 @@ const find = (d, code) => d.all.filter((x) => x.code === code);
 const MARKER = 'CL-wtg/0001';
 const SETTINGS = 'CL-wtg/0002';   // WARN — existence + completeness + unknown key
 const MALFORMED = 'CL-wtg/0003';  // ERROR — a core field is not well-formed
+const REPEATED = 'CL-wtg/0004';  // ERROR — the same marker repeats within body or notes
 
 const TEMPLATE = { 'templates/Card.template': '{$body.Text}' };
 
@@ -82,6 +83,47 @@ describe('CL-wtg/0001 — [e] / [wtg-no-timestamp] used together with /]', () =>
       ].join('\n'),
     });
     expect(find(d, MARKER)).toHaveLength(0);
+  });
+});
+
+
+// ── Rule 4 — repeated markers within one area ────────────────────────────────
+
+const MARKERS = ['[e]', '[wtg-no-timestamp]', '/]'];
+describe('CL-wtg/0004 — the same timestamp marker repeated within one area', () => {
+  test.each(MARKERS.flatMap((marker) => ['body', 'notes'].flatMap((area) =>
+    ['same line', 'across lines'].map((spacing) => [marker, area, spacing]))))(
+    '%s repeated in %s %s is an ERROR', (marker, area, spacing) => {
+      const repeated = spacing === 'same line' ? `${marker} ${marker}` : `${marker}\ntext\n${marker}`;
+      const { diagnostics: d, threw } = compileProject({ ...TEMPLATE,
+        'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
+        'Codex/items.yaml': item({ id: 'gate', title: 'North Gate',
+          notes: area === 'notes' ? repeated : undefined,
+          text: area === 'body' ? repeated : 'body text' }),
+      });
+      const hits = find(d, REPEATED);
+      expect(hits).toHaveLength(1);
+      expect(hits[0].severity).toBe('error');
+      expect(threw).not.toBeNull();
+    },
+  );
+
+  test.each(MARKERS)('%s once in each area passes', (marker) => {
+    const { diagnostics: d, threw } = compileProject({ ...TEMPLATE,
+      'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
+      'Codex/items.yaml': item({ id: 'gate', title: 'North Gate', notes: marker, text: marker }),
+    });
+    expect(find(d, REPEATED)).toHaveLength(0);
+    expect(find(d, MARKER)).toHaveLength(0);
+    expect(threw).toBeNull();
+  });
+
+  test('distinct exclusion aliases in one area do not count as repetition', () => {
+    const { diagnostics: d } = compileProject({ ...TEMPLATE,
+      'compile.yaml': config(['lint: {packs: {wtg: {}}}']),
+      'Codex/items.yaml': item({ id: 'gate', title: 'North Gate', notes: '[e] [wtg-no-timestamp]' }),
+    });
+    expect(find(d, REPEATED)).toHaveLength(0);
   });
 });
 
@@ -268,12 +310,14 @@ describe('CL-wtg/0003 — the "WTG Time Config" core fields are well-formed', ()
 describe('level: and declaration control whether the pack runs', () => {
   const TRAP = {
     ...TEMPLATE,
-    'Codex/items.yaml': item({ id: 'gate', title: 'North Gate', notes: '[e] /]' }),
+    'Codex/items.yaml': item({ id: 'gate', title: 'North Gate', notes: '[e] [e] /]' }),
   };
 
   test('a project that never declares the pack gets no findings (no auto-activation)', () => {
     const { diagnostics: d } = compileProject({ ...TRAP, 'compile.yaml': config([]) });
     expect(find(d, MARKER)).toHaveLength(0);
+    expect(find(d, REPEATED)).toHaveLength(0);
+    expect(d.all.some((h) => h.code === REPEATED)).toBe(false);
   });
 
   test('per-pack level: warn demotes the ERROR to WARN and the build survives', () => {
@@ -286,12 +330,23 @@ describe('level: and declaration control whether the pack runs', () => {
     expect(hits.every((h) => h.severity === 'warn')).toBe(true);
   });
 
+  test('per-pack level: warn demotes repeated-marker ERROR and compilation survives', () => {
+    const { diagnostics: d, threw } = compileProject({ ...TEMPLATE,
+      'compile.yaml': config(['lint: {packs: {wtg: {level: warn}}}']),
+      'Codex/items.yaml': item({ id: 'gate', title: 'North Gate', notes: '[e]\n[e]' }),
+    });
+    expect(find(d, REPEATED).map((h) => h.severity)).toEqual(['warn']);
+    expect(threw).toBeNull();
+  });
+
   test('per-pack level: off silences it entirely', () => {
     const { diagnostics: d } = compileProject({
       ...TRAP,
       'compile.yaml': config(['lint: {packs: {wtg: {level: off}}}']),
     });
     expect(find(d, MARKER)).toHaveLength(0);
+    expect(find(d, REPEATED)).toHaveLength(0);
+    expect(d.all.some((h) => h.code === REPEATED)).toBe(false);
   });
 
   test('(g) level: warn demotes the CL-wtg/0003 ERROR to WARN and the build survives', () => {
@@ -343,7 +398,7 @@ describe('level: and declaration control whether the pack runs', () => {
   test('wtg: ~ on a branch unbinds it there while a sibling branch still fires', () => {
     const { diagnostics: d } = compileProject({
       ...TEMPLATE,
-      'Codex/items.yaml': item({ id: 'gate', title: 'North Gate', notes: '[e] /]' }),
+      'Codex/items.yaml': item({ id: 'gate', title: 'North Gate', notes: '[e] [e] /]' }),
       'compile.yaml': [
         'version: 4',
         'structure:',
@@ -362,5 +417,9 @@ describe('level: and declaration control whether the pack runs', () => {
     expect(hits.length).toBeGreaterThan(0);
     expect(hits.every((h) => /branch "bound"/.test(h.message))).toBe(true);
     expect(hits.some((h) => /branch "freed"/.test(h.message))).toBe(false);
+    const repeated = find(d, REPEATED);
+    expect(repeated.length).toBeGreaterThan(0);
+    expect(repeated.every((h) => /branch "bound"/.test(h.message))).toBe(true);
+    expect(repeated.some((h) => /branch "freed"/.test(h.message))).toBe(false);
   });
 });

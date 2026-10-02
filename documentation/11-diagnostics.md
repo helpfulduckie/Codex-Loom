@@ -875,11 +875,11 @@ per-pack and per-branch `level:` ceilings — has to be able to reach them. A pa
 card, and the branch it fired on, because a pack can validate one branch's `notes:`
 config and not another's.
 
-The two bundled packs are `wtg` (`CL-wtg/0001`–`CL-wtg/0003`, the World Time Generator mod
+The two bundled packs are `wtg` (`CL-wtg/0001`–`CL-wtg/0004`, the World Time Generator mod
 — see Convention Packs) and `duckieConv` (`CL-duckieConv/0001`–`CL-duckieConv/0004`, a set
 of card-authoring conventions — a per-role length budget, list caps, a
-faction-field redundancy nudge, and a `meta.duckieConv.role` value check). Both are all
-WARN. `duckieConv`'s `count` and `mutexHint` rules run only in the inline compile pass, not
+faction-field redundancy nudge, and a `meta.duckieConv.role` value check). WTG has ERROR
+and WARN rules; all `duckieConv` rules are WARN. `duckieConv`'s `count` and `mutexHint` rules run only in the inline compile pass, not
 in offline `--lint`; its `budget` and role rules run in both. A combined
 `--compile --lint` run writes the compile's complete diagnostic stream to the lint report,
 so inline-only findings are included in that report and its summary. Standalone `--lint`

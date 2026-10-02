@@ -1,7 +1,7 @@
 # World Time Generator — convention pack (v4 spec §8.2.2).
 #
 # Validates a scenario's use of WTG 3.0, checked against its source
-# (Scripts/WTG/World-Time-Generator-3.0/src/library.js). Three rules:
+# (Scripts/WTG/World-Time-Generator-3.0/src/library.js). Four rules:
 #
 #   1. the two per-card timestamp markers used together, which contradict;
 #   2. WARN — the "WTG Time Config" card must exist wherever WTG runs, must carry the
@@ -18,6 +18,8 @@
 #      well-formed: `M/D/year` (1-6-digit year), `H:MM AM|PM`, an era in {AD, CE, BC,
 #      BCE}, and `Initialized` true/false — all matched case-insensitively. The 28
 #      override keys and any stray key pass here; unknown-key is rule 2's job.
+#   4. ERROR — the same literal timestamp marker may appear only once in each of a
+#      card's body and notes; repeats across lines still count.
 #
 # Enable with `lint: { packs: { wtg: {} } }`. Findings are coded `CL-wtg/NNNN`.
 
@@ -136,3 +138,20 @@ rules:
         Starting Time: { type: string, pattern: '^\d{1,2}:\d{2}\s*(AM|PM)$' }
         Initialized:   { type: string, pattern: '^(true|false)$' }
     message: 'A "WTG Time Config" field is malformed — see the detail.'
+
+  # ── CL-wtg/0004 — repeated literal markers within one area ───────────────────
+  #
+  # Notes and Entry are checked separately: one marker in each area is valid, while
+  # repeating the same literal marker within either area is an authoring error.
+  # Rule 4 checks each marker independently, so distinct exclusion aliases remain distinct.
+  - id: 4
+    severity: error
+    forbid:
+      any:
+        - bodyMatch: '\[e\][\s\S]*\[e\]'
+        - bodyMatch: '\[wtg-no-timestamp\][\s\S]*\[wtg-no-timestamp\]'
+        - bodyMatch: '/\][\s\S]*/\]'
+        - notesMatch: '\[e\][\s\S]*\[e\]'
+        - notesMatch: '\[wtg-no-timestamp\][\s\S]*\[wtg-no-timestamp\]'
+        - notesMatch: '/\][\s\S]*/\]'
+    message: 'The same WTG marker appears more than once in this card body or notes; keep one occurrence per area.'

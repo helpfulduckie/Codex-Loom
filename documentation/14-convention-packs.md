@@ -270,7 +270,7 @@ whole-value item field.
 
 ## The bundled `wtg` pack
 
-`packs/wtg.cl.yaml` is the first bundled pack. Three rules:
+`packs/wtg.cl.yaml` is the first bundled pack. Four rules:
 
 - **`CL-wtg/0001` — contradictory timestamp markers (ERROR, every card).** `[e]` /
   `[wtg-no-timestamp]` excludes a card from WTG timestamps entirely; `/]` marks where a
@@ -292,6 +292,10 @@ whole-value item field.
   `Initialized` must be `true` / `false` — all matched case-insensitively. The 28 override
   keys and any stray key pass here; unknown-key is `CL-wtg/0002`'s job. An open `record`
   with `keys:` over just the four fields.
+
+- **`CL-wtg/0004` — repeated literal marker within one area (ERROR).** The same `[e]`,
+  `[wtg-no-timestamp]`, or `/]` marker may appear only once in a card's body and only once
+  in its notes. Each area is checked independently, and repeats across lines count.
 
 Enable it with `lint: { packs: { wtg: {} } }`.
 
