@@ -55,6 +55,7 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/extract.js` | Named transforms for a section's `from:` source — `scriptBanner` (§7.7) |
 | `src/overview.js` | Leaf-review and whole-tree overview file generation |
 | `src/diff.js` | Cross-branch `--with-diff` (Shared/delta) and `--with-annotate` report generation |
+| `src/variance.js` | Cross-branch `--with-variance`: per-item rendered versions, diffed along the variant chain |
 | `src/inventory.js` | `--with-inventory`: slot × branch × occupants report (§7.9) |
 | `src/provenance.js` | Provenance report: library set and source file per resolved item (§17.2) |
 | `src/schematables.js` | The generated schema reference: field/label tables and type membership, derived from `fields.cl.yaml` (§13.8) |
@@ -120,6 +121,7 @@ runProvenanceMode()               → Overview/<root>.provenance.{md,csv}  (alwa
 (if --with-inventory) runInventoryMode() → Overview/Inventory.md
 (if --with-diff)      runDiffMode()      → Overview/Shared.md + Overview/*.delta.md
 (if --with-annotate)  runAnnotateMode()  → Overview/*.annotate.md
+(if --with-variance)  runVarianceMode()  → variance/<title>.variance.md
 ```
 
 ---
@@ -387,17 +389,21 @@ Library path resolution no longer needs a bespoke two-pass. v3 resolved plain-pa
 
 ---
 
-## Cross-Branch Review Reports (`--with-diff` / `--with-annotate` / `--with-inventory`)
+## Cross-Branch Review Reports (`--with-diff` / `--with-annotate` / `--with-variance` / `--with-inventory`)
 
-These reports answer the authoring question "is this wired up the way I intended?" — `--with-diff` for *discovery* (scan, or hand to an agent), `--with-annotate` for *drill-down* once discovery flags a suspect item, `--with-inventory` for placement specifically.
+These reports answer the authoring question "is this wired up the way I intended?" — `--with-diff` for *discovery* (scan, or hand to an agent), `--with-annotate` for *drill-down* once discovery flags a suspect item, `--with-variance` for *reading* what each branch receives when there are many branches, `--with-inventory` for placement specifically.
 
-**They are compile options, not post-hoc report modes.** Unlike `--leafReview`/`--overview`/`--seed-map`/`--body-sizes`/`--lint` (which read the already-written `output/` tree from disk), these three need structures that only exist in memory *during* compilation. `--with-diff` and `--with-annotate` need identity-keyed, fully-resolved item objects — the on-disk markdown has discarded `item.id` and variant-application metadata. `--with-inventory` needs the slot index and the occupant map, because the output file records what a slot *rendered to* and never who filled it. So setting any of them forces a compile (`doCompile`) and the reports are emitted at the end of `compile()` from data captured in the per-leaf loop, gated behind `options.diff`/`options.annotate`/`options.inventory`. Capture overhead is zero for a normal compile.
+**They are compile options, not post-hoc report modes.** Unlike `--leafReview`/`--overview`/`--seed-map`/`--body-sizes`/`--lint` (which read the already-written `output/` tree from disk), these three need structures that only exist in memory *during* compilation. `--with-diff` and `--with-annotate` need identity-keyed, fully-resolved item objects — the on-disk markdown has discarded `item.id` and variant-application metadata. `--with-inventory` needs the slot index and the occupant map, because the output file records what a slot *rendered to* and never who filled it. So setting any of them forces a compile (`doCompile`) and the reports are emitted at the end of `compile()` from data captured in the per-leaf loop, gated behind `options.diff`/`options.annotate`/`options.variance`/`options.inventory`. Capture overhead is zero for a normal compile.
 
 **`--with-diff` → `Overview/Shared.md` + `Overview/<leaf>.delta.md`** (`runDiffMode` in `diff.js`).
 Partition rule (`buildSharedAndDeltas`): for each item id and each component block, collect its rendered text from every leaf. Identical in *all* leaves → `Shared.md`. Otherwise varying → each leaf's own version goes to that leaf's `.delta.md`; leaves where it is absent (`~`-excluded) silently omit it. Each `.delta.md` is therefore self-contained ("everything this branch has that isn't universal"), read against `Shared.md` once. Rendered-block granularity, no annotation.
 
 **`--with-annotate` → `Overview/<leaf>.annotate.md`** (`runAnnotateMode`).
 Per leaf, per item, field-level diff of `resolveItem(itemDef, registry, branchPath)` against the **project base** `resolveItem(itemDef, registry, [])` (empty branch path = project imports/overrides applied, no branch dispatch — *not* library base). Because both sides share the same source tokens/variables, the only differences are branch-variant effects. Each changed field is attributed to the applied variant(s) whose delta touches that path (`collectDeltaKeyPaths` + prefix match), or flagged `unexplained` (the bleed signal). `~`-nulled items are reported explicitly; items identical to base with no variants are omitted (they live in `Shared.md`).
+
+**`--with-variance` → `<reports>/variance/<title>.variance.md`** (`runVarianceMode` in `variance.js`).
+Per item, across leaves — the transpose of diff and annotate, which are per leaf and so repeat a difference shared by many leaves once per leaf. Each distinct rendered story card of an item is one *version*, listed once with the leaves that receive it, its body size and its `meta` role; leaves the item is absent from get their own row. Items are keyed by id, so a variant that renames a card stays in one entry. A version is labeled by the variants that produced it (dispatched names plus `importVariants`, filtered on an include to names the item defines), plus any role binding shared by all its leaves and not by all the item's leaves — which is how a protagonist branch is told apart. Versions are diffed along that chain: a nested path counts its parents (`major/anchor` builds on `major`), and each version diffs against the version whose chain is its longest prefix. The base prints in full.
+Diffs are of rendered text, not fields, because the question is what AID receives; annotate answers which YAML key did it. Only changed lines print, with `…` for a skipped stretch. A line keeps its `Label:` and marks the changed words of its value; changes separated only by punctuation or one short word merge into one ~~removed~~ **added** pair, so a rewrite does not alternate word by word. Separators and a bullet's `- ` stay outside the marks, because GFM will not open `~~`/`**` between a letter and punctuation. A bullet or an unlabeled continuation line is preceded by the labeled line it hangs from. The fence's `meta:` block is left out; it never reaches AID.
 
 **`--with-inventory` → `Overview/Inventory.md`** (`runInventoryMode` in `inventory.js`).
 Per leaf, `captureLeafInventory` walks the slot index and the occupant map into `{slot, gated, occupants}` records. Rendering compresses twice: branches are grouped by occupancy so a uniformly-filled slot is one row, and a row's branch set is written as a path pattern when one selects exactly that set. `branchPattern` verifies each candidate against the leaves it matches and returns null on an over-match, because a pattern claiming a placement that never happened would be indistinguishable from a correct one. Occupant order comes from `sortOccupants`, exported from `emit/components.js` so §7.4's `order:`-then-id rule stays stated in one place.

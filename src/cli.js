@@ -159,6 +159,7 @@ function main(rawArgs) {
     ['renameToCl', ['--rename-cl']],
     ['diff',       ['--with-diff',     '--diff',     '-d']],
     ['annotate',   ['--with-annotate', '--annotate', '-a']],
+    ['variance',   ['--with-variance', '--variance', '-V']],
     ['inventory',  ['--with-inventory', '--inventory', '-i']],
     ['schemaTables', ['--schema-tables']],
     ['clean',      ['--clean',      '-c']],
@@ -217,7 +218,7 @@ function main(rawArgs) {
     return 1;
   }
 
-  const doCompile    = flags.compile || flags.diff || flags.annotate || flags.inventory ||
+  const doCompile    = flags.compile || flags.diff || flags.annotate || flags.variance || flags.inventory ||
     flags.schemaTables ||
     (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.bodySizes && !flags.lint &&
       !flags.snapshot && !flags.migrate);
@@ -228,14 +229,14 @@ function main(rawArgs) {
   const doLint       = flags.lint;
   const doSnapshot   = flags.snapshot;
 
-  if (positional.length === 0 && !flags.compile && !flags.diff && !flags.annotate &&
+  if (positional.length === 0 && !flags.compile && !flags.diff && !flags.annotate && !flags.variance &&
       !flags.inventory && !flags.schemaTables &&
       !flags.leafReview && !flags.overview && !flags.seedMap && !flags.bodySizes && !flags.lint &&
       !flags.snapshot && !flags.migrate && !flags.renameToCl) {
     console.error(
       'Usage: codex-loom [mode flags] [compile options] [<folder | compile.yaml>]\n' +
       '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --body-sizes|-b  --lint|-L  --snapshot  --migrate  --rename-cl\n' +
-      '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-inventory|-i  --schema-tables  --clean|-c  --verbose|-v  --live\n' +
+      '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-variance|-V  --with-inventory|-i  --schema-tables  --clean|-c  --verbose|-v  --live\n' +
       '  Migrate options:       --rename-cl  (renames the whole project to .cl.yaml / .cl.yml; also runs standalone on a v4 project)\n' +
       '  Diagnostics:           --lint-level=off|error|warn  (overrides lint.level; reaches the opinion layer only)\n' +
       '  No mode flag compiles. Report modes read the existing output tree; compile options force a compile.\n' +
@@ -330,7 +331,7 @@ function main(rawArgs) {
       try {
         compile(configPath, {
           clean: flags.clean, log,
-          diff: flags.diff, annotate: flags.annotate, inventory: flags.inventory,
+          diff: flags.diff, annotate: flags.annotate, variance: flags.variance, inventory: flags.inventory,
           schemaTables: flags.schemaTables,
           lintLevel, live: flags.live,
           diagnostics: compileDiagnostics,

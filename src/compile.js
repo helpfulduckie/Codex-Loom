@@ -239,7 +239,7 @@ function compileRun(configPath, options, buses) {
   const allItemIds = new Set();
   const leafSummaries = [];
 
-  const captureReports = !!(options.diff || options.annotate);
+  const captureReports = !!(options.diff || options.annotate || options.variance);
   const rootDirName = path.basename(config._resolvedOutput);
   const leafData = [];
 

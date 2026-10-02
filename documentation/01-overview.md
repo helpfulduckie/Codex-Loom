@@ -69,7 +69,7 @@ codex-loom -C -l -o path/to/project/
 
 **Mode flags** — `-C`/`--compile`, `-l`/`--leafReview`, `-o`/`--overview`, `-s`/`--seed-map`, `-b`/`--body-sizes`, `-L`/`--lint`, `--snapshot`, `--migrate` — control what runs. Any combination is valid except `--migrate`, which runs alone.
 
-**Compile options** — `-d`/`--with-diff`, `-a`/`--with-annotate`, `-i`/`--with-inventory`, `-c`/`--clean`, `-v`/`--verbose`, `--live` — modify a compile rather than selecting one. The first three emit review reports from data that only exists in memory during compilation, so any of them forces a compile. (`--diff`, `--annotate` and `--inventory` are accepted as aliases.)
+**Compile options** — `-d`/`--with-diff`, `-a`/`--with-annotate`, `-V`/`--with-variance`, `-i`/`--with-inventory`, `-c`/`--clean`, `-v`/`--verbose`, `--live` — modify a compile rather than selecting one. The first four emit review reports from data that only exists in memory during compilation, so any of them forces a compile. (`--diff`, `--annotate`, `--variance` and `--inventory` are accepted as aliases.)
 
 **Diagnostics** — `--lint-level=off|error|warn` (also `--lint-level warn`) overrides `lint.level` from `compile.yaml`. It reaches the opinion layer only — the quality heuristics (trigger-less cards, prose guesses, unused or duplicated placeholder declarations, convention-pack findings) — and never silences a factual error like a leaked token or a platform-cap overflow. It is deliberately separate from `--verbose`: verbosity is about compile progress, this is about which diagnostics an author wants to hear.
 

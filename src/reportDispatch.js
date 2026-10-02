@@ -73,6 +73,14 @@ function runReports({
       const w = runAnnotateMode(leafData, allItemDefs, registry, annotateDir);
       reportSummary.push(`${w.written.length} annotation file(s)`);
     }
+    if (options.variance) {
+      const varianceDir = path.join(reportBase, 'variance');
+      fs.mkdirSync(varianceDir, { recursive: true });
+      const w = require('./variance').runVarianceMode(
+        leafData, allItemDefs, varianceDir, config.title || rootDirName,
+      );
+      reportSummary.push(`${w.written.length} variance file(s)`);
+    }
   }
   if (reportSummary.length > 0) {
     log.info(`\nWrote ${reportSummary.join(' and ')} to:\n  ${reportBase}`);

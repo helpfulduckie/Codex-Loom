@@ -219,6 +219,7 @@ function compileLeaf(branchPath, ctx) {
       branchPath,
       fileBase: branchPath.length ? branchPath.join(' - ') : rootDirName,
       items: renderedById,
+      roles: cctx.roles || {},
       components: { ...sectionedSegments },
     });
   }
