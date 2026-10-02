@@ -141,6 +141,76 @@ describe("an include's branches: is silent on the same rule", () => {
   });
 });
 
+// ── Directory includes ───────────────────────────────────────────────────────
+
+describe('an include naming a directory', () => {
+  /** `warm` lives only in the nested file, so a per-file count would miss it in lore.yaml. */
+  const NESTED = [
+    '- id: Lamplighter',
+    '  name: Lamplighter',
+    '  aid: {type: Character, triggers: [Lamplighter]}',
+    '  body: {Tagline: Walks the rounds.}',
+  ].join('\n');
+  const project = (include, extra = {}) => compileProject({
+    ...BASE,
+    'canon/deeper/rounds.yaml': NESTED,
+    'Codex/items.yaml': include,
+    ...extra,
+  });
+
+  test('loads the items of every YAML file under it, nested ones included', () => {
+    const text = compiled(project(`- include: '{%here}/canon'`).tmpDir);
+    expect(text).toContain('Keeps the ledger.');
+    expect(text).toContain('Walks the rounds.');
+  });
+
+  test('an importVariants: selector defined in one file of the directory raises no CL0326', () => {
+    const { diagnostics, tmpDir } = project([
+      `- include: '{%here}/canon'`,
+      '  importVariants: [warm]',
+    ].join('\n'));
+    expect(codes(diagnostics, 'CL0326')).toHaveLength(0);
+    expect(compiled(tmpDir)).toContain('The lamp is lit.');
+  });
+
+  test('a selector no file defines raises CL0326 once, counting every item in the directory', () => {
+    const found = codes(project([
+      `- include: '{%here}/canon'`,
+      '  importVariants: [wrm]',
+    ].join('\n')).diagnostics, 'CL0326');
+    expect(found).toHaveLength(1);
+    expect(found[0].message).toContain('4 items');
+    expect(found[0].message).toContain('canon/');
+  });
+
+  test('a branches: dispatch is counted across the directory, not per file', () => {
+    const dispatch = (name) => project([
+      `- include: '{%here}/canon'`,
+      '  branches:',
+      `    plain: ${name}`,
+    ].join('\n')).diagnostics;
+    expect(codes(dispatch('warm'), 'CL0326')).toHaveLength(0);
+    const found = codes(dispatch('wrm'), 'CL0326');
+    expect(found).toHaveLength(1);
+    expect(found[0].message).toContain('4 items');
+  });
+
+  test('a file under the directory included again on its own raises CL0131', () => {
+    const { diagnostics } = project([
+      `- include: '{%here}/canon'`,
+      `- include: '{%here}/canon/lore.yaml'`,
+    ].join('\n'));
+    expect(codes(diagnostics, 'CL0131')).toHaveLength(1);
+  });
+
+  test('a directory holding no YAML files raises CL0130', () => {
+    const { diagnostics } = project(`- include: '{%here}/notes'`, { 'notes/readme.txt': 'not items' });
+    const found = codes(diagnostics, 'CL0130');
+    expect(found).toHaveLength(1);
+    expect(found[0].message).toContain('holds no YAML files');
+  });
+});
+
 // ── The arity-1 half, unchanged ──────────────────────────────────────────────
 
 describe('the arity-1 positions still warn per miss', () => {

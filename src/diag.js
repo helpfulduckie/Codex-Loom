@@ -32,7 +32,7 @@ const REGISTRY = Object.freeze({
   PACK_UNBIND_UNKNOWN:          { id: 'CL0118', severity: WARN,  summary: 'This branch unbinds a convention pack it never inherited, so nothing changes; remove the ~ entry or inherit the pack first.' },
   PACK_NAME_MISMATCH:           { id: 'CL0119', severity: ERROR, summary: 'The convention pack name differs from its lint.packs key, so portable diagnostics and suppressions can break; make the key and name match.' },
   PATH_NOT_FOUND:               { id: 'CL0120', severity: WARN,  summary: 'A configured input path is missing, so content at that path is skipped; create the path or correct the configuration.' },
-  INCLUDE_NOT_FOUND:            { id: 'CL0130', severity: WARN,  summary: 'An include path is missing, so included items are skipped; create the file or correct the include path.' },
+  INCLUDE_NOT_FOUND:            { id: 'CL0130', severity: WARN,  summary: 'An include path is missing or is a directory holding no YAML files, so included items are skipped; create the file or correct the include path.' },
   DOUBLE_INCLUDE:               { id: 'CL0131', severity: ERROR, summary: 'The same file is included more than once, so the repeated items are skipped; keep one include of the file.' },
   ITEM_WITHOUT_IDENTITY:        { id: 'CL0140', severity: ERROR, summary: 'This item has no id or name, so it cannot enter the registry; add one identity field and loading continues for other items.' },
   DUPLICATE_ITEM_ID:            { id: 'CL0141', severity: ERROR, summary: 'An item id is already defined, so the later definition is skipped; remove the duplicate or give it a unique id.' },

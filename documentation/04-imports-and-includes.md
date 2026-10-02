@@ -2,7 +2,7 @@
 
 Project item files can pull in items from the shared library in two ways:
 
-- **`include:`** — loads every item from a library file as-is, with optional per-item overrides
+- **`include:`** — loads every item from a library file or directory as-is, with optional per-item overrides
 - **`import:`** — loads a single named item and applies variant chains, field overrides, and branch dispatch
 
 ---
@@ -27,6 +27,19 @@ structure:
 ```
 
 You can also use a direct relative path, but the `{%name}` form is preferred for portability.
+
+### Including a directory
+
+**An include path that names a directory loads every YAML file under it, subdirectories included**, in name order. The directive's `importVariants:` and `branches:` apply to every item from every file, exactly as they would for one file.
+
+```yaml surface=item
+- include: "{%main}/Characters"
+  branches: {major: major, anchor: major/anchor}
+```
+
+**The directory is one include for the zero-match check.** `CL0326` fires only when no item in *any* file under the directory defines the selector, so a variant that lives in one file of forty is not a typo forty times over. A directory holding no YAML files raises `CL0130`.
+
+**Each file is still included at most once.** Including a directory and also one file inside it is `CL0131`; use an explicit `import:` to override a single item instead (see [Include vs explicit import](#include-vs-explicit-import)).
 
 ### Branch filtering on includes
 

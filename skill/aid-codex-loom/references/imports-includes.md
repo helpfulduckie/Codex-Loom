@@ -2,7 +2,7 @@
 
 Two ways to pull items from a shared **library** — a directory declared under `structure.input.library` — into a project:
 
-- **`include:`** — loads every item from a library file, with optional filtering
+- **`include:`** — loads every item from a library file or directory, with optional filtering
 - **`import:`** — loads a single named item and applies variants, overrides, and dispatch
 
 ---
@@ -18,6 +18,15 @@ Loads all items from a library file. Items compiled as-is unless you attach `imp
 `{%main}` resolves to the path string of the `main` library directory (not its contents). **Every library name is automatically exposed as a `{%name}` variable**, so there is nothing to declare twice. Always prefer it to a relative path, for portability.
 
 **When the project has a populated snapshot, `{%name}` resolves through the frozen copy rather than the live library.** The decision is made once at config load, so a compile is either frozen or it is not — never partially. `--live` overrides for one run. See `references/library-snapshot.md`.
+
+### Including a directory
+
+A path naming a directory loads every YAML file under it, recursively, in name order; `importVariants:` and `branches:` apply to all of them. The zero-match warning `CL0326` counts across the whole directory, so it fires only when no file defines the name. An empty directory is `CL0130`; including the directory and a file inside it is `CL0131`.
+
+```yaml
+- include: "{%main}/Characters"
+  branches: {major: major, anchor: major/anchor}
+```
 
 ### Branch filtering on includes
 

@@ -65,6 +65,14 @@ function normalizeItemVarField(entry, onWarn) {
   return out;
 }
 
+/** A component document shares item directories and is loaded by the component loader. */
+function isComponentDocument(entry) {
+  return !Array.isArray(entry) && typeof entry === 'object'
+    && entry.sections && typeof entry.sections === 'object'
+    && entry.id === undefined
+    && (entry.name === undefined || typeof entry.name !== 'string');
+}
+
 function loadItemsFromDir(dirs, options = {}) {
   const { diagnostics } = options;
   const dirList = Array.isArray(dirs) ? dirs : [dirs];
@@ -99,14 +107,7 @@ function loadItemsFromDir(dirs, options = {}) {
           return;
         }
 
-        if (
-          !Array.isArray(entry) && typeof entry === 'object'
-          && entry.sections && typeof entry.sections === 'object'
-          && entry.id === undefined
-          && (entry.name === undefined || typeof entry.name !== 'string')
-        ) {
-          return;
-        }
+        if (isComponentDocument(entry)) return;
 
         const at = Array.isArray(data) ? [String(index)] : [];
         const label = entry.id || (typeof entry.name === 'string' ? entry.name : null);
@@ -242,53 +243,86 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
       continue;
     }
 
-    const importerSource = def._source || '(unknown)';
-    if (seenFiles.has(fullPath)) {
-      seenFiles.get(fullPath).push(importerSource);
-      diagnostics.error(
-        CODES.DOUBLE_INCLUDE,
-        `File included more than once: ${fullPath}; the repeated include is skipped. Keep one include.\nIncluded by:\n`
-        + seenFiles.get(fullPath).map((s) => `  ${s}`).join('\n'),
-        { file: importerSource },
-      );
+    const isDir = fs.statSync(fullPath).isDirectory();
+    const files = isDir
+      ? findFiles(fullPath, YAML_SUFFIXES, { sort: true })
+        .filter((f) => !RESERVED_LIBRARY_BASENAMES.includes(path.basename(f).toLowerCase()))
+      : [fullPath];
+    if (files.length === 0) {
+      const message = `Include directory holds no YAML files: ${fullPath}; nothing is included. Add item files or correct the include path.`;
+      diagnostics.warn(CODES.INCLUDE_NOT_FOUND, message, { file: def._source });
       continue;
     }
-    seenFiles.set(fullPath, [importerSource]);
 
-    let raw; let sourceMap;
-    try {
-      ({ value: raw, sourceMap } = loadYamlDocument(fullPath));
-    } catch (err) {
-      if (!(err instanceof YamlLoadError)) throw err;
-      diagnostics.error(err.code, err.message, { file: fullPath });
-      continue;
-    }
+    // CL0326 counts matches across the whole directive, so a directory include reports a
+    // selector only when no file under it defines the name.
     const fromThisInclude = [];
-    for (const [index, item] of (Array.isArray(raw) ? raw : [raw]).entries()) {
-      const id = ((item.id || (typeof item.name === 'string' ? item.name : '')) || '').toLowerCase();
-      if (explicitIds.has(id)) continue; // an explicit import wins
-
-      const stamped = { ...item, _source: fullPath };
-      attachOrigins(stamped, sourceMap.exportOrigins(Array.isArray(raw) ? [String(index)] : []));
-      if (def.importVariants) {
-        stamped._include_variants = def.importVariants;
-        transferOrigins(def, stamped, ['importVariants'], ['_include_variants']);
-      }
-      if (def.branches) {
-        stamped._include_branch_spec = def.branches;
-        transferOrigins(def, stamped, ['branches'], ['_include_branch_spec']);
-      }
-      included.push(stamped);
-      fromThisInclude.push(stamped);
+    for (const file of files) {
+      fromThisInclude.push(...includeFile(file, def, fullPath, { seenFiles, explicitIds, diagnostics }));
     }
+    included.push(...fromThisInclude);
 
-    reportUnmatchedSelectors(def, fromThisInclude, includePath, diagnostics);
+    reportUnmatchedSelectors(def, fromThisInclude, isDir ? `${path.basename(fullPath)}/` : path.basename(fullPath), diagnostics);
   }
 
   return included;
 }
 
-function reportUnmatchedSelectors(def, items, includePath, diagnostics) {
+function includeFile(file, def, includeKey, { seenFiles, explicitIds, diagnostics }) {
+  const importerSource = def._source || '(unknown)';
+  if (seenFiles.has(file)) {
+    seenFiles.get(file).push(importerSource);
+    diagnostics.error(
+      CODES.DOUBLE_INCLUDE,
+      `File included more than once: ${file}; the repeated include is skipped. Keep one include.\nIncluded by:\n`
+      + seenFiles.get(file).map((s) => `  ${s}`).join('\n'),
+      { file: importerSource },
+    );
+    return [];
+  }
+  seenFiles.set(file, [importerSource]);
+
+  let raw; let sourceMap;
+  try {
+    ({ value: raw, sourceMap } = loadYamlDocument(file));
+  } catch (err) {
+    if (!(err instanceof YamlLoadError)) throw err;
+    diagnostics.error(err.code, err.message, { file });
+    return [];
+  }
+  if (raw === null || raw === undefined) {
+    diagnostics.warn(CODES.YAML_EMPTY_FILE, `Empty file skipped: ${file}; add YAML content or remove the file.`, { file });
+    return [];
+  }
+
+  const out = [];
+  for (const [index, item] of (Array.isArray(raw) ? raw : [raw]).entries()) {
+    if (item === null || item === undefined) {
+      diagnostics.warn(CODES.YAML_NULL_DOCUMENT, `Null document in "${file}" — it contributes no items; add content or remove the empty document.`, { file });
+      continue;
+    }
+    if (isComponentDocument(item)) continue;
+    const id = ((item.id || (typeof item.name === 'string' ? item.name : '')) || '').toLowerCase();
+    if (explicitIds.has(id)) continue; // an explicit import wins
+
+    // `_include_key` names the directive, which for a directory include spans many files;
+    // the per-branch CL0326 check groups on it rather than on `_source`.
+    const stamped = { ...item, _source: file, _include_key: includeKey };
+    attachOrigins(stamped, sourceMap.exportOrigins(Array.isArray(raw) ? [String(index)] : []));
+    if (def.importVariants) {
+      stamped._include_variants = def.importVariants;
+      transferOrigins(def, stamped, ['importVariants'], ['_include_variants']);
+    }
+    if (def.branches) {
+      stamped._include_branch_spec = def.branches;
+      transferOrigins(def, stamped, ['branches'], ['_include_branch_spec']);
+    }
+    out.push(stamped);
+  }
+  return out;
+}
+
+function reportUnmatchedSelectors(def, items, includeLabel, diagnostics) {
   if (!def.importVariants || items.length === 0) return;
 
   for (const [index, vPath] of parseVariantsList(def.importVariants).entries()) {
@@ -300,7 +334,7 @@ function reportUnmatchedSelectors(def, items, includePath, diagnostics) {
 
     const message = `importVariants selector "${vPath}" matched none of the `
       + `${items.length} item${items.length === 1 ? '' : 's'} included from `
-      + `${path.basename(includePath)}. `
+      + `${includeLabel}. `
       + 'No item defines that variant, so the selector changes nothing; check the spelling '
       + 'or add the variant to an included item.';
     diagnostics.warn(CODES.SELECTOR_MATCHED_NOTHING, message, originLocation(def,

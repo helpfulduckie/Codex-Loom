@@ -233,7 +233,7 @@ Then run: `codex-loom ./my-project`
 
 **`templateFor`** is a branch-merged map from rendering role (`base`, `notes`, one per component) to a selection file. It is how one branch renders different templates from another — and a **context tier** is exactly that: a branch carrying `templateFor: {base: terse.cl.yaml}`, guarded so a terse list can only shorten, never invent.
 
-**Library vs project items** — shared items live in directories named under `structure.input.library`; project items live under `structure.input.items`. Each library name is automatically a `{%name}` variable. Pull them in with `import:` (one item, full control) or `include:` (a whole file, optionally filtered).
+**Library vs project items** — shared items live in directories named under `structure.input.library`; project items live under `structure.input.items`. Each library name is automatically a `{%name}` variable. Pull them in with `import:` (one item, full control) or `include:` (a whole file or directory, optionally filtered).
 
 **A snapshot freezes the library.** Set `structure.input.snapshot` and run `--snapshot`, and every `{%name}` resolves through a committed frozen copy instead of the live source. Drift prints one informational line and never fails a build; `--live` escapes for one run.
 

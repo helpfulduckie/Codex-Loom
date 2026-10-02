@@ -115,7 +115,7 @@ arriving by any route is still worth flagging.
 | `CL0118` | WARN | `lint.packs.<name>: ~` targets a pack this branch never inherited, so nothing changes. Remove the entry or inherit the pack. |
 | `CL0119` | ERROR | The pack `name:` differs from its `lint.packs` key, so portable diagnostics/suppressions can break. Make them match. |
 | `CL0120` | WARN | A configured input path is missing, so content there is skipped. Create the path or correct the configuration. |
-| `CL0130` | WARN | An `include:` path is missing, so included items are skipped. Create the file or correct the path. |
+| `CL0130` | WARN | An `include:` path is missing, or names a directory holding no YAML files, so included items are skipped. Create the file or correct the path. |
 | `CL0131` | ERROR | The same file is included more than once, so the repeated include is skipped. Keep one include. |
 | `CL0140` | ERROR | The item has no `id:` or `name:`, so it cannot enter the registry. Add one identity field. |
 | `CL0141` | ERROR | An item id is already defined, so the later definition is skipped. Remove the duplicate or rename it. |

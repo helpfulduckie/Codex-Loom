@@ -86,10 +86,10 @@ function buildCompileContext(config, branchPath, options = {}) {
 }
 
 function reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics) {
-  const groups = new Map(); // included file → the items it contributed
+  const groups = new Map(); // include directive's target → the items it contributed
   for (const def of allItemDefs) {
     if (!def._include_branch_spec) continue;
-    const key = def._source || '(unknown)';
+    const key = def._include_key || def._source || '(unknown)';
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(def);
   }
@@ -103,6 +103,8 @@ function reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics) {
       { source: items[0], path: ['_include_branch_spec'], selections },
     );
     if (names === null) continue; // the whole include is excluded from this branch
+    // A directory include's key is the directory, which no item has as its own `_source`.
+    const label = items[0]._source === source ? path.basename(source) : `${path.basename(source)}/`;
     for (const { name, loc } of selections) {
       const matched = items.filter((def) => {
         const deltas = collectVariantDeltas(def, name, null);
@@ -112,7 +114,7 @@ function reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics) {
       diagnostics.warn(
         DIAG_CODES.SELECTOR_MATCHED_NOTHING,
         `branch dispatch to variant "${name}" on branch "${branchPath.join('/') || '(root)'}" `
-        + `matched none of the ${items.length} items included from ${path.basename(source)}. `
+        + `matched none of the ${items.length} items included from ${label}. `
         + 'No included item defines that variant, so the dispatch changes nothing; check '
         + 'the spelling or add the variant to an included item.',
         { ...loc, branch },
