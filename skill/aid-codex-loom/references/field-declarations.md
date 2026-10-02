@@ -242,7 +242,6 @@ None of the three is an opinion-layer code: a field is read or it is not.
 compile, deriving the field/label tables and type-to-field membership mechanically from
 `fields.cl.yaml`.
 
-**It does not write a project's `SCHEMA.md`.** Where the generated tables disagree with a
-hand-maintained schema document, the document is wrong — copy the tables across. The
-authoring conventions in that document (budget targets, the card-role spectrum) stay
-hand-written.
+**The generated reference reflects resolved declarations; project authoring guidance remains separate.**
+It reports fields, labels, groups, and template order from `fields.cl.yaml`. Document
+project-specific authoring conventions and budgets alongside the generated reference.

@@ -1216,15 +1216,12 @@ an opinion code: a field is read or it is not.
 
 ### §13.8 The schema document is generated
 
-**The field/label tables and the type-to-field membership are mechanically derivable from
-`fields.cl.yaml`.** `--schema-tables` writes `schema-tables.md` under the resolved reports
-directory during a compile that already loaded the field table, frozen by the golden
-harness the same way `--with-inventory` is. It does **not** write the external `SCHEMA.md`
-— that file lives in another repo and this compiler has never written outside its own tree
-— a human copies the tables across. Where the generation disagrees with the committed
-document, the document is wrong; that drift is what this corrects. The authoring
-conventions in that document (budget targets, the card-role spectrum) stay hand-written
-and are untouched. Shipped in Phase 12.
+**The generated reference reflects resolved declarations; project authoring guidance remains separate.**
+`--schema-tables` writes `schema-tables.md` under the resolved reports directory during a
+compile that already loaded the field table, frozen by the golden harness the same way
+`--with-inventory` is. The reference reports fields, labels, group membership, and template
+order from `fields.cl.yaml`. Document project-specific authoring conventions and budgets
+separately.
 
 ---
 

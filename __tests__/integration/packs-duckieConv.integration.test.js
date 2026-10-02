@@ -67,6 +67,8 @@ describe('CL-duckieConv/0001 — per-role character budget', () => {
     expect(hits[0].severity).toBe('warn');
     expect(hits[0].message).toMatch(/role "standard"/);
     expect(hits[0].message).toContain('500');
+    expect(hits[0].message).toMatch(/soft character budget/);
+    expect(hits[0].message).not.toMatch(/SCHEMA\.md/);
   });
 
   test('the same body at role: anchor (800) is silent', () => {
@@ -197,6 +199,7 @@ describe('CL-duckieConv/0002 — count', () => {
     });
     const hits = find(d, COUNT);
     expect(hits.some((h) => /appearance: 8 items, expected at most 7/.test(h.message))).toBe(true);
+    expect(hits.every((h) => !/SCHEMA\.md/.test(h.message))).toBe(true);
   });
 
   test('a bare comma-string vibe is NOT split — one value, no finding', () => {
@@ -244,6 +247,8 @@ describe('CL-duckieConv/0003 — mutexHint', () => {
     const hits = find(d, MUTEX);
     expect(hits).toHaveLength(1);
     expect(hits[0].severity).toBe('warn');
+    expect(hits[0].message).toMatch(/audit for overlap and merge down/);
+    expect(hits[0].message).not.toMatch(/SCHEMA\.md/);
   });
 
   test('only three of the four → silent', () => {

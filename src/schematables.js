@@ -114,10 +114,9 @@ function generateSchemaTables(fieldTable, { title, tierTemplates } = {}) {
 
   const out = [];
   out.push(`# ${title || 'Codex Loom'} ${DASH} generated field reference`, '');
-  out.push('_Generated from `fields.cl.yaml` by `codex-loom --schema-tables` (v4 §13.8)._',
-    '_The field, label and membership tables here supersede the hand-maintained copies in',
-    '`SCHEMA.md` sections 3-5; where they disagree, `SCHEMA.md` has drifted. The authoring',
-    'conventions (`SCHEMA.md` sections 1 and 7) are hand-written and not reproduced here._', '');
+  out.push('_Generated from `fields.cl.yaml` by `codex-loom --schema-tables`._',
+    '_These tables reflect the resolved field and label declarations, group membership,',
+    'and template order. Document authoring conventions and budgets separately._', '');
 
   out.push('## Fields', '');
   out.push('| Field | Label | Renders | Reads |', '|---|---|---|---|');

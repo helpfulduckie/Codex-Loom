@@ -422,8 +422,8 @@ None of the three is an opinion-layer code: a field is read or it is not. See [D
 
 ---
 
-## The Schema Document Is Generated
+## Generated Field Reference
 
 **The field/label tables and the type-to-field membership are mechanically derivable from `fields.cl.yaml`.** `--schema-tables` writes `schema-tables.md` under the resolved reports directory during a compile that already loaded the field table.
 
-**It does not write an external `SCHEMA.md`.** Where the generation disagrees with a committed schema document, the document is wrong — a human copies the tables across. The authoring conventions in such a document (budget targets, the card-role spectrum) stay hand-written.
+**The generated reference reflects resolved declarations; project authoring guidance remains separate.** `schema-tables.md` reports fields, labels, groups, and template order from the loaded field table. Document project-specific authoring conventions and budgets alongside the generated reference.

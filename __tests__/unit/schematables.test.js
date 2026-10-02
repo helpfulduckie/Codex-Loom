@@ -73,10 +73,13 @@ describe('Type to fields', () => {
   });
 });
 
-describe('provenance line', () => {
-  test('states it supersedes SCHEMA.md and that disagreement means drift', () => {
-    expect(md).toMatch(/supersede the hand-maintained copies/);
-    expect(md).toMatch(/where they disagree, `SCHEMA\.md` has drifted/);
+describe('generated reference header', () => {
+  test('explains that tables reflect declarations while conventions are documented separately', () => {
+    expect(md).toMatch(/Generated from `fields\.cl\.yaml` by `codex-loom --schema-tables`/);
+    expect(md).toMatch(/resolved field and label declarations, group membership,/);
+    expect(md).toMatch(/and template order/);
+    expect(md).toMatch(/Document authoring conventions and budgets separately/);
+    expect(md).not.toMatch(/SCHEMA\.md/);
   });
 });
 
