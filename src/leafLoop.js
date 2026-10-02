@@ -46,6 +46,7 @@ function compileLeaf(branchPath, ctx) {
     diagnostics,
     configPath,
     roleStateByPath,
+    scriptDirectoryCache: ctx.scriptDirectoryCache,
   });
   const branchProtagonist = cctx.branchProtagonist;
 
@@ -208,10 +209,7 @@ function compileLeaf(branchPath, ctx) {
   const hasAIN = !!sectionedWritten.aiInstructions;
   const hasAN = !!sectionedWritten.authorsNote;
 
-  const scriptsSpec = cctx.componentRefs.scripts;
-  if (scriptsSpec && typeof scriptsSpec === 'string') {
-    deferredScripts.set(outputDir, scriptsSpec);
-  }
+  deferredScripts.set(outputDir, cctx.scriptFiles);
 
   if (captureReports) {
     leafData.push({
@@ -230,8 +228,10 @@ function compileLeaf(branchPath, ctx) {
 
 function runLeafLoop(ctx) {
   let filesWritten = 0;
-  for (const branchPath of ctx.leaves) {
-    filesWritten += compileLeaf(branchPath, ctx);
+  const scriptDirectoryCache = new Map();
+  const leafContext = { ...ctx, scriptDirectoryCache };
+  for (const branchPath of leafContext.leaves) {
+    filesWritten += compileLeaf(branchPath, leafContext);
   }
   return filesWritten;
 }

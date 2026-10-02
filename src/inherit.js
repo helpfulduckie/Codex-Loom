@@ -7,13 +7,20 @@ const { writeSectionedComponent, renderFrontmatter } = require('./emit/component
 const {
   writeOutput, buildBranchOutputDir, resolveBranchFolderPath,
 } = require('./outputPaths');
-const { recordTree } = require('./outputLedger');
+const { recordWrite } = require('./outputLedger');
 
-function copyScripts(srcDir, targetDir) {
-  if (!srcDir || !fs.existsSync(srcDir)) return;
-  const dest = path.join(targetDir, 'Scripts');
-  fs.cpSync(srcDir, dest, { recursive: true });
-  recordTree(dest);
+function copyScripts(files, targetDir) {
+  for (const [relative, source] of files) {
+    const dest = path.join(targetDir, 'Scripts', ...relative.split(/[\\/]/));
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(source, dest);
+    recordWrite(dest);
+  }
+}
+
+function scriptSelectionSignature(files) {
+  return JSON.stringify([...files].map(([relative, source]) => [relative, path.resolve(source)])
+    .sort(([a], [b]) => a.localeCompare(b)));
 }
 
 /** The branch tree as nodes keyed by path prefix; `leaf` is the leaf index ending there. */
@@ -128,16 +135,20 @@ function placeInheritedFiles({
     }
   }
 
-  if (deferredScripts.size > 0) {
+  if ([...deferredScripts.values()].some((files) => files.size > 0)) {
     const scriptsDeclaredInBranches = branchTreeDeclares(
       config.branches, (node) => node.scripts !== undefined,
     );
-    if (canLift(deferredScripts, scriptsDeclaredInBranches)) {
-      const [spec] = deferredScripts.values();
-      copyScripts(spec, config._resolvedOutput);
+    const scriptsCanLift = leaves.length > 1
+      && deferredScripts.size === leaves.length
+      && !scriptsDeclaredInBranches
+      && new Set([...deferredScripts.values()].map(scriptSelectionSignature)).size === 1;
+    if (scriptsCanLift) {
+      const [files] = deferredScripts.values();
+      copyScripts(files, config._resolvedOutput);
       log.verbose(`    OK: Scripts/ (inherited from root) → ${path.join(config._resolvedOutput, 'Scripts')}`);
     } else {
-      for (const [leafDir, spec] of deferredScripts) copyScripts(spec, leafDir);
+      for (const [leafDir, files] of deferredScripts) copyScripts(files, leafDir);
     }
   }
 

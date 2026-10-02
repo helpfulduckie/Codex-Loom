@@ -23,6 +23,7 @@ const { renderCard, cardTitle } = require('./emit/vl');
 const { checkUndeclaredPlaceholders, checkPlaceholderContext } = require('./emit/placeholders');
 const { checkTargetSlot } = require('./slots');
 const { resolveComponentSpec, questionsForMeasurement } = require('./treeWrite');
+const { resolveScriptFiles } = require('./scripts');
 
 function buildCompileContext(config, branchPath, options = {}) {
   const chain = walkBranchChain(config.branches, branchPath, {
@@ -41,26 +42,27 @@ function buildCompileContext(config, branchPath, options = {}) {
   const components = Object.assign({}, config.components || {}, chain.components);
   const render = Object.assign({}, config.render || {}, chain.render);
 
-  const scripts = chain.scripts !== undefined ? chain.scripts : config.scripts;
-  if (scripts !== undefined) components.scripts = scripts;
-
   const componentTypes = [
     'aiInstructions', 'opening', 'plotEssential', 'summary', 'authorsNote',
-    'description', 'adventureDescription', 'scripts',
+    'description', 'adventureDescription',
   ];
   const componentRefs = {};
   const componentOrigins = {};
   const configFile = { file: options.configPath || undefined };
   for (const type of componentTypes) {
     const spec = components[type] !== undefined ? components[type] : null;
-    const authored = type === 'scripts'
-      ? (chain.scripts !== undefined ? chain.paths.scripts : ['scripts'])
-      : (chain.paths.components[type] || ['components', type]);
+    const authored = chain.paths.components[type] || ['components', type];
     componentOrigins[type] = originLocation(config, authored, configFile);
     componentRefs[type] = resolveComponentSpec(spec, config._base, variables, {
       diagnostics: options.diagnostics, location: componentOrigins[type],
     });
   }
+
+  const resolvedScripts = resolveScriptFiles(config, chain, variables, {
+    diagnostics: options.diagnostics,
+    configPath: options.configPath,
+    directoryCache: options.scriptDirectoryCache,
+  });
 
   const templateFor = {};
   for (const node of [config, ...chain.nodes]) {
@@ -79,7 +81,8 @@ function buildCompileContext(config, branchPath, options = {}) {
   }
 
   return {
-    variables, componentRefs, componentOrigins, render, templateFor, placeholders: chain.placeholders, roles,
+    variables, componentRefs, componentOrigins, scriptFiles: resolvedScripts,
+    render, templateFor, placeholders: chain.placeholders, roles,
     branchProtagonist: roleInfo ? roleInfo.protagonist : null,
     lint: chain.lint,
   };
