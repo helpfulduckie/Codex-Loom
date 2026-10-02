@@ -307,8 +307,11 @@ function includeFile(file, def, includeKey, { seenFiles, explicitIds, diagnostic
 
     // `_include_key` names the directive, which for a directory include spans many files;
     // the per-branch CL0326 check groups on it rather than on `_source`.
-    const stamped = { ...item, _source: file, _include_key: includeKey };
-    attachOrigins(stamped, sourceMap.exportOrigins(Array.isArray(raw) ? [String(index)] : []));
+    const loaded = { ...item, _source: file, _include_key: includeKey };
+    attachOrigins(loaded, sourceMap.exportOrigins(Array.isArray(raw) ? [String(index)] : []));
+    // The same `variables:` / `vars:` → `v` folding a library or project item gets; without
+    // it every `{$v.…}` in an included item renders empty.
+    const stamped = normalizeItemVarField(loaded, (code, message, at) => diagnostics.warn(code, message, at || { file }));
     if (def.importVariants) {
       stamped._include_variants = def.importVariants;
       transferOrigins(def, stamped, ['importVariants'], ['_include_variants']);

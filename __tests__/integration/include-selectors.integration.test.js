@@ -211,6 +211,25 @@ describe('an include naming a directory', () => {
   });
 });
 
+// ── Included items are normalized like any other ────────────────────────────
+
+describe('an included item', () => {
+  test('reads a `variables:` block as `v`, as a library or project item does', () => {
+    const { tmpDir } = compileProject({
+      ...BASE,
+      'canon/church.yaml': [
+        '- id: Church',
+        '  name: Church',
+        '  aid: {type: Character, triggers: [Church]}',
+        '  variables: {empire: Heliador}',
+        '  body: {Tagline: "Religion of {$v.empire}"}',
+      ].join('\n'),
+      'Codex/items.yaml': `- include: '{%here}/canon/church.yaml'`,
+    });
+    expect(compiled(tmpDir)).toContain('Religion of Heliador');
+  });
+});
+
 // ── The arity-1 half, unchanged ──────────────────────────────────────────────
 
 describe('the arity-1 positions still warn per miss', () => {
