@@ -56,6 +56,8 @@ ERROR CL0325 Codex/items.cl.yaml:187:3 (branch open)
   two item definitions resolve to id "anchor" on this branch.
   hint: A def carrying \`import:\` with no \`id:\` of its own claims the id of the item it imports, so two of them — or one alongside an explicit def of that id — emit the same item twice. Give one of them its own \`id:\` to make it a copy (§17.4), or dispatch them to different branches.
   related (first definition): Codex/items.cl.yaml:8:3
+WARN CL0321 Codex/missing-variant.cl.yaml:9:3 (branch open)
+  variant "absent" is not defined in the variant tree of "MissingVariant" (missing-variant.cl.yaml); check the spelling or add the variant.
 ERROR CL0532 Codex/items.cl.yaml:71:5 (branch open)
   undeclared placeholder "%ghostName%" in item "Greeter" rendering into plotEssential slot "cast" on branch "open" — Velvet Lattice substitutes only declared keys, so the AI receives the literal token until you declare or correct "%ghostName%".
   hint: Declared on this branch: heroName, altName, neverUsed, longPrompt.
