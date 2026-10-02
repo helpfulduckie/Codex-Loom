@@ -247,7 +247,7 @@ Each key writes one file. Every component except `branchFraming:` inherits down 
 | `description` | `Description.md` at the output root, written once | n/a | no |
 | `adventureDescription` | `Description.md`, at each leaf | yes | yes |
 
-`scripts:` is **not** a component — it is a top-level key (see [scripts](#scripts) below), folded in here only because it merges down the branch chain the same way.
+`scripts:` is **not** a component — it is a top-level key with its own directory and hook-map rules (see [scripts](#scripts) below).
 
 **`opening:`** — Written to each leaf's `Components/Opening.md`. An ordinary component: it inherits down the tree, may be a `sections:` document, and items may route into its slots. A `.md` file expands `{%variables}` at the leaf while preserving its other text, and a spec naming no file is used as literal text, which is what most openings are. Capped at 4,000 characters (`CL0710`/`CL0711`).
 
@@ -263,28 +263,43 @@ See [Components → Description](09-components.md#description) for both keys, th
 
 ### `scripts`
 
-Points at the Velvet Lattice scripting hooks copied into each branch leaf's `Scripts/`
-folder. It is a **top-level key** — sibling to `components:`, not a key inside it — and it
-merges down the branch chain like `components:` and `render:`, so a branch can swap or
-unbind (`~`) the script set it ships.
+Selects files for the Velvet Lattice `Scripts/` folder. It is a **top-level key** — sibling
+to `components:`, not a key inside it. Declarations resolve from the root through each
+branch to the leaf, using that leaf's final variables and paths relative to the config file.
 
 Two forms:
 
 ```yaml surface=config
-scripts: ./scripts               # a directory, copied whole
+scripts: ./scripts               # a directory bundle
 ```
 
 ```yaml surface=config
-scripts:                         # the four VL hook files, named individually
+scripts:                         # select hooks by their Velvet Lattice names
   input:   ./scripts/input.js
   context: ./scripts/context.js
   output:  ./scripts/output.js
   library: ./scripts/library.js
 ```
 
-Path values take `{%variable}` expansion like any other config path; the files themselves
-are copied as-is, with no processing of their contents. See
-[Components → Scripts](09-components.md#scripts).
+**A directory declaration replaces all four hook selections.** The compiler looks for
+`input.js`, `output.js`, `context.js`, and `library.js` at the directory root; a missing
+hook removes the inherited hook. Other files, including files in nested directories, are
+retained as auxiliary files. A later directory replaces the earlier auxiliary-file set.
+
+**A mapping changes only the hooks it names.** Omitted keys inherit the current selection,
+and a named `null` removes that hook. An empty mapping changes nothing; `scripts: ~` is
+equivalent to setting all four hook keys to `null`, so a later partial mapping can restore
+only its named hooks. Mapping operations preserve the most recent directory's auxiliary
+files. A named path that does not exist is allowed and removes that hook instead of falling
+back to an inherited source.
+
+**Only the four top-level canonical filenames are loaded as hooks by Velvet Lattice.**
+File bytes are copied unchanged. Directory files keep their relative names; mapped sources
+are written under their canonical hook filenames. The compiler places each relative output
+file at the fewest branch nodes that preserve every leaf's selected bytes; an ancestor copy
+is blocked when any leaf must lack that file, and a local override is added only when it
+saves a write. A one-leaf project keeps its scripts at that leaf; an unbranched project
+writes at the root. See [Components → Scripts](09-components.md#scripts).
 
 ### `render`
 
@@ -297,7 +312,7 @@ render:
 
 `notesTemplate` names the template that renders every card's `notes:` field when the item does not name one itself and no `templateFor.notes` entry matches its `aid.type` — the scalar half of rung 2 of the ladder in [Item YAML → Rendering notes through a template](03-item-yaml.md). Naming a template that is not loaded is ERROR `CL0411`, reported at load rather than once per card.
 
-**It merges down the branch chain, key by key, like `components:` and `scripts:`.** That is the point of putting it here rather than only at root: which mods a branch loads is what decides whether a marker in the notes field means anything on that branch, and swapping the template swaps the whole convention without touching a single item.
+**It merges down the branch chain, key by key.** A branch can replace `notesTemplate` without changing the other project-wide rendering defaults. Which mods a branch loads decides whether a marker in the notes field means anything on that branch.
 
 ```yaml surface=config
 render:

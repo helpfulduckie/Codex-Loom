@@ -514,21 +514,38 @@ Author's Note produces no story card of its own, but like every component it can
 
 ## Scripts
 
-`scripts:` points at the Velvet Lattice scripting hooks **copied** into each branch leaf's `Scripts/` folder. It is a **top-level `compile.yaml` key**, not a `components:` sub-key — putting it under `components:` is a `CL0210` error — but it merges down the branch chain the same way a component does, so a branch can swap or unbind (`~`) its script set.
+`scripts:` selects files for Velvet Lattice and is a **top-level `compile.yaml` key**, not a `components:` sub-key — putting it under `components:` is a `CL0210` error. Paths resolve from the root through each branch using the leaf's final variable table and the config directory as their base.
 
 ```yaml surface=config
-scripts: ./scripts               # a directory, copied whole
+scripts: ./scripts               # a directory bundle
 ```
 
 ```yaml surface=config
-scripts:                         # the four VL hook files, named individually
+scripts:                         # select hooks by their Velvet Lattice names
   input:   ./scripts/input.js
   context: ./scripts/context.js
   output:  ./scripts/output.js
   library: ./scripts/library.js
 ```
 
-No processing is applied to the files — they are copied as-is. Path values still take `{%variable}` expansion. See [compile.yaml → scripts](02-compile-yaml.md#scripts).
+**A directory replaces all four hook selections.** The compiler recognizes the top-level
+`input.js`, `output.js`, `context.js`, and `library.js` files; an absent hook removes its
+inherited selection. Other files are kept recursively as auxiliary files, and a later
+directory replaces the previous auxiliary-file set.
+
+**A mapping applies only its named hooks.** Unmentioned keys inherit, a named `null`
+removes that hook, and an empty map changes nothing. `scripts: ~` removes all four hooks;
+a later partial map restores only the hooks it names. Mapping and null operations preserve
+the nearest directory's auxiliary files. A mapped source path may be missing, which makes
+that hook absent rather than restoring an inherited file.
+
+**Script bytes remain unchanged.** Directory files keep their relative names; mapped sources
+are written under canonical hook filenames. Velvet Lattice loads only those four top-level
+hooks. The compiler places each relative output file at the fewest branch nodes that
+preserve every leaf's bytes; a leaf that must lack a file prevents an ancestor copy, and a
+local override appears only when it saves a write. A single playable leaf keeps its files at
+that leaf; an unbranched project writes them at root. See
+[compile.yaml → scripts](02-compile-yaml.md#scripts).
 
 ---
 

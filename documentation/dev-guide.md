@@ -30,6 +30,7 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/log.js` | The progress log — `{ info, verbose }` — that narration goes to; exports only the silent default |
 | `src/model/item.js` | Item resolution through import/variant/branch chains |
 | `src/model/branches.js` | Branch-spec dispatch; `enumerateLeaves`; branch-chain walks |
+| `src/scripts.js` | Root-to-leaf script directory and hook-map resolution using final leaf variables |
 | `src/model/fieldops.js` | Value-level field operations (`applyFieldOp` and friends) |
 | `src/model/refs.js` | Item reference resolution, plain and library-qualified (§17.2) |
 | `src/model/pronouns.js` | Pronoun and verb conjugation passes; cross-item reference resolution |
@@ -47,7 +48,7 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/limits.js` | AID's platform field caps and the post-render length measurement (§8.5) |
 | `src/slots.js` | The sections one `render.storyCards`/`render.component` entry renders; slot index; empty-slot warnings (§7.8) |
 | `src/leafLoop.js` | The per-leaf compile loop: branch-chain merge, sectioned components, slot index, card + slot render in one pass |
-| `src/inherit.js` | Component and script inheritance down the branch tree; story-card placement with overrides, `placeWithOverrides` (§7.3a) |
+| `src/inherit.js` | Component placement; per-file script placement and story-card placement with overrides, `placeWithOverrides` (§7.3a) |
 | `src/outputPaths.js` | Where a branch node's folder lands on disk; the post-write sweep that removes output the compile did not write and archives stale nodes |
 | `src/outputLedger.js` | The files a compile has written, recorded by every output writer for the sweep (§8.7) |
 | `src/treeWrite.js` | Recursive writers for interior-node framing, labels, placeholders and descriptions; component-spec resolution |
@@ -95,7 +96,7 @@ enumerateLeaves(branches)         → [[path], [path], ...]
     ↓
 FOR EACH LEAF:
   walkBranchChain()             → merged variables/roles/placeholders/components; branchProtagonist
-  buildCompileContext()          → variables (merged), componentRefs (resolved paths)
+  buildCompileContext()          → variables, componentRefs, scriptFiles (resolved against final leaf variables)
   resolveBranchItems()           → resolvedItems[]
     FOR EACH itemDef:
       resolveItem()              → resolved item object or null (excluded)
@@ -113,7 +114,7 @@ FOR EACH LEAF:
     writeOutput()                → Story Cards/{type}/{type}.md
   renderSectionedComponent()     → Components/{Plot Essentials,Summary,AI Instructions,
                                     Author Notes,Opening}.md + Description.md
-  copyScripts()
+placeInheritedFiles()            → minimum-copy placement of each script file after all leaves compile
 writeFramingRecursive()          → Components/Opening.md at every branch node incl. the root;
                                     roles resolve in every shape (sentence, prose .md, sections:)
 Root Description                 → Description.md, roles resolve, branchProtagonist always null

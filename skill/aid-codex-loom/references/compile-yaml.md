@@ -168,7 +168,11 @@ Each value is either inline text, or a path to a file. There are seven keys:
 **`opening:` and `branchFraming:` are two keys for one filename**, and the difference is where AID reads it. An `Opening.md` at a leaf is that branch's first move; anywhere else it is the framing shown while the player chooses a branch beneath that node. `branchFraming:` does not inherit, because it belongs to the node whose children it frames — declared on a leaf it is ignored with a WARN.
 
 ### `scripts`
-**Top-level, not a component.** Points at a directory copied into each leaf's `Scripts/` folder, or a mapping of the four Velvet Lattice hook names. Merges per file down the branch chain.
+**Top-level, not a component.** A directory declaration replaces all four Velvet Lattice hook selections; absent `input.js`, `output.js`, `context.js`, or `library.js` files remove inherited hooks. Other directory files are kept recursively as auxiliary files, with the newest directory replacing the previous auxiliary set.
+
+An explicit map changes only the hook keys it names. Omitted keys inherit, a named `null` removes that hook, and `{}` changes nothing. `scripts: ~` equals four individual hook removals, so a later partial map restores only its named hooks. Map and null operations preserve the latest directory's auxiliary files. Missing named source files are allowed and remove that hook instead of falling back to its inherited source.
+
+Declarations resolve from root through the branch chain with each leaf's final variable values; relative paths use the config file's directory. File bytes are copied unchanged. Directory files keep their relative names; mapped sources use canonical hook filenames. The compiler places each relative output file at the fewest branch nodes that preserve every leaf's selection; an absent leaf blocks an ancestor copy, and a local override is used only when it saves a write. One playable leaf keeps its files at that leaf, while an unbranched project writes at root.
 
 ### `branches`
 Nested branch tree. Leaf = no `branches:` sub-key, and produces one output folder. Node = has `branches:`, and recurses.
