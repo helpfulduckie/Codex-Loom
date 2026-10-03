@@ -115,7 +115,8 @@ function compileLeaf(branchPath, ctx) {
         && typeof component.render.component.variant === 'string'
         ? component.render.component.variant.trim() : '';
       const fieldComponent = fieldVariant
-        ? selectComponentSections(component, fieldVariant, null, null)
+        ? selectComponentSections(component, fieldVariant, null, null,
+          busWarner(diagnostics, { file: String(spec), branch: label }))
         : component;
       ({ text, segments, excluded = false } = renderSectionedComponent(
         fieldComponent, branchPath, filled,

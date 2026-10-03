@@ -38,6 +38,8 @@ body:
 
 Do not add a leading separator to the appended value — rendering handles separators, via the field declaration's `join:` key or a `{join(…)}` call in a text template.
 
+Appending to one member of a mapping (`personality.expanded.shy: +{…}`) keeps that member on one line: its pieces join with `; ` in a list render, or with the declared separator under `join:`. For any other separator (a comma mid-sentence), restate the member's whole text instead of appending.
+
 ### Remove Substring — `-{text}`
 Removes all occurrences of the substring. Result is trimmed.
 ```yaml
@@ -114,7 +116,7 @@ body:
   Physical Traits:
     gender: male              # replace subfield
     hair: -{in a bun}         # remove substring in subfield
-    eyes: "+{, with a faint glow}"   # append to subfield
+    eyes: +{faintly glowing}  # append to subfield; renders "…; faintly glowing"
     other: ~                  # remove subfield
 ```
 

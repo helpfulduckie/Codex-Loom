@@ -326,7 +326,9 @@ function applyCrossItemRefs(resolvedItems, { registry, onWarn, resolvedById }) {
       if (actualKey === undefined) return null;
       val = val[actualKey];
     }
-    return val !== null && val !== undefined ? String(val) : null;
+    if (val === null || val === undefined) return null;
+    // The reference lands inside a string, so an appended field joins as an inline scalar does.
+    return Array.isArray(val) ? val.join('; ') : String(val);
   }
 
   function processValue(str) {

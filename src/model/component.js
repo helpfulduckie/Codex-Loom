@@ -129,11 +129,18 @@ function normalizeSection(name, def, index, onWarn) {
   return section;
 }
 
-function applySectionVariant(section, delta) {
+function sectionOpLabel(name, path) {
+  return [name ? `section "${name}"` : 'section', ...path].join('.');
+}
+
+function applySectionVariant(section, delta, onWarn = null) {
   if (!delta || typeof delta !== 'object' || Array.isArray(delta)) return section;
   const result = copyOrigins(section, { ...section });
   const take = (from, to = from) => transferOrigins(delta, result, from, to);
-  const opCtx = (path) => ({ source: delta, sourcePath: path, target: result, targetPath: path });
+  const opCtx = (path) => ({
+    source: delta, sourcePath: path, target: result, targetPath: path,
+    onWarn, label: sectionOpLabel(section.name, path),
+  });
 
   if (delta.text !== undefined) {
     if (delta.text === null) {
@@ -176,7 +183,7 @@ function applySectionVariant(section, delta) {
 
 const CONTENT_KEYS = ['text', 'file', 'from'];
 
-function layerSectionDef(base, over) {
+function layerSectionDef(base, over, { onWarn = null, name = null } = {}) {
   const from = (base && typeof base === 'object' && !Array.isArray(base)) ? base : {};
   const raw = (over && typeof over === 'object' && !Array.isArray(over)) ? over : {};
   const result = copyOrigins(from, { ...from });
@@ -201,6 +208,7 @@ function layerSectionDef(base, over) {
       if (value === null) { result.text = null; take(['text']); continue; }
       const next = applyFieldOp(from.text, value, {
         source: raw, sourcePath: ['text'], target: result, targetPath: ['text'],
+        onWarn, label: sectionOpLabel(name, ['text']),
       });
       result.text = next === '__DELETE__' ? null : next;
     } else if (key === 'render') {
@@ -252,7 +260,7 @@ function mergeSectionRecords(base, over, onWarn = () => {}) {
     }
 
     if (existing !== undefined) {
-      merged[existing] = layerSectionDef(merged[existing], def);
+      merged[existing] = layerSectionDef(merged[existing], def, { onWarn, name: existing });
     } else {
       merged[name] = def;
       keyOf.set(name.toLowerCase(), name);
@@ -262,7 +270,7 @@ function mergeSectionRecords(base, over, onWarn = () => {}) {
   return merged;
 }
 
-function applySectionSelector(sections, name) {
+function applySectionSelector(sections, name, onWarn = null) {
   const result = {};
   let matched = 0;
 
@@ -276,7 +284,8 @@ function applySectionSelector(sections, name) {
       continue;
     }
     matched += 1;
-    result[sectionName] = layerSectionDef(def, originView(def, ['variants', key], variants[key]));
+    result[sectionName] = layerSectionDef(def, originView(def, ['variants', key], variants[key]),
+      { onWarn, name: sectionName });
   }
 
   return { sections: result, matched };
@@ -323,7 +332,7 @@ function sectionsForBranch(component, branchPath, onWarn = null) {
     for (const name of fanned) {
       const key = findSectionVariant(section, name);
       if (key === undefined) continue;
-      resolved = applySectionVariant(resolved, sectionVariant(section, key));
+      resolved = applySectionVariant(resolved, sectionVariant(section, key), onWarn);
     }
 
     variants.forEach((name, i) => {
@@ -334,7 +343,7 @@ function sectionsForBranch(component, branchPath, onWarn = null) {
           sectionSelections[i] && sectionSelections[i].loc);
         return;
       }
-      resolved = applySectionVariant(resolved, sectionVariant(section, key));
+      resolved = applySectionVariant(resolved, sectionVariant(section, key), onWarn);
     });
     applicable.push({ section: resolved, variants: [...fanned, ...variants] });
   }

@@ -56,7 +56,9 @@ op: "+{retired}"
 - retired
 ```
 
-Do not put a leading separator in the appended value — the separator is added by the template, not the operation.
+Do not put a leading separator in the appended value — the separator is added by the template, not the operation. The one exception is a field its template joins with an empty separator (`{join("", $body.Tagline)}`), where each piece has to carry its own; see [Two variants appending to one field](#two-variants-appending-to-one-field).
+
+**Appending to one member of a mapping or list keeps that member on one line.** `personality.expanded.shy: +{talkative once comfortable}` turns the `shy` member into a two-element array inside the mapping. Wherever that mapping renders as bullets, key lines or an inline run, the member's pieces join with `; `; under `join:` they join with the declared separator. For any other separator, restate the member's whole text instead of appending.
 
 ### Remove Substring — `-{text}`
 
@@ -152,7 +154,7 @@ An empty sequence `[]` is always treated as an ops list (no ops = no change, not
 
 ### When a `-{}` or `/{}/{}` matches nothing — `CL0328`
 
-`-{text}` and `/{old}/{new}` return the value untouched when the target is absent, which is a silent no-op. That is usually harmless — a swap-chain like `/{She}/{He}` / `/{she}/{he}` / `/{her}/{his}` relies on it, since any one description carries some of those forms and not others. But a *standalone* `-{}` / `/{}/{}` that matches nothing, or an op chain where **every** removal/swap missed, is always a mistake: most often the text the op was written against has drifted since. Codex Loom warns (`CL0328`) in exactly those two cases, and stays quiet when some ops in a chain legitimately do nothing.
+`-{text}` and `/{old}/{new}` return the value untouched when the target is absent, which is a silent no-op. That is usually harmless — a swap-chain like `/{She}/{He}` / `/{she}/{he}` / `/{her}/{his}` relies on it, since any one description carries some of those forms and not others. But a *standalone* `-{}` / `/{}/{}` that matches nothing, or an op chain where **every** removal/swap missed, is always a mistake: most often the text the op was written against has drifted since. Codex Loom warns (`CL0328`) in exactly those two cases, and stays quiet when some ops in a chain legitimately do nothing. The same warning covers a component section's `text:` — in a section variant, an `importVariants` selector, or a local section layered over an imported one. `+{}` is never reported: it has no target to miss.
 
 ```yaml check=none reason=body-field-fragment
 # Op sequence — every element starts with an op prefix
@@ -225,7 +227,7 @@ body:
   Physical Traits:
     gender: male
     hair: -{long }
-    eyes: "+{, with a faint glow}"
+    eyes: +{faintly glowing}
     other: ~
 ```
 

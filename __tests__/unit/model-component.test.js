@@ -606,6 +606,57 @@ describe('dispatch and variant origins', () => {
     });
   });
 
+  describe('a remove or swap that matches nothing', () => {
+    const MISS = [
+      'sections:',
+      '  intro:',
+      '    text: Day',
+      '    branches:',
+      '      dark: night',
+      '    variants:',
+      '      night:',
+      '        text: "/{Dawn}/{Dusk}"',
+      '      keyed:',
+      '        text: "+{Night}"',
+    ];
+
+    test('is reported at the variant that authored it', () => {
+      const { spec, component } = load(MISS);
+      const { seen, onWarn } = located();
+      sectionsForBranch(component, ['dark'], onWarn);
+      expect(seen.filter((d) => d.code === CODES.FIELD_OP_NOOP)).toEqual([
+        expect.objectContaining({ file: spec, line: 8 }),
+      ]);
+    });
+
+    test('names the section in its message', () => {
+      const { component } = load(MISS);
+      const messages = [];
+      sectionsForBranch(component, ['dark'], (code, message) => messages.push(message));
+      expect(messages.join('\n')).toContain('section "intro".text');
+    });
+
+    test('is reported when an importVariants selector applies it', () => {
+      const { component } = load(MISS);
+      const { seen, onWarn } = located();
+      applySectionSelector(component.rawSections, 'night', onWarn);
+      expect(seen.map((d) => d.code)).toEqual([CODES.FIELD_OP_NOOP]);
+    });
+
+    test('is reported when a local section overlays an imported one', () => {
+      const { seen, onWarn } = located();
+      mergeSectionRecords({ genre: { text: 'Thriller' } }, { genre: { text: '-{Noir}' } }, onWarn);
+      expect(seen.map((d) => d.code)).toEqual([CODES.FIELD_OP_NOOP]);
+    });
+
+    test('an append is never reported, because it has no target to miss', () => {
+      const { component } = load(MISS);
+      const { seen, onWarn } = located();
+      applySectionSelector(component.rawSections, 'keyed', onWarn);
+      expect(seen).toEqual([]);
+    });
+  });
+
   test('an overlay replaces the origins it overrides and prunes the content it displaces', () => {
     const { attachOrigins, createOriginIndex } = require('../../src/origin');
     const at = (file, entries) => createOriginIndex(entries.map(([p, line]) => ({ file, path: p, line })));

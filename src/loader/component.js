@@ -135,7 +135,7 @@ function resolveImports(doc, spec, options) {
 
     let contributed = tagSectionOrigins(imported.rawSections, path.basename(resolved));
     for (const { name, path: selectorPath } of parseSelectorList(entry.importVariants)) {
-      const applied = applySectionSelector(contributed, name);
+      const applied = applySectionSelector(contributed, name, onWarn);
       contributed = applied.sections;
       if (applied.matched === 0) {
         report(diagnostics, 'warn', CODES.SELECTOR_MATCHED_NOTHING,

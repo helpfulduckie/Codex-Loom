@@ -11,7 +11,7 @@ const { renderCard } = require('./emit/vl');
 const { resolveVariables } = require('./util');
 const { validateCardTypeValue } = require('./cardType');
 
-function selectComponentSections(component, variant, entrySections, onUnknownSection) {
+function selectComponentSections(component, variant, entrySections, onUnknownSection, onWarn = null) {
   let raw = (component && component.rawSections) || {};
 
   if (Array.isArray(entrySections) && entrySections.length > 0) {
@@ -28,7 +28,7 @@ function selectComponentSections(component, variant, entrySections, onUnknownSec
   }
 
   if (typeof variant === 'string' && variant.trim() !== '') {
-    raw = applySectionSelector(raw, variant.trim()).sections;
+    raw = applySectionSelector(raw, variant.trim(), onWarn).sections;
   }
 
   return copyOrigins(component,
@@ -95,6 +95,7 @@ function renderComponentStoryCards(component, descriptor, branchPath, filled, gr
         + `"${descriptor.label}" does not declare — it is dropped from this entry. Correct sections: or declare the section.`,
         entryAt('sections', String(entry.sections.indexOf(name))),
       ),
+      busWarner(diagnostics, loc),
     );
 
     const { text: notesText } = renderSectionedComponent(sub, branchPath, filled, {

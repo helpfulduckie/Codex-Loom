@@ -71,6 +71,12 @@ function renderScalar(val) {
   return String(val);
 }
 
+// A `+{}` aimed at one member of a list or mapping leaves an array in that member's place.
+// Default coercion would join it with a bare comma, so a member renders as a scalar does.
+function memberText(member) {
+  return Array.isArray(member) ? renderScalar(member) : String(member);
+}
+
 
 function evaluateInline(inner, data) {
   const refMatch = inner.match(/^inline\(\s*(\$[^)]+?)\s*\)$/s);
@@ -78,9 +84,9 @@ function evaluateInline(inner, data) {
   const val = resolveField(refMatch[1].trim(), data);
   if (val === null) return '';
   if (typeof val === 'object' && !Array.isArray(val)) {
-    return Object.values(val).filter(v => v != null).join(' ');
+    return Object.values(val).filter(v => v != null).map(memberText).join(' ');
   }
-  if (Array.isArray(val)) return val.join(' ');
+  if (Array.isArray(val)) return val.map(memberText).join(' ');
   return String(val);
 }
 
@@ -92,8 +98,15 @@ function evaluateJoin(inner, data) {
   const values = refs
     .map(ref => resolveField(ref, data))
     .filter(v => v !== null)
-    .flatMap(v => Array.isArray(v) ? v : (typeof v === 'object' ? Object.values(v).filter(x => x != null) : [v]));
+    .flatMap(v => Array.isArray(v) ? v : (typeof v === 'object' ? Object.values(v).filter(x => x != null) : [v]))
+    // An appended member is an array one level down; it joins with the call's own separator.
+    .flat();
   return values.join(separator);
+}
+
+function bulletList(members) {
+  if (members.length === 1) return memberText(members[0]);
+  return '\n' + members.map(member => '- ' + memberText(member)).join('\n');
 }
 
 function evaluateList(inner, data) {
@@ -101,15 +114,11 @@ function evaluateList(inner, data) {
   if (!refMatch) throw new Error('Malformed list(): ' + inner);
   const val = resolveField(refMatch[1].trim(), data);
   if (val === null) return '';
-  if (Array.isArray(val)) {
-    if (val.length === 1) return String(val[0]);
-    return '\n' + val.map(item => '- ' + item).join('\n');
-  }
+  if (Array.isArray(val)) return bulletList(val);
   if (typeof val === 'object') {
     const entries = Object.values(val).filter(v => v != null);
     if (entries.length === 0) return '';
-    if (entries.length === 1) return String(entries[0]);
-    return '\n' + entries.map(v => '- ' + v).join('\n');
+    return bulletList(entries);
   }
   return renderScalar(val);
 }
@@ -157,7 +166,7 @@ function evaluateKeys(inner, data) {
   if (val === null) return '';
   if (typeof val === 'object' && !Array.isArray(val)) {
     return Object.entries(val)
-      .map(([k, v]) => `- ${k}: ${v}`)
+      .map(([k, v]) => `- ${k}: ${memberText(v)}`)
       .join('\n');
   }
   return renderScalar(val);
@@ -204,16 +213,12 @@ function renderNode(node, data, ctx) {
 function renderFieldRef(node, data) {
   const val = resolveField(node.ref, data);
   if (val === null) return '';
-  if (Array.isArray(val)) {
-    if (val.length === 1) return String(val[0]);
-    return '\n' + val.map(item => '- ' + item).join('\n');
-  }
+  if (Array.isArray(val)) return bulletList(val);
   if (typeof val === 'object') {
     if (val.full != null) return String(val.full);
     const entries = Object.values(val).filter(v => v != null);
     if (entries.length === 0) return '';
-    if (entries.length === 1) return String(entries[0]);
-    return '\n' + entries.map(v => '- ' + v).join('\n');
+    return bulletList(entries);
   }
   return renderScalar(val);
 }

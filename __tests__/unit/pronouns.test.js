@@ -580,6 +580,15 @@ describe('applyCrossItemRefs', () => {
     expect(items[0].body.Hair).toBe('silver');
   });
 
+  test('a referenced field that holds an array joins with "; "', () => {
+    const items = [
+      { id: 'aria',   body: { Tagline: 'like {$mentor.body.Tagline}' } },
+      { id: 'mentor', body: { Tagline: ['Archivist', 'retired'] } },
+    ];
+    applyCrossItemRefs(items, { registry: new Map() });
+    expect(items[0].body.Tagline).toBe('like Archivist; retired');
+  });
+
   test('missing item → warns and leaves token as-is', () => {
     // model/ is pure (§3.3): it reports through the caller's onWarn rather than printing.
     const onWarn = jest.fn();

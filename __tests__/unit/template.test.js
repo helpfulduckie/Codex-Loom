@@ -147,6 +147,11 @@ describe('evaluateJoin', () => {
     const d = { body: { tags: ['x', 'y'], extra: 'z' } };
     expect(evaluateJoin('join("; ", $body.tags, $body.extra)', d)).toBe('x; y; z');
   });
+
+  test('a mapping member that holds an array joins with the same separator', () => {
+    const d = { body: { magic: { ice: ['high ice-affinity', 'combat trained'], growth: 'moderate' } } };
+    expect(evaluateJoin('join(" | ", $body.magic)', d)).toBe('high ice-affinity | combat trained | moderate');
+  });
 });
 
 describe('evaluateList', () => {
@@ -159,8 +164,23 @@ describe('evaluateList', () => {
       'list($body.missing)', {}, ''],
     ['single-element array → renders inline as bare value (no bullet, no newline)',
       'list($body.items)', { body: { items: ['solo'] } }, 'solo'],
+    ['a mapping member that holds an array renders as one bullet joined with "; "',
+      'list($body.expanded)',
+      { body: { expanded: { shy: ['quiet with strangers', 'talkative once comfortable'], kind: 'kind' } } },
+      '\n- quiet with strangers; talkative once comfortable\n- kind'],
+    ['a lone mapping member that holds an array renders inline joined with "; "',
+      'list($body.expanded)', { body: { expanded: { shy: ['quiet', 'talkative'] } } }, 'quiet; talkative'],
+    ['an array member that is itself an array renders as one bullet',
+      'list($body.items)', { body: { items: [['a', 'b'], 'c'] } }, '\n- a; b\n- c'],
   ])('%s', (_label, expr, d, expected) => {
     expect(evaluateList(expr, d)).toBe(expected);
+  });
+});
+
+describe('a bare field reference to a mapping with an appended member', () => {
+  test('renders the member as one bullet joined with "; "', () => {
+    const body = { expanded: { shy: ['quiet', 'talkative'], kind: 'kind' } };
+    expect(render('{$body.expanded}', { body })).toBe('- quiet; talkative\n- kind');
   });
 });
 
@@ -577,6 +597,11 @@ describe('evaluateKeys', () => {
     expect(evaluateKeys(expr, evalData)).toBe(expected);
   });
 
+  test('a value that holds an array joins with "; "', () => {
+    const d = { body: { Traits: { hair: ['silver', 'braided'] } } };
+    expect(evaluateKeys('keys($body.Traits)', d)).toBe('- hair: silver; braided');
+  });
+
   test('malformed syntax → throws', () => {
     expect(() => evaluateKeys('keys(bad)', evalData)).toThrow('Malformed keys()');
   });
@@ -590,6 +615,11 @@ describe('evaluateInline', () => {
     ['null field → empty string', 'inline($body.Missing)', ''],
   ])('%s', (_label, expr, expected) => {
     expect(evaluateInline(expr, evalData)).toBe(expected);
+  });
+
+  test('a mapping member that holds an array joins with "; "', () => {
+    const d = { body: { Traits: { hair: ['silver', 'braided'], eyes: 'grey' } } };
+    expect(evaluateInline('inline($body.Traits)', d)).toBe('silver; braided grey');
   });
 
   test('malformed syntax → throws', () => {
