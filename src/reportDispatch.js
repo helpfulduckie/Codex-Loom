@@ -73,7 +73,7 @@ function runReports({
     if (options.annotate) {
       const annotateDir = path.join(reportBase, 'annotate');
       fs.mkdirSync(annotateDir, { recursive: true });
-      const w = runAnnotateMode(leafData, allItemDefs, registry, annotateDir);
+      const w = runAnnotateMode(leafData, allItemDefs, registry, annotateDir, identity.label, rootDirName);
       reportSummary.push(`${w.written.length} annotation file(s)`);
     }
     if (options.variance) {

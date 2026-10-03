@@ -8,7 +8,7 @@ const { resolveItem, collectVariantDeltas } = require('./model/item');
 const { resolveBranchSpec } = require('./model/branches');
 const { resolveItemRef } = require('./model/refs');
 const { SLOTTED_COMPONENTS } = require('./emit/components');
-const { sanitizeFilename, shiftHeadings } = require('./report');
+const { sanitizeFilename, shiftHeadings, reportIdentity } = require('./report');
 
 
 const COMPONENT_FAMILIES = SLOTTED_COMPONENTS.map((d) => [d.key, d.label]);
@@ -278,31 +278,6 @@ function collectLeafAnnotationRecords(leaf, allItemDefs, registry) {
   return records;
 }
 
-function buildLeafAnnotation(leaf, allItemDefs, registry) {
-  const sections = [`# Annotations: ${leaf.label}`,
-    '_Field-level differences from each item\'s project base (no branch dispatch). ' +
-    'Each delta is tagged with the variant that produced it, or `unexplained`._'];
-  for (const record of collectLeafAnnotationRecords(leaf, allItemDefs, registry)) {
-    if (record.status === 'nulled') {
-      sections.push(`## ${record.itemId}\n\n- **nulled** — excluded from this branch by \`~\` dispatch`);
-      continue;
-    }
-    const head = record.variants.length
-      ? `## ${record.itemId}\n\n_variants applied: ${record.variants.join(', ')}_`
-      : `## ${record.itemId}`;
-    const lines = [head];
-    if (record.changes.length === 0) lines.push('- _variant(s) applied but produced no field change vs base_');
-    for (const ch of record.changes) {
-      const tag = ch.explainers.length ? `explained-by ${ch.explainers.join(', ')}` : '**unexplained**';
-      lines.push(`- \`${ch.path}\` — ${tag}\n    - base: ${ch.base}\n    - leaf: ${ch.leaf}`);
-    }
-    sections.push(lines.join('\n'));
-  }
-
-  if (sections.length === 2) sections.push('_No item differs from its project base in this branch._');
-  return sections.join('\n\n');
-}
-
 function buildAnnotationGroups(leafData, allItemDefs, registry) {
   const grouped = new Map();
   for (const itemDef of allItemDefs) {
@@ -334,11 +309,11 @@ function buildAnnotationReport(leafData, allItemDefs, registry, title) {
   const heading = title || 'Annotations';
   const sections = [`# Annotations: ${heading}`,
     '_Field-level differences from each item\'s project base (no branch dispatch). ' +
-    'Each delta is tagged with the variant that produced it, or `unexplained`._'];
+    'Each changed field lists the dispatched variants whose deltas touch that path, or `unexplained`._'];
   for (const entry of buildAnnotationGroups(leafData, allItemDefs, registry)) {
     sections.push(`## ${entry.itemId}`);
     for (const group of entry.groups) {
-      const lines = [`### ${group.status === 'nulled' ? 'Nulled' : 'Resolved'}`];
+      const membership = [];
       const variantGroups = new Map();
       for (const branch of group.branches) {
         const key = JSON.stringify(branch.variants);
@@ -347,8 +322,9 @@ function buildAnnotationReport(leafData, allItemDefs, registry, title) {
       }
       for (const [key, labels] of variantGroups) {
         const variants = JSON.parse(key);
-        lines.push(`- Variants ${variants.length ? `\`${variants.join(', ')}\`` : '_none_'}: ${labels.join(', ')}`);
+        membership.push(`- Variants ${variants.length ? `\`${variants.join(', ')}\`` : '_none_'}: ${labels.join(', ')}`);
       }
+      const lines = [`### ${group.status === 'nulled' ? 'Nulled' : 'Resolved'}`, membership.join('\n')];
       if (group.status === 'nulled') {
         lines.push('- **nulled** — excluded from these branches by `~` dispatch');
       } else {
@@ -358,29 +334,25 @@ function buildAnnotationReport(leafData, allItemDefs, registry, title) {
           lines.push(`- \`${ch.path}\` — ${tag}\n    - base: ${ch.base}\n    - leaf: ${ch.leaf}`);
         }
       }
-      sections.push(lines.join('\n'));
+      sections.push(lines.filter(Boolean).join('\n\n'));
     }
   }
   if (sections.length === 2) sections.push('_No item differs from its project base in any branch._');
   return sections.join('\n\n');
 }
 
-function runAnnotateMode(leafData, allItemDefs, registry, outputDir) {
-  const written = [];
-  for (const leaf of leafData) {
-    const doc = buildLeafAnnotation(leaf, allItemDefs, registry);
-    const filename = sanitizeFilename(leaf.fileBase) + '.annotate.md';
-    const outPath = path.join(outputDir, filename);
-    fs.writeFileSync(outPath, doc + '\n', 'utf8');
-    written.push(outPath);
-  }
+function runAnnotateMode(leafData, allItemDefs, registry, outputDir, title, fallbackName = title) {
+  const identity = reportIdentity(title, fallbackName);
+  const doc = buildAnnotationReport(leafData, allItemDefs, registry, identity.label);
+  const outPath = path.join(outputDir, `${identity.stem}.annotate.md`);
+  fs.writeFileSync(outPath, doc + '\n', 'utf8');
+  const written = [outPath];
   return { written };
 }
 
 module.exports = {
   buildSharedAndDeltas,
   runDiffMode,
-  buildLeafAnnotation,
   buildAnnotationGroups,
   buildAnnotationReport,
   runAnnotateMode,

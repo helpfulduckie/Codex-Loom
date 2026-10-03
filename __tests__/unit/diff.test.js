@@ -2,7 +2,6 @@
 
 const {
   buildSharedAndDeltas,
-  buildLeafAnnotation,
   buildAnnotationGroups,
   buildAnnotationReport,
   flattenItem,
@@ -159,17 +158,18 @@ describe('collectDeltaKeyPaths', () => {
   });
 });
 
-// ── buildLeafAnnotation: nulled-item reporting ──────────────────────────────────
+// ── annotation report: nulled-item reporting ───────────────────────────────────
 
-describe('buildLeafAnnotation — nulled items', () => {
+describe('buildAnnotationReport — nulled items', () => {
   const registry = new Map();
 
   test('~-excluded item is explicitly reported as nulled', () => {
     const itemDef = { id: 'gone', branches: { knight: null }, body: { x: 'y' } };
-    const doc = buildLeafAnnotation(
-      { label: 'knight', branchPath: ['knight'] },
+    const doc = buildAnnotationReport(
+      [{ label: 'knight', fileBase: 'knight', branchPath: ['knight'] }],
       [itemDef],
       registry,
+      'Test',
     );
     expect(doc).toMatch(/## gone/);
     expect(doc).toMatch(/nulled/);
@@ -261,6 +261,15 @@ describe('buildAnnotationGroups', () => {
     expect(changes[1]).toMatchObject({ base: JSON.stringify('base'), leaf: JSON.stringify('leaf') });
   });
 
+  test('nested branch dispatch retains the full nested variant path', () => {
+    const def = { id: 'hero', body: { mood: 'base' },
+      variants: { major: { body: { mood: 'major' }, variants: { anchor: { body: { mood: 'leaf' } } } } },
+      branches: { major: { branches: { anchor: 'major/anchor' } } } };
+    const group = buildAnnotationGroups([leafAt('major/anchor')], [def], registry)[0].groups[0];
+    expect(group.branches[0].variants).toEqual(['major/anchor']);
+    expect(group.changes[0]).toMatchObject({ leaf: JSON.stringify('leaf'), explainers: ['major/anchor'] });
+  });
+
   test('wildcard selections precede exact selections, and equal values with different explainers stay separate', () => {
     const def = { id: 'hero', body: { mood: 'base' },
       variants: {
@@ -278,8 +287,8 @@ describe('buildAnnotationGroups', () => {
   test('merges equal field records despite irrelevant variant differences and retains each branch list', () => {
     const def = { id: 'hero', body: { mood: 'base' },
       variants: {
-        anchor: { body: { mood: 'same' } }, irrelevant: { render: { storyCard: false } },
-        plain: { render: { storyCard: true } },
+        anchor: { body: { mood: 'same' } }, irrelevant: { render: { storyCards: false } },
+        plain: { render: { storyCards: true } },
       },
       branches: { a: ['anchor', 'irrelevant'], b: ['anchor', 'plain'] } };
     const groups = buildAnnotationGroups([leafAt('a'), leafAt('b')], [def], registry)[0].groups;
@@ -315,6 +324,8 @@ describe('buildAnnotationGroups', () => {
       const def = { id: 'hero', branches: { a: 'v' } };
       const groups = mockedGroups([leafAt('a')], [def], registry);
       expect(groups[0].groups[0].changes[0].explainers).toEqual([]);
+      const { buildAnnotationReport: mockedReport } = require('../../src/diff');
+      expect(mockedReport([leafAt('a')], [def], registry, 'Mock')).toContain('**unexplained**');
       jest.dontMock('../../src/model/item');
     });
   });
