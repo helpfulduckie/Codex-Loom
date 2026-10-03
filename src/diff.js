@@ -238,12 +238,9 @@ function safeResolve(itemDef, registry, branchPath) {
   catch { return null; }
 }
 
-function buildLeafAnnotation(leaf, allItemDefs, registry) {
-  const { label, branchPath } = leaf;
-  const sections = [`# Annotations: ${label}`,
-    '_Field-level differences from each item\'s project base (no branch dispatch). ' +
-    'Each delta is tagged with the variant that produced it, or `unexplained`._'];
-
+function collectLeafAnnotationRecords(leaf, allItemDefs, registry) {
+  const records = [];
+  const { branchPath } = leaf;
   for (const itemDef of allItemDefs) {
     const itemId = itemDef.id || itemDef.import;
     if (!itemId) continue;
@@ -254,7 +251,7 @@ function buildLeafAnnotation(leaf, allItemDefs, registry) {
     const branchVariantNames = resolveBranchSpec(spec, branchPath);
 
     if (branchVariantNames === null) {
-      sections.push(`## ${itemId}\n\n- **nulled** — excluded from this branch by \`~\` dispatch`);
+      records.push({ itemId, status: 'nulled', variants: [], changes: [] });
       continue;
     }
 
@@ -266,24 +263,105 @@ function buildLeafAnnotation(leaf, allItemDefs, registry) {
     if (changes.length === 0 && branchVariantNames.length === 0) continue; // shared, no variants
 
     const attributions = attributeChanges(itemDef, registry, branchVariantNames, changes);
+    records.push({
+      itemId,
+      status: 'resolved',
+      variants: [...branchVariantNames],
+      changes: changes.map(ch => ({
+        path: ch.path,
+        base: ch.base,
+        leaf: ch.leaf,
+        explainers: [...attributions[ch.path]],
+      })),
+    });
+  }
+  return records;
+}
 
-    const head = branchVariantNames.length
-      ? `## ${itemId}\n\n_variants applied: ${branchVariantNames.join(', ')}_`
-      : `## ${itemId}`;
-    const lines = [head];
-
-    if (changes.length === 0) {
-      lines.push('- _variant(s) applied but produced no field change vs base_');
+function buildLeafAnnotation(leaf, allItemDefs, registry) {
+  const sections = [`# Annotations: ${leaf.label}`,
+    '_Field-level differences from each item\'s project base (no branch dispatch). ' +
+    'Each delta is tagged with the variant that produced it, or `unexplained`._'];
+  for (const record of collectLeafAnnotationRecords(leaf, allItemDefs, registry)) {
+    if (record.status === 'nulled') {
+      sections.push(`## ${record.itemId}\n\n- **nulled** — excluded from this branch by \`~\` dispatch`);
+      continue;
     }
-    for (const ch of changes) {
-      const explainers = attributions[ch.path];
-      const tag = explainers.length ? `explained-by ${explainers.join(', ')}` : '**unexplained**';
+    const head = record.variants.length
+      ? `## ${record.itemId}\n\n_variants applied: ${record.variants.join(', ')}_`
+      : `## ${record.itemId}`;
+    const lines = [head];
+    if (record.changes.length === 0) lines.push('- _variant(s) applied but produced no field change vs base_');
+    for (const ch of record.changes) {
+      const tag = ch.explainers.length ? `explained-by ${ch.explainers.join(', ')}` : '**unexplained**';
       lines.push(`- \`${ch.path}\` — ${tag}\n    - base: ${ch.base}\n    - leaf: ${ch.leaf}`);
     }
     sections.push(lines.join('\n'));
   }
 
   if (sections.length === 2) sections.push('_No item differs from its project base in this branch._');
+  return sections.join('\n\n');
+}
+
+function buildAnnotationGroups(leafData, allItemDefs, registry) {
+  const grouped = new Map();
+  for (const itemDef of allItemDefs) {
+    const itemId = itemDef.id || itemDef.import;
+    if (itemId && !grouped.has(itemId)) grouped.set(itemId, new Map());
+  }
+  for (const leaf of leafData) {
+    for (const record of collectLeafAnnotationRecords(leaf, allItemDefs, registry)) {
+      const key = JSON.stringify([record.status, record.changes]);
+      const groups = grouped.get(record.itemId);
+      if (!groups.has(key)) groups.set(key, {
+        status: record.status,
+        changes: record.changes,
+        branches: [],
+      });
+      groups.get(key).branches.push({
+        label: leaf.label,
+        fileBase: leaf.fileBase,
+        branchPath: [...leaf.branchPath],
+        variants: [...record.variants],
+      });
+    }
+  }
+  return [...grouped].map(([itemId, groups]) => ({ itemId, groups: [...groups.values()] }))
+    .filter(entry => entry.groups.length > 0);
+}
+
+function buildAnnotationReport(leafData, allItemDefs, registry, title) {
+  const heading = title || 'Annotations';
+  const sections = [`# Annotations: ${heading}`,
+    '_Field-level differences from each item\'s project base (no branch dispatch). ' +
+    'Each delta is tagged with the variant that produced it, or `unexplained`._'];
+  for (const entry of buildAnnotationGroups(leafData, allItemDefs, registry)) {
+    sections.push(`## ${entry.itemId}`);
+    for (const group of entry.groups) {
+      const lines = [`### ${group.status === 'nulled' ? 'Nulled' : 'Resolved'}`];
+      const variantGroups = new Map();
+      for (const branch of group.branches) {
+        const key = JSON.stringify(branch.variants);
+        if (!variantGroups.has(key)) variantGroups.set(key, []);
+        variantGroups.get(key).push(branch.label);
+      }
+      for (const [key, labels] of variantGroups) {
+        const variants = JSON.parse(key);
+        lines.push(`- Variants ${variants.length ? `\`${variants.join(', ')}\`` : '_none_'}: ${labels.join(', ')}`);
+      }
+      if (group.status === 'nulled') {
+        lines.push('- **nulled** — excluded from these branches by `~` dispatch');
+      } else {
+        if (group.changes.length === 0) lines.push('- _variant(s) applied but produced no field change vs base_');
+        for (const ch of group.changes) {
+          const tag = ch.explainers.length ? `explained-by ${ch.explainers.join(', ')}` : '**unexplained**';
+          lines.push(`- \`${ch.path}\` — ${tag}\n    - base: ${ch.base}\n    - leaf: ${ch.leaf}`);
+        }
+      }
+      sections.push(lines.join('\n'));
+    }
+  }
+  if (sections.length === 2) sections.push('_No item differs from its project base in any branch._');
   return sections.join('\n\n');
 }
 
@@ -303,6 +381,8 @@ module.exports = {
   buildSharedAndDeltas,
   runDiffMode,
   buildLeafAnnotation,
+  buildAnnotationGroups,
+  buildAnnotationReport,
   runAnnotateMode,
   flattenItem,
   diffFlattened,

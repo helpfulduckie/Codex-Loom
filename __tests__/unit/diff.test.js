@@ -3,10 +3,13 @@
 const {
   buildSharedAndDeltas,
   buildLeafAnnotation,
+  buildAnnotationGroups,
+  buildAnnotationReport,
   flattenItem,
   diffFlattened,
   collectDeltaKeyPaths,
 } = require('../../src/diff');
+const { ItemRegistry } = require('../../src/loader/registry');
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -170,5 +173,149 @@ describe('buildLeafAnnotation — nulled items', () => {
     );
     expect(doc).toMatch(/## gone/);
     expect(doc).toMatch(/nulled/);
+  });
+});
+
+describe('buildAnnotationGroups', () => {
+  const registry = new Map();
+  const leafAt = label => ({ label, fileBase: label, branchPath: label.split('/') });
+
+  test('merges identical complete records and preserves branch input order', () => {
+    const def = { id: 'hero', body: { mood: 'calm' }, variants: { storm: { body: { mood: 'wild' } } },
+      branches: { a: 'storm', b: 'storm' } };
+    const result = buildAnnotationGroups([leafAt('b'), leafAt('a')], [def], registry);
+    expect(result).toHaveLength(1);
+    expect(result[0].groups).toEqual([{
+      status: 'resolved',
+      changes: [{ path: 'body.mood', base: JSON.stringify('calm'), leaf: JSON.stringify('wild'), explainers: ['storm'] }],
+      branches: [
+        { label: 'b', fileBase: 'b', branchPath: ['b'], variants: ['storm'] },
+        { label: 'a', fileBase: 'a', branchPath: ['a'], variants: ['storm'] },
+      ],
+    }]);
+  });
+
+  test('retains applied variants with no change and omits shared unchanged items', () => {
+    const def = { id: 'hero', body: { mood: 'calm' }, variants: { quiet: {} },
+      branches: { a: 'quiet', b: [] } };
+    const result = buildAnnotationGroups([leafAt('a'), leafAt('b')], [def], registry);
+    expect(result[0].groups).toHaveLength(1);
+    expect(result[0].groups[0]).toMatchObject({ status: 'resolved', changes: [],
+      branches: [{ label: 'a', variants: ['quiet'] }] });
+    expect(buildAnnotationGroups([leafAt('b')], [def], registry)).toEqual([]);
+  });
+
+  test('preserves null dispatch and absent and removed field markers', () => {
+    const nulled = { id: 'gone', branches: { a: null }, body: { x: 'y' } };
+    const changed = { id: 'fields', body: { old: 'x' }, variants: { edit: { body: { old: null, added: 'y' } } },
+      branches: { a: 'edit' } };
+    const groups = buildAnnotationGroups([leafAt('a')], [nulled, changed], registry);
+    expect(groups[0].groups[0]).toMatchObject({ status: 'nulled', changes: [], branches: [{ variants: [] }] });
+    expect(groups[1].groups[0].changes).toEqual([
+      { path: 'body.added', base: '(absent)', leaf: JSON.stringify('y'), explainers: ['edit'] },
+      { path: 'body.old', base: JSON.stringify('x'), leaf: '(removed)', explainers: ['edit'] },
+    ]);
+  });
+
+  test('report shows item headings, branch membership, variants, and field values', () => {
+    const def = { id: 'hero', body: { mood: 'calm' }, variants: { storm: { body: { mood: 'wild' } } },
+      branches: { a: 'storm' } };
+    const report = buildAnnotationReport([leafAt('a')], [def], registry, 'Sample');
+    expect(report).toContain('# Annotations: Sample');
+    expect(report).toContain('## hero');
+    expect(report).toContain('### Resolved');
+    expect(report).toContain('Variants `storm`: a');
+    expect(report).toContain('base: "calm"');
+    expect(report).toContain('leaf: "wild"');
+  });
+
+  test('import comparisons use the project body override as the base', () => {
+    const registry = new ItemRegistry();
+    registry.set('canon', { id: 'canon', body: { mood: 'canon' }, variants: {} });
+    const def = { id: 'hero', import: 'canon', body: { mood: 'project' },
+      variants: { leaf: { body: { mood: 'branch' } } }, branches: { a: 'leaf' } };
+    const changes = buildAnnotationGroups([leafAt('a')], [def], registry)[0].groups[0].changes;
+    expect(changes).toEqual([{
+      path: 'body.mood', base: JSON.stringify('project'), leaf: JSON.stringify('branch'), explainers: ['leaf'],
+    }]);
+  });
+
+  test('include variants are part of the project base before branch dispatch', () => {
+    const def = { id: 'hero', body: { mood: 'original' },
+      variants: { included: { body: { mood: 'included' } }, leaf: { body: { mood: 'leaf' } } },
+      _include_variants: ['included'], _include_branch_spec: { a: 'leaf' } };
+    const group = buildAnnotationGroups([leafAt('a')], [def], registry)[0].groups[0];
+    expect(group.branches[0].variants).toEqual(['leaf']);
+    expect(group.changes).toEqual([{
+      path: 'body.mood', base: JSON.stringify('included'), leaf: JSON.stringify('leaf'), explainers: ['leaf'],
+    }]);
+  });
+
+  test('arrays and nested paths remain atomic and retain sorted path order', () => {
+    const def = { id: 'hero', body: { nested: { value: 'base' } }, aid: { triggers: ['one'] },
+      variants: { edit: { body: { nested: { value: 'leaf' } }, aid: { triggers: ['one', 'two'] } } },
+      branches: { a: 'edit' } };
+    const changes = buildAnnotationGroups([leafAt('a')], [def], registry)[0].groups[0].changes;
+    expect(changes.map(({ path }) => path)).toEqual(['aid.triggers', 'body.nested.value']);
+    expect(changes[0]).toMatchObject({ base: JSON.stringify(['one']), leaf: JSON.stringify(['one', 'two']) });
+    expect(changes[1]).toMatchObject({ base: JSON.stringify('base'), leaf: JSON.stringify('leaf') });
+  });
+
+  test('wildcard selections precede exact selections, and equal values with different explainers stay separate', () => {
+    const def = { id: 'hero', body: { mood: 'base' },
+      variants: {
+        common: { body: { mood: 'same' } }, exact: { body: { mood: 'same' } },
+        alpha: { body: { mood: 'same' } }, beta: { body: { mood: 'same' } },
+      }, branches: { '*': 'common', a: 'exact', b: 'alpha', c: 'beta' } };
+    const groups = buildAnnotationGroups([leafAt('a'), leafAt('b'), leafAt('c')], [def], registry)[0].groups;
+    expect(groups).toHaveLength(3);
+    expect(groups[0].branches[0].variants).toEqual(['common', 'exact']);
+    expect(groups[0].changes[0]).toMatchObject({ leaf: JSON.stringify('same'), explainers: ['common', 'exact'] });
+    expect(groups.slice(1).map(group => group.changes[0].explainers)).toEqual([['common', 'alpha'], ['common', 'beta']]);
+    expect(groups.slice(1).map(group => group.branches[0].label)).toEqual(['b', 'c']);
+  });
+
+  test('merges equal field records despite irrelevant variant differences and retains each branch list', () => {
+    const def = { id: 'hero', body: { mood: 'base' },
+      variants: {
+        anchor: { body: { mood: 'same' } }, irrelevant: { render: { storyCard: false } },
+        plain: { render: { storyCard: true } },
+      },
+      branches: { a: ['anchor', 'irrelevant'], b: ['anchor', 'plain'] } };
+    const groups = buildAnnotationGroups([leafAt('a'), leafAt('b')], [def], registry)[0].groups;
+    expect(groups).toHaveLength(1);
+    expect(groups[0].changes).toEqual([{
+      path: 'body.mood', base: JSON.stringify('base'), leaf: JSON.stringify('same'), explainers: ['anchor'],
+    }]);
+    expect(groups[0].branches.map(branch => branch.variants)).toEqual([
+      ['anchor', 'irrelevant'], ['anchor', 'plain'],
+    ]);
+  });
+
+  test('merges no-change records with different variants and renders each application list', () => {
+    const def = { id: 'hero', body: { mood: 'calm' },
+      variants: { quiet: {}, still: {} }, branches: { a: 'quiet', b: 'still' } };
+    const data = [leafAt('a'), leafAt('b')];
+    const groups = buildAnnotationGroups(data, [def], registry)[0].groups;
+    expect(groups).toHaveLength(1);
+    expect(groups[0].branches.map(branch => branch.variants)).toEqual([['quiet'], ['still']]);
+    const report = buildAnnotationReport(data, [def], registry, 'Sample');
+    expect(report).toContain('Variants `quiet`: a');
+    expect(report).toContain('Variants `still`: b');
+    expect(report.match(/produced no field change/g)).toHaveLength(1);
+  });
+
+  test('controlled resolver deltas without a matching variant path are marked unexplained', () => {
+    jest.isolateModules(() => {
+      jest.doMock('../../src/model/item', () => ({
+        resolveItem: (_def, _registry, branchPath) => ({ body: { mood: branchPath.length ? 'leaf' : 'base' } }),
+        collectVariantDeltas: () => [],
+      }));
+      const { buildAnnotationGroups: mockedGroups } = require('../../src/diff');
+      const def = { id: 'hero', branches: { a: 'v' } };
+      const groups = mockedGroups([leafAt('a')], [def], registry);
+      expect(groups[0].groups[0].changes[0].explainers).toEqual([]);
+      jest.dontMock('../../src/model/item');
+    });
   });
 });
