@@ -343,6 +343,41 @@ describe('preview of a field a variant deletes', () => {
   });
 });
 
+describe('preview of a field deleted and then set again under different capitalization', () => {
+  const { preview } = require('../../src/compile');
+  const { config } = smallProject({
+    'items/items.yaml': [
+      '- id: Widget',
+      '  name: Widget',
+      '  aid: {type: Item, title: Widget}',
+      '  render: {template: Item}',
+      '  body: {A: base, Desc: kept}',
+      '  variants:',
+      '    strip:',
+      '      body: {A: ~}',
+      '    restore:',
+      '      body: {a: restored}',
+      '  branches:',
+      '    B: [strip, restore]',
+    ].join('\n'),
+    'compile.yaml': BASE_PROJECT['compile.yaml'].replace('  A: {}', '  A: {}\n  B: {}'),
+  });
+  const result = preview(config);
+  const item = result.items[result.leaves.find((l) => l.label === 'B').items[0]];
+  const field = item.fields.find((f) => f.path.join('.').toLowerCase() === 'body.a');
+
+  test('the field is live and is not listed as removed', () => {
+    expect(field.value).toBe('restored');
+    expect(item.removedFields).toEqual([]);
+  });
+
+  test('the field keeps both the deletion and the restoration in its layers', () => {
+    expect(field.layers.map((l) => l.name)).toEqual(['strip', 'restore']);
+    expect(field.layers[0]).toMatchObject({ deleted: true, before: 'base' });
+    expect(field.layers[1]).toMatchObject({ deleted: false, after: 'restored' });
+  });
+});
+
 describe('preview component records', () => {
   const { preview } = require('../../src/compile');
   const { config } = smallProject({

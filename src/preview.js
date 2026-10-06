@@ -9,7 +9,7 @@ const path = require('path');
 const { compile } = require('./compile');
 const { Diagnostics } = require('./diag');
 const { nearestOrigin } = require('./origin');
-const { ITEM_TOP_LEVEL_FIELDS, isPlainObject } = require('./util');
+const { ITEM_TOP_LEVEL_FIELDS, isPlainObject, findKey } = require('./util');
 
 const FIELD_ROOTS = [...ITEM_TOP_LEVEL_FIELDS, 'body'];
 
@@ -51,8 +51,13 @@ function libraryOf(file, libraries) {
   return best;
 }
 
+// Field keys match without regard to case, so a path is identified the same way: a field
+// deleted as `A` and set again as `a` is one field with one history.
+const pathId = (parts) => JSON.stringify(parts.map((part) => String(part).toLowerCase()));
+
 function isPrefix(prefix, parts) {
-  return prefix.length <= parts.length && prefix.every((part, i) => part === parts[i]);
+  return prefix.length <= parts.length
+    && pathId(prefix) === pathId(parts.slice(0, prefix.length));
 }
 
 function leafPaths(value, prefix, out) {
@@ -130,8 +135,9 @@ function buildFields(item, libraries, fileIndex) {
 function presentAt(item, fieldPath) {
   let node = item;
   for (const part of fieldPath) {
-    if (node === null || typeof node !== 'object' || node[part] === undefined) return false;
-    node = node[part];
+    const actual = findKey(node, String(part));
+    if (actual === null || node[actual] === undefined) return false;
+    node = node[actual];
   }
   return true;
 }
@@ -144,7 +150,7 @@ function buildRemovedFields(item, libraries, fileIndex) {
   for (const entry of layers) {
     if (!entry.deleted) continue;
     const fieldPath = entry.path || [];
-    const key = JSON.stringify(fieldPath);
+    const key = pathId(fieldPath);
     if (seen.has(key)) continue;
     seen.add(key);
     if (presentAt(item, fieldPath)) continue;
