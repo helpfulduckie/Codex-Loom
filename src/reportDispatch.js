@@ -5,7 +5,7 @@ const path = require('path');
 const { CODES: DIAG_CODES } = require('./diag');
 const { isOutOfBase, normalize } = require('./config/load');
 const { reportUnusedPlaceholders, reportDuplicateQuestions } = require('./emit/placeholders');
-const { recordWrite } = require('./outputLedger');
+const { writeOutputFile } = require('./outputLedger');
 const { reportIdentity } = require('./report');
 
 function reportUnusedRoles(declarations, usage, { diagnostics, file }) {
@@ -98,6 +98,7 @@ function finalizeDiagnostics({
   roleState, placeholderState, gaps, fieldAudit, cardTypeAudit,
   registry, rootDirName, fieldTable, tierTemplates,
   captureReports, leafData, inventoryData, allItemDefs,
+  writeReports = true,
 }) {
   for (const leafLabel of descriptionLeaves) {
     if (openingLeaves.has(leafLabel)) continue;
@@ -160,8 +161,7 @@ function finalizeDiagnostics({
       variables: config.variables || {},
       library: libraryManifest,
     };
-    fs.writeFileSync(manifestPath, JSON.stringify(manifestData, null, 2), 'utf8');
-    recordWrite(manifestPath);
+    writeOutputFile(manifestPath, JSON.stringify(manifestData, null, 2));
     log.verbose(`  OK: Library manifest → ${manifestPath}`);
   }
 
@@ -185,10 +185,12 @@ function finalizeDiagnostics({
     }
   }
 
-  runReports({
-    config, configPath, options, log, registry, rootDirName,
-    fieldTable, tierTemplates, captureReports, leafData, inventoryData, allItemDefs,
-  });
+  if (writeReports) {
+    runReports({
+      config, configPath, options, log, registry, rootDirName,
+      fieldTable, tierTemplates, captureReports, leafData, inventoryData, allItemDefs,
+    });
+  }
 
   reportUnusedRoles(roleState.declarations, roleState.usage, { diagnostics, file: configPath });
   fieldAudit.finish(diagnostics, { leaves: leafSummaries.map((s) => s.label) });

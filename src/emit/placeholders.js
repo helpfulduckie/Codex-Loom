@@ -1,14 +1,13 @@
 'use strict';
 
 
-const fs = require('fs');
 const path = require('path');
 const YAML = require('yaml');
 const { CODES } = require('../diag');
 const { resolveVariables, checkUnexpandedVariables, PLACEHOLDER_RE } = require('../util');
 const { applyTokenPass } = require('../model/pronouns');
 const { originLocation } = require('../origin');
-const { recordWrite } = require('../outputLedger');
+const { writeOutputFile, removeOutputFile } = require('../outputLedger');
 
 const FILENAME = 'Placeholders.yaml';
 
@@ -283,7 +282,7 @@ function writeNodePlaceholders(nodeDir, node, mergedTable, variables, {
   const outPath = path.join(nodeDir, FILENAME);
 
   if (keys.length === 0) {
-    if (fs.existsSync(outPath)) fs.rmSync(outPath);
+    removeOutputFile(outPath);
     return null;
   }
 
@@ -310,7 +309,7 @@ function writeNodePlaceholders(nodeDir, node, mergedTable, variables, {
     if (expanded[key] !== undefined && expanded[key] !== null) emitted[key] = expanded[key];
   }
   if (Object.keys(emitted).length === 0) {
-    if (fs.existsSync(outPath)) fs.rmSync(outPath);
+    removeOutputFile(outPath);
     return null;
   }
 
@@ -321,9 +320,7 @@ function writeNodePlaceholders(nodeDir, node, mergedTable, variables, {
     checkUnexpandedVariables(question, where, { diagnostics, file, loc });
   }
 
-  fs.mkdirSync(nodeDir, { recursive: true });
-  fs.writeFileSync(outPath, YAML.stringify(emitted), 'utf8');
-  recordWrite(outPath);
+  writeOutputFile(outPath, YAML.stringify(emitted));
   return outPath;
 }
 

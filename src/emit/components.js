@@ -8,7 +8,7 @@ const YAML = require('yaml');
 const { sectionsForBranch, WRAP } = require('../model/component');
 const { applyWrapper } = require('../template');
 const { applyTokenPass } = require('../model/pronouns');
-const { recordWrite } = require('../outputLedger');
+const { writeOutputFile } = require('../outputLedger');
 const {
   resolveVariables, transformStringValues, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts,
 } = require('../util');
@@ -193,15 +193,13 @@ function renderSectionedComponent(component, branchPath, occupants, options = {}
 function writeSectionedComponent(outputDir, descriptor, content, sink, metadata = null) {
   if (!content) return null;
   const dir = descriptor.dir ? path.join(outputDir, descriptor.dir) : outputDir;
-  fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, descriptor.file);
   const label = `component ${descriptor.file}`;
   const frontmatter = renderFrontmatter(metadata);
   checkUnexpandedVariables(`${frontmatter}${content}`, label, sink);
   checkUnresolvedFieldTokens(content, label, sink);
   checkMechanicalArtifacts(content, label, sink);
-  fs.writeFileSync(outPath, `${frontmatter}${content}\n`, 'utf8');
-  recordWrite(outPath);
+  writeOutputFile(outPath, `${frontmatter}${content}\n`);
   return outPath;
 }
 

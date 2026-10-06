@@ -20,7 +20,7 @@ const {
   expandQuestions,
 } = require('./emit/placeholders');
 const { LIMITS, checkLimit } = require('./limits');
-const { recordWrite } = require('./outputLedger');
+const { writeOutputFile, removeOutputFile, ensureOutputDir } = require('./outputLedger');
 
 function resolveComponentSpec(spec, base, variables, sink) {
   if (spec == null) return null;
@@ -44,13 +44,11 @@ function questionsForMeasurement(table, variables, {
 
 function writeComponentFile(outputDir, filename, content, sink) {
   const dir = path.join(outputDir, 'Components');
-  fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, filename);
   checkUnexpandedVariables(content, `component ${filename}`, sink);
   checkUnresolvedFieldTokens(content, `component ${filename}`, sink);
   checkMechanicalArtifacts(content, `component ${filename}`, sink);
-  fs.writeFileSync(outPath, content + '\n', 'utf8');
-  recordWrite(outPath);
+  writeOutputFile(outPath, content + '\n');
   return outPath;
 }
 
@@ -221,8 +219,7 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
           + 'raw text is what readers see. Legal to write, and occasionally meant as a '
           + 'joke, but never substituted.',
       });
-      fs.writeFileSync(labelPath, rootLabel + '\n', 'utf8');
-      recordWrite(labelPath);
+      writeOutputFile(labelPath, rootLabel + '\n');
       log.verbose(`  OK: Label → ${labelPath}`);
       return {
         outputBase: nodeOutput, variables: branchVars, table, roles, rolesDeclared,
@@ -233,7 +230,7 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
     // An untitled branch is labelled by its key, so the key is where its label is authored.
     const titleAt = originLocation(rootNode,
       [...nodeConfigPath(path_), ...(node && node.title ? ['title'] : [])], { file: configPath });
-    fs.mkdirSync(nodeOutput, { recursive: true });
+    ensureOutputDir(nodeOutput);
     const outPath = path.join(nodeOutput, 'Label.md');
     const labelText = applyTokenPass(
       resolveVariables(rawTitle, branchVars, { diagnostics, location: titleAt }),
@@ -264,11 +261,10 @@ function writeLabelsRecursive(rootNode, outputBase, opts = {}) {
       });
     }
     if (labelText !== name) {
-      fs.writeFileSync(outPath, labelText + '\n', 'utf8');
-      recordWrite(outPath);
+      writeOutputFile(outPath, labelText + '\n');
       log.verbose(`    OK: Label → ${outPath}`);
-    } else if (fs.existsSync(outPath)) {
-      fs.rmSync(outPath);
+    } else {
+      removeOutputFile(outPath);
     }
 
     return {

@@ -1,6 +1,5 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const { loadTemplates } = require('./loader');
 const {
@@ -14,7 +13,7 @@ const {
   checkConfigNotesTemplates, gatherTierTemplates,
 } = require('./templateResolve');
 const { sweepOutput } = require('./outputPaths');
-const { startOutputLedger, takeOutputLedger } = require('./outputLedger');
+const { startOutputLedger, takeOutputLedger, ensureOutputDir } = require('./outputLedger');
 const {
   loadItemsFromDir, buildRegistry, mergeRegistries,
   resolveIncludes, buildCanonRegistry,
@@ -177,7 +176,9 @@ function compileRun(configPath, options, buses) {
     options.lintLevel || (config.lint && config.lint.level) || null,
   );
 
-  fs.mkdirSync(config._resolvedOutput, { recursive: true });
+  // Started before the first output call, so capture mode covers the output directory too.
+  startOutputLedger({ capture: !!options.capture });
+  ensureOutputDir(config._resolvedOutput);
 
   const { templates, partials, fieldTable } = loadTemplates(config._resolvedTemplates, { diagnostics: loadDiagnostics });
   checkConfigNotesTemplates(config, templates, loadDiagnostics, configPath, fieldTable);
@@ -228,7 +229,6 @@ function compileRun(configPath, options, buses) {
   const leaves = enumerateLeaves(config.branches);
 
   log.info(`\nCompiling ${leaves.length} branch leaf/leaves...`);
-  startOutputLedger();
 
   let totalFiles = 0;
   const allItemIds = new Set();
@@ -292,12 +292,14 @@ function compileRun(configPath, options, buses) {
     roleState, placeholderState, gaps, fieldAudit, cardTypeAudit,
     registry, rootDirName, fieldTable, tierTemplates,
     captureReports, leafData, inventoryData, allItemDefs,
+    writeReports: !options.capture,
   });
 
   // Every output file is written by now, so what the compiler owns and did not write is
   // stale. The errors below describe a complete tree, so they do not stop the sweep; an
   // exception before this point skips it and leaves the previous output in place.
-  sweepOutput(config, leaves, takeOutputLedger(), log);
+  const writtenFiles = takeOutputLedger();
+  if (!options.capture) sweepOutput(config, leaves, writtenFiles, log);
 
   if (gaps.length > 0) {
     throw new Error(

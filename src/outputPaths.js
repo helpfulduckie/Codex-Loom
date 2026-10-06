@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { FILENAME: PLACEHOLDERS_FILENAME } = require('./emit/placeholders');
 const { walkBranchChain } = require('./model/branches');
-const { recordWrite } = require('./outputLedger');
+const { writeOutputFile } = require('./outputLedger');
 
 // ── What the compiler owns in the output tree ───────────────────────────────
 
@@ -18,10 +18,8 @@ const OWNED_ROOT_FILES = ['library-dependencies.json', 'canon-dependencies.json'
 
 function writeOutput(outputDir, type, renderedItems) {
   const typeDir = path.join(outputDir, 'Story Cards', type);
-  fs.mkdirSync(typeDir, { recursive: true });
   const outputPath = path.join(typeDir, `${type}.md`);
-  fs.writeFileSync(outputPath, renderedItems.join('\n\n') + '\n', 'utf8');
-  recordWrite(outputPath);
+  writeOutputFile(outputPath, renderedItems.join('\n\n') + '\n');
   return outputPath;
 }
 

@@ -7,7 +7,7 @@ const { writeSectionedComponent, renderFrontmatter } = require('./emit/component
 const {
   writeOutput, buildBranchOutputDir, resolveBranchFolderPath,
 } = require('./outputPaths');
-const { recordWrite } = require('./outputLedger');
+const { writeOutputFile } = require('./outputLedger');
 
 /** The branch tree as nodes keyed by path prefix; `leaf` is the leaf index ending there. */
 function buildPlacementTree(leafPaths) {
@@ -162,9 +162,7 @@ function placeInheritedFiles({
     for (const [outputDir, files] of ownedScripts) {
       for (const [filename, buffer] of files) {
         const dest = path.join(outputDir, 'Scripts', ...filename.split(/[\\/]/));
-        fs.mkdirSync(path.dirname(dest), { recursive: true });
-        fs.writeFileSync(dest, buffer);
-        recordWrite(dest);
+        writeOutputFile(dest, buffer);
       }
     }
   }
