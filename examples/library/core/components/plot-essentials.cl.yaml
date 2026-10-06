@@ -1,0 +1,34 @@
+# A Plot Essentials format the projects share.
+#
+# It lives inside the `core/` set directory, and that is allowed where the field table is
+# not: `loadItemsFromDir` skips a document with top-level `sections:` and no identity
+# silently, because a library entry pointing at a mixed-purpose directory is expected.
+# doc: 09-components.md#sections-and-slots
+#
+# It declares slots and almost no text. A shared format that wrote the genre line for you
+# would be a scenario, not a library. Four blocks, in reading order: the genre header, the
+# cast roster, the world, and the player.
+
+sections:
+  genre:
+    text: |
+      Genre: {%genre}
+      Setting: {%settingName}
+    render: {position: 1, wrapper: square}
+
+  # One [ ] block holding the whole cast, one terse line each. Items route in with
+  # `render.plotEssential: {slot: cast, template: CharacterRoster}`.
+  cast:
+    slot: true
+    render: {position: 2, wrapper: square, wrap: all}
+
+  # The setting, at full detail, in its own { } block. Items use the `Location` template,
+  # which leads with the same name line the story cards use.
+  world:
+    slot: true
+    render: {position: 3, wrapper: curly}
+
+  # The player. One occupant, the placeholder-defined `Wayfarer`, on the `Player` template.
+  you:
+    slot: true
+    render: {position: 4, wrapper: curly}

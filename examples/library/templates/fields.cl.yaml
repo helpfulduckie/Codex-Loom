@@ -1,0 +1,71 @@
+# The shared field table both library sets are written against.
+# doc: 10-field-declarations.md#declaration-keys
+#
+# It sits beside the set directories rather than inside one, and that placement is
+# load-bearing: `buildCanonRegistry` walks a set directory whole and reads every YAML file
+# in it as an item. A component document (top-level `sections:`, no identity) is skipped
+# silently, so components may live inside a set — but a `fields:` document is not, and one
+# filed under `core/` fails the compile with "missing both id and name fields".
+#
+# A project reads this through `structure.input.templates`, not through
+# `structure.input.library`.
+
+# ── The name line ────────────────────────────────────────────────────────────
+#
+# Every rendered body leads with the item's own name. The Story Card *title* (`## Name`)
+# is invisible to the AI storyteller — it only ever reads the body — so the name has to be
+# a rendered line. Three partials carry the three shapes a field list cannot express:
+#
+#   cardName.partial    `{$aid.title} - {tagline}`   — story cards, and the World slot
+#   rosterLine.partial  `{$aid.title} - {role}; {gender}; {age}; {hair}` — the cast roster
+#   youLine.partial     `You: {$name.display}`       — the player, in the You slot
+#
+fields:
+  # These fields are read through name-led partials and intentionally have no list stanza.
+  Tagline:     { label: Tagline }
+  role:        { label: Role }
+  vibe:        { label: Vibe, join: "; ", wrap: "[]" }
+  appearance:  { label: Appearance,
+                 from: [Physical Traits.gender, Physical Traits.age,
+                        Physical Traits.hair, Physical Traits.other],
+                 join: "; " }
+  personality: { label: Personality, from: Personality.keywords, join: ", " }
+  personalityExpanded: { from: Personality.expanded }
+  Magic:       { label: Magic, from: [Magic.affinity, Magic.effect], join: "; " }
+  Background:  { label: Background, render: list }
+  relationships: { label: Relationships, render: list }
+  secret:      { label: Hidden Info, wrap: "[]", wrapLabel: true }
+
+  # Setting fields. `era` and `technology` are what make the three settings comparable
+  # at a glance, which is the whole point of a settings file in a shared library.
+  era:         { label: Era }
+  technology:  { label: Technology }
+  landmarks:   { label: Landmarks, render: list }
+  factions:    { label: Factions, render: list }
+
+  # Magic-system fields. Both sets' `magic` items are written against these, which is what
+  # lets a project hold `core:magic` and `grimwood:magic` side by side and have them read
+  # as two answers to the same questions.
+  source:      { label: Source }
+  cost:        { label: Cost }
+  limits:      { label: Limits, render: list }
+  practitioners: { label: Practitioners, render: list }
+
+groups:
+  core: [vibe, appearance, personality, personalityExpanded]
+
+templates:
+  # Story cards and the World slot: the name line, then the fields.
+  Character:   [{ include: cardName }, core, Magic, Background, relationships, secret]
+  Location:    [{ include: cardName }, vibe, era, technology, landmarks, factions]
+  MagicSystem: [{ include: cardName }, source, cost, limits, practitioners]
+
+  # The Plot Essentials cast roster — one terse line per character, all inside one [ ]
+  # block. A slot-only template, never audited, so the partial may read a subset.
+  CharacterRoster: [{ include: rosterLine }]
+
+  # The Plot Essentials You block — the player, addressed as "You".
+  Player: [{ include: youLine }, personality, Magic]
+
+  # A one-line entry for the Summary component's open-threads slot — name line only.
+  Thread: [{ include: cardName }]

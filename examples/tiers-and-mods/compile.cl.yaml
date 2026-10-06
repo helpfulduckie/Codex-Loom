@@ -1,0 +1,106 @@
+# Codex Loom v4 — worked example: context tiers and mod stubs.
+# doc: 01-overview.md
+# doc: 02-compile-yaml.md
+#
+# The grid is context (fullContext / lowContext) crossed with mod (modA / modB /
+# modLess), nested two levels — 2 × 3 = 6 leaves. Context is the outer axis: a tier
+# is a rendering-length choice that reshapes every card, so `templateFor` sits once
+# on `lowContext` and every mod under it inherits the terser field lists. The mod is
+# the inner axis: each mod branch turns on the convention pack that checks its config,
+# and carries a comment on installing the real script on AID.
+# doc: 10-field-declarations.md#tiering--a-shorter-rendering-per-branch
+#
+#   modA     World Time Generator. The bundled `wtg` pack. Its `WTG Time Config`
+#            card is a block of literal `Key: Value` mod configuration with no
+#            relationship to item fields — the case a `.template` escape hatch
+#            exists for (07-templates.md).
+#   modB     Inner Self. A project-local pack, `./lint/inner-self.cl.yaml`, shipped
+#            beside the mod stub it checks. Models the mod's `@`-prefixed brain
+#            cards: a blank entry, and `notes:` holding colon-delimited snake_case
+#            first-person thoughts.
+#   modLess  No mod, no pack — the baseline the other two are read against.
+# doc: 14-convention-packs.md#declaring-packs
+#
+# It reads the `core` library set only. The section 17 multi-library surface is
+# `variants-and-fieldops`; this project stays on one set so tiering and packs are
+# what a reader is looking at.
+
+version: 4
+title: Tiers and Mods
+
+structure:
+  input:
+    items: [./Codex]
+    library:
+      core: ../library/core
+    # Two template directories: the shared field table the library is written
+    # against, and this project's own slot files and escape-hatch templates. Later
+    # entries override earlier ones on a name collision.
+    templates: [../library/templates, ./templates]
+  output: ./output
+  reports: ./Review
+
+variables:
+  genre: Salvage-crew space opera
+  settingName: The Tessene drift
+
+placeholders:
+  heroName: What should we call you?
+  heroTrait: What is your job on the crew?
+
+templateFor:
+  base: fields.cl.yaml
+
+lint:
+  level: warn
+
+components:
+  plotEssential: '{%core}/components/plot-essentials.cl.yaml'
+  aiInstructions: '{%core}/components/ai-instructions.cl.yaml'
+  authorsNote: '{%core}/components/authors-note.cl.yaml'
+  opening: "The airlock cycles, and the three of them are looking at you to say something."
+
+branches:
+  fullContext:
+    title: Full context
+    branches:
+      modA:
+        title: With World Time Generator
+        # Installing the real script: paste World-Time-Generator-3.0/src/library.js
+        # into a scenario's Library tab, then input.js / context.js / output.js into
+        # their hooks. This branch only ships the `WTG Time Config` card the script
+        # reads on first turn and deletes after.
+        lint:
+          packs:
+            wtg: {}
+      modB:
+        title: With Inner Self
+        # Installing the real script: paste Inner-Self/src/library.js into the
+        # Library tab and input.js / context.js / output.js into their hooks, then
+        # list the crew's first names in IMPORTANT_SCENARIO_CHARACTERS. This branch
+        # ships `@`-prefixed brain cards instead, the mobile-creator opt-in.
+        lint:
+          packs:
+            innerSelf:
+              source: ./lint/inner-self.cl.yaml
+      modLess:
+        title: No mod
+
+  lowContext:
+    title: Low context
+    templateFor:
+      base: terse.cl.yaml
+    branches:
+      modA:
+        title: With World Time Generator
+        lint:
+          packs:
+            wtg: {}
+      modB:
+        title: With Inner Self
+        lint:
+          packs:
+            innerSelf:
+              source: ./lint/inner-self.cl.yaml
+      modLess:
+        title: No mod

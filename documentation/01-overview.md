@@ -1,6 +1,6 @@
 # Codex Loom — Overview & Getting Started
 
-Codex Loom is a command-line compiler that turns YAML card definitions into Velvet Lattice story card files for AI Dungeon scenarios. You write your characters, locations, and other cards in structured YAML; Codex Loom assembles them into the folder layout Velvet Lattice expects, resolves pronoun tokens, applies variant chains, and generates one complete output folder per playable branch.
+Codex Loom is a command-line compiler that turns YAML item definitions into Velvet Lattice story card files for AI Dungeon scenarios. You write your characters, locations, and other items in structured YAML; Codex Loom assembles them into the folder layout Velvet Lattice expects, resolves pronoun and role tokens, applies variant chains, and writes each file at the node in the branch tree that owns it.
 
 ---
 
@@ -28,10 +28,6 @@ codex-loom path/to/project/
 codex-loom --verbose path/to/project/
 codex-loom -v path/to/project/
 
-# Compile and wipe stale branch folders first
-codex-loom --clean path/to/project/
-codex-loom -c path/to/project/
-
 # Generate one leaf-review file per branch leaf
 codex-loom --leafReview path/to/project/
 codex-loom -l path/to/project/
@@ -44,20 +40,36 @@ codex-loom -o path/to/project/
 codex-loom --seed-map path/to/project/
 codex-loom -s path/to/project/
 
-# Generate a card body size report (see below)
-codex-loom --card-sizes path/to/project/
+# Generate an item body size report (see below)
+codex-loom --body-sizes path/to/project/
 codex-loom -b path/to/project/
 
 # Generate a syntax lint report (see below)
 codex-loom --lint path/to/project/
 codex-loom -L path/to/project/
 
+# Freeze the library into a committed snapshot/ tree
+codex-loom --snapshot path/to/project/
+
+# Compile against the live library instead of the frozen snapshot
+codex-loom --live path/to/project/
+
+# Convert a v3 project to v4 in place (does not compile)
+codex-loom --migrate path/to/project/
+codex-loom --migrate --rename-cl path/to/project/
+
 # Combine: compile then generate both review files in one run
 codex-loom --compile --leafReview --overview path/to/project/
 codex-loom -C -l -o path/to/project/
 ```
 
-**Mode flags** — `-C`/`--compile`, `-l`/`--leafReview`, `-o`/`--overview`, `-s`/`--seed-map`, `-b`/`--card-sizes`, `-L`/`--lint` — control what runs. Any combination is valid:
+**Mode flags** — `-C`/`--compile`, `-l`/`--leafReview`, `-o`/`--overview`, `-s`/`--seed-map`, `-b`/`--body-sizes`, `-L`/`--lint`, `--snapshot`, `--migrate` — control what runs. Any combination is valid except `--migrate`, which runs alone.
+
+**Compile options** — `-d`/`--with-diff`, `-a`/`--with-annotate`, `-V`/`--with-variance`, `-i`/`--with-inventory`, `-v`/`--verbose`, `--live` — modify a compile rather than selecting one. The first four emit review reports from data that only exists in memory during compilation, so any of them forces a compile. (`--diff`, `--annotate`, `--variance` and `--inventory` are accepted as aliases.)
+
+**Diagnostics** — `--lint-level=off|error|warn` (also `--lint-level warn`) overrides `lint.level` from `compile.yaml`. It reaches the opinion layer only — the quality heuristics (trigger-less cards, prose guesses, unused or duplicated placeholder declarations, convention-pack findings) — and never silences a factual error like a leaked token or a platform-cap overflow. It is deliberately separate from `--verbose`: verbosity is about compile progress, this is about which diagnostics an author wants to hear.
+
+**Report names use the authored root `title:` when available.** The report label is the trimmed literal title from `compile.yaml`; `{%variable}` and `{$role}` tokens stay literal in report text even though compilation expands them in `Label.md`. A missing or blank title uses the compiled output folder name. Offline report commands use that folder name even when `Label.md` exists. Filenames use a safe version of the label, while headings keep the readable label. Renaming a title can leave earlier report files beside the new ones.
 
 | Flags | What happens |
 |---|---|
@@ -66,50 +78,109 @@ codex-loom -C -l -o path/to/project/
 | `-l` | Leaf-review only |
 | `-o` | Overview only |
 | `-s` | Seed map only |
-| `-b` | Card sizes only |
+| `-b` | Item sizes only |
 | `-L` | Lint only |
+| `--snapshot` | Freeze the library, no compile |
+| `--migrate` | Convert a v3 project in place, no compile |
 | `-l -o` | Both review modes, no compile |
 | `-C -l` | Compile, then leaf-review |
 | `-C -o` | Compile, then overview |
 | `-C -s` | Compile, then seed map |
-| `-C -b` | Compile, then card sizes |
+| `-C -b` | Compile, then item sizes |
 | `-C -L` | Compile, then lint |
 | `-C -l -o` | Compile, then both review modes |
 
-`-c`/`--clean` and `-v`/`--verbose` only apply to the compile step.
+`-v`/`--verbose` only applies to the compile step.
 
-**Seed map** (`-s`/`--seed-map`) — Reads compiled output and reports which cards' body text contains other cards' triggers. When Card A's body mentions a word from Card B's trigger list, the Storyteller AI pulling Card A into context may also pull Card B — a "seed." The seed map makes these relationships visible so you can spot unintended context cascade or find cards that nothing seeds.
+**Every compile cleans up after itself.** Once everything is written, the compiler deletes any output file it owns and did not write this run — a card file whose item is gone, a copy left at a leaf after the card moved up the tree — and removes branch folders the config no longer has. A removed branch folder that still holds something the compiler did not write, such as Velvet Lattice's `.short_id`, is moved to `Archive/<timestamp>/` instead of deleted. A compile that fails while writing skips the cleanup, so the previous output stays in place. `--clean` is still accepted and does nothing.
 
-Two files are written to the overview folder:
+**The library snapshot** (`--snapshot`, `--live`) — Shared items declared under `library:` are frozen into a committed `snapshot/` tree with a hashed manifest, so a compile reproduces byte-for-byte even when the shared source moves underneath it. Library-name `{%name}` tokens resolve against the snapshot by default; `--live` redirects them to the working library instead. See [The Library Snapshot](12-snapshot.md).
 
-| File | Contents |
-|---|---|
-| `{name}.seedmap.md` | Per-branch listing of every card with its trigger list and which other cards seed it |
-| `{name}.seedmap.csv` | `Branch, Title, Triggers, Seeded By` — sort by **Seeded By** ascending to find cards that never get seeded |
+**Migration** (`--migrate`, `--rename-cl`) — Converts a v3 project to the v4 schema in place and writes `migration-report.md` alongside the config, listing every file touched and a review queue of the conversions that need a human eye. It does not compile; run `codex-loom` again once the project has migrated. `--rename-cl` additionally gives every file the project reads the `.cl.yaml` / `.cl.yml` extension — the config, the item and library files, and the component documents named by path (their `components:` references are rewritten in step). It also runs on its own against an already-migrated v4 project: `codex-loom --rename-cl path/to/project/`. See [Migrating from v3](15-migrating-from-v3.md) for what changes and the hand edits the review queue asks for.
 
-"Seeded By" counts distinct seeder cards, not individual trigger matches. Cards with a count of 0 are never organically pulled in by another card's body text.
+**Seed map** (`-s`/`--seed-map`) — Reads compiled output and reports which items' body text contains other items' triggers. When Item A's body mentions a word from Item B's trigger list, the Storyteller AI pulling Item A into context may also pull Item B — a "seed." The seed map makes these relationships visible so you can spot unintended context cascade or find items that nothing seeds.
 
-**Card sizes** (`-b`/`--card-sizes`) — Reads compiled output and reports the character count of each card's body text. One CSV is written to the overview folder:
+The overall pair is written directly under `<reports>/seed-map/`; branch pairs go under `<reports>/seed-map/leaves/`:
 
 | File | Contents |
 |---|---|
-| `{name}.bodysize.csv` | `Branch, Title, Body Size` — character count of each compiled card body, sorted by branch |
+| `{name}.seedmap.md` | Per-branch listing of every item with its trigger list and which other items seed it |
+| `{name}.seedmap.csv` | `Branch, Title, Triggers, Seeded By` — sort by **Seeded By** ascending to find items that never get seeded |
 
-Sort by **Body Size** ascending to spot cards that variants may have gutted, or descending to find cards that are likely too large for AID's context window. For single-branch scenarios the `Branch` column is omitted.
+An unbranched project writes only the overall pair. Branch files retain their branch names when those names are unique; collisions receive a ` (leaf)` suffix and later numbers. The overall and branch reports remain separate even when a project title matches a branch name.
 
-**Lint** (`-L`/`--lint`) — Reads compiled output (`Story Cards/` and `Components/` `.md` files) and mechanically scans for compile-time artifacts that should never survive into rendered output: unresolved pronoun/character/field tokens (`{$she}`, `{$Aria}`, `{$body.Field}`), unexpanded compile variables (`{%key}`), leaked template render functions and control tags (`{join(...)}`, `{if}`/`{/if}`, `{wrapper}`, `{include}`, etc.), unresolved verb-conjugation markers (`[s]`, `[is]`, `[was]`, ...), a bracketed word that *looks like* an attempted verb marker but isn't one of the real five (e.g. `[does]`, `[have]` — an author-typo case a fixed pattern list alone can't catch, so this is flagged even without knowing what the "correct" token should have been), and JS interpolation artifacts (`[object Object]`, bare `undefined`/`NaN`). It also checks Story Cards for VL structural errors: a card carrying both `[e]` and `/]` (mutually exclusive), a card with neither, an empty trigger list, or a missing `encapsulate: true`.
+"Seeded By" counts distinct seeder items, not individual trigger matches. Items with a count of 0 are never organically pulled in by another item's body text.
+
+**Item sizes** (`-b`/`--body-sizes`) — Reads compiled output and measures every item body and every `Opening.md` against AID's field caps: 2,000 characters for a story card body, 4,000 for an Opening. Two files are written to the overview folder:
+
+| File | Contents |
+|---|---|
+| `{name}.bodysize.csv` | `Branch, Target, Title, Kind, Compiled, On Upload, Limit, Remaining, Status` — one row per measured string, tightest first |
+| `{name}.bodysize.md` | A summary table per target, then every item at `NEAR` or `OVER` with how much room it has left |
+
+**A card body has three lengths, and the report shows the two that matter for the cap:**
+
+| Length | What it is | In the report |
+|---|---|---|
+| Compiled | What Codex Loom wrote into the `.md` — the body with its fence and `## Title` excluded, `%key%` still literal | `Compiled` |
+| On upload | What Velvet Lattice sends and AID stores as the card's `value`, after each `%key%` expands to its `${question}` text | `On Upload` |
+| In play | What the model actually sees, after the player answers the prompt and `${What is your character's name?}` collapses to their answer | not measured |
+
+**`On Upload` is the only one the cap applies to.** It is the peak: the placeholder question text is longer than the `%key%` that compiled to it, and usually longer than the answer the player eventually gives. So a card at 1,990 compiled characters can be over 2,000 on upload and arrive truncated, even though what the model reads during play would have fitted. Where the two columns agree, the text reaches no declared placeholders.
+
+**"In play" is shown nowhere and is not a gap in the report** — it depends on answers that do not exist until someone plays the scenario, and AID has already truncated by then.
+
+`Status` is `OVER` past the cap, `NEAR` within 10% of it, `OK` below that — the same bands the compiler raises `CL0710`–`CL0713` on, so the report and the build agree. `Target` is `Card` or `Opening`; `Kind` is `story`/`reference` for a card and `leaf`/`framing` for an Opening. Reference items get their own section in the markdown report: soft heuristics skip them, but the caps do not.
+
+**The third cap is enforced but not reported here.** An item's `notes:` — AID's `description` field — is capped at 10,000 characters (`CL0714` over, `CL0715` within 10%), and the compiler checks it on every build. `--body-sizes` measures only `Card` and `Opening` targets, so a `notes:` field near its limit shows up as a compile diagnostic and not as a row in these files. It matters most for `render.storyCards` alternates, which put a whole rendered component into `notes:` — see [Components](09-components.md#swappable-alternates--renderstorycards).
+
+Each `Opening.md` is measured as its own file rather than per branch, because Velvet Lattice merges components by filename — a leaf's opening *replaces* an ancestor's rather than adding to it. For single-branch scenarios the `Branch` column is omitted.
+
+**Slot inventory** (`-i`/`--with-inventory`) — Writes `Overview/Inventory.md`, listing every slot a component declares and which items landed in it, per branch. Because an item declares where it renders and a component never learns who filled it, this is the one place the two ends are put back together.
+
+It answers what the diagnostics cannot. `CL0611` fires when a target names a slot no component declares and `CL0614` fires when a declared slot ends up empty, so the typo cases are already loud — but a slot holding the *wrong* items is well-formed by every check the compiler runs, and reading that off the output tree means opening every leaf.
+
+Two tables, and both compress:
+
+| Section | Rows |
+|---|---|
+| One per slot | Branches grouped by what the slot holds, so a slot filled the same way everywhere is one row reading `all 32` |
+| `Items` | Every item with a component target, its slot, and the branches it landed on |
+
+A branch set is written as a path pattern when one describes it exactly — `*/Aness/*/*` rather than sixteen full paths — which also names the axis that decided the row. When no pattern matches the set exactly the branches are listed instead, because a pattern that over-matched would claim a placement that never happened.
+
+Empty and gated slots stay distinct: `(empty)` is a declared, placeable slot nobody targeted, while `(gated off this branch)` is a section the component's own `branches:` excluded, which is a legitimate way to drop a slot's whole contents from one branch.
+
+**Lint** (`-L`/`--lint`) — Reads compiled output (`Story Cards/` and `Components/` `.md` files) and mechanically scans for compile-time artifacts that should never survive into rendered output: unresolved pronoun/character/field tokens (`{$she}`, `{$Aria}`, `{$body.Field}`), unexpanded compile variables (`{%key}`), leaked template render functions and control tags (`{join(...)}`, `{if}`/`{/if}`, `{wrapper}`, `{include}`, etc.), unresolved verb-conjugation markers (`[s]`, `[is]`, `[was]`, ...), a bracketed word that *looks like* an attempted verb marker but isn't one of the supported markers (e.g. `[does]`, `[have]` — an author-typo case a fixed pattern list alone can't catch, so this is flagged even without knowing what the "correct" token should have been), and JS interpolation artifacts (`[object Object]`, bare `undefined`/`NaN`). It also checks Story Cards for one structural error: an empty or missing trigger list, which means a card that can never be pulled into context.
+
+It also carries one check about *intent* rather than about artifacts: a `${...}` whose
+content is identifier-shaped, like `${she}` or `${Aria.she}`. AID's native placeholder and
+a Codex Loom token are one transposition apart, and a mistyped `${she}` reaches the player
+as a prompt asking them to type the word "she". The content is what separates them: a
+token holds an identifier, a real placeholder holds a question written for a human, so
+`${What is your name?}` and `${Date: (MM/DD/YYYY)}` draw nothing. Latitude's premade
+specials are exempt: `${character.name}`, `${character.gender}`, and the five
+`${character.pronoun.*}` forms that follow the gender answer. The exemption is the
+`character.` prefix — these have no `%key%` equivalent and every project that wants them
+writes them raw, so flagging them would be permanent noise. A bare identifier-shaped
+`${they}` is **not** exempt: that is exactly the mistyped `{$they}` this check exists to
+catch.
+
+Core lint carries only that one structural check on purpose. Rules about what a card's *content* should say — the `[e]` background-knowledge marker, the `/]` discovery marker, and their mutual exclusion — belong to a particular mod's convention and fire wrongly for every project that does not use it, so they belong to convention packs rather than core lint.
 
 This is pure pattern-matching — deterministic and exhaustive, with no false-negative risk from an LLM guessing at the token list. It catches the mechanical half of a QA pass; bleed, missing-information, and cross-branch consistency checks still require holding the whole branch structure in mind and are out of scope here.
 
-The same patterns run automatically on every compile (no flag needed) — each card/component prints a `WARN:`/`ERROR`-style line to stdout as it's written, the same way unresolved `{$...}`/`{%...}` tokens already do. `--lint` is for post-hoc scanning of an already-compiled output folder; the automatic pass is for catching problems immediately during a normal compile.
+The same patterns run automatically on every compile (no flag needed) — each finding is a coded diagnostic (`CL0430`–`CL0437`) on the compile's diagnostics bus, printed together after the compile with every other diagnostic, and an `ERROR` among them fails the run. Standalone `--lint` is a post-hoc scan of an already-compiled output folder. When `--compile --lint` are requested together, the lint report instead records every diagnostic raised by that compile, including loader, rendering, placement, and inline-only convention-pack findings; its summary counts that complete run diagnostic stream. If loading fails before output can be written, the report is still produced and says that zero compiled files were scanned.
 
 One report is written to the overview folder:
 
 | File | Contents |
 |---|---|
-| `{name}.lint.md` | Every finding, grouped by file, with severity (`ERROR`/`WARN`), category, and line number(s) |
+| `{name}.lint.md` | Standalone: every output-scan finding. Combined with compile: every diagnostic raised by the compile. Grouped by file, with severity (`ERROR`/`WARN`), category, and line number(s) |
 
-`ERROR` findings are near-certain bugs (a token that should always resolve). `WARN` findings need a human glance — e.g. a bare `undefined` could theoretically be intentional prose, and a missing `encapsulate: true` is sometimes a deliberate exception.
+`ERROR` findings are near-certain bugs (a token that should always resolve). `WARN` findings need a human glance — a bare `undefined` could theoretically be intentional prose, and an item with no triggers is legitimate when it is never meant to be pulled in by name.
+
+Every finding is also echoed to the terminal, and `--lint` exits non-zero when the count of `ERROR` findings is above zero — the report is still written first, so a CI step that runs it gets both the file and the failure.
 
 **Path resolution** — When given a project folder (or no argument), Codex Loom looks for `compile.yaml` inside it to derive the output path and overview path. If no `compile.yaml` is found, it treats the folder as an already-compiled scenario root and runs any requested review modes directly on it — with a warning if `-C` was also requested.
 
@@ -119,99 +190,126 @@ One report is written to the overview folder:
 
 ```
 my-project/
-  compile.yaml                   ← required; project entry point
-  cards/                         ← project card definitions and imports
-    characters.yaml
-    locations.yaml
-  canon/                         ← shared (canonical) card definitions
-    Characters/
-      Aness.yaml
-      Felicia.yaml
-  templates/                     ← .template and .partial files
-    Character.template
-    Location.template
-    CardHeader.partial
-  plot-essentials.yaml           ← optional; defines Components/Plot Essentials.md
-  ai-instructions.yaml           ← optional; defines Components/AI Instructions.md
-  authors-note.yaml              ← optional; defines Components/Author's Note.md
+  compile.cl.yaml                ← required; project entry point
+  items/                         ← project item definitions and imports
+    characters.cl.yaml
+    locations.cl.yaml
+  library/                       ← shared item definitions, declared under `library:`
+    main/
+      Aness.cl.yaml
+      Felicia.cl.yaml
+  templates/                     ← field tables, and .template/.partial escape hatches
+    fields.cl.yaml
+    terse.cl.yaml                ← a context tier's slot file, if the project has one
+    Notes.template
+    ItemHeader.partial
+  components/                    ← optional; one file per component
+    plot-essentials.cl.yaml
+    ai-instructions.cl.yaml
+    authors-note.cl.yaml
+  snapshot/                      ← written by --snapshot; committed
   output/                        ← compiler writes here (do not edit manually)
 ```
+
+**Paths are declared, not conventional.** Nothing above is a magic directory name — `structure.input.items`, `structure.input.templates`, `structure.input.library` and `structure.output` name them, and the layout here is only what a typical project chooses. `library:` is a *mapping* of names to directories (`main: ./library/main`), and each name is auto-exposed as a `{%name}` variable, which is how a component or item refers to shared content. See [compile.yaml Reference](02-compile-yaml.md).
+
+**`.cl.yaml` is the v4 extension.** Plain `.yaml` still loads; the suffix marks a file as Codex Loom's rather than something else's, and `--rename-cl` applies it across a project — the config, item and library files, and path-named component documents.
 
 ---
 
 ## Output Structure
 
-For a project with two branch leaves `subject` and `researcher`, the output looks like:
+**Each file is written once, at the node that owns it.** Velvet Lattice inherits components, placeholders, scripts and story cards down the branch tree, so a leaf resolves to its ancestors' files without holding copies of them. A card or component that is identical across every branch is written at the root and nowhere else.
+
+For a project with two branch leaves `subject` and `researcher` that share most of their content:
 
 ```
 output/
-  Story Cards/                   ← root-level cards (compiled for all branches)
+  Story Cards/                   ← every card identical across both leaves
     Character/
       Character.md
+  Components/
+    AI Instructions.md           ← identical at both leaves, so written once here
+  Label.md                       ← only when it differs from the directory name
   Branches/
     subject/
-      Story Cards/               ← all cards compiled for the subject leaf
-        Character/
-          Character.md
-      Components/
-        Opening.md
-        Plot Essentials.md
-        AI Instructions.md
-        Author's Note.md
-      Scripts/                   ← optional; copied from scripts source
-    researcher/
       Story Cards/
         Character/
-          Character.md
+          Character.md           ← only the cards this leaf renders differently
+      Components/
+        Opening.md               ← per-leaf: this branch's first move
+        Plot Essentials.md       ← per-leaf: slots filled by per-branch items
+      Description.md             ← never inherits; written at every node
+      Scripts/                   ← optional; copied from scripts source
+    researcher/
       Components/
         Opening.md
         Plot Essentials.md
+      Description.md
 ```
 
 For nested branches (e.g. branch `A` with children `X` and `Y`), the path is `Branches/A/Branches/X/`.
 
 A project with no `branches:` key produces a single root-level output with no `Branches/` folder.
 
+**Two files never inherit and are written at every node that needs one:** `Label.md` and `Description.md`. Velvet Lattice reads both from the node's own directory with no parent in scope. `Label.md` is additionally omitted whenever the rendered label equals the directory segment, because VL falls back to the directory name when the file is absent.
+
+**Story cards are placed as few times as possible, using overrides.** Velvet Lattice gives each leaf the nearest copy of a card by name, so a leaf's own card replaces one it inherits. A card constant everywhere lands at the root. A card that one branch renders differently lands once at the common ancestor, and that branch carries its own version, which overrides it. A card that some leaf does not have at all is never written above that leaf, because an inherited card cannot be removed. This is why a leaf folder holds only what that branch changes or adds — the rest is inherited.
+
+**Reading the output tree is not how you check what a branch contains.** Use `--leafReview`, which resolves each leaf through its ancestor chain and writes one file showing everything that branch actually gets.
+
 ---
 
-## The Five File Types You Author
+## The File Types You Author
 
 | File | Purpose |
 |---|---|
-| `compile.yaml` | Project configuration — paths, branches, protagonist, component references |
-| Card YAML files | Card definitions and imports under `cards/` or `canon/` |
-| `.template` files | How each card type is rendered to markdown |
-| `.partial` files | Reusable template fragments |
-| Component YAML files | Plot Essentials, AI Instructions, Author's Note content |
+| `compile.cl.yaml` | Project configuration — paths, branches, roles, placeholders, component references |
+| Item YAML files | Item definitions and imports, under the directories `structure.input.items` and `library:` name |
+| `fields.cl.yaml` | Field declarations, groups and template lists — how each item type is rendered |
+| `.template` / `.partial` files | The escape hatch, for what a field list cannot express |
+| Component YAML files | Plot Essentials, Summary, AI Instructions, Author's Note, Opening and Description content |
+| Lint pack files | Optional; declarative convention checks, enabled per project under `lint.packs` |
 
 Each is covered in its own reference document.
+
+**All seven component types share one grammar.** A component is a named mapping of `sections:`, and Plot Essentials, Summary, AI Instructions, Author's Note, Opening, branch framing and Description all read the same way. `imports:` pulls sections in from another component file and nests to any depth, which is how a house style is shared across projects. A component key may also point straight at a `.md` or `.txt`; `{%variables}` expand at its render scope, its other prose is preserved, and it declares no sections. See [Components](09-components.md).
 
 ---
 
 ## Core Concepts
 
-**Cards** are the atomic units of content — a character, a location, a settings block. Each card has a type (which controls its output folder), a body of content fields, and AID-specific metadata like triggers and encapsulate.
+**Items** are the atomic units of content — a character, a location, a settings block. Each item has a type (which controls its output folder), a body of content fields, and AID-specific metadata such as its triggers and card name.
 
-**Canon vs project cards** — Canon cards live in a shared folder available to any project. Project cards are local to one scenario and can import and extend canon cards.
+**Library vs project items** — Library items live in shared folders available to any project, declared as a mapping of names to directories under `library:`. Each name becomes a `{%name}` variable. Project items are local to one scenario and can import and extend library items. `--snapshot` freezes the library so a compile reproduces byte-for-byte even after the shared source moves.
 
-**Branches** define playable paths through the scenario. The compiler enumerates all leaf nodes in the branch tree and produces one complete output folder per leaf. Cards can be filtered to specific branches or shared across all of them.
+**Branches** define playable paths through the scenario. The compiler enumerates every leaf in the branch tree and resolves each one's full content, then writes each file once at the node that owns it — Velvet Lattice inherits the rest down the tree. Items can be filtered to specific branches or shared across all of them.
 
-**Variants** are named deltas that layer changes on top of a card. A character card might have a `networked` variant that adds implant details, or a `Felix` variant that changes gender. Branch dispatch maps branch names to variant names, so the right version of each card appears in each branch's output.
+**Roles** name a character by the part they play rather than by who fills it — `protagonist`, `LI`, `rival`. A `{$role}` token resolves to whichever item that branch binds the role to, so one piece of text serves every branch. Roles are declared at the project root and rebound per branch node.
 
-**Templates** are plain-text files that control how a card's fields are rendered to markdown. Field references, conditional blocks, and render functions let you shape the output precisely.
+**Placeholders** are AID's own `${question}` prompts, declared once under `placeholders:` and referenced as `%key%`. The player answers them when the adventure starts.
 
-**Pronoun tokens** let you write field content once and have `{$she}` / `{$her~}` resolve to the correct pronouns for each card or variant. Character ID tokens (`{$Aness}`) resolve to "you" when that character is the active branch protagonist, and to the character's display name otherwise.
+**Variants** are named deltas that layer changes on top of an item. A character item might have a `networked` variant that adds implant details, or a `Felix` variant that changes gender. Branch dispatch maps branch names to variant names, so the right version of each item appears in each branch's output.
+
+**Field declarations** control how an item's fields are rendered to markdown. A field is declared once — its label, render function and formatting — and a template is an ordered list of field and group names, with list order equal to output order. `templateFor` selects which lists apply per branch, which is also how a context tier works. Text templates remain available for the few shapes a field list cannot express.
+
+**Pronoun tokens** let you write field content once and have `{$she}` / `{$her~}` resolve to the correct pronouns for each item or variant. Character ID tokens (`{$Aness}`) resolve to "you" when that character is the active branch protagonist, and to the character's display name otherwise.
 
 ---
 
 ## Next Steps
 
 - [compile.yaml Reference](02-compile-yaml.md)
-- [Card Definition Reference](03-card-yaml.md)
+- [Item Definition Reference](03-item-yaml.md)
 - [Imports & Includes](04-imports-and-includes.md)
 - [Branch Tree & Variant Dispatch](05-branches-and-variants.md)
 - [Field Operations](06-field-operations.md)
 - [Templates & Partials](07-templates.md)
 - [Pronoun System](08-pronouns.md)
-- [Components (PE, AIN, AN, Opening)](09-components.md)
-- [Errors & Warnings](10-errors-and-warnings.md)
+- [Components (PE, Summary, AIN, AN, Opening, Description)](09-components.md)
+- [Field Declarations](10-field-declarations.md)
+- [Diagnostic Codes](11-diagnostics.md)
+- [The Library Snapshot](12-snapshot.md)
+- [Roles](13-roles.md)
+- [Convention Packs](14-convention-packs.md)
+- [Migrating from v3](15-migrating-from-v3.md)

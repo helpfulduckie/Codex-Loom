@@ -1,0 +1,1 @@
+{$aid.title} - {$body.role}; {join("; ", $body.Physical Traits.gender, $body.Physical Traits.age, $body.Physical Traits.hair)}

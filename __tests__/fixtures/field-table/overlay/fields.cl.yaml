@@ -1,0 +1,8 @@
+# Phase 12 mechanism fixture — the project overlay (§13.5).
+#
+# Overrides one field's label. The merge is replace-per-entry, not deep: this entry has no
+# `labelWhen`, so the base's conditional-label rule is gone for `appearance` here and the
+# sibling fields (`vibe`, `personality`, …) still resolve from base untouched.
+
+fields:
+  appearance: { label: Face, join: '; ' }

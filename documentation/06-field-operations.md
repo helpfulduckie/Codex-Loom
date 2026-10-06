@@ -1,6 +1,6 @@
 # Field Operations
 
-Field operations are used in `variants:` deltas, `importVariants:` chains, and `body:` overrides on imports. They let you make targeted changes to a card's fields without replacing the entire value.
+Field operations are used in `variants:` deltas, `importVariants:` chains, and `body:` overrides on imports. They let you make targeted changes to an item's fields without replacing the entire value.
 
 All string matching within operations is **case-sensitive** for the content of the operation itself (the substring to find/replace), but field **key** matching is always case-insensitive.
 
@@ -12,16 +12,16 @@ All string matching within operations is **case-sensitive** for the content of t
 
 Assign a new value directly. Replaces the field entirely.
 
-```yaml
+```yaml surface=item
 body:
   Tagline: count of monwynd, shadow mage
 ```
 
 ### Remove Field
 
-Set the field to `null` (empty value or explicit `~`). Removes the field entirely from the card.
+Set the field to `null` (empty value or explicit `~`). Removes the field entirely from the item.
 
-```yaml
+```yaml surface=item
 body:
   Magic:               # empty value — removes the Magic field
   alternate form: ~    # explicit null — equivalent
@@ -29,44 +29,72 @@ body:
 
 ### Append — `+{value}`
 
-Appends to a field by converting the existing value into a two-element array. The separator between elements is a template concern — use `{join("; ", ...)}` or `{$body.Field}` (which joins arrays with `"; "` by default) to control formatting.
+Appends a value to a field. **What that produces depends on what the field already holds:**
 
-- If the field is **empty or absent**, the value is set as a plain scalar (no array created)
-- If the field is a **non-empty string or block scalar**, the result is `[existing, value]`
-- If the field is already an **array**, the value is appended as a new element: `[...existing, value]`
+- **Empty or absent** — the value is set as a plain scalar; no array is created
+- **A non-empty string or block scalar** — the result is `[existing, value]`
+- **Already an array** — the value is appended as a new element: `[...existing, value]`
+- **A mapping** — the mapping is flattened to its values, and the value is appended to that list; the keys are lost. See [Subfield Operations](#subfield-operations)
 
-```yaml
+**Appending can change a field's shape, and that changes how it renders.** A scalar becomes a list, and a bare `{$body.Field}` does not join a list — see [Templates & Partials](07-templates.md#variable-interpolation) for what each form emits and how to get a single line instead.
+
+```yaml surface=item
 body:
   Tagline: +{retired}
-  # "count of monwynd, shadow mage" → ["count of monwynd, shadow mage", "retired"]
-  # rendered via {$body.Tagline}  → "count of monwynd, shadow mage; retired"
-  # rendered via {join(", ", $body.Tagline)} → "count of monwynd, shadow mage, retired"
-
   Background: +{Recently returned from exile.}
-  # "long backstory" → ["long backstory", "Recently returned from exile."]
 ```
 
-Do not put a leading separator in the appended value — the separator is added by the template, not the operation.
+Appending to a non-empty string produces a two-element array:
+
+```yaml transform=field-op id=op-append-scalar
+current: count of monwynd, shadow mage
+op: "+{retired}"
+```
+
+```yaml expect=op-append-scalar
+- count of monwynd, shadow mage
+- retired
+```
+
+Do not put a leading separator in the appended value — the separator is added by the template, not the operation. The one exception is a field its template joins with an empty separator (`{join("", $body.Tagline)}`), where each piece has to carry its own; see [Two variants appending to one field](#two-variants-appending-to-one-field).
+
+**Appending to one member of a mapping or list keeps that member on one line.** `personality.expanded.shy: +{talkative once comfortable}` turns the `shy` member into a two-element array inside the mapping. Wherever that mapping renders as bullets, key lines or an inline run, the member's pieces join with `; `; under `join:` they join with the declared separator. For any other separator, restate the member's whole text instead of appending.
 
 ### Remove Substring — `-{text}`
 
 Removes all occurrences of the substring from the field value. Result is trimmed.
 
-```yaml
+```yaml surface=item
 body:
   Physical Traits:
     hair: -{in a controlled bun}
-    # "platinum blond hair in a controlled bun" → "platinum blond hair"
+```
+
+```yaml transform=field-op id=op-remove-substring
+current: platinum blond hair in a controlled bun
+op: "-{in a controlled bun}"
+```
+
+```yaml expect=op-remove-substring
+platinum blond hair
 ```
 
 ### Swap Substring — `/{old}/{new}`
 
 Replaces all occurrences of `old` with `new`. Result is trimmed.
 
-```yaml
+```yaml surface=item
 body:
   Background: /{her}/{his}
-  # "she built her reputation" → "she built his reputation"
+```
+
+```yaml transform=field-op id=op-swap-substring
+current: she built her reputation
+op: "/{her}/{his}"
+```
+
+```yaml expect=op-swap-substring
+she built his reputation
 ```
 
 ---
@@ -89,7 +117,7 @@ When a field holds a YAML sequence (array), operations behave element-wise:
 
 Set a field to a YAML sequence where every element is an op string (`+{…}`, `-{…}`, `/{…}/{…}`). Operations are applied in order to the field value.
 
-```yaml
+```yaml surface=item
 body:
   description:
     - "/{She}/{He}"
@@ -99,11 +127,23 @@ body:
 
 When an op chain includes `+{…}`, the append converts the intermediate value to an array. Subsequent swap ops map element-wise over the array:
 
-```yaml
+```yaml surface=item
 body:
   title:
-    - "+{Guild Certified}"      # "Master Swordsman" → ["Master Swordsman", "Guild Certified"]
-    - "/{Swordsman}/{Archer}"   # → ["Master Archer", "Guild Certified"]
+    - "+{Guild Certified}"
+    - "/{Swordsman}/{Archer}"
+```
+
+```yaml transform=field-op id=op-chain-append-swap
+current: Master Swordsman
+op:
+  - "+{Guild Certified}"
+  - "/{Swordsman}/{Archer}"
+```
+
+```yaml expect=op-chain-append-swap
+- Master Archer
+- Guild Certified
 ```
 
 ### Distinguishing op sequences from value arrays
@@ -112,12 +152,18 @@ A YAML sequence in a variant is treated as a **value replacement** (sets the fie
 
 An empty sequence `[]` is always treated as an ops list (no ops = no change, not an empty array replacement).
 
-```yaml
+### When a `-{}` or `/{}/{}` matches nothing — `CL0328`
+
+`-{text}` and `/{old}/{new}` return the value untouched when the target is absent, which is a silent no-op. That is usually harmless — a swap-chain like `/{She}/{He}` / `/{she}/{he}` / `/{her}/{his}` relies on it, since any one description carries some of those forms and not others. But a *standalone* `-{}` / `/{}/{}` that matches nothing, or an op chain where **every** removal/swap missed, is always a mistake: most often the text the op was written against has drifted since. Codex Loom warns (`CL0328`) in exactly those two cases, and stays quiet when some ops in a chain legitimately do nothing. The same warning covers a component section's `text:` — in a section variant, an `importVariants` selector, or a local section layered over an imported one. `+{}` is never reported: it has no target to miss.
+
+```yaml check=none reason=body-field-fragment
 # Op sequence — every element starts with an op prefix
 description:
   - "/{She}/{He}"
   - "+{addendum}"
+```
 
+```yaml check=none reason=body-field-fragment
 # Value array — plain strings; replaces the field with this array
 keywords:
   - inquisitive
@@ -125,13 +171,29 @@ keywords:
   - compassionate
 ```
 
+### Two variants appending to one field
+
+An `+{…}` op does not have to come from one variant. When branch dispatch applies more than one variant to an item, each variant's op on a field runs in dispatch order, and the appends accumulate. `examples/variants-and-fieldops/` is built around this: a per-setting flavor variant and a per-tone variant both append to `Aness`'s `Tagline`. Each append carries its own separator inside the braces (`+{; sworn to a house}`), so the pieces read as one clause when the field is rendered.
+
+```yaml surface=item from=variants-and-fieldops/Codex/cast.cl.yaml
+- import: Aness
+  variants:
+    magical: { importVariants: [magical] }
+    medievalFlavor: { body: { Tagline: "+{; sworn to a house}" } }
+  branches:
+    '*': { branches: { magical: magical, mundane: mundane } }
+    medieval: { apply: [medievalFlavor] }
+```
+
+On the `medieval/magical` leaf the dispatch collects `[medievalFlavor, magical]`, so `Tagline` starts at the library base, gains `; sworn to a house` from the project's own variant, then gains `; hedge-trained` from the library's `magical` variant. Rendered on the story-card name line as `Aness Kolar - Fixer; knows who owes whom; sworn to a house; hedge-trained`.
+
 ---
 
 ## Subfield Operations
 
 Apply an operation to a specific subfield within a nested mapping. Other subfields are not affected.
 
-```yaml
+```yaml surface=item
 body:
   Physical Traits:
     gender: male          # replace this subfield only
@@ -139,14 +201,33 @@ body:
     other:                # remove this subfield only (empty value)
 ```
 
+**Aim a string op at the mapping itself and it collapses into a list.** `hair: -{…}` targets a subfield and is what you want; `Physical Traits: -{…}`, with the op one level up, flattens the whole mapping to its values, discards every key, and leaves an array behind:
+
+```yaml surface=item
+body:
+  Physical Traits: -{grey}
+```
+
+```yaml transform=field-op id=op-mapping-collapse
+current: { hair: platinum blond, eyes: grey, height: tall }
+op: "-{grey}"
+```
+
+```yaml expect=op-mapping-collapse
+- platinum blond
+- tall
+```
+
+There is no diagnostic for this. Operations against a mapping belong on its subfields, one level in.
+
 You can mix operations and replacements within the same mapping block:
 
-```yaml
+```yaml surface=item
 body:
   Physical Traits:
     gender: male
     hair: -{long }
-    eyes: "+{, with a faint glow}"
+    eyes: +{faintly glowing}
     other: ~
 ```
 
@@ -154,7 +235,7 @@ body:
 
 ## Examples
 
-```yaml
+```yaml surface=item
 variants:
   veteran:
     body:

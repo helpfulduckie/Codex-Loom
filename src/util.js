@@ -2,39 +2,98 @@
 
 const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
+const { loadYaml } = require('./loader/yaml');
+const { CODES: DIAG_CODES, severityOf } = require('./diag');
+const { FUNCTION_NAMES } = require('./render/parse');
 
-function findFiles(dir, ext) {
+const YAML_SUFFIXES = Object.freeze(['.cl.yaml', '.cl.yml', '.yaml', '.yml']);
+
+const CONFIG_BASENAMES = Object.freeze([
+  'compile.cl.yaml', 'compile.cl.yml', 'compile.yaml', 'compile.yml',
+]);
+
+const RESERVED_LIBRARY_BASENAMES = Object.freeze(['library.cl.yaml']);
+
+const PATH_UNSAFE_CHARS = '<>:"/\\\\|?*';
+
+// Shared by schema and reference diagnostics; transpositions count as one edit.
+function damerauLevenshtein(a, b) {
+  a = String(a); b = String(b);
+  if (a === b) return 0;
+  const m = a.length; const n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const d = Array.from({ length: m + 1 }, (_, i) => [i]);
+  for (let j = 0; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
+    }
+  }
+  return d[m][n];
+}
+
+function hasSuffix(name, suffixes) {
+  const lower = name.toLowerCase();
+  return suffixes.some((s) => lower.endsWith(s));
+}
+
+function isPlainObject(v) {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+function findFiles(dir, ext, { sort = false } = {}) {
+  const suffixes = Array.isArray(ext) ? ext : [ext];
   const results = [];
   if (!fs.existsSync(dir)) return results;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+  let entries = fs.readdirSync(dir, { withFileTypes: true });
+  if (sort) entries = entries.sort((a, b) => a.name.localeCompare(b.name));
+  for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isSymbolicLink()) {
       try {
         const stat = fs.statSync(full);
         if (stat.isDirectory()) {
-          results.push(...findFiles(full, ext));
-        } else if (stat.isFile() && entry.name.toLowerCase().endsWith(ext)) {
+          results.push(...findFiles(full, suffixes, { sort }));
+        } else if (stat.isFile() && hasSuffix(entry.name, suffixes)) {
           results.push(full);
         }
       } catch (_) { /* broken symlink — skip */ }
     } else if (entry.isDirectory()) {
-      results.push(...findFiles(full, ext));
-    } else if (entry.isFile() && entry.name.toLowerCase().endsWith(ext)) {
+      results.push(...findFiles(full, suffixes, { sort }));
+    } else if (entry.isFile() && hasSuffix(entry.name, suffixes)) {
       results.push(full);
     }
   }
   return results;
 }
 
-function loadYaml(filePath) {
+function readFileTrim(filePath) {
   try {
-    const raw = fs.readFileSync(filePath, 'utf8');
-    return yaml.load(raw);
-  } catch (err) {
-    throw new Error(`Failed to load YAML at ${filePath}: ${err.message}`);
+    return fs.readFileSync(filePath, 'utf8').trim();
+  } catch {
+    return null;
   }
 }
+
+function listFilesRelative(dir) {
+  const out = [];
+  const walk = (current, prefix) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const abs = path.join(current, entry.name);
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(abs, rel);
+      else out.push(rel);
+    }
+  };
+  if (fs.existsSync(dir)) walk(dir, '');
+  return out.sort();
+}
+
 
 function deepClone(obj) {
   if (obj === null || typeof obj !== 'object') return obj;
@@ -42,6 +101,19 @@ function deepClone(obj) {
   const out = {};
   for (const [k, v] of Object.entries(obj)) out[k] = deepClone(v);
   return out;
+}
+
+function transformStringValues(value, transform) {
+  if (typeof value === 'string') return transform(value);
+  if (Array.isArray(value)) return value.map((entry) => transformStringValues(entry, transform));
+  if (isPlainObject(value)) {
+    const out = {};
+    for (const [key, entry] of Object.entries(value)) {
+      out[key] = transformStringValues(entry, transform);
+    }
+    return out;
+  }
+  return value;
 }
 
 function findKey(obj, key) {
@@ -74,51 +146,80 @@ function deleteCI(obj, key) {
 
 const VAR_ALIASES = new Set(['v', 'var', 'vars', 'variable', 'variables']);
 
+const ITEM_TOP_LEVEL_FIELDS = Object.freeze(['name', 'pronouns', 'aid', 'render', 'v', 'notes', 'kind', 'meta']);
+
+const NOTES_ALIASES = new Set(['notes', 'description']);
+
+function normalizeNotesKey(key) {
+  return NOTES_ALIASES.has(String(key).toLowerCase()) ? 'notes' : key;
+}
+
 function normalizeVarKey(key) {
   return VAR_ALIASES.has(key.toLowerCase()) ? 'v' : key;
 }
 
-/**
- * Expand {%key} variable references in a string.
- * Cycle-detects via a resolving Set.
- */
-function resolveVariables(text, variables, _resolving) {
-  if (!variables || typeof text !== 'string') return text;
-  if (!_resolving) _resolving = new Set();
+function resolveVariables(text, variables, sink = {}) {
+  if (typeof text !== 'string') return text;
+  const { diagnostics, file, location, branchOnly = null } = sink;
 
-  return text.replace(/\{%([^}]+)\}/g, (match, key) => {
-    const lower = key.trim().toLowerCase();
-    if (_resolving.has(lower)) {
-      console.warn(`  WARN: cycle detected in variable "{%${key}}"`);
+  const declared = isPlainObject(variables) ? variables : {};
+  const loc = location || { file };
+
+  const expand = (str, chain) => str.replace(/\{%([^}]+)\}/g, (match, rawKey) => {
+    const key = rawKey.trim();
+    const lower = key.toLowerCase();
+
+    const cycleAt = chain.indexOf(lower);
+    if (cycleAt >= 0) {
+      const loop = [...chain.slice(cycleAt), lower].join('" → "');
+      diagnostics.error(DIAG_CODES.VARIABLE_CYCLE, `variable cycle: "${loop}"`, loc);
       return match;
     }
-    const actualKey = Object.keys(variables).find(k => k.toLowerCase() === lower);
-    if (actualKey === undefined) {
-      console.warn(`  WARN: variable "{%${key}}" not declared`);
+
+    const actualKey = Object.keys(declared).find((k) => k.toLowerCase() === lower);
+    if (actualKey === undefined || declared[actualKey] === null || declared[actualKey] === undefined) {
+      if (branchOnly && branchOnly.has(lower)) {
+        diagnostics.error(
+          DIAG_CODES.VARIABLE_PRE_BRANCH,
+          `"{%${key}}" is declared only under a branch, but this value resolves before `
+          + 'branches are enumerated.',
+          loc,
+          { hint: 'Only root-level variables are available in include/import paths and under structure:.' },
+        );
+      } else {
+        diagnostics.error(DIAG_CODES.VARIABLE_UNDECLARED,
+          `variable "{%${key}}" is not declared, so the token remains literal; declare or correct the key.`, loc);
+      }
       return match;
     }
-    _resolving.add(lower);
-    const expanded = resolveVariables(String(variables[actualKey]), variables, _resolving);
-    _resolving.delete(lower);
-    return expanded;
+
+    return expand(String(declared[actualKey]), [...chain, lower]);
   });
+
+  return expand(text, []);
 }
 
-/**
- * Walk the text-bearing sections of a card (body, aid, render, name) and apply
- * `transform(str) → str` to every string value (array elements mapped, nested
- * objects recursed). Mutates the card in place.
- *
- * This is the single place the set of `{$…}`/text sections lives, so the field
- * interpolation, cross-card, and pronoun passes all reach the same fields.
- * `name` is normalized to an object ({display, full, …}) by resolveCard before
- * any of these passes run.
- */
-function walkCardTextFields(card, transform) {
-  if (!card) return;
-  for (const section of [card.body, card.aid, card.render, card.name]) {
+function walkItemTextFields(item, transform) {
+  if (!item) return;
+  for (const section of [item.body, item.aid, item.render, item.name]) {
     if (section && typeof section === 'object') walkTextRecursive(section, transform);
   }
+}
+
+const ITEM_CONTEXT_KEYS = Object.freeze(['id', 'name', 'pronouns', 'aid', 'render', 'body', 'v', 'notes']);
+
+function itemContext(item, extra) {
+  return {
+    id:       item.id,
+    name:     item.name,
+    pronouns: item.pronouns,
+    aid:      item.aid    || {},
+    render:   item.render || {},
+    body:     item.body   || {},
+    v:        item.v      || {},
+    notes:    item.notes,
+    ...extra,
+  };
 }
 
 function walkTextRecursive(obj, transform) {
@@ -135,120 +236,69 @@ function walkTextRecursive(obj, transform) {
   }
 }
 
-// ── mechanical syntax patterns ──────────────────────────────────────────────
-//
-// Single source of truth for every compile-time artifact pattern that should
-// never survive into rendered output. Shared between the automatic per-write
-// safety net below and the standalone `--lint` post-hoc scanner (src/lint.js),
-// so the two never drift out of sync with each other or with the token list
-// documented in documentation/06-field-operations.md, 07-templates.md, and
-// 08-pronouns.md.
+const PLACEHOLDER_RE = /%(\w+)%/g;
+
 
 const FIELD_TOKEN_RE    = /\{\$[^{}]+\}/g;
 const VAR_TOKEN_RE       = /\{%[^}]+\}/g;
-const TEMPLATE_FN_RE     = /\{(?:join|list|and|prose|block|keys|inline)\([^{}]*\)\}/g;
+const TEMPLATE_FN_RE     = new RegExp('\\{(?:' + FUNCTION_NAMES.join('|') + ')\\([^{}]*\\)\\}', 'g');
 const TEMPLATE_TAG_RE    = /\{\/?if\b[^{}]*\}|\{\/?wrapper\}|\{\/?preserve\}|\{include\s+[^{}]+\}/g;
-const VERB_MARKER_RE     = /\[(?:s|es|is|was|has)\]/g;
-// A bracketed lowercase word that looks like an *attempted* verb-conjugation
-// marker but isn't one of the five real ones ([s]/[es]/[is]/[was]/[has]) or
-// the unrelated [e] background-knowledge marker — e.g. an author writing
-// "[does]" or "[have]" from a guess rather than the documented marker list.
-// Real bracket usage elsewhere ([Secret: ...], [object Object]) always has
-// a capital letter, punctuation, or a space, so it never matches this shape.
-const SUSPECT_VERB_MARKER_RE = /\[(?!s\]|es\]|is\]|was\]|has\]|e\])[a-z]{1,8}\]/g;
+const VERB_MARKER_RE     = /\[(?:s|es|ies|is|was|has)\]/g;
+const SUSPECT_VERB_MARKER_RE = /\[(?!s\]|es\]|ies\]|is\]|was\]|has\]|e\])[a-z]{1,8}\]/g;
 const JS_ARTIFACT_RE     = /\[object (?:Object|Undefined|Null|Array)\]/g;
 const JS_WORD_RE         = /\b(?:undefined|NaN)\b/g;
 
-/**
- * Blank out the content of every VL front-matter fence (`~~~ ... ~~~`),
- * preserving newlines so line numbers stay aligned. The fence only ever holds
- * `triggers: [...]`, `encapsulate: ...`, and `notes: [e]` — a single-word
- * trigger array like `triggers: [door]` is a legitimate AID trigger, not an
- * attempted (and mistyped) verb-conjugation marker, so the suspect-verb-marker
- * heuristic should never see it. Other checks still scan the fence normally.
- */
 function maskFencedRegions(text) {
-  if (typeof text !== 'string') return text;
-  return text.replace(/~~~[\s\S]*?~~~/g, block => block.replace(/[^\n]/g, ' '));
+  return require('./emit/vl').maskFences(text);
 }
 
-/**
- * Warn about every distinct match of `re` found in `text`, one line per
- * distinct match (not per occurrence). Resets `re.lastIndex` first since
- * these are shared, stateful `g`-flag RegExp objects.
- */
-function warnPattern(text, label, re, describe) {
+// `loc` names the exact authored origin of `text` (a single declared value, e.g. one
+// placeholder question); omit it when `text` is composed from several sources and no
+// single origin applies, and the file-only fallback is correct.
+function reportPattern(text, label, re, code, describe, sink = {}) {
   if (typeof text !== 'string') return false;
+  const { diagnostics, file, loc } = sink;
   const seen = new Set();
   re.lastIndex = 0;
   let m;
   while ((m = re.exec(text)) !== null) {
     if (!seen.has(m[0])) {
       seen.add(m[0]);
-      console.warn(`  WARN: ${describe(m[0])} in ${label}`);
+      diagnostics.add(severityOf(code), code, `${describe(m[0])} in ${label}`, { file, ...loc });
     }
     if (m[0].length === 0) re.lastIndex++;
   }
   return seen.size > 0;
 }
 
-/**
- * Final safety net: warn about any {$…} field/pronoun/character token left
- * unresolved in rendered output (a card or component). Emits one warning per
- * distinct leftover token.
- *
- * Targets {$…} only — {%…} is handled by warnUnexpandedVariables, and {@…} is
- * intentionally never expanded in card content.
- *
- * @param {string} text   - the fully-rendered output to scan
- * @param {string} label  - human-readable location, e.g. 'card "Aria" (Character)'
- * @returns {boolean}     - true if any unresolved token was found
- */
-function warnUnresolvedFieldTokens(text, label) {
-  return warnPattern(text, label, FIELD_TOKEN_RE, m => `unresolved token ${m}`);
+function checkUnresolvedFieldTokens(text, label, sink) {
+  return reportPattern(text, label, FIELD_TOKEN_RE, DIAG_CODES.LEAKED_FIELD_TOKEN,
+    m => `compiled output contains unresolved token ${m}; correct the authoring reference or resolver input`, sink);
 }
 
-/**
- * Final safety net: warn about any {%variable} token left unexpanded in rendered
- * output (a card or component). Emits one warning per distinct leftover token.
- *
- * Targets {%...} only — {@...} is intentionally not expanded in card content, so
- * a literal {@...} here is expected and must not be flagged.
- *
- * @param {string} text   - the fully-rendered output to scan
- * @param {string} label  - human-readable location, e.g. 'card "Aria" (Character)'
- * @returns {boolean}     - true if any unexpanded variable was found
- */
-function warnUnexpandedVariables(text, label) {
-  return warnPattern(text, label, VAR_TOKEN_RE, m => `unexpanded variable ${m}`);
+function checkUnexpandedVariables(text, label, sink) {
+  return reportPattern(text, label, VAR_TOKEN_RE, DIAG_CODES.LEAKED_VARIABLE,
+    m => `compiled output contains unexpanded variable ${m}; declare or correct the variable reference`, sink);
 }
 
-/**
- * Final safety net: warn about mechanical compile-time artifacts other than
- * the {$…}/{%…} tokens above — leaked render functions ({join}/{list}/...),
- * leaked template control tags ({if}/{wrapper}/{preserve}/{include}),
- * unresolved verb-conjugation markers ([s]/[is]/[was]/...), and JS
- * interpolation failures ([object Object], bare undefined/NaN). Emits one
- * warning per distinct leftover match.
- *
- * @param {string} text   - the fully-rendered output to scan
- * @param {string} label  - human-readable location, e.g. 'card "Aria" (Character)'
- * @returns {boolean}     - true if any artifact was found
- */
-function warnMechanicalArtifacts(text, label) {
+function checkMechanicalArtifacts(text, label, sink) {
+  const C = DIAG_CODES;
   let found = false;
-  found = warnPattern(text, label, TEMPLATE_FN_RE,  m => `leaked render function ${m}`) || found;
-  found = warnPattern(text, label, TEMPLATE_TAG_RE, m => `leaked template tag ${m}`) || found;
-  found = warnPattern(text, label, VERB_MARKER_RE,  m => `unresolved verb-conjugation marker ${m}`) || found;
-  found = warnPattern(maskFencedRegions(text), label, SUSPECT_VERB_MARKER_RE, m => `bracketed "${m}" isn't a recognized verb-conjugation marker ([s]/[es]/[is]/[was]/[has]) or [e] — possible typo`) || found;
-  found = warnPattern(text, label, JS_ARTIFACT_RE,  m => `JS interpolation artifact ${m}`) || found;
-  found = warnPattern(text, label, JS_WORD_RE,      m => `possible JS interpolation artifact "${m}"`) || found;
+  found = reportPattern(text, label, TEMPLATE_FN_RE,  C.LEAKED_RENDER_FUNCTION, m => `compiled output contains leaked render function ${m}; remove or correct the source call`, sink) || found;
+  found = reportPattern(text, label, TEMPLATE_TAG_RE, C.LEAKED_TEMPLATE_TAG,    m => `compiled output contains leaked template tag ${m}; close or correct the source tag`, sink) || found;
+  found = reportPattern(text, label, VERB_MARKER_RE,  C.LEAKED_VERB_MARKER,     m => `compiled output contains unresolved verb-conjugation marker ${m}; correct the source marker or its subject`, sink) || found;
+  found = reportPattern(maskFencedRegions(text), label, SUSPECT_VERB_MARKER_RE, C.SUSPECT_VERB_MARKER, m => `compiled output contains unrecognized bracketed word ${m}; replace it with a supported marker if it is a typo`, sink) || found;
+  found = reportPattern(text, label, JS_ARTIFACT_RE,  C.LEAKED_JS_ARTIFACT,     m => `compiled output contains JS interpolation artifact ${m}; correct the source interpolation`, sink) || found;
+  found = reportPattern(text, label, JS_WORD_RE,      C.SUSPECT_JS_WORD,        m => `compiled output contains bare ${m}; provide the source value or correct the interpolation`, sink) || found;
   return found;
 }
 
 module.exports = {
-  findFiles, loadYaml, deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
-  resolveVariables, warnUnexpandedVariables, walkCardTextFields, warnUnresolvedFieldTokens,
-  warnMechanicalArtifacts, maskFencedRegions,
+  damerauLevenshtein,
+  findFiles, readFileTrim, listFilesRelative, loadYaml, deepClone, transformStringValues, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
+  ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
+  YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix, PATH_UNSAFE_CHARS, PLACEHOLDER_RE, isPlainObject,
+  resolveVariables, checkUnexpandedVariables, walkItemTextFields, walkTextRecursive, itemContext, ITEM_CONTEXT_KEYS, checkUnresolvedFieldTokens,
+  checkMechanicalArtifacts, maskFencedRegions,
   FIELD_TOKEN_RE, VAR_TOKEN_RE, TEMPLATE_FN_RE, TEMPLATE_TAG_RE, VERB_MARKER_RE, SUSPECT_VERB_MARKER_RE, JS_ARTIFACT_RE, JS_WORD_RE,
 };

@@ -1,6 +1,6 @@
 # Components
 
-Components are non-story-card files written to each branch leaf's `Components/` folder. They provide AID with the Opening prompt, Plot Essentials context, AI Instructions, and Author's Note. Each component is optional; if not configured, no file is written.
+Components are non-story-card files written to each branch leaf's `Components/` folder. They provide AID with the Opening prompt, Plot Essentials context, the running Summary, AI Instructions, and Author's Note. Each component is optional; if not configured, no file is written.
 
 Components are declared in `compile.yaml` under the root-level `components:` key and/or per-branch `components:` overrides.
 
@@ -10,143 +10,109 @@ Components are declared in `compile.yaml` under the root-level `components:` key
 
 `Opening.md` is written to a branch leaf's `Components/` folder. AID uses it to prompt the player to select a branch — typically a question or a brief description.
 
-### Declaring an opening
+### An opening is an ordinary component
 
-In `compile.yaml`:
+An `opening:` is built from `sections:` like Plot Essentials or AI Instructions, and everything the sections grammar offers applies: per-section branch dispatch and variants, `file:` and `from:` sources, `imports:`, and items routing into slots.
 
-```yaml
-components:
-  opening: "Who are you?"                    # inline text
-  opening: ./openings/root.md                # file path (read and written as-is)
-  opening: "{@opening}/subject.md"           # component key reference
+```yaml surface=component
+# components/opening.cl.yaml
+sections:
+  scene:
+    text: |
+      The harbor is still. Nothing has happened yet, and that is the problem.
+    render: {position: 1}
+  company:
+    slot: true                      # items with render.opening land here
+    render: {position: 2}
+  oath:
+    file: './openings/knight-oath.md'
+    branches:
+      knight: []
+      _: ~
 ```
 
-Per branch:
+Sections join with a blank line between them, which is what a paragraph break is in an opening.
 
-```yaml
+**Prose is still the common case and costs nothing.** Most openings are a file or a sentence, and neither needs a document:
+
+```yaml surface=config
+components:
+  opening: ./openings/root.md                # a prose file; variables expand at the emitting scope
+```
+
+```yaml surface=config
+components:
+  opening: "Who are you, really?"            # a sentence, used as written
+```
+
+```yaml surface=config
+components:
+  opening: "{%openings}/{%role}.md"          # a path built from variables
+```
+
+A spec that names a file on disk is read; one that names nothing is the text itself. Either way it goes through the same token passes a `sections:` opening does: `{%variable}` tokens expand against the branch's merged table, and `{$role}` / pronoun tokens resolve — so an inline opening may differ per branch, and may reference a role, without a document.
+
+### Declaring an opening per branch
+
+```yaml surface=config
 branches:
   subject:
-    protagonist: Aness
+    roles:
+      protagonist: Aness
     components:
       opening: "You are a research subject assigned to the Zenus project."
   researcher:
-    protagonist: Veyrn
+    roles:
+      protagonist: Veyrn
     components:
       opening: ./openings/researcher.md
 ```
 
-**Inheritance:** `opening:` inherits down to leaf nodes. A branch that doesn't declare its own `opening:` uses the nearest ancestor's value. Only leaf nodes receive an `Opening.md` file.
+**A branch that declares no `opening:` uses its nearest ancestor's.** That is what a leaf *resolves*, and it is what decides the text a player sees.
 
-### `openingChoice:` for branch-point nodes
+**Where the file is written is a separate question, with a different answer.** Velvet Lattice inherits components down the tree by itself, so the compiler does not copy one to every leaf when it does not have to:
 
-`openingChoice:` is written to a non-leaf branch node's `Components/Opening.md`. Unlike `opening:`, it does **not** inherit — it belongs to the node where it is declared.
+- **Identical at every leaf, redeclared by no branch, in a project with more than one leaf** — written once to `{output}/Components/Opening.md`, and VL inherits it down.
+- **Anything else** — written into each leaf's own `Components/` folder.
 
-```yaml
+The lift is to the output root or not at all; components have no intermediate-node placement. (Story cards do — they are placed per name, with overrides, which is a different mechanism. See [design-spec §7.3a](design-spec.md).) A single-leaf project always writes per leaf, because its one leaf already *is* the root.
+
+**A leaf with an adventure description and no opening is `CL0616`.** Velvet Lattice reads a node's prompt as its Opening or, failing that, its description, so the pairing produces the blurb as the first scene. See [Description](#description).
+
+### `branchFraming:` for branch-point nodes
+
+`branchFraming:` writes to a **non-leaf** node's `Components/Opening.md` — what AID shows while the player is choosing among the children below it. Unlike `opening:` it does **not** inherit: it belongs to the node where it is declared.
+
+```yaml surface=config
 branches:
   tier2:
     components:
-      openingChoice: "Choose a specialisation."
+      branchFraming: "Choose a specialisation."
     branches:
       alpha: {}
       beta: {}
 ```
 
-If `openingChoice:` is declared on a leaf node, it is ignored with a warning.
+It takes the same three shapes an opening does — a sentence, a file, or a `sections:` document — but **items cannot route into it**. Framing sits at an interior node and items are resolved per leaf, so there is no cast at that node to place. `render.branchFraming` on an item is declared and reports that nothing reads it, rather than being a bare unknown key.
 
-### YAML block openings
+Declared on a leaf, `branchFraming:` is ignored with a warning: a leaf has no children to frame.
 
-When `components.opening` points to a `.yaml` (or `.yml`) file, the compiler treats it as a **sequence of paragraph blocks** rather than a single text file. Each block can carry its own branch dispatch and variant, allowing paragraphs to be shared across non-sibling branches, interleaved conditionally, or varied by branch — without duplicating text.
-
-```yaml
-# compile.yaml
-components:
-  opening: ./opening.yaml
-```
-
-```yaml
-# opening.yaml
-# Universal block — no branches: key → appears in every leaf
-- text: "A world of magic and intrigue awaits."
-
-# Role paragraph — included only for subject/* leaves
-- text: "You serve the empire as its subject."
-  branches:
-    subject: []   # [] = include with no variant
-    _: ~          # _: ~ = exclude from all unmatched branches
-
-# Role paragraph — included only for researcher/* leaves
-- text: "You investigate ancient mysteries as a researcher."
-  branches:
-    researcher: []
-    _: ~
-
-# Mage specialization — shared across subject/mage and researcher/mage,
-# with a variant for the researcher path
-- text: "You have mastered the arcane arts."
-  variants:
-    researcher-mage:
-      text: "You have mastered the arcane arts, informed by archival research."
-  branches:
-    subject:
-      branches:
-        mage: []
-        _: ~
-    researcher:
-      branches:
-        mage: researcher-mage
-        _: ~
-    _: ~
-
-# Knight oath from an external file — included for */knight leaves
-- text: ./paragraphs/knight-oath.md
-  branches:
-    '*':
-      branches:
-        knight: []
-        _: ~
-
-# Variable expansion works in block text
-- text: "Your role as a {%role} defines your approach."
-```
-
-Included blocks are resolved in order and joined with `\n\n` to form the leaf's `Opening.md` content.
-
-#### Block schema
-
-| Key | Required | Description |
-|---|---|---|
-| `text` | yes | Inline string or path to a `.md`/`.txt` file. `{%variable}` tokens expanded. |
-| `branches` | no | Branch dispatch map — same syntax as PE/card dispatch. Absent = include in all leaves. |
-| `variants` | no | Named text deltas: `variantName: { text: "..." }` |
-
-#### Branch dispatch for opening blocks
-
-| `branches:` pattern | Effect |
-|---|---|
-| Absent | Block appears in all leaves |
-| `branchName: []` | Include with base text for that branch (no variant) |
-| `branchName: variantName` | Include with variant text for that branch |
-| `branchName: ~` | Exclude from that branch |
-| `_: ~` | Exclude from any branch not explicitly listed above |
-| `'*': { branches: { mage: '*', _: ~ } }` | Wildcard at top level; nested rule selects mage only |
-
-Dispatch uses the same `resolveBranchSpec` logic as Plot Essentials blocks and story card branch dispatch. See `documentation/02-compile-yaml.md` for the full dispatch syntax.
-
-#### Text file paths
-
-`text:` values that resolve to an existing file are read at compile time. Paths are relative to the directory of `compile.yaml` (same as all other file references). Variable tokens in the path are expanded before resolution, so `text: ./paragraphs/{%role}.md` works.
-
-#### Existing opening behavior is unchanged
-
-A `components.opening` pointing to a `.md`, `.txt`, or inline string continues to work exactly as before. YAML block mode activates only when the path ends with `.yaml` or `.yml`.
+**A `branchFraming:` declared at the project root — outside every `branches:` node — writes once to `{output}/Components/Opening.md` and behaves like framing at any interior node.** It reads the project's own `roles:` and resolves `{$role}` and pronoun tokens whether it is a sentence, a prose `.md` file, or a `sections:` document (see [Roles](13-roles.md#using-a-role-in-prose)). The only asymmetry is `{$protagonist}` → "you", which needs a branch protagonist: root framing takes one from `roles: protagonist` if bound, and the root `Description` — a different key — never does.
 
 ### Output paths
 
 | Declaration | Output path |
 |---|---|
-| Root `components.opening` | `{output}/Components/Opening.md` |
+| Root `components.opening`, resolving the same on every leaf | `{output}/Components/Opening.md`, written once |
+| Root `components.opening`, differing by leaf | `{output}/Branches/…/leaf/Components/Opening.md`, one per leaf |
 | Leaf branch `components.opening` | `{output}/Branches/…/leaf/Components/Opening.md` |
-| Branch-point `components.openingChoice` | `{output}/Branches/…/node/Components/Opening.md` |
+| Branch-point `components.branchFraming` | `{output}/Branches/…/node/Components/Opening.md` |
+
+A root declaration can differ per leaf without being redeclared — a `{%variable}` or a `{$role}` that resolves differently down each branch is enough.
+
+Both keys write the same filename at different levels, because Velvet Lattice reads a node's prompt from `Components/Opening.md` wherever that node sits. `description:` and `adventureDescription:` share `Description.md` the same way.
+
+`Opening.md` is capped at **4,000 characters** by AID, measured after placeholder substitution — the tightest cap in the platform and the one placeholders concentrate in. Over it is `CL0710`; from 3,600 it is `CL0711`. Branch framing lands in the same filename and is capped with it.
 
 ---
 
@@ -154,257 +120,286 @@ A `components.opening` pointing to a `.md`, `.txt`, or inline string continues t
 
 `Components/Plot Essentials.md` aggregates genre, setting, character blocks, and other context. It is defined in a YAML file referenced by `components.plotEssential`.
 
-The Plot Essentials file is a **YAML sequence** of block definitions. Blocks compile in the order they appear (with optional position sorting).
+**The file is a record of named `sections:`, and it describes shape only — it never names an item.** A section either carries `text:` or is marked `slot: true`, and a slot is a place items route *into*. Membership lives on the item: an item declares `render.plotEssential` naming the slot it belongs in, and the component never learns who filled it. This is the inversion described in [01-overview.md](01-overview.md) — the component says where content can go, the item says where it goes.
 
-### Block types
+Naming every section is what makes the file overridable: an importing project can reposition, edit or delete a named section.
 
-#### Freeform block
+### Sections and slots
 
-Provides arbitrary text content. Goes through pronoun and conjugation token resolution.
+A compiling version of this file, with the same four sections against a real project's
+items, is `examples/showcase/components/plot-essentials.cl.yaml`.
 
-```yaml
-- body:
+```yaml surface=component from=showcase/components/plot-essentials.cl.yaml
+sections:
+  genre:
     text: |
       Genre: Psychological Thriller | Dark Character Study
       Setting: Steampunk Fantasy Feudal Europe; the Royal Academy
-  render:
-    wrapper: square
-    position: 1
+    render: {position: 1, wrapper: square}
+
+  you:
+    slot: true                      # items route in here
+    render: {position: 5, wrapper: curly}
+
+  cast:
+    slot: true
+    heading: Cast
+    headingLevel: 0                 # 0 = plain text (the default here); 1-6 = Markdown heading
+    render: {position: 6, wrapper: curly}
+
+  hints:
+    slot: true
+    heading: Hints
+    render: {position: 7, wrapper: curly}
+    branches:
+      flashback: ~                  # drop the whole section on this branch
 ```
 
-#### Card import block
+And the item side, which lives in the item's own file:
 
-Imports a card from the registry and renders it through a template. Useful for character blocks in PE.
-
-```yaml
-- import: Aness
-  importVariants: [networked]
+```yaml surface=item
+- id: Aness
+  name: {display: Aness, full: Aness Vale}
+  aid: {type: Character, triggers: [Aness, Vale]}
   render:
-    wrapper: curly
-    stripFence: true
-    position: 3
-  branches:
-    subject: networked
+    template: Character
+    storyCard: false                # this item lives in PE, not in a story card
+    plotEssential: {slot: you, order: 1}
 ```
 
-#### Section block
+An item may name several targets: `storyCard: true` alongside a `plotEssential:` target produces both. See [03-item-yaml.md](03-item-yaml.md) for the full `render:` surface.
 
-A section block groups multiple child blocks under a single shared wrapper with an optional heading. Presence of the `blocks:` key identifies it as a section. Child `render.wrapper` values are ignored — the section applies the wrapper to the combined output.
+### Wrapping — `each` or `all`
 
-```yaml
-# Group two genre lines under one square bracket
-- blocks:
-    - body:
-        text: "Genre: Psychological Thriller"
-    - body:
-        text: "Genre: Dark Character Study"
-  render:
-    wrapper: square
-    position: 1
+**A slot owns the wrapping of what lands in it, and the item's own `render.wrapper` is ignored there.** `render.wrapper` governs story-card output only. Without this rule an item with `wrapper: curly` placed in a slot with `wrapper: curly` would ship double-braced.
+
+**`render.wrap` decides whether that wrapper encloses each occupant or the whole collection.** The default is `each`, which is the ordinary Plot Essentials idiom — every character its own bracketed block.
+
+```yaml check=none reason=section-map-fragment
+  cast:
+    slot: true
+    render: {position: 6, wrapper: curly}              # wrap: each — four occupants, four blocks
+
+  party:
+    slot: true
+    heading: The Coinflip Company
+    render: {position: 7, wrapper: curly, wrap: all}   # one wrapper around the joined list
 ```
 
-With a heading and hint-style card imports:
+### Ordering
 
-```yaml
-- blocks:
-    - import: Aness
-      render:
-        style: hint
-        stripFence: true
-        position: 1
-    - import: Kaiden
-      render:
-        style: hint
-        stripFence: true
-        position: 2
-  heading: Hints
-  headingLevel: 0        # 0 = plain text (default); 1-6 = Markdown heading
-  render:
-    wrapper: curly
-    position: 4
-    compact: false       # true = no blank line between heading and children
-  branches:
-    flashback: ~         # null = exclude entire section from this branch
-```
+**Sections sort by `render.position`, then by the order they are written in the file.** A document has a reading order, so it can be the tiebreak.
 
-Sections are **not nestable** — a child block may not itself have a `blocks:` key.
-
-### Block fields
-
-| Field | Description |
-|---|---|
-| `import` | Card ID to import. If absent, block is freeform. |
-| `importVariants` | Variant chains to apply to the imported card (slash-separated paths). |
-| `body` | For freeform blocks: content mapping with a `text` key. For import blocks: additional body field overrides. |
-| `pronouns` | For freeform blocks: pronoun set for token resolution within `body.text`. |
-| `branches` | Branch dispatch spec — uses the same `resolveBranchSpec` mechanism as card-level `branches:`. |
-| `render.style` | `full` (default), `hint`, or `skip`. `hint` tries a `TemplateName.hint` template first. `skip` excludes the block. |
-| `render.wrapper` | `square` → `[ ... ]`, `curly` → `{ ... }`, `none` → raw. |
-| `render.stripFence` | Boolean. When `true`, strips everything up to and including the last `~~~` line from the rendered output (keeps only the card body, not the story card header). |
-| `render.position` | Numeric sort key for block ordering. Default `5`. Lower numbers appear first. |
-| `render.template` | Template override for the imported card. Falls back to the card's own `render.template` / `aid.type`. |
-| `variants` | Local card deltas applied after import resolution. |
+**Occupants within a slot sort by the target's `order:`, then by item id.** Items live in their own files after the inversion, so there is no document order to fall back on — and filesystem traversal order varies between machines and shifts when a file is renamed, which would make compiled output irreproducible. Set `order:` explicitly when a slot's sequence matters.
 
 ### Section fields
 
-| Field | Description |
-|---|---|
-| `blocks` | Sequence of child block definitions. Presence of this key identifies the entry as a section. |
-| `heading` | Optional heading placed before child content, inside the wrapper. Omit to suppress entirely. |
-| `headingLevel` | `1`–`6` adds a Markdown `#` prefix. `0` (default) renders plain text. |
-| `render.wrapper` | Applied to the entire section output (heading + joined children). Child `render.wrapper` values are ignored. |
-| `render.position` | Sort key for the section among all top-level PE segments. Default `5`. |
-| `render.compact` | When `true`, suppresses the blank line between the heading and the first child. Default `false`. |
-| `branches` | Branch dispatch for the entire section. `~` excludes the whole section. Child blocks may also carry their own `branches:`. |
+| Field | Default | Effect |
+|---|---|---|
+| `slot` | `false` | `true` marks a section items can route into. A slot section takes no `text:`. |
+| `text` | — | A string, or a mapping of named lines. With a mapping only the values render; the names exist so a variant can edit one line without restating the block. |
+| `file` | — | A path whose contents become the section's text, included verbatim. |
+| `from` | — | `{script:, extract:}` — a path read through a named transform. `extract: scriptBanner` reads a JavaScript file's leading comment block. |
+| `heading` | — | Placed before the content, inside the wrapper. Omit to suppress entirely. |
+| `headingLevel` | `0` here | `1`–`6` adds a Markdown `#` prefix; `0` renders plain text. AI Instructions and Author's Note default to `2` instead. |
+| `render.position` | `5` | Sort key among sections; lower is earlier. |
+| `render.wrapper` | `none` | `square` → `[ … ]`, `curly` → `{ … }`, `none` → raw. |
+| `render.wrap` | `each` | `each` wraps every occupant; `all` wraps the joined collection. Slots only. |
+| `render.compact` | `false` | Suppress the blank line between the heading and what follows. |
+| `render.bullet` | `false` | Prefix each `text:` line with `- `. |
+| `branches` | — | Branch dispatch for the section, using the same dispatch walker as items. `~` drops the section on that branch. |
+| `variants` | — | Named deltas this section's `branches:` can select. |
 
-`only:` and `except:` are **not** supported directly on PE blocks; use `branches:` with null values to exclude blocks from specific branches:
+**A section takes its text from one of `text:`, `file:` and `from:`.** Declaring two is `CL0619`. `file:` and `from:` paths resolve against the project base with `{%variable}` expansion, and are read once per component file rather than once per branch. The Description section below has the full account of both, including the `extract:` roster.
 
-```yaml
+**Document-level keys.** Besides `sections:`, a component document may declare `imports:` (see [Sharing a component with `imports:`](#sharing-a-component-with-imports)), `branches:` (the fan-out over every section), and `metadata:` — frontmatter for the output file, emitted only by the components that write one with a place for it, which today is Description alone.
+
+**Component text values expand at the output scope.** `{%variables}` in prose, headings, and nested metadata values use the leaf's merged variables for inherited components and root variables for the scenario Description. Keys and selectors stay literal. Deferred component placement compares the full emitted payload, including serialized frontmatter, so equal text with different metadata remains at its leaves.
+
+`only:` and `except:` are not supported; use `branches:` with `~`.
+
+### Branch dispatch and variants are per section
+
+```yaml surface=component
+sections:
+  genre:
+    text: |
+      Genre: Psychological Thriller
+    branches:
+      flashback: lighter            # apply this section's "lighter" variant
+      briefing: ~                   # drop this section entirely
+    variants:
+      lighter:
+        text: |
+          Genre: Character Study
+```
+
+**Gating a slot off is a legitimate way to drop its whole contents from one branch**, and does not require editing every item that targets it. It becomes an ERROR only when it would make an item vanish from *every* output it declared — see `CL0610` in [11-diagnostics.md](11-diagnostics.md).
+
+### `branches:` on the whole component
+
+**A tone shift that affects several sections is written once, at the document level.** `branches:` on the component names *every* section it holds: the variant name is looked up in each section's own `variants:` and applied wherever it is found.
+
+```yaml surface=component
 branches:
-  flashback: ~    # null → exclude this block from the flashback branch
+  flashback: lighter          # every section defining "lighter" gets it
+  briefing: ~                 # this branch gets no Plot Essentials file at all
+
+sections:
+  genre:
+    text: "Genre: Thriller"
+    variants:
+      lighter: {text: "Genre: Caper"}
+  tone:
+    text: Write with weight.
+    variants:
+      lighter: {text: Write with a light touch.}
+  setting:
+    text: The Royal Academy.   # defines no "lighter" — untouched, and not a mistake
 ```
 
-### strip_fence example
+**Sections that do not define the name are silently unaffected**, because most of them will be — that is what fanning out means. A name matching *no* section is `CL0605`, which is the only report a misspelling at this position produces.
 
-For a character block in PE, you typically want only the card body (not the `## Name` header and `~~~` fence). Set `render.stripFence: true`:
+**There is no component-level `variants:`.** A component declares no variants of its own, so a name here is always a selector over what its sections declare. A `variants:` block at document level is reported as a misplaced key.
 
-```yaml
-- import: Aness
-  importVariants: [networked]
-  render:
-    wrapper: curly
-    stripFence: true
-  branches:
-    subject: networked
-    researcher: ~       # exclude from researcher branch
+**`~` at this position excludes the whole component from that branch**, and writes no file. This is not the same as every section resolving away, which is `CL0615` and an ERROR — an exclusion is what the author asked for. An item whose only target was a slot in an excluded component is caught by `CL0610` instead, the same way a section-level `~` already behaves.
+
+**Both dispatch positions can fire at once, and they stack.** The component's fan-out applies first, then the section's own `branches:`, so a section that names a variant specifically gets the last word over one that reached it by fan-out. Neither declaration is a denial of the other. The full resolution order for a component is: `imports:` with their `importVariants:`, then local `sections:` layering, then the component dispatch, then the section dispatch — the same order items already resolve in.
+
+### Sharing a component with `imports:`
+
+Every component can pull in another with `imports:`, so one document can be written once and used by many projects. This is what `imports:` exists for: a single AI Instructions body currently sits in 67 places across the scenario corpus, reached by copy or by absolute path, and neither of those supports a variant, a branch dispatch, or a one-line override.
+
+```yaml surface=component
+# shared/ai-instructions.cl.yaml — the shared document
+sections:
+  narrativeTone:
+    heading: Narrative Tone
+    text: Write with psychological weight.
+    render: {position: 1}
+    variants:
+      dark: {text: '+{ Do not soften outcomes. }'}
+
+  writingRules:
+    heading: Writing Rules
+    render: {position: 2, bullet: true}
+    text:
+      pov: Second person, present tense.
+      tone: Clinical observation.
 ```
 
-Rendered output (wrapper=curly, strip_fence=true):
+```yaml surface=component
+# the project's own ai-instructions.cl.yaml
+imports:
+  - from: '{%components}/ai-instructions.cl.yaml'
+    importVariants: [dark]
+
+sections:
+  writingRules:                       # override by name — one line, not the block
+    text:
+      pov: '+{ Never break the second person. }'
+  institute:                          # a section the import does not provide
+    heading: The Institute
+    text: Conditioning scenes are clinical.
+    render: {position: 5}
+  legalese: ~                         # delete an inherited section
 ```
-{
-Aness - Journeyman Healer; Magic Researcher; Fused-Squad Subject
-Physical Traits: female; mid 20s; black hair, braided, waist-length; ...
-...
-}
-```
+
+**`imports:` is a list, applied in order**, so components compose: a house-style base, then a world layer, then the project's own deltas. A later import wins over an earlier one on the same section name, and the local `sections:` win over all of them.
+
+**Local sections layer rather than replace.** A name the import provided is merged field by field with the full operation vocabulary — `+{}`, `-{}`, `/{}/{}` — so an override can edit one named line of `text:` without restating the block, move a section with `render.position` while keeping its wrapper, or add a `branches:` dispatch to a variant the *imported* section defines. A name no import provided is appended as a new section. `~` deletes an inherited one; deleting a name nothing provided is `CL0608`.
+
+**Slots merge by name.** An imported component contributes its slots, wrappers, headings and positions, and the local file may add slots, override a wrapper or position, or delete an inherited slot with `~`. Because membership lives on items rather than in the component, an imported component describes shape only and is genuinely project-independent — an item routes into `cast` without the shared file knowing anything about that item.
+
+**`importVariants:` is a selector, not a declaration.** The name is looked up in each imported section's own `variants:`, and applied to every section that defines it. Sections that do not are silently unaffected — most of them will be, which is the point. A selector matching *no* section at all is `CL0326`, because a misspelling would otherwise apply to nothing and say nothing.
+
+**Paths resolve against the project base**, the same base `include:` and every `components:` entry use, and `{%variables}` expand first — including library names, which are variables. A `from:` naming no file is `CL0606`; an import chain that loops is `CL0607` and the offending import is skipped rather than followed.
 
 ### Full example
 
-```yaml
-# Genre — all branches
-- body:
+```yaml surface=component from=showcase/components/plot-essentials.cl.yaml
+sections:
+  genre:
     text: |
       Genre: Psychological Thriller | Dark Character Study
-  render:
-    wrapper: square
-    position: 1
+    render: {position: 1, wrapper: square}
 
-# Setting — all branches
-- body:
+  setting:
     text: |
       Setting: Steampunk Fantasy Feudal Europe; the Royal Academy
-  render:
-    wrapper: square
-    position: 2
+    render: {position: 2, wrapper: square}
 
-# NPC compact reference — all branches
-- import: Kaiden
-  render:
-    wrapper: curly
-    stripFence: true
-    template: pe-character
-    position: 4
+  you:
+    slot: true
+    render: {position: 5, wrapper: curly}
 
-# You-block — one per branch, subject branch gets networked variant
-- import: Aness
-  importVariants: [networked]
-  render:
-    wrapper: curly
-    stripFence: true
-    position: 5
-  branches:
-    subject: networked
-    researcher: ~
+  cast:
+    slot: true
+    render: {position: 6, wrapper: curly}
 
-- import: Veyrn
-  render:
-    wrapper: curly
-    stripFence: true
-    position: 5
-  branches:
-    researcher: base
-    subject: ~
-
-# Grouped hints — one curly block with heading, excluded from flashback branch
-- blocks:
-    - import: Aness
-      render:
-        style: hint
-        stripFence: true
-        position: 1
-    - import: Kaiden
-      render:
-        style: hint
-        stripFence: true
-        position: 2
-  heading: Hints
-  headingLevel: 0
-  render:
-    wrapper: curly
-    position: 6
-  branches:
-    flashback: ~
+  hints:
+    slot: true
+    heading: Hints
+    render: {position: 7, wrapper: curly}
+    branches:
+      flashback: ~
 ```
+
+```yaml surface=item
+# The items that fill it, in their own files
+- id: Aness
+  render:
+    template: Character
+    storyCard: false
+    plotEssential: {slot: you, order: 1}
+  branches: {researcher: ~}
+
+- id: Kaiden
+  aid: {type: Character, triggers: [Kaiden]}
+  render:
+    template: Character
+    plotEssential: {slot: cast, order: 1, template: CharacterBrief}
+```
+
+**A per-target `template:` lets the story card and the Plot Essentials entry use different templates.**
+
+An item rendered into a slot produces body text and nothing else — the `## Name` heading and `~~~` fence belong to story-card output, and Plot Essentials is not a story card.
+
+---
+
+## Summary
+
+`Components/Summary.md` is set by `components.summary`. Velvet Lattice reads it into `storySummary` — AID's running "what has happened so far" — where Plot Essentials feeds standing context. **Plot Essentials states fact that holds throughout; Summary states narrative past.** Authors shape the two alike, so Summary is mechanically identical to Plot Essentials: `sections:`, slots, wrapping, `render.position` ordering, per-section branch dispatch and variants, `imports:`, and a bare `heading:` read as level 0. Items route into its slots via `render.summary`, and it inherits down the branch tree like every component.
+
+Everything under [Plot Essentials](#plot-essentials) — section fields, slot wrapping, the `each`/`all` rule, ordering, branch gating, `imports:` — applies to Summary unchanged. Expect it to be used rarely.
 
 ---
 
 ## AI Instructions
 
-`Components/AI Instructions.md` provides AID with explicit authoring or behavioral instructions. It is defined in a YAML file referenced by `components.aiInstructions`.
+`Components/AI Instructions.md` provides AID with explicit authoring or behavioral instructions, set by `components.aiInstructions`.
 
-The AIN file is a **YAML mapping** with:
+**It is a sectioned component, exactly like Plot Essentials and Summary.** The four differ only in the file they write and in what a bare `heading:` means — Plot Essentials and Summary read it as level 0, AI Instructions and Author's Note as level 2. Everything else on this page about sections, slots, wrapping, branch gating and section variants applies unchanged.
 
-```yaml
-sections:
-  SectionId:
-    heading: "Section Title"
-    headingLevel: 2            # default: 2
-    text: "prose content"      # OR a mapping: {RuleId: text} — keys are internal only, not rendered
-    headingLevel: 2            # 0 = plain text heading; omit heading: to suppress entirely
-    render:
-      position: 5              # sort order; default 5
-      compact: false           # true = no blank line between heading and text
-      bullet: false            # true = prefix each text line with "- "
+### Prose, or a document
 
-variants:
-  DocumentVariant:
-    apply: [SectionVariantName]   # apply named variant to all sections that define it
-    sections:
-      SectionId:                   # null → remove this section
-card:                              # optional; story card metadata for AIN card output
-  ...
+The spec may point at either:
 
-branches:                          # branch dispatch
-  branchName: variantName
-  branchName:
-    ain: variantName               # variant for the AIN document
-    cards: [cardVariantSet]        # variant sets for story card output
+```yaml surface=config
+components:
+  aiInstructions: ./components/ai-instructions.md      # prose passthrough with variable expansion
 ```
+
+```yaml surface=config
+components:
+  aiInstructions: ./components/ai-instructions.yaml    # sections, compiled
+```
+
+A `.md` or `.txt` file expands `{%variables}` at the root or leaf where it renders and trims trailing blank lines; its other text is preserved. It declares no sections, so it declares no slots — an item whose `render.aiInstructions` names a slot in a passthrough component is an ERROR (`CL0611`) saying so, rather than a silent drop.
 
 ### Sections
 
-Each section has an optional heading and text. Text can be a plain string or a mapping — when using a mapping, the keys are purely internal identifiers (for field operations); only the values are rendered.
-
-**Render controls:**
-
-| Field | Default | Effect |
-|---|---|---|
-| `render.position` | `5` | Sort order; lower = earlier |
-| `render.compact` | `false` | Suppress blank line between heading and text |
-| `render.bullet` | `false` | Prefix each text line with `- ` |
-| `headingLevel` | `2` | Markdown heading depth; `0` = plain text heading; omit `heading:` to suppress entirely |
-
-```yaml
+```yaml surface=component transform=render-section section=rules headingLevel=2 id=section-rules
 sections:
   narrative:
     heading: Narrative Tone
@@ -422,121 +417,239 @@ sections:
     text:
       pov: Second person, present tense.
       tone: Clinical observation punctuated by visceral sensation.
+
+  cast:
+    slot: true               # items route in here via render.aiInstructions
+    render:
+      position: 3
 ```
 
-The `rules` section above renders as:
-```
+The `rules` section — a mapping `text:` under a level-2 heading, `bullet: true` — renders as:
+
+``` expect=section-rules
 ## Writing Rules
 - Second person, present tense.
 - Clinical observation punctuated by visceral sensation.
 ```
 
-### Branch variants
+**Text may be a string or a mapping of named lines.** With a mapping, the keys are internal identifiers and only the values are rendered — the names exist so a variant can replace or delete one rule without restating the block.
 
-```yaml
-branches:
-  subject: intimate       # apply "intimate" document variant for subject branch
-  researcher: detached
+| Field | Default | Effect |
+|---|---|---|
+| `render.position` | `5` | Sort order; lower = earlier |
+| `render.compact` | `false` | Suppress the blank line between heading and text |
+| `render.bullet` | `false` | Prefix each text line with `- ` |
+| `headingLevel` | `2` | Heading depth; `0` = plain text heading; omit `heading:` to suppress entirely |
 
-variants:
-  intimate:
-    apply: [close]        # apply "close" section variant to all sections that have it
-  detached:
-    apply: [distant]
-    sections:
-      rules:              # remove the "rules" section for detached variant
+### Branch dispatch and variants are per section
+
+```yaml surface=component
+sections:
+  rules:
+    text:
+      pov: Second person, present tense.
+      tone: Clinical observation.
+    branches:
+      subject: close          # on the subject branch, apply this section's "close" variant
+      researcher: ~           # on the researcher branch, drop this section entirely
+    variants:
+      close:
+        text:
+          tone: Close, unsparing observation.    # edits one line; "pov" is untouched
 ```
+
+**There is no document-level `variants:`.** A component declares no variants of its own, so writing one at the document level reports a misplaced-key ERROR pointing at the section surface.
+
+**Document-level `branches:` is supported, and it is a fan-out selector** — it names every section the document holds, applying the variant wherever a section defines it. See [`branches:` on the whole component](#branches-on-the-whole-component) above; everything there applies to AI Instructions unchanged.
+
+### Swappable alternates — `render.storyCards`
+
+A scenario ships one version of a component in its field and offers alternates as story cards the player can read and paste in themselves — a fuller ruleset, a terser one, or the scenario-specific parts only. Every component can do this; AI Instructions is where it is used most.
+
+```yaml surface=component
+render:
+  component:
+    variant: concise                 # what ships in the AI Instructions field (optional)
+  storyCards:
+    - title: AI Instructions — Full
+      variant: verbose               # a section-variant selector, applied everywhere it is defined
+    - title: AI Instructions — Scenario Rules Only
+      sections: [institute, pacing]   # a subset — omits the imported house style
+      type: zz_AIN                     # overrides the project default (see below)
+```
+
+Each `storyCards` entry renders the component again — with the leaf's slot occupants in place — as a **trigger-less** story card: `kind: reference` is set for you, the rendered text goes in `notes:` (AID's 10,000-character `description` field), and the body is a one-line "copy the description field…" prompt. A trigger-less card never enters context, so the alternates cost nothing during play, and the `empty-triggers` lint knows not to flag them.
+
+The card's AID `type` — which groups it in the story-card editor — resolves on three rungs, most specific first:
+
+1. the entry's own `type:`;
+2. `storyCardType.<component>` in `compile.yaml` (project-wide, e.g. `storyCardType: {aiInstructions: zz_AIN}` to sort the alternates to the end of the player's list);
+3. the component's display label (`AI Instructions`, `Plot Essentials`, …).
+
+`storyCardType` values are root-scoped; an entry's `title:` and `type:` are leaf-scoped and expand before validation. Entry selectors (`variant:` and `sections:`) remain literal.
+
+Placement is the ordinary story-card mechanism: an alternate that renders identically across a subtree is written once at that subtree's root; one that varies per branch is written once at the common ancestor where that saves copies, with the odd branches carrying their own version as an override. Two entries whose titles collide under one type are an ERROR (`CL0622`), the same as any two story cards sharing a name.
 
 ---
 
 ## Author's Note
 
-`Components/Author's Note.md` works identically to AI Instructions except:
+`Components/Author Notes.md` — Velvet Lattice's spelling, not a typo — works exactly like AI Instructions, including the level-2 heading default, slots, and per-section variants.
 
-- The file structure is the same (sections, variants, branches)
-- No `card:` block is supported (ignored with a warning if present)
-- No story card output is produced
-
-```yaml
-# authors-note.yaml
+```yaml surface=component
 sections:
   tone:
-    text: |
-      Maintain second-person perspective throughout.
-
-branches:
-  subject: subject-tone
-
-variants:
-  subject-tone:
-    apply: [close]
+    text: Maintain second-person perspective throughout.
+    branches:
+      subject: close
+    variants:
+      close:
+        text: Stay inside the subject's head; report sensation before thought.
 ```
+
+Author's Note produces no story card of its own, but like every component it can offer alternates through `render.storyCards` (see [AI Instructions](#swappable-alternates--renderstorycards) above).
 
 ---
 
+
 ## Scripts
 
-`components.scripts` points to a directory that is **copied** into each branch leaf's `Scripts/` folder.
+`scripts:` selects files for Velvet Lattice and is a **top-level `compile.yaml` key**, not a `components:` sub-key — putting it under `components:` is a `CL0210` error. Paths resolve from the root through each branch using the leaf's final variable table and the config directory as their base.
 
-```yaml
-components:
-  scripts: ./scripts
+```yaml surface=config
+scripts: ./scripts               # a directory bundle
 ```
 
-No processing is applied — files are copied as-is.
+```yaml surface=config
+scripts:                         # select hooks by their Velvet Lattice names
+  input:   ./scripts/input.js
+  context: ./scripts/context.js
+  output:  ./scripts/output.js
+  library: ./scripts/library.js
+```
+
+**A directory replaces all four hook selections.** The compiler recognizes the top-level
+`input.js`, `output.js`, `context.js`, and `library.js` files; an absent hook removes its
+inherited selection. Other files are kept recursively as auxiliary files, and a later
+directory replaces the previous auxiliary-file set.
+
+**A mapping applies only its named hooks.** Unmentioned keys inherit, a named `null`
+removes that hook, and an empty map changes nothing. `scripts: ~` removes all four hooks;
+a later partial map restores only the hooks it names. Mapping and null operations preserve
+the nearest directory's auxiliary files. A mapped path that names no file, or a `scripts:`
+directory that does not exist, is an error (`CL0636`); the hook is left absent rather than
+restored from an inherited file.
+
+**Script bytes remain unchanged.** Directory files keep their relative names; mapped sources
+are written under canonical hook filenames. Velvet Lattice loads only those four top-level
+hooks. The compiler places each relative output file at the fewest branch nodes that
+preserve every leaf's bytes; a leaf that must lack a file prevents an ancestor copy, and a
+local override appears only when it saves a write. A single playable leaf keeps its files at
+that leaf; an unbranched project writes them at root. See
+[compile.yaml → scripts](02-compile-yaml.md#scripts).
 
 ---
 
 ## Description
 
-`Description.md` is a **project-level** file written once to the output root, at the same level as the `Branches/` folder. Unlike other components it is not written per-branch.
+A description is an ordinary component built from `sections:`, and there are **two keys** for it. `description:` is the scenario blurb AID shows in listings; `adventureDescription:` is the description a leaf carries, which AID applies to the adventure started from that leaf. Both write `Description.md`, at different levels — the same arrangement `opening:` and `branchFraming:` have with `Opening.md`.
 
-Its content can come from a plain body file, from a cleaned-up banner extracted from a JavaScript script file, or both.
-
-### Declaration modes
-
-`components.description` accepts three formats based on file extension:
-
-```yaml
+```yaml surface=config
 components:
-  description: ./description.md        # .md or .txt → body content only
-  description: ./scripts/library.js    # .js → script banner only
-  description: ./description.yaml      # .yaml → full config (body + script)
+  description: ./components/description.cl.yaml           # the store listing, root only
+  adventureDescription: ./components/adventure.cl.yaml    # per-leaf, inherits down the tree
 ```
 
-### Description config file (`.yaml`)
+### Which key to use
 
-When pointing to a YAML file, the following keys are supported:
+| | `description:` | `adventureDescription:` |
+|---|---|---|
+| What AID does with it | Shows it on the scenario's listing page | Becomes the adventure's description |
+| Where it is declared | The project root only | Anywhere in the tree |
+| Inherits down the tree | No | Yes, like every other component |
+| Where the file lands | `{output}/Description.md` | `{output}/Branches/…/Description.md`, at each leaf |
+| Items can route into its slots | No | Yes |
 
-```yaml
-# description.yaml
-body:   ./components/description.md   # optional: path to body text file
-script: ./scripts/library.js          # optional: path to JS file to extract banner from
-stripTrailingInstructions: true        # optional; default false
+**The scenario blurb does not inherit, and that is deliberate.** A scenario has one listing, so copying it into every leaf would write the same paragraph thirty times and say nothing new. `adventureDescription:` is the one that inherits, because a description that varies by branch is a per-adventure thing.
+
+**Items route into an adventure description, not into the scenario blurb.** A `render.adventureDescription` target places an item in a slot exactly as `render.plotEssential` does. The blurb has no branch, so there is no cast to place into it.
+
+### Per-node descriptions depend on an AID oversight
+
+There is no field in the AID editor for a per-node description. Velvet Lattice writes one at every node, and AID *does* apply it to the resulting adventure — verified by uploading one. This works because reaching it requires a tool like VL, so nothing on AID's side has had reason to close it. It is harmless and unlikely to change soon, but it is an oversight rather than a feature: if it is ever closed, `adventureDescription:` stops having an effect and `description:` is unaffected.
+
+### A leaf with a description and no opening is an ERROR
+
+Velvet Lattice sets a node's prompt to `components["Opening"] or node.description`. A leaf carrying a description and no `Opening.md` therefore does not open on an empty prompt — it opens on the blurb, as though the store listing were the first scene. That is `CL0616`, and it is an ERROR rather than a warning because the output is wrong in a way that reads as intentional.
+
+Give the branch an `opening:`, or drop the `adventureDescription:` it inherits:
+
+```yaml surface=config
+branches:
+  silent:
+    components:
+      adventureDescription: ./components/adventure.cl.yaml
+      opening: ./openings/silent.md      # without this, CL0616
 ```
 
-All path values in the config file support `{%variable}` and `{@Key}` token expansion, resolved the same way as `include:` paths — relative to `compile.yaml`.
+### Sections take their text from three places
 
-```yaml
-# description.yaml with token expansion
-body:   '{@bodyKey}'                   # {@Key} resolved from structure.input.components
-script: '{@scripts}/library.js'        # {@ dir key} + path suffix
+Besides `text:`, a section may read a file (`file:`) or read one through a named transform (`from:`). These are ordinary section keys and work in any component, not only a description.
+
+```yaml surface=component
+sections:
+  pitch:
+    text: |
+      A psychological thriller set in {%setting}.
+    render: {position: 1}
+
+  body:
+    file: './components/blurb.md'        # included verbatim
+    render: {position: 2}
+
+  modBanner:
+    from:
+      script: '{%scripts}/library.js'    # read through a transform
+      extract: scriptBanner
+    render: {position: 9}
 ```
 
-### Script banner extraction
+**A section takes its text from one source.** Declaring `text:` alongside `file:` or `from:` is `CL0619`; the `text:` is kept and the file is ignored. Split them into two sections if both were meant to appear — which also lets each carry its own heading and position.
 
-When a `.js` file is specified (via `script:` or directly), the compiler reads the top contiguous `//` comment block and transforms it:
+**Paths resolve against the project base**, the same base `imports:`, `include:` and every `components:` entry use, and `{%variable}` tokens expand first. They are read once per component file rather than once per branch, so a missing path is reported once (`CL0617`) however many leaves the component reaches.
+
+**An override replaces the source rather than joining it.** A project importing a component whose section uses `file:` can replace it with its own `text:`, or append to the file's contents with a field operation, and neither is an error:
+
+```yaml surface=component
+imports:
+  - from: '{%components}/house-blurb.cl.yaml'
+sections:
+  body:
+    text: '+{And this project in particular.}'   # appends to the imported file's text
+```
+
+### `extract:` — the transform roster
+
+| Name | What it reads |
+|---|---|
+| `scriptBanner` | The leading `//` comment block of a JavaScript file, cleaned up for prose |
+
+An unrecognized name is `CL0618` and names the roster. Adding a transform is a compiler change.
+
+#### `scriptBanner`
+
+Reads the top contiguous `//` comment block and transforms it line by line:
 
 | Line (after stripping `//`) | Treatment |
 |---|---|
-| All `=` characters | Skipped (pure separator) |
+| All `=` characters | Group boundary |
 | Text padded with `=` on both sides | Condensed to `=== text ===` |
-| Empty | Skipped |
-| Anything else | Kept as-is |
+| Empty | Dropped |
+| Anything else | Kept as written |
 
-Example — this comment block:
+This comment block:
 
-```js
+```js transform=script-banner id=scriptbanner-install-note
 // ============================================================
 // ============= Standard Build - 26.9.6 - library ============
 // ============================================================
@@ -547,38 +660,75 @@ Example — this comment block:
 // ============================================================
 ```
 
-Becomes:
+becomes:
 
-```
+``` expect=scriptbanner-install-note
 === Standard Build - 26.9.6 - library ===
 - UnifiedSettings@1.1.2
 - DuckieDebug@1.0.3
-Paste this ONLY into the library tab in AI Dungeon scripting
 ```
 
-#### `stripTrailingInstructions`
+**The trailing group is dropped when it reads as an install note.** If the final group has no list items and an earlier group does, it is removed — which is how "Paste this ONLY into…" stays out of a store listing without hardcoding the text. The rule needs both halves, so a banner that is entirely prose keeps all of it, and a banner whose last group is itself a list keeps that too.
 
-When `true`, the compiler checks whether the final group of lines (content between the last separator block and end of the comment) contains no list items (lines starting with `-` or `*`), while at least one earlier group did. If so, that final group is dropped.
+There is no way to turn this off — the extractor always strips a trailing install-note group. There is no flag for it.
 
-This automatically removes footer instructions like "Paste this into…" without hardcoding any text.
+### `metadata:` becomes frontmatter
 
-### Combined output
+A component document may declare `metadata:`, which is written as a YAML frontmatter block above the body. Velvet Lattice reads scenario tags from `Description.md`'s frontmatter, which is what this is for.
 
-When both `body:` and `script:` are set, the body content comes first, followed by a blank line, then the extracted banner:
+```yaml surface=component
+# components/description.cl.yaml
+metadata:
+  tags: [thriller, dark]
+sections:
+  pitch:
+    text: A psychological thriller.
+```
+
+produces:
 
 ```
-[body content]
-
-=== Standard Build - 26.9.6 - library ===
-- UnifiedSettings@1.1.2
-...
-```
-
-### Output path
-
-`{output}/Description.md` — written once after all branches compile, alongside `Branches/` and `Overview/`. It is not written per-branch and cannot be declared at branch level.
-
 ---
+tags:
+  - thriller
+  - dark
+---
+
+A psychological thriller.
+```
+
+The frontmatter block alone, from the `metadata:` mapping:
+
+```yaml transform=render-frontmatter id=frontmatter-tags
+metadata:
+  tags: [thriller, dark]
+```
+
+``` expect=frontmatter-tags
+---
+tags:
+  - thriller
+  - dark
+---
+```
+
+The key is declared on every component, but only the two description components emit it — nothing else writes a file with a place to put frontmatter. Declaring it elsewhere is `CL0620` and the metadata is ignored.
+
+### Prose descriptions still work
+
+A `.md` or `.txt` path uses the same prose passthrough as every other component, including `{%variable}` expansion at its render scope:
+
+```yaml surface=config
+components:
+  description: ./components/description.md
+```
+
+### Output paths
+
+- `description:` → `{output}/Description.md`, written once after all branches compile, alongside `Branches/` and `Overview/`.
+- `adventureDescription:` → `Description.md` at each leaf's output directory, beside that leaf's `Opening.md`.
+
+An unbranched project is its own leaf, so both keys aim at the same file there. Declaring both is `CL0621`; the scenario blurb is what survives.
 
 ## Label
 
@@ -587,4 +737,4 @@ When both `body:` and `script:` are set, the body content comes first, followed 
 - **Root `title:`** (top-level of `compile.yaml`, sibling of `protagonist:`) — written once to `{output}/Label.md`, alongside `Description.md`. See [Root-Level Keys → title](02-compile-yaml.md#title).
 - **Branch `title:`** (inside a `branches:` node) — written to that branch's own output folder (`Branches/<path>/Label.md`), falling back to the branch key when omitted. See [Branch Tree & Variant Dispatch](05-branches-and-variants.md).
 
-Both expand `{%variable}` tokens against the variables in scope (root variables for the root label; branch-merged variables for a branch label). Neither accepts a file path or `{@Key}` reference — the value is used as literal text.
+Both expand `{%variable}` tokens against the variables in scope (root variables for the root label; branch-merged variables for a branch label). Neither accepts a file path or `{%Key}` reference — the value is used as literal text.

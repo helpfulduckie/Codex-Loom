@@ -3,147 +3,24 @@
 const fs   = require('fs');
 const path = require('path');
 
-const { discoverLeaves, sanitizeFilename } = require('./overview');
+const { discoverLeaves } = require('./overview');
+const { resolveAt } = require('./compiledTree');
+const { NULL_LOG } = require('./log');
+const { csvCell, reportIdentity, reportStem, branchLabel } = require('./report');
 
-// ── parsing ──────────────────────────────────────────────────────────────────
 
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/**
- * Parse a compiled Story Cards .md file into an array of card objects.
- * Each section starts with `## Title`, followed by a ~~~ fence, then body text.
- */
-function parseCardsFromMd(content) {
-  const cards = [];
-  const sections = content.split(/^(?=## )/m);
 
-  for (const section of sections) {
-    const trimmed = section.trim();
-    if (!trimmed) continue;
-
-    const titleMatch = trimmed.match(/^## (.+)/);
-    if (!titleMatch) continue;
-    const title = titleMatch[1].trim();
-
-    // Find the ~~~ fence pair
-    const firstFence = trimmed.indexOf('~~~');
-    if (firstFence === -1) continue;
-    const secondFence = trimmed.indexOf('~~~', firstFence + 3);
-    if (secondFence === -1) continue;
-
-    const fenceContent = trimmed.slice(firstFence + 3, secondFence);
-    const triggerMatch = fenceContent.match(/^triggers:\s*\[(.+)\]/m);
-    if (!triggerMatch) continue;
-
-    const triggers = triggerMatch[1]
-      .split(',')
-      .map(t => t.trim())
-      .filter(Boolean);
-
-    const body = trimmed.slice(secondFence + 3).trim();
-
-    cards.push({ title, triggers, body });
-  }
-
-  return cards;
-}
-
-/**
- * Walk from a leaf dir upward through Branches/ parent levels.
- * Returns dirs root-first (ancestors before the leaf).
- */
-function ancestorDirs(leafDir) {
-  let dir = leafDir;
-  const dirs = [];
-  while (true) {
-    dirs.unshift(dir);
-    const parent     = path.dirname(dir);
-    const parentName = path.basename(parent);
-    if (parent === dir || parentName !== 'Branches') break;
-    dir = path.dirname(parent);
-  }
-  return dirs;
-}
-
-/**
- * Collect all parsed cards visible to a leaf node: read Story Cards .md files
- * from the leaf dir and each ancestor branch dir, accumulating upward.
- */
-function collectLeafCards(leafDir) {
-  const cards = [];
-  const visited = new Set();
-
-  for (const branchDir of ancestorDirs(leafDir)) {
-    const storyCardsDir = path.join(branchDir, 'Story Cards');
-    if (!fs.existsSync(storyCardsDir)) continue;
-
-    const mdFiles = collectMdFiles(storyCardsDir);
-    for (const file of mdFiles) {
-      if (visited.has(file)) continue;
-      visited.add(file);
-      const content = fs.readFileSync(file, 'utf8');
-      const cardType = path.basename(path.dirname(file));
-      const parsed = parseCardsFromMd(content).map(c => ({ ...c, type: cardType }));
-      cards.push(...parsed);
-    }
-  }
-
-  return cards;
-}
-
-/**
- * Collect the text of Plot Essentials.md and Opening.md visible to a leaf node.
- * Reads from each ancestor dir's Components/ folder (leaf overrides ancestor).
- * Returns { peText, openingText } — empty string when not found.
- */
-function collectLeafComponents(leafDir) {
-  let peText      = '';
-  let openingText = '';
-
-  for (const branchDir of ancestorDirs(leafDir)) {
-    const compDir = path.join(branchDir, 'Components');
-    const pePath     = path.join(compDir, 'Plot Essentials.md');
-    const openPath   = path.join(compDir, 'Opening.md');
-    if (fs.existsSync(pePath))    peText      = fs.readFileSync(pePath, 'utf8');
-    if (fs.existsSync(openPath))  openingText = fs.readFileSync(openPath, 'utf8');
-  }
-
-  return { peText, openingText };
-}
-
-function collectMdFiles(dir) {
-  const results = [];
-  if (!fs.existsSync(dir)) return results;
-  function walk(current) {
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })
-        .sort((a, b) => a.name.localeCompare(b.name))) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.isFile() && entry.name.endsWith('.md')) results.push(full);
-    }
-  }
-  walk(dir);
-  return results;
-}
-
-// ── analysis ─────────────────────────────────────────────────────────────────
-
-/**
- * For every card, find which other cards' bodies or Plot Essentials contain its triggers.
- * Returns an array of { seeder, seeded, via, source } objects.
- *   source: 'card' | 'pe'
- * Self-matches (seeder.title === seeded.title) are skipped.
- */
 function buildSeedRelations(cards, peText = '') {
   const relations = [];
 
   for (const seeded of cards) {
     for (const trigger of seeded.triggers) {
-      const re = new RegExp(escapeRegex(trigger), 'gi');
+      const re = new RegExp(escapeRegex(trigger), 'i');
 
-      // Card-to-card seeds
       for (const seeder of cards) {
         if (seeder.title === seeded.title) continue;
         if (re.test(seeder.body)) {
@@ -151,7 +28,6 @@ function buildSeedRelations(cards, peText = '') {
         }
       }
 
-      // Plot Essentials seeds
       if (peText && re.test(peText)) {
         relations.push({ seeder: 'Plot Essentials', seeded: seeded.title, via: trigger, source: 'pe' });
       }
@@ -161,17 +37,13 @@ function buildSeedRelations(cards, peText = '') {
   return relations;
 }
 
-/**
- * For every card, check whether any of its triggers appear in the Opening text.
- * Returns a Set of card titles that are seeded by the Opening.
- */
 function buildOpeningFlags(cards, openingText = '') {
   const seededInOpening = new Set();
   if (!openingText) return seededInOpening;
 
   for (const card of cards) {
     for (const trigger of card.triggers) {
-      const re = new RegExp(escapeRegex(trigger), 'gi');
+      const re = new RegExp(escapeRegex(trigger), 'i');
       if (re.test(openingText)) {
         seededInOpening.add(card.title);
         break;
@@ -182,7 +54,6 @@ function buildOpeningFlags(cards, openingText = '') {
   return seededInOpening;
 }
 
-// ── formatting ────────────────────────────────────────────────────────────────
 
 function formatSeedMap(rootDirName, leafResults) {
   const parts = [`# Seed Map — ${rootDirName}`];
@@ -190,8 +61,7 @@ function formatSeedMap(rootDirName, leafResults) {
 
   for (const { branchNames, cards, relations, seededInOpening } of leafResults) {
     if (!singleLeaf) {
-      const branchLabel = branchNames.length > 0 ? branchNames.join(' - ') : rootDirName;
-      parts.push(`## Branch: ${branchLabel}`);
+      parts.push(`## Branch: ${branchLabel(branchNames, rootDirName)}`);
     }
 
     if (cards.length === 0) {
@@ -199,7 +69,6 @@ function formatSeedMap(rootDirName, leafResults) {
       continue;
     }
 
-    // Group relations by seeded card (inbound view)
     const inbound = new Map(); // seeded title → [{ seeder, via, source }]
     for (const rel of relations) {
       if (!inbound.has(rel.seeded)) inbound.set(rel.seeded, []);
@@ -234,13 +103,6 @@ function formatSeedMap(rootDirName, leafResults) {
   return parts.join('\n\n');
 }
 
-function csvCell(value) {
-  const s = String(value);
-  return s.includes(',') || s.includes('"') || s.includes('\n')
-    ? `"${s.replace(/"/g, '""')}"`
-    : s;
-}
-
 function formatSeedMapCsv(rootDirName, leafResults) {
   const singleLeaf = leafResults.length === 1 && leafResults[0].branchNames.length === 0;
   const rows = [];
@@ -252,9 +114,8 @@ function formatSeedMapCsv(rootDirName, leafResults) {
   }
 
   for (const { branchNames, cards, relations, seededInOpening } of leafResults) {
-    const branchLabel = branchNames.length > 0 ? branchNames.join(' - ') : rootDirName;
+    const label = branchLabel(branchNames, rootDirName);
 
-    // Count distinct seeders (cards + PE) per seeded title
     const seederSets = new Map(); // seeded title → Set of seeder labels
     for (const rel of relations) {
       if (!seederSets.has(rel.seeded)) seederSets.set(rel.seeded, new Set());
@@ -267,7 +128,7 @@ function formatSeedMapCsv(rootDirName, leafResults) {
       if (singleLeaf) {
         rows.push([csvCell(card.title), csvCell(card.type || ''), card.triggers.length, seededBy, inOpening].join(','));
       } else {
-        rows.push([csvCell(branchLabel), csvCell(card.title), csvCell(card.type || ''), card.triggers.length, seededBy, inOpening].join(','));
+        rows.push([csvCell(label), csvCell(card.title), csvCell(card.type || ''), card.triggers.length, seededBy, inOpening].join(','));
       }
     }
   }
@@ -275,59 +136,82 @@ function formatSeedMapCsv(rootDirName, leafResults) {
   return rows.join('\n');
 }
 
-// ── runner ────────────────────────────────────────────────────────────────────
+function allocateLeafStems(leafResults, rootDirName) {
+  const candidates = leafResults.map(({ branchNames }) =>
+    reportStem(branchLabel(branchNames, rootDirName)) || 'leaf');
+  const reserved = new Set(candidates.map((candidate) => candidate.toLowerCase()));
+  const seen = new Set();
+  const used = new Set();
 
-/**
- * Run seed-map mode on a scenario output root.
- * Discovers all leaf branches, collects their compiled cards, builds seed
- * relations, and writes a .seedmap.md and .seedmap.csv to outputDir.
- * Returns { mdPath, csvPath }.
- */
-function runSeedMapMode(scenarioRoot, outputDir, verbose = false) {
+  return candidates.map((candidate) => {
+    const folded = candidate.toLowerCase();
+    if (!seen.has(folded) && !used.has(folded)) {
+      seen.add(folded);
+      used.add(folded);
+      return candidate;
+    }
+    let suffix = ' (leaf)';
+    let number = 2;
+    while (used.has(`${candidate}${suffix}`.toLowerCase())
+        || reserved.has(`${candidate}${suffix}`.toLowerCase())) {
+      suffix = ` (leaf ${number++})`;
+    }
+    const allocated = `${candidate}${suffix}`;
+    used.add(allocated.toLowerCase());
+    return allocated;
+  });
+}
+
+
+function runSeedMapMode(scenarioRoot, outputDir, options = {}) {
+  const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
-  const leaves      = discoverLeaves(rootAbs, [], []);
+  const identity    = reportIdentity(options.title, rootDirName);
+  const leaves      = discoverLeaves(rootAbs);
 
-  if (leaves.length === 0) {
-    console.warn('  WARN: No branch leaves found — nothing to map.');
-    return null;
-  }
+  if (leaves.length === 0) return { written: [] };
 
   const leafResults = [];
   for (const leaf of leaves) {
-    const cards                    = collectLeafCards(leaf.leafDir);
-    const { peText, openingText }  = collectLeafComponents(leaf.leafDir);
+    const cards                    = resolveAt(leaf.leafDir).resolved.cards
+      .filter((card) => card.triggers.length > 0);
+    const components                = resolveAt(leaf.leafDir).resolved.components;
+    const peText                    = components['Plot Essentials'] || '';
+    const openingText               = components['Opening'] || '';
     const relations                = buildSeedRelations(cards, peText);
     const seededInOpening          = buildOpeningFlags(cards, openingText);
     leafResults.push({ branchNames: leaf.branchNames, cards, relations, seededInOpening });
-    if (verbose) {
-      const label = leaf.branchNames.join(' - ') || rootDirName;
-      console.log(`  mapped: ${label} (${cards.length} cards, ${relations.length} seeds)`);
-    }
+    const label = branchLabel(leaf.branchNames, identity.label);
+    log.verbose(`  mapped: ${label} (${cards.length} cards, ${relations.length} seeds)`);
   }
 
-  const mdPath  = path.join(outputDir, `${rootDirName}.seedmap.md`);
-  const csvPath = path.join(outputDir, `${rootDirName}.seedmap.csv`);
+  const mdPath  = path.join(outputDir, `${identity.stem}.seedmap.md`);
+  const csvPath = path.join(outputDir, `${identity.stem}.seedmap.csv`);
+  const written = [mdPath, csvPath];
 
-  fs.writeFileSync(mdPath,  formatSeedMap(rootDirName, leafResults) + '\n', 'utf8');
-  fs.writeFileSync(csvPath, formatSeedMapCsv(rootDirName, leafResults) + '\n', 'utf8');
+  fs.writeFileSync(mdPath,  formatSeedMap(identity.label, leafResults) + '\n', 'utf8');
+  fs.writeFileSync(csvPath, formatSeedMapCsv(identity.label, leafResults) + '\n', 'utf8');
 
-  // Per-branch files (skipped for single-leaf scenarios with no branch names)
   const singleLeaf = leafResults.length === 1 && leafResults[0].branchNames.length === 0;
   if (!singleLeaf) {
-    for (const leafResult of leafResults) {
-      const fileBase   = leafResult.branchNames.join(' - ') || rootDirName;
-      const stem       = sanitizeFilename(fileBase);
-      const leafMd     = path.join(outputDir, `${stem}.seedmap.md`);
-      const leafCsv    = path.join(outputDir, `${stem}.seedmap.csv`);
-      // Format as a single-leaf doc (no "## Branch:" header — filename conveys the branch)
+    fs.mkdirSync(path.join(outputDir, 'leaves'), { recursive: true });
+    const stems = allocateLeafStems(leafResults, identity.label);
+    for (const [index, leafResult] of leafResults.entries()) {
+      const stem       = stems[index];
+      const leafMd     = path.join(outputDir, 'leaves', `${stem}.seedmap.md`);
+      const leafCsv    = path.join(outputDir, 'leaves', `${stem}.seedmap.csv`);
+      written.push(leafMd, leafCsv);
       const asSingle   = [{ ...leafResult, branchNames: [] }];
-      fs.writeFileSync(leafMd,  formatSeedMap(rootDirName, asSingle) + '\n', 'utf8');
-      fs.writeFileSync(leafCsv, formatSeedMapCsv(rootDirName, asSingle) + '\n', 'utf8');
+      fs.writeFileSync(leafMd,  formatSeedMap(identity.label, asSingle) + '\n', 'utf8');
+      fs.writeFileSync(leafCsv, formatSeedMapCsv(identity.label, asSingle) + '\n', 'utf8');
     }
   }
 
-  return { mdPath, csvPath };
+  return { written, mdPath, csvPath };
 }
 
-module.exports = { runSeedMapMode, parseCardsFromMd, collectLeafCards, collectMdFiles };
+module.exports = {
+  runSeedMapMode,
+  buildSeedRelations, buildOpeningFlags,
+};

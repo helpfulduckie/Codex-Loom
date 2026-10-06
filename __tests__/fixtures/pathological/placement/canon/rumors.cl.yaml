@@ -1,0 +1,34 @@
+# A second included file — the other arity-N selector on an `include:` (§7.6.2a).
+#
+# `importVariants:` selects unconditionally at import; `branches:` dispatches per branch.
+# Both are stamped onto every item in the included file by `resolveIncludes`, so both are
+# in the arity-N position and both are owed silence on a miss. This file carries the
+# branch-dispatched half: three items, one of which defines `hushed`.
+
+- id: Whisper
+  name: Whisper
+  aid:
+    type: Character
+    triggers: [Whisper]
+  body:
+    Tagline: Repeats what the kitchen says.
+  variants:
+    hushed:
+      body:
+        Tagline: '/{Repeats}/{Declines to repeat}'
+
+- id: Placard
+  name: Placard
+  aid:
+    type: Character
+    triggers: [Placard]
+  body:
+    Tagline: Defines no variants, and is dispatched at anyway.
+
+- id: Bellpull
+  name: Bellpull
+  aid:
+    type: Character
+    triggers: [Bellpull]
+  body:
+    Tagline: Defines no variants either.

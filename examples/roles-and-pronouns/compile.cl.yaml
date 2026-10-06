@@ -1,0 +1,115 @@
+# Codex Loom v4 — worked example: roles and pronouns.
+#
+# The grid is protagonist (aness / zephon / wayfarer) crossed with rival, and it is
+# uneven on purpose — 3 + 3 + 4 = 10 leaves. A named protagonist cannot be their own
+# rival, so each of `aness` and `zephon` faces the other two named characters plus a
+# placeholder-defined stranger; the placeholder player `wayfarer` faces all three
+# named characters plus the stranger.
+# doc: 13-roles.md
+#
+# Three roles are exercised at increasing depth:
+#
+#   protagonist  bound once per protagonist subtree. `{$Id}` tokens for the bound
+#                item render "you"; it is a pronoun-POV switch and nothing else —
+#                the Plot Essentials `you` slot is filled by the placeholder player
+#                on every leaf regardless of who the protagonist is.
+#   rival        rebound at every leaf against one shared opening line. `{$rival}`
+#                and `{$rival.they}` in that line resolve to a different item and a
+#                different pronoun set per leaf.
+#   ally         bound to a default per subtree, then inherited unchanged, rebound
+#                where the default would collide with the rival, or `~`-unbound on
+#                the `vs-stranger` leaves. Every `~` removes something an ancestor
+#                bound — no manufactured error to justify it.
+# doc: 08-pronouns.md#verb-conjugation
+#
+# It reads the `core` library set only. The section 17 multi-library surface is
+# `variants-and-fieldops`; this project stays on one set so the roles construct is
+# what a reader is looking at.
+
+version: 4
+title: Roles and Pronouns
+
+structure:
+  input:
+    items: [./Codex]
+    library:
+      core: ../library/core
+    templates: [../library/templates]
+  output: ./output
+  reports: ./Review
+
+variables:
+  genre: Low fantasy
+  settingName: Ashbourne
+
+placeholders:
+  heroName: What should we call you?
+  heroTrait: What are you known for?
+  rivalName: And the one you are up against?
+
+templateFor:
+  base: fields.cl.yaml
+
+components:
+  plotEssential: '{%core}/components/plot-essentials.cl.yaml'
+  aiInstructions: '{%core}/components/ai-instructions.cl.yaml'
+  authorsNote: '{%core}/components/authors-note.cl.yaml'
+  # One opening, declared once at the root, that resolves two roles differently down
+  # every branch - ten readings of one line. `{$rival}` rebinds per leaf; the bare
+  # `{$rival}` is a name and conjugates singular, while the scoped `{$rival.they}`
+  # renders the pronoun and agrees with the bound item's set, so both markers in the
+  # sentence read correctly whichever rival is in play.
+  # doc: 08-pronouns.md#verb-conjugation
+  opening: "{$rival} know[s] what {$rival.they} want[s], and {$protagonist} are the one in the way."
+
+# Nothing is bound at the root: the protagonist and the rivalry only exist inside a
+# branch. `ally` is introduced one level down, on each protagonist node.
+roles:
+  protagonist: ~
+  rival: ~
+
+branches:
+  aness:
+    title: You play as Aness
+    roles: { protagonist: Aness, ally: Kaiden }
+    branches:
+      vs-zephon:
+        title: "Against {$rival}: {$protagonist} and {$ally}"
+        roles: { rival: Zephon }
+      vs-kaiden:
+        title: "Against {$rival}: {$protagonist} and {$ally}"
+        roles: { rival: Kaiden, ally: Zephon }   # the ally cannot also be the rival
+      vs-stranger:
+        title: "Against the unknown: {$protagonist} alone"
+        roles: { rival: Stranger, ally: ~ }      # no ally when the rival is unknown
+
+  zephon:
+    title: You play as Zephon
+    roles: { protagonist: Zephon, ally: Kaiden }
+    branches:
+      vs-aness:
+        title: "Against {$rival}: {$protagonist} and {$ally}"
+        roles: { rival: Aness }
+      vs-kaiden:
+        title: "Against {$rival}: {$protagonist} and {$ally}"
+        roles: { rival: Kaiden, ally: Aness }
+      vs-stranger:
+        title: "Against the unknown: {$protagonist} alone"
+        roles: { rival: Stranger, ally: ~ }
+
+  wayfarer:
+    title: You play as whoever you name
+    roles: { protagonist: Wayfarer, ally: Aness }
+    branches:
+      vs-aness:
+        title: "Against {$rival}: {$protagonist} and {$ally}"
+        roles: { rival: Aness, ally: Kaiden }   # default ally is the rival here
+      vs-zephon:
+        title: "Against {$rival}: {$protagonist} and {$ally}"
+        roles: { rival: Zephon }
+      vs-kaiden:
+        title: "Against {$rival}: {$protagonist} and {$ally}"
+        roles: { rival: Kaiden }
+      vs-stranger:
+        title: "Against the unknown: {$protagonist} alone"
+        roles: { rival: Stranger, ally: ~ }

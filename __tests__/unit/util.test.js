@@ -3,9 +3,26 @@
 const fs = require('fs');
 const {
   findFiles, loadYaml, deepClone, findKey,
-  getCI, setCI, deleteCI, normalizeVarKey, resolveVariables, warnUnexpandedVariables,
-  walkCardTextFields, warnUnresolvedFieldTokens, warnMechanicalArtifacts, maskFencedRegions,
+  getCI, setCI, deleteCI, normalizeVarKey, resolveVariables, checkUnexpandedVariables,
+  walkItemTextFields, checkUnresolvedFieldTokens, checkMechanicalArtifacts, maskFencedRegions,
 } = require('../../src/util');
+const { Diagnostics } = require('../../src/diag');
+
+/**
+ * The leak detectors report onto the bus rather than to the console (§12.5), so what these
+ * assert on is `{ severity, code, message }` — the three things a caller downstream can act
+ * on. Severity in particular is the point of the change: six of the eight patterns are now
+ * ERRORs that fail the run, where every one of them used to print a flat `WARN:` and gate
+ * nothing.
+ */
+function collect(run) {
+  const diagnostics = new Diagnostics();
+  const found = run({ diagnostics });
+  return {
+    found,
+    rows: diagnostics.all.map((d) => ({ severity: d.severity, code: d.code, message: d.message })),
+  };
+}
 
 // ── deepClone ─────────────────────────────────────────────────────────────────
 
@@ -152,20 +169,46 @@ describe('resolveVariables', () => {
     expect(resolveVariables('{%x} and {%y}', { x: 'foo', y: 'bar' })).toBe('foo and bar');
   });
 
-  test('undeclared variable: warns and returns token literal', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const result = resolveVariables('{%missing}', {});
-    expect(result).toBe('{%missing}');
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('missing'));
-    warn.mockRestore();
+  test('undeclared variable with a bus: raises CL0510 instead of warning, still returns the literal', () => {
+    const diagnostics = new Diagnostics();
+    const result = resolveVariables('X {%missing} Y', {}, { diagnostics, file: 'items.cl.yaml' });
+    expect(result).toBe('X {%missing} Y');
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0]).toMatchObject({ code: 'CL0510', file: 'items.cl.yaml' });
+    expect(diagnostics.errors[0].message).toContain('{%missing}');
   });
 
-  test('cycle: warns and returns token literal', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const result = resolveVariables('{%a}', { a: '{%a}' });
+  test('a present-but-null (~-unbound) variable is treated as undeclared, not rendered as "null" (Decision 1)', () => {
+    // Measured bug this guards: `Object.keys().find()` finds a present-but-null key
+    // regardless of its value, so a plain assign would fall through to
+    // `String(variables[actualKey])` and ship the literal word "null" into compiled prose.
+    const diagnostics = new Diagnostics();
+    const result = resolveVariables('X {%foo} Y', { foo: null }, { diagnostics, file: 'items.cl.yaml' });
+    expect(result).toBe('X {%foo} Y');
+    expect(result).not.toContain('null');
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0]).toMatchObject({ code: 'CL0510', file: 'items.cl.yaml' });
+    expect(diagnostics.errors[0].message).toContain('foo');
+  });
+
+  test('cycle with a bus: raises CL0511 and names every key in the loop', () => {
+    const diagnostics = new Diagnostics();
+    const result = resolveVariables('{%a}', { a: '{%b}', b: '{%a}' }, { diagnostics, file: 'compile.cl.yaml' });
     expect(result).toBe('{%a}');
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('cycle'));
-    warn.mockRestore();
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0].code).toBe('CL0511');
+    expect(diagnostics.errors[0].message).toContain('"a" → "b" → "a"');
+  });
+
+  // §5.1: a name only a branch declares, used where the value resolves before branches are
+  // enumerated, is a scoping mistake rather than a typo — so it gets CL0520 and says so,
+  // instead of sending the author looking for a declaration that exists.
+  test('branchOnly turns an undeclared name into CL0520', () => {
+    const diagnostics = new Diagnostics();
+    const sink = { diagnostics, file: 'compile.cl.yaml', branchOnly: new Set(['protag']) };
+    expect(resolveVariables('{%protag}/opening.yaml', {}, sink)).toBe('{%protag}/opening.yaml');
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0].code).toBe('CL0520');
   });
 
   test('non-string text passes through unchanged', () => {
@@ -173,146 +216,195 @@ describe('resolveVariables', () => {
     expect(resolveVariables(null, { name: 'x' })).toBeNull();
   });
 
-  test('null variables argument passes text through unchanged', () => {
-    expect(resolveVariables('{%key}', null)).toBe('{%key}');
+  // An absent variables map is an empty one, not a reason to skip checking — the config
+  // expander's rule, kept when the two merged. A file with no `variables:` block that
+  // still writes `{%key}` has exactly the problem CL0510 reports, and the old passthrough
+  // hid it.
+  test('an absent variables map is checked as an empty one, not skipped', () => {
+    const diagnostics = new Diagnostics();
+    expect(resolveVariables('{%key}', null, { diagnostics, file: 'compile.cl.yaml' })).toBe('{%key}');
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0]).toMatchObject({ code: 'CL0510', file: 'compile.cl.yaml' });
   });
 
   test('string with no tokens passes through unchanged', () => {
     expect(resolveVariables('plain text', { x: 'y' })).toBe('plain text');
   });
+
+  // ── the {@} replacement (§6.1) ──────────────────────────────────────────────
+  // v3's second naming system, `{@name}` for canon/component resources, is gone.
+  // Canon names are auto-exposed as `{%}` variables, so a canon reference in an
+  // `include:` path now resolves through this function like any other variable.
+
+  test('a canon name expands mid-path, exactly as {@name} used to', () => {
+    const variables = { characters: '/canon/_General/Characters' };
+    expect(resolveVariables('{%characters}/Aness.yaml', variables))
+      .toBe('/canon/_General/Characters/Aness.yaml');
+  });
+
+  test('a leftover {@name} token is left untouched, not resolved', () => {
+    // Nothing consumes `{@}` any more; the migrator rewrites these before v4 sees them.
+    expect(resolveVariables('{@characters}/Aness.yaml', { characters: '/x' }))
+      .toBe('{@characters}/Aness.yaml');
+  });
 });
 
-// ── warnUnexpandedVariables ───────────────────────────────────────────────────
+// ── checkUnexpandedVariables ──────────────────────────────────────────────────
 
-describe('warnUnexpandedVariables', () => {
-  test('warns once per distinct {%token} and returns true', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const found = warnUnexpandedVariables('a {%role} b {%role} c {%era}', 'card "X" (Y)');
+describe('checkUnexpandedVariables', () => {
+  test('reports CL0431 once per distinct {%token}, at ERROR, and returns true', () => {
+    const { found, rows } = collect((sink) =>
+      checkUnexpandedVariables('a {%role} b {%role} c {%era}', 'item "X" (Y)', sink));
     expect(found).toBe(true);
-    expect(warn).toHaveBeenCalledTimes(2); // {%role} deduped, {%era}
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('{%role}'));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('{%era}'));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('card "X" (Y)'));
-    warn.mockRestore();
+    expect(rows).toHaveLength(2); // {%role} deduped, {%era}
+    expect(rows.every((r) => r.code === 'CL0431' && r.severity === 'error')).toBe(true);
+    expect(rows[0].message).toContain('{%role}');
+    expect(rows[1].message).toContain('{%era}');
+    expect(rows[0].message).toContain('item "X" (Y)');
   });
 
   test('ignores {@name} references and returns false', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const found = warnUnexpandedVariables('see {@main}/x for details', 'component Opening.md');
+    const { found, rows } = collect((sink) =>
+      checkUnexpandedVariables('see {@main}/x for details', 'component Opening.md', sink));
     expect(found).toBe(false);
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
+    expect(rows).toEqual([]);
   });
 
-  test('clean text returns false and warns nothing', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    expect(warnUnexpandedVariables('fully resolved', 'x')).toBe(false);
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
+  test('clean text returns false and reports nothing', () => {
+    const { found, rows } = collect((sink) => checkUnexpandedVariables('fully resolved', 'x', sink));
+    expect(found).toBe(false);
+    expect(rows).toEqual([]);
   });
 
   test('non-string input returns false', () => {
-    expect(warnUnexpandedVariables(null, 'x')).toBe(false);
-    expect(warnUnexpandedVariables(42, 'x')).toBe(false);
+    expect(checkUnexpandedVariables(null, 'x')).toBe(false);
+    expect(checkUnexpandedVariables(42, 'x')).toBe(false);
   });
+
 });
 
-// ── walkCardTextFields ────────────────────────────────────────────────────────
+// ── walkItemTextFields ────────────────────────────────────────────────────────
 
-describe('walkCardTextFields', () => {
+describe('walkItemTextFields', () => {
   test('visits strings in body, aid, render, and name (incl. arrays + nesting)', () => {
-    const card = {
+    const item = {
       body: { Tagline: 'a', Traits: { hair: 'b' }, Keywords: ['c', 'd'] },
       aid: { title: 'e', triggers: ['f'] },
       render: { wrapper: 'g' },
       name: { display: 'h', full: 'i' },
     };
-    walkCardTextFields(card, s => s.toUpperCase());
-    expect(card.body.Tagline).toBe('A');
-    expect(card.body.Traits.hair).toBe('B');
-    expect(card.body.Keywords).toEqual(['C', 'D']);
-    expect(card.aid.title).toBe('E');
-    expect(card.aid.triggers).toEqual(['F']);
-    expect(card.render.wrapper).toBe('G');
-    expect(card.name.full).toBe('I');
+    walkItemTextFields(item, s => s.toUpperCase());
+    expect(item.body.Tagline).toBe('A');
+    expect(item.body.Traits.hair).toBe('B');
+    expect(item.body.Keywords).toEqual(['C', 'D']);
+    expect(item.aid.title).toBe('E');
+    expect(item.aid.triggers).toEqual(['F']);
+    expect(item.render.wrapper).toBe('G');
+    expect(item.name.full).toBe('I');
   });
 
   test('leaves non-string values (numbers, booleans) untouched', () => {
-    const card = { aid: { encapsulate: true }, render: { position: 5 }, body: {} };
-    walkCardTextFields(card, () => 'X');
-    expect(card.aid.encapsulate).toBe(true);
-    expect(card.render.position).toBe(5);
+    const item = { aid: { encapsulate: true }, render: { position: 5 }, body: {} };
+    walkItemTextFields(item, () => 'X');
+    expect(item.aid.encapsulate).toBe(true);
+    expect(item.render.position).toBe(5);
   });
 
-  test('no-op on missing card / sections', () => {
-    expect(() => walkCardTextFields(undefined, s => s)).not.toThrow();
-    expect(() => walkCardTextFields({ id: 'x' }, s => s)).not.toThrow();
+  test('no-op on missing item / sections', () => {
+    expect(() => walkItemTextFields(undefined, s => s)).not.toThrow();
+    expect(() => walkItemTextFields({ id: 'x' }, s => s)).not.toThrow();
   });
 });
 
-// ── warnUnresolvedFieldTokens ─────────────────────────────────────────────────
+// ── checkUnresolvedFieldTokens ────────────────────────────────────────────────
 
-describe('warnUnresolvedFieldTokens', () => {
-  test('warns once per distinct {$token} and returns true', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const found = warnUnresolvedFieldTokens('{$she} and {$she} and {$Aria}', 'card "X" (Y)');
+describe('checkUnresolvedFieldTokens', () => {
+  test('reports CL0430 once per distinct {$token}, at ERROR, and returns true', () => {
+    const { found, rows } = collect((sink) =>
+      checkUnresolvedFieldTokens('{$she} and {$she} and {$Aria}', 'item "X" (Y)', sink));
     expect(found).toBe(true);
-    expect(warn).toHaveBeenCalledTimes(2);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('{$she}'));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('{$Aria}'));
-    warn.mockRestore();
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.code === 'CL0430' && r.severity === 'error')).toBe(true);
+    expect(rows[0].message).toContain('{$she}');
+    expect(rows[1].message).toContain('{$Aria}');
   });
 
   test('ignores {%…} and {@…} tokens', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    expect(warnUnresolvedFieldTokens('{%role} {@main}/x', 'x')).toBe(false);
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
+    const { found, rows } = collect((sink) =>
+      checkUnresolvedFieldTokens('{%role} {@main}/x', 'x', sink));
+    expect(found).toBe(false);
+    expect(rows).toEqual([]);
   });
 
   test('clean text and non-string return false', () => {
-    expect(warnUnresolvedFieldTokens('resolved text', 'x')).toBe(false);
-    expect(warnUnresolvedFieldTokens(null, 'x')).toBe(false);
+    expect(checkUnresolvedFieldTokens('resolved text', 'x')).toBe(false);
+    expect(checkUnresolvedFieldTokens(null, 'x')).toBe(false);
   });
 });
 
-describe('warnMechanicalArtifacts', () => {
-  test('flags a guessed verb marker like [does] instead of silently passing it through', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const found = warnMechanicalArtifacts('Aness love[does] magic research', 'card "X" (Y)');
+describe('checkMechanicalArtifacts', () => {
+  test('a leaked [ies] is a supported unresolved marker', () => {
+    const { rows } = collect((sink) =>
+      checkMechanicalArtifacts('Guide carr[ies] the bag', 'item "X" (Y)', sink));
+    expect(rows).toContainEqual(expect.objectContaining({
+      code: 'CL0434', severity: 'error', message: expect.stringContaining('[ies]'),
+    }));
+    expect(rows.map((r) => r.code)).not.toContain('CL0436');
+  });
+  test('a guessed verb marker like [does] is CL0436 at WARN — an opinion, not a fact', () => {
+    const { found, rows } = collect((sink) =>
+      checkMechanicalArtifacts('Aness love[does] magic research', 'item "X" (Y)', sink));
     expect(found).toBe(true);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[does]'));
-    warn.mockRestore();
+    const suspect = rows.filter((r) => r.code === 'CL0436');
+    expect(suspect).toHaveLength(1);
+    expect(suspect[0].severity).toBe('warn');
+    expect(suspect[0].message).toContain('[does]');
   });
 
   test('does not flag real verb markers or [e] as suspect', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const found = warnMechanicalArtifacts('[e] Aness love[s] magic', 'card "X" (Y)');
-    // [s] itself is still flagged as an unresolved *real* marker, but not as "suspect"
-    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("isn't a recognized"));
-    warn.mockRestore();
+    const { rows } = collect((sink) =>
+      checkMechanicalArtifacts('[e] Aness love[s] magic', 'item "X" (Y)', sink));
+    // [s] is still an unresolved *real* marker (CL0434, ERROR), but nothing is "suspect".
+    expect(rows.map((r) => r.code)).toContain('CL0434');
+    expect(rows.map((r) => r.code)).not.toContain('CL0436');
   });
 
   test('does not flag a single-word trigger in the fence as a suspect marker', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const rendered = '## Door\n\n~~~\ntriggers: [door]\nencapsulate: true\n~~~\n\n[e] A plain wooden door.';
-    warnMechanicalArtifacts(rendered, 'card "Door" (Location)');
-    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("isn't a recognized"));
-    warn.mockRestore();
+    const rendered = [
+      '## Door', '', '~~~', 'triggers: [door]', 'encapsulate: true', '~~~', '',
+      '[e] A plain wooden door.',
+    ].join('\n');
+    const { rows } = collect((sink) =>
+      checkMechanicalArtifacts(rendered, 'item "Door" (Location)', sink));
+    expect(rows.map((r) => r.code)).not.toContain('CL0436');
   });
 
-  test('flags leaked template functions, tags, and JS artifacts', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    warnMechanicalArtifacts('{join("; ", $body.Tagline)} {if $x}{/if} [object Object] undefined', 'card "X" (Y)');
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('leaked render function'));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('leaked template tag'));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('JS interpolation artifact'));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('possible JS interpolation artifact "undefined"'));
-    warn.mockRestore();
+  test('leaked functions, tags and artifacts are ERRORs; a bare "undefined" is a WARN', () => {
+    const { rows } = collect((sink) => checkMechanicalArtifacts(
+      '{join("; ", $body.Tagline)} {if $x}{/if} [object Object] undefined', 'item "X" (Y)', sink));
+    const by = Object.fromEntries(rows.map((r) => [r.code, r]));
+    expect(by.CL0432.severity).toBe('error');
+    expect(by.CL0432.message).toContain('leaked render function');
+    expect(by.CL0433.severity).toBe('error');
+    expect(by.CL0433.message).toContain('leaked template tag');
+    expect(by.CL0435.severity).toBe('error');
+    expect(by.CL0435.message).toContain('JS interpolation artifact');
+    expect(by.CL0437.severity).toBe('warn');
+    expect(by.CL0437.message).toContain('compiled output contains bare undefined');
   });
 
   test('clean text returns false', () => {
-    expect(warnMechanicalArtifacts('Aness loves magic research.', 'x')).toBe(false);
+    expect(checkMechanicalArtifacts('Aness loves magic research.', 'x')).toBe(false);
+  });
+
+  test('lint.level reaches the two opinions and cannot reach the six facts', () => {
+    const diagnostics = new Diagnostics({ lintLevel: 'off' });
+    checkMechanicalArtifacts(
+      'love[does] it {if $x}{/if} undefined', 'item "X" (Y)', { diagnostics });
+    const codes = diagnostics.all.map((d) => d.code);
+    expect(codes).toContain('CL0433');   // fact — survives `level: off`
+    expect(codes).not.toContain('CL0436');
+    expect(codes).not.toContain('CL0437');
   });
 });
 
@@ -352,12 +444,12 @@ describe('findFiles', () => {
   test('returns files matching extension', () => {
     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
     jest.spyOn(fs, 'readdirSync').mockReturnValue([
-      file('cards.yaml'),
+      file('items.yaml'),
       file('readme.txt'),
     ]);
     const result = findFiles('/dir', '.yaml');
     expect(result).toHaveLength(1);
-    expect(result[0]).toContain('cards.yaml');
+    expect(result[0]).toContain('items.yaml');
   });
 
   test('filters by extension case-insensitively', () => {

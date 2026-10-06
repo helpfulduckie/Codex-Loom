@@ -3,75 +3,14 @@
 const fs   = require('fs');
 const path = require('path');
 
-// ── private helpers ──────────────────────────────────────────────────────────
+const { buildTree, flattenNodes, leafNodes, collectMdFiles } = require('./compiledTree');
+const { readFileTrim } = require('./util');
+const { NULL_LOG } = require('./log');
+const { reportIdentity, shiftHeadings, leafFileName } = require('./report');
 
-function readFile(filePath) {
-  try {
-    return fs.readFileSync(filePath, 'utf8').trim();
-  } catch {
-    return null;
-  }
-}
 
-function collectMarkdownFiles(dir) {
-  const results = [];
-  if (!fs.existsSync(dir)) return results;
-
-  function walk(current) {
-    const entries = fs.readdirSync(current, { withFileTypes: true });
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-      } else if (entry.isFile() && entry.name.endsWith('.md')) {
-        results.push(full);
-      }
-    }
-  }
-  walk(dir);
-  return results;
-}
-
-function sanitizeFilename(name) {
-  return name.replace(/[<>:"/\\|?*]/g, '_').trim();
-}
-
-function shiftHeadings(content, shift) {
-  if (shift <= 0) return content;
-  return content.replace(/^(#{1,6})(?= )/gm, (_, hashes) => {
-    const newLevel = Math.min(hashes.length + shift, 6);
-    return '#'.repeat(newLevel);
-  });
-}
-
-// ── exported building blocks ─────────────────────────────────────────────────
-
-/**
- * Read all .md files from a Components/ directory.
- * Returns a map of basename-without-ext → trimmed content.
- */
-function readComponents(branchDir) {
-  const compDir = path.join(branchDir, 'Components');
-  const result  = {};
-  if (!fs.existsSync(compDir)) return result;
-
-  const entries = fs.readdirSync(compDir, { withFileTypes: true });
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    if (entry.isFile() && entry.name.endsWith('.md')) {
-      const content = readFile(path.join(compDir, entry.name));
-      if (content) result[path.basename(entry.name, '.md')] = content;
-    }
-  }
-  return result;
-}
-
-/**
- * Build a concatenated story-cards block from a Story Cards/ directory.
- * Groups files by their immediate sub-folder (card type).
- * headingLevel controls the markdown heading depth for group names.
- */
 function buildStoryCardsBlock(storyCardsDir, headingLevel) {
-  const files = collectMarkdownFiles(storyCardsDir);
+  const files = collectMdFiles(storyCardsDir);
   if (files.length === 0) return null;
 
   const hashes     = '#'.repeat(headingLevel);
@@ -93,108 +32,97 @@ function buildStoryCardsBlock(storyCardsDir, headingLevel) {
   for (const groupName of groupOrder) {
     if (groupName) lines.push(`${hashes} ${groupName}`);
     for (const file of groups[groupName]) {
-      const content = readFile(file);
+      const content = readFileTrim(file);
       if (content) lines.push(shiftHeadings(content, headingLevel - 1));
     }
   }
   return lines.join('\n\n');
 }
 
-/**
- * Recursively discover all leaf nodes under a scenario root directory.
- * Each leaf accumulates story-card blocks from all ancestor nodes.
- *
- * @typedef {{ branchNames: string[], cards: string[], leafDir: string }} LeafNode
- * @param {string}   branchDir     - absolute path of the node to walk
- * @param {string[]} ancestorCards - accumulated card blocks from ancestors
- * @param {string[]} branchNames   - path of branch names from root to here
- * @returns {LeafNode[]}
- */
-function discoverLeaves(branchDir, ancestorCards, branchNames) {
-  const storyCardsDir = path.join(branchDir, 'Story Cards');
-  const branchesDir   = path.join(branchDir, 'Branches');
+/** `storyCardsDirs` runs root to leaf; a deeper card replaces an inherited one by name, as VL does. */
+function buildMergedStoryCardsBlock(storyCardsDirs, headingLevel) {
+  const hashes = '#'.repeat(headingLevel);
+  const byTitle = new Map(); // card title → { type, title, chunk }
 
-  const myCards = [...ancestorCards];
-  if (fs.existsSync(storyCardsDir)) {
-    const block = buildStoryCardsBlock(storyCardsDir, 3);
-    if (block) myCards.push(block);
-  }
-
-  const childBranches = fs.existsSync(branchesDir)
-    ? fs.readdirSync(branchesDir, { withFileTypes: true })
-        .filter(e => e.isDirectory())
-        .sort((a, b) => a.name.localeCompare(b.name))
-    : [];
-
-  if (childBranches.length === 0) {
-    return [{ branchNames, cards: myCards, leafDir: branchDir }];
-  }
-
-  const leaves = [];
-  for (const child of childBranches) {
-    const childPath = path.join(branchesDir, child.name);
-    leaves.push(...discoverLeaves(childPath, myCards, [...branchNames, child.name]));
-  }
-  return leaves;
-}
-
-/**
- * Walk every node in the tree (root + all branches, depth-first), collecting
- * one section per node showing only that node's own content.
- */
-function collectOverviewSections(branchDir, branchNames, rootDirName) {
-  const sections = [];
-
-  const label   = branchNames.length === 0
-    ? rootDirName
-    : [rootDirName, ...branchNames].join(' - ');
-  const heading = `## ${label}`;
-
-  const ownComponents = readComponents(branchDir);
-  const storyCardsDir = path.join(branchDir, 'Story Cards');
-  const ownCards      = fs.existsSync(storyCardsDir)
-    ? buildStoryCardsBlock(storyCardsDir, 4)
-    : null;
-
-  const sectionParts = [heading];
-  for (const [name, content] of Object.entries(ownComponents)) {
-    const fenced = name === 'Plot Essentials' || name === 'AI Instructions';
-    const body   = fenced ? `\`\`\`\n${content}\n\`\`\`` : content;
-    sectionParts.push(`### ${name}\n\n${body}`);
-  }
-  if (ownCards) sectionParts.push(`### Story Cards\n\n${ownCards}`);
-  if (sectionParts.length === 1) sectionParts.push('_No content at this level._');
-  sections.push(sectionParts.join('\n\n'));
-
-  const branchesDir = path.join(branchDir, 'Branches');
-  if (fs.existsSync(branchesDir)) {
-    const children = fs.readdirSync(branchesDir, { withFileTypes: true })
-      .filter(e => e.isDirectory())
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    for (const child of children) {
-      sections.push(
-        ...collectOverviewSections(
-          path.join(branchesDir, child.name),
-          [...branchNames, child.name],
-          rootDirName,
-        )
-      );
+  for (const dir of storyCardsDirs) {
+    if (!fs.existsSync(dir)) continue;
+    for (const file of collectMdFiles(dir)) {
+      const parts = path.relative(dir, file).split(path.sep);
+      const type = parts.length > 1 ? parts[0] : '';
+      const content = readFileTrim(file);
+      if (!content) continue;
+      for (const raw of content.split(/(?=^## )/m)) {
+        const chunk = raw.trim();
+        if (!chunk) continue;
+        const title = (chunk.match(/^##\s+(.*)/) || [, ''])[1].trim();
+        // Text with no card heading has no name to override by, so each chunk stands alone.
+        const key = title || Symbol('untitled');
+        byTitle.set(key, { type, title, chunk: shiftHeadings(chunk, headingLevel - 1) });
+      }
     }
   }
+  if (byTitle.size === 0) return null;
+
+  const byType = new Map(); // type name → [{ title, chunk }]
+  for (const card of byTitle.values()) {
+    if (!byType.has(card.type)) byType.set(card.type, []);
+    byType.get(card.type).push(card);
+  }
+
+  const lines = [];
+  for (const type of [...byType.keys()].sort((a, b) => a.localeCompare(b))) {
+    if (type) lines.push(`${hashes} ${type}`);
+    for (const { chunk } of byType.get(type).sort((a, b) => a.title.localeCompare(b.title))) {
+      lines.push(chunk);
+    }
+  }
+  return lines.join('\n\n');
+}
+
+function discoverLeaves(rootDir) {
+  return leafNodes(buildTree(rootDir)).map((leaf) => {
+    const dirs = [];
+    for (let node = leaf; node; node = node.parent) dirs.unshift(path.join(node.dir, 'Story Cards'));
+    return {
+      branchNames: leaf.branchNames,
+      cards: buildMergedStoryCardsBlock(dirs, 3),
+      leafDir: leaf.dir,
+    };
+  });
+}
+
+function collectOverviewSections(rootDir, rootDirName) {
+  const sections = [];
+
+  for (const node of flattenNodes(buildTree(rootDir))) {
+    const label = node.branchNames.length === 0
+      ? rootDirName
+      : [rootDirName, ...node.branchNames].join(' - ');
+
+    const storyCardsDir = path.join(node.dir, 'Story Cards');
+    const ownCards      = fs.existsSync(storyCardsDir)
+      ? buildStoryCardsBlock(storyCardsDir, 4)
+      : null;
+
+    const sectionParts = [`## ${label}`];
+    for (const [name, content] of Object.entries(node.own.components)) {
+      const fenced = name === 'Plot Essentials' || name === 'AI Instructions';
+      const body   = fenced ? `\`\`\`\n${content}\n\`\`\`` : content;
+      sectionParts.push(`### ${name}\n\n${body}`);
+    }
+    if (ownCards) sectionParts.push(`### Story Cards\n\n${ownCards}`);
+    if (sectionParts.length === 1) sectionParts.push('_No content at this level._');
+    sections.push(sectionParts.join('\n\n'));
+  }
+
   return sections;
 }
 
-// ── exported leaf compiler ────────────────────────────────────────────────────
 
-/**
- * Compile a single leaf node into a .leaf.md file and write it to outputDir.
- * Filename: sanitize(branchNames.join(" - ") || rootDirName) + ".leaf.md"
- */
-function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose = false) {
-  const { branchNames, cards, leafDir } = leaf;
+function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log = NULL_LOG,
+  identity = reportIdentity(null, rootDirName), filename = null) {
+  const { branchNames, cards, leafDir } = leaf; // `cards` is the merged block, or null
 
-  // Walk up from the leaf to find the nearest versions of each component file.
   let dir      = leafDir;
   let opening  = null;
   let plotEss  = null;
@@ -203,10 +131,10 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose = false
   while (true) {
     const compDir = path.join(dir, 'Components');
     if (fs.existsSync(compDir)) {
-      if (opening === null) opening = readFile(path.join(compDir, 'Opening.md'));
-      if (plotEss === null) plotEss = readFile(path.join(compDir, 'Plot Essentials.md'));
-      if (ainText === null) ainText = readFile(path.join(compDir, 'AI Instructions.md'));
-      if (anText  === null) anText  = readFile(path.join(compDir, "Author Notes.md"));
+      if (opening === null) opening = readFileTrim(path.join(compDir, 'Opening.md'));
+      if (plotEss === null) plotEss = readFileTrim(path.join(compDir, 'Plot Essentials.md'));
+      if (ainText === null) ainText = readFileTrim(path.join(compDir, 'AI Instructions.md'));
+      if (anText  === null) anText  = readFileTrim(path.join(compDir, "Author Notes.md"));
     }
     if (opening !== null && plotEss !== null && ainText !== null && anText !== null) break;
     const parent     = path.dirname(dir);
@@ -216,15 +144,13 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose = false
   }
 
   const title = branchNames.length > 0
-    ? `${rootDirName}: ${branchNames.join(' - ')}`
-    : rootDirName;
+    ? `${identity.label}: ${branchNames.join(' - ')}`
+    : identity.label;
 
-  const fileBase = isSingleLeaf && branchNames.length === 0
-    ? rootDirName
-    : branchNames.join(' - ');
-
-  const filename = sanitizeFilename(fileBase || rootDirName) + '.leaf.md';
-  const outPath  = path.join(outputDir, filename);
+  const chosenFilename = filename || (isSingleLeaf && branchNames.length === 0
+    ? `${identity.stem}.leaf.md`
+    : leafFileName(branchNames, rootDirName, isSingleLeaf));
+  const outPath  = path.join(outputDir, chosenFilename);
 
   const parts = [];
   parts.push(`# ${title}`);
@@ -232,69 +158,57 @@ function compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose = false
   if (plotEss)  parts.push(`## Plot Essentials\n\n\`\`\`\n${plotEss}\n\`\`\``);
   if (ainText)  parts.push(`## AI Instructions\n\n\`\`\`\n${ainText}\n\`\`\``);
   if (anText)   parts.push(`## Author's Note\n\n${anText}`);
-  if (cards.length > 0) parts.push(`## Story Cards\n\n${cards.join('\n\n')}`);
+  if (cards) parts.push(`## Story Cards\n\n${cards}`);
 
   fs.writeFileSync(outPath, parts.join('\n\n'), 'utf8');
-  if (verbose) console.log(`  ✓  ${filename}`);
+  log.verbose(`  ✓  ${chosenFilename}`);
 }
 
-// ── exported runners ──────────────────────────────────────────────────────────
 
-/**
- * Run leaves mode on a scenario root: discover all leaves, compile each one.
- * Returns the list of output file paths written.
- */
-function runLeafReviewMode(scenarioRoot, outputDir, verbose = false) {
+function runLeafReviewMode(scenarioRoot, outputDir, options = {}) {
+  const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
-  const leaves      = discoverLeaves(rootAbs, [], []);
+  const identity    = reportIdentity(options.title, rootDirName);
+  const leaves      = discoverLeaves(rootAbs);
 
-  if (leaves.length === 0) {
-    console.warn('  WARN: No branch leaves found — nothing to compile.');
-    return [];
-  }
+  if (leaves.length === 0) return { written: [] };
 
   const isSingleLeaf = leaves.length === 1;
   const written      = [];
 
   for (const leaf of leaves) {
     const { branchNames } = leaf;
-    const fileBase  = isSingleLeaf && branchNames.length === 0
-      ? rootDirName
-      : branchNames.join(' - ');
-    const filename  = sanitizeFilename(fileBase || rootDirName) + '.leaf.md';
+    const filename  = isSingleLeaf && branchNames.length === 0
+      ? `${identity.stem}.leaf.md`
+      : leafFileName(branchNames, rootDirName, isSingleLeaf);
     written.push(path.join(outputDir, filename));
 
-    compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, verbose);
+    compileLeaf(leaf, outputDir, rootDirName, isSingleLeaf, log, identity, filename);
   }
 
-  return written;
+  return { written };
 }
 
-/**
- * Run overview mode: produce one .overview.md covering the whole tree.
- * Returns the output file path written.
- */
-function runOverviewMode(scenarioRoot, outputDir, verbose = false) {
+function runOverviewMode(scenarioRoot, outputDir, options = {}) {
+  const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
-  const filename    = sanitizeFilename(rootDirName) + '.overview.md';
+  const identity    = reportIdentity(options.title, rootDirName);
+  const filename    = identity.stem + '.overview.md';
   const outPath     = path.join(outputDir, filename);
 
-  const sections = collectOverviewSections(rootAbs, [], rootDirName);
-  const doc = [`# ${rootDirName}`, ...sections].join('\n\n');
+  const sections = collectOverviewSections(rootAbs, identity.label);
+  const doc = [`# ${identity.label}`, ...sections].join('\n\n');
   fs.writeFileSync(outPath, doc, 'utf8');
-  if (verbose) console.log(`  ✓  ${filename}`);
-  return outPath;
+  log.verbose(`  ✓  ${filename}`);
+  return { written: [outPath], outPath };
 }
 
 module.exports = {
-  readComponents,
   buildStoryCardsBlock,
   discoverLeaves,
-  collectOverviewSections,
   compileLeaf,
   runLeafReviewMode,
   runOverviewMode,
-  sanitizeFilename,
 };

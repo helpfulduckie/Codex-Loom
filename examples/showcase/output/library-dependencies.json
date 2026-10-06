@@ -1,0 +1,16 @@
+{
+  "generatedAt": "2026-09-11T04:27:41.803Z",
+  "compileYaml": "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\showcase\\compile.cl.yaml",
+  "variables": {
+    "setting": "The Royal Academy"
+  },
+  "library": {
+    "main": {
+      "expression": "./library/main",
+      "resolvedPath": "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\showcase\\library\\main",
+      "files": [
+        "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\showcase\\library\\main\\places.cl.yaml"
+      ]
+    }
+  }
+}

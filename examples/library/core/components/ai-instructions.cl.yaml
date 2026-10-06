@@ -1,0 +1,20 @@
+# Shared AI Instructions. Nothing here names a branch: a library does not know what
+# branches a project has, so per-branch dispatch is written on the project's own copy or
+# added by a project section of the same name.
+# doc: 09-components.md
+
+sections:
+  pov:
+    text:
+      person: Second person, present tense.
+      tone: Plain narration. Do not summarize what the player just did.
+
+  pacing:
+    text: |
+      Do not resolve a scene the player opened in the same turn.
+      End on something the player can act against.
+
+  magic:
+    text: |
+      Magic is expensive and specific. If a working has no stated cost, it does not
+      happen. Never invent a second magic system alongside the one in play.

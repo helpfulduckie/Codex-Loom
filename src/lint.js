@@ -8,96 +8,81 @@ const {
   VERB_MARKER_RE, SUSPECT_VERB_MARKER_RE, JS_ARTIFACT_RE, JS_WORD_RE,
   maskFencedRegions,
 } = require('./util');
+const { parseCards } = require('./emit/vl');
+const {
+  CODES: DIAG_CODES, Diagnostics, SEVERITY, SEVERITY_LABEL,
+} = require('./diag');
+const {
+  loadPack, evaluatePack, evaluatePackExistence, clampFinding,
+} = require('./lint/packs');
+const { buildTree, leafNodes, collectMdFiles } = require('./compiledTree');
+const { NULL_LOG } = require('./log');
+const { reportIdentity } = require('./report');
 
-// ── mechanical syntax checks ────────────────────────────────────────────────
-//
-// Every pattern here is a compile-time artifact that should never survive into
-// rendered output — a resolver miss, a template tag that didn't get consumed,
-// or a JS interpolation failure. Patterns are imported from util.js, the same
-// catalog the automatic per-write compile-time warnings use, so this offline
-// scanner can never drift out of sync with them (or be guessed independently,
-// which is how the wrong-token-syntax bug happened in the first place).
 
 const CHECKS = [
   {
-    category: 'unresolved-field-token',
-    severity: 'ERROR',
+    severity: SEVERITY.ERROR,
+    code: DIAG_CODES.LEAKED_FIELD_TOKEN,
     re: FIELD_TOKEN_RE,
     hint: 'pronoun/character-ID/field-ref token ({$she}, {$Aria}, {$Aria.she}, {$body.Field}) left unresolved',
   },
   {
-    category: 'unexpanded-variable',
-    severity: 'ERROR',
+    severity: SEVERITY.ERROR,
+    code: DIAG_CODES.LEAKED_VARIABLE,
     re: VAR_TOKEN_RE,
     hint: 'compile.yaml variable token ({%key}) left unexpanded',
   },
   {
-    category: 'template-function',
-    severity: 'ERROR',
+    severity: SEVERITY.ERROR,
+    code: DIAG_CODES.LEAKED_RENDER_FUNCTION,
     re: TEMPLATE_FN_RE,
     hint: 'render function ({join}, {list}, {and}, {prose}, {block}, {keys}, {inline}) leaked into output',
   },
   {
-    category: 'template-tag',
-    severity: 'ERROR',
+    severity: SEVERITY.ERROR,
+    code: DIAG_CODES.LEAKED_TEMPLATE_TAG,
     re: TEMPLATE_TAG_RE,
     hint: 'template control tag ({if}/{/if}, {wrapper}/{/wrapper}, {preserve}/{/preserve}, {include}) leaked into output',
   },
   {
-    category: 'verb-conjugation-marker',
-    severity: 'ERROR',
+    severity: SEVERITY.ERROR,
+    code: DIAG_CODES.LEAKED_VERB_MARKER,
     re: VERB_MARKER_RE,
-    hint: 'verb conjugation marker ([s]/[es]/[is]/[was]/[has]) left unresolved — needs a preceding {$Id} or {$Id.pronoun} scope',
+    hint: 'verb conjugation marker ([s]/[es]/[ies]/[is]/[was]/[has]) left unresolved — needs a preceding {$Id} or {$Id.pronoun} scope',
   },
   {
-    category: 'suspect-verb-marker',
-    severity: 'WARN',
+    severity: SEVERITY.WARN,
+    code: DIAG_CODES.SUSPECT_VERB_MARKER,
     re: SUSPECT_VERB_MARKER_RE,
-    hint: "bracketed lowercase word that isn't a recognized verb-conjugation marker ([s]/[es]/[is]/[was]/[has]) or the [e] marker — likely a typo (e.g. [does] instead of [s]/[is])",
+    hint: "bracketed lowercase word that isn't a recognized verb-conjugation marker ([s]/[es]/[ies]/[is]/[was]/[has]) or the [e] marker — likely a typo (e.g. [does] instead of [s]/[is])",
   },
   {
-    category: 'js-interpolation-artifact',
-    severity: 'ERROR',
+    severity: SEVERITY.ERROR,
+    code: DIAG_CODES.LEAKED_JS_ARTIFACT,
     re: JS_ARTIFACT_RE,
     hint: 'JS interpolation failure artifact',
   },
   {
-    category: 'js-interpolation-word',
-    severity: 'WARN',
+    severity: SEVERITY.WARN,
+    code: DIAG_CODES.SUSPECT_JS_WORD,
     re: JS_WORD_RE,
     hint: 'bare "undefined"/"NaN" — usually a JS interpolation failure, but verify it is not intentional prose',
   },
 ];
 
-// ── file discovery ───────────────────────────────────────────────────────────
 
-/**
- * Recursively collect .md files under dir whose path includes a "Story Cards"
- * or "Components" segment — i.e. actual compiled output, not QA report
- * folders (Overview, leaf-review, seed-map, card-sizes, diff, annotate).
- */
 function findLintableFiles(dir) {
   const results = [];
-  if (!fs.existsSync(dir)) return results;
-  function walk(current) {
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })
-        .sort((a, b) => a.name.localeCompare(b.name))) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-      } else if (entry.isFile() && entry.name.endsWith('.md')) {
-        const parts = full.split(path.sep);
-        if (parts.includes('Story Cards') || parts.includes('Components')) {
-          results.push(full);
-        }
-      }
+  for (const full of collectMdFiles(dir)) {
+    const parts = full.split(path.sep);
+    if (parts.includes('Story Cards') || parts.includes('Components')) {
+      results.push(full);
     }
   }
-  walk(dir);
   return results;
 }
 
-// ── line numbers ─────────────────────────────────────────────────────────────
 
 function lineAt(text, index) {
   let line = 1;
@@ -107,180 +92,185 @@ function lineAt(text, index) {
   return line;
 }
 
-// ── raw-text scan ────────────────────────────────────────────────────────────
 
-/**
- * Run every mechanical CHECKS pattern against text. Occurrences of the same
- * (category, matched string) are grouped, recording every line they appear on.
- * Returns an array of { category, severity, hint, match, lines }.
- */
-function scanText(text) {
-  const findings = [];
+function scanText(text, { diagnostics, file = null } = {}) {
   const maskedText = maskFencedRegions(text);
-  for (const { category, severity, re, hint } of CHECKS) {
-    // suspect-verb-marker ignores the triggers:/encapsulate: fence — a
-    // single-word trigger like `triggers: [door]` is a real trigger, not a
-    // mistyped conjugation marker.
-    const scanTarget = category === 'suspect-verb-marker' ? maskedText : text;
-    const grouped = new Map(); // match string -> lines[]
+  for (const { severity, code, re, hint } of CHECKS) {
+    const scanTarget = code === DIAG_CODES.SUSPECT_VERB_MARKER ? maskedText : text;
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(scanTarget)) !== null) {
-      const key = m[0];
-      const line = lineAt(text, m.index);
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key).push(line);
+      diagnostics.add(severity, code, `\`${m[0]}\` — ${hint}`, { file, line: lineAt(text, m.index) });
       if (m[0].length === 0) re.lastIndex++; // guard against zero-width matches
     }
-    for (const [match, lines] of grouped) {
-      findings.push({ category, severity, hint, match, lines });
-    }
   }
-  return findings;
 }
 
-// ── story-card structural checks ─────────────────────────────────────────────
-//
-// Mirrors the "Format correctness" checklist from the VL QA review process:
-// [e]/`/]` mutual exclusion, empty trigger lists, missing encapsulate.
 
-function parseStoryCards(content) {
-  const sections = content.split(/^(?=## )/m);
-  const cards = [];
-  for (const section of sections) {
-    const trimmed = section.trim();
-    if (!trimmed) continue;
-    const titleMatch = trimmed.match(/^## (.+)/);
-    if (!titleMatch) continue;
-    const title = titleMatch[1].trim();
+const TOKEN_SHAPED = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*$/;
 
-    const firstFence = trimmed.indexOf('~~~');
-    if (firstFence === -1) continue;
-    const secondFence = trimmed.indexOf('~~~', firstFence + 3);
-    if (secondFence === -1) continue;
+const AID_SPECIAL_PREFIX = 'character.';
 
-    const fenceContent = trimmed.slice(firstFence + 3, secondFence);
-    const body = trimmed.slice(secondFence + 3).trim();
-    cards.push({ title, fenceContent, body });
-  }
-  return cards;
-}
-
-function scanStoryCardStructure(content) {
-  const findings = [];
-  for (const { title, fenceContent, body } of parseStoryCards(content)) {
-    const hasEPrefix = /^\[e\]/.test(body);
-    const hasDiscoveryMarker = /\/\]/.test(body);
-
-    if (hasEPrefix && hasDiscoveryMarker) {
-      findings.push({
-        category: 'e-marker-conflict', severity: 'ERROR', card: title,
-        hint: '[e] and /] are mutually exclusive but both appear on this card',
-      });
-    } else if (!hasEPrefix && !hasDiscoveryMarker) {
-      findings.push({
-        category: 'missing-discovery-marker', severity: 'WARN', card: title,
-        hint: 'card has neither [e] (background knowledge) nor /] (discovery marker) — verify this is intentional',
-      });
-    }
-
-    const triggerMatch = fenceContent.match(/^triggers:\s*\[(.*)\]/m);
-    const triggers = triggerMatch
-      ? triggerMatch[1].split(',').map(t => t.trim()).filter(Boolean)
-      : [];
-    if (!triggerMatch || triggers.length === 0) {
-      findings.push({
-        category: 'empty-triggers', severity: 'WARN', card: title,
-        hint: 'card has an empty or missing trigger list',
-      });
-    }
-
-    if (!/^encapsulate:\s*true/m.test(fenceContent)) {
-      findings.push({
-        category: 'missing-encapsulate', severity: 'WARN', card: title,
-        hint: 'encapsulate: true is absent — verify this is a deliberate exception',
-      });
-    }
-  }
-  return findings;
-}
-
-// ── report formatting ────────────────────────────────────────────────────────
-
-function formatLines(lines) {
-  const shown = lines.slice(0, 5).join(', ');
-  return lines.length > 5 ? `${shown}, +${lines.length - 5} more` : shown;
-}
-
-function formatReport(rootDirName, fileResults) {
-  const out = [`# Codex Loom Syntax Lint — ${rootDirName}`, ''];
-  let errorCount = 0, warnCount = 0;
-
-  for (const { relPath, findings } of fileResults) {
-    if (findings.length === 0) continue;
-    out.push(`## ${relPath}`, '');
-    for (const f of findings) {
-      if (f.severity === 'ERROR') errorCount++; else warnCount++;
-      if (f.card) {
-        out.push(`- [${f.severity}] (${f.category}) card "${f.card}": ${f.hint}`);
-      } else {
-        out.push(`- [${f.severity}] (${f.category}) \`${f.match}\` at line ${formatLines(f.lines)} — ${f.hint}`);
+function scanNativePlaceholders(text, { diagnostics, file = null } = {}) {
+  for (let i = 0; i < text.length - 1; i += 1) {
+    if (text[i] !== '$' || text[i + 1] !== '{') continue;
+    let depth = 0;
+    let j = i;
+    for (; j < text.length; j += 1) {
+      if (text[j] === '{') depth += 1;
+      else if (text[j] === '}') {
+        depth -= 1;
+        if (depth === 0) { j += 1; break; }
       }
+    }
+    const whole = text.slice(i, j);
+    const inner = whole.slice(2, -1);
+    i = j - 1;
+
+    if (!TOKEN_SHAPED.test(inner)) continue;
+    if (inner.toLowerCase().startsWith(AID_SPECIAL_PREFIX)) continue;
+
+    diagnostics.add(
+      SEVERITY.WARN, DIAG_CODES.NATIVE_PLACEHOLDER_SHAPE,
+      `\`${whole}\` reads as an AID placeholder that would prompt the player to type "${inner}".`,
+      { file, line: lineAt(text, i) },
+      { hint: `If a Codex Loom token was meant, it is written {$${inner}} — the brace and the dollar the other way round.` },
+    );
+  }
+}
+
+
+function scanStoryCardStructure(content, { diagnostics, file = null } = {}) {
+  for (const card of parseCards(content).filter((c) => c.hasFence)) {
+    if (card.kind === 'reference') continue;
+    if (card.triggers.length === 0) {
+      diagnostics.add(
+        SEVERITY.WARN, DIAG_CODES.CARD_NO_TRIGGERS,
+        `card "${card.title || '(untitled)'}" has an empty or missing trigger list, so AID cannot pull it into context. Add triggers or use kind: reference.`,
+        { file },
+      );
+    }
+  }
+}
+
+
+function loadDeclaredPacks(config, configPath, diagnostics) {
+  const entries = (config && config.lint && config.lint.packs) || {};
+  const baseDir = (config && config._base) || (configPath ? path.dirname(configPath) : '.');
+  const variables = (config && (config._variables || config.variables)) || {};
+  const out = [];
+  for (const [name, entry] of Object.entries(entries)) {
+    const packLevel = (entry && typeof entry === 'object' && entry.level) || null;
+    if (packLevel === 'off') continue;
+    const pack = loadPack(name, entry, { baseDir, variables, diagnostics, loc: { file: configPath } });
+    if (pack) out.push({ name, pack, packLevel });
+  }
+  return out;
+}
+
+function scanPacks(content, type, loadedPacks, { diagnostics, file = null } = {}) {
+  if (!loadedPacks || loadedPacks.length === 0) return;
+  const cards = parseCards(content, { type });
+  for (const { pack, packLevel } of loadedPacks) {
+    for (const f of evaluatePack(pack, cards)) {
+      const severity = clampFinding(f.severity, packLevel, null);
+      if (severity === null) continue;
+      diagnostics.add(severity, f.code, `card "${f.card}": ${f.detail}`, { file });
+    }
+  }
+}
+
+
+const NO_FILE_GROUP = '(convention packs)';
+
+function formatReport(rootDirName, diagnostics) {
+  const out = [`# Codex Loom Syntax Lint — ${rootDirName}`, ''];
+
+  const groups = new Map();
+  for (const d of diagnostics.all) {
+    const key = d.file || NO_FILE_GROUP;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(d);
+  }
+
+  for (const [heading, items] of groups) {
+    out.push(`## ${heading}`, '');
+    for (const d of items) {
+      const where = [
+        d.line !== null ? `line ${d.line}` : null,
+        d.branch ? `leaf "${d.branch}"` : null,
+      ].filter(Boolean).join(' ');
+      out.push(`- [${SEVERITY_LABEL[d.severity]}] ${d.code}${where ? ` ${where}` : ''}: ${d.message}`);
+      if (d.hint) out.push(`  ${d.hint}`);
     }
     out.push('');
   }
 
+  const errorCount = diagnostics.errors.length;
+  const warnCount = diagnostics.warnings.length;
   out.unshift(`<!-- ${errorCount} error(s), ${warnCount} warning(s) -->`);
   return { text: out.join('\n').trimEnd() + '\n', errorCount, warnCount };
 }
 
-// ── runner ────────────────────────────────────────────────────────────────────
 
-/**
- * Run syntax-lint mode on a scenario output root: scans every compiled
- * Story Cards/Components .md file for unresolved template artifacts and
- * VL structural errors. Writes a `<root>.lint.md` report to outputDir and
- * echoes findings to the console. Returns { reportPath, errorCount, warnCount }
- * or null if no lintable files were found.
- */
-function runLintMode(scenarioRoot, outputDir, verbose = false) {
+function runLintMode(scenarioRoot, outputDir, options = {}) {
+  const { log = NULL_LOG } = options;
   const rootAbs     = path.resolve(scenarioRoot);
   const rootDirName = path.basename(rootAbs);
-  const files        = findLintableFiles(rootAbs);
+  const identity    = reportIdentity(options.title || options.config?.title, rootDirName);
+  const files        = fs.existsSync(rootAbs) ? findLintableFiles(rootAbs) : [];
+  const bus = options.diagnostics || new Diagnostics();
 
-  if (files.length === 0) {
-    console.warn('  WARN: No Story Cards/Components .md files found — nothing to lint.');
-    return null;
+  if (files.length === 0 && bus.isEmpty()) {
+    return { written: [], reportPath: null, errorCount: 0, warnCount: 0, fileCount: 0 };
   }
 
-  const fileResults = [];
-  for (const file of files) {
+  if (options.lintLevel) bus.setLintLevel(options.lintLevel);
+  const loadedPacks = options.scan !== false && options.config
+    ? loadDeclaredPacks(options.config, options.configPath || null, bus)
+    : [];
+
+  for (const file of options.scan === false ? [] : files) {
     const content  = fs.readFileSync(file, 'utf8');
     const relPath  = path.relative(rootAbs, file);
-    const findings = scanText(content);
+    const segs = relPath.split(path.sep);
+    const scIdx = segs.indexOf('Story Cards');
+    const cardType = scIdx >= 0 && segs[scIdx + 1] ? segs[scIdx + 1] : null;
+    const before = bus.length;
+    const ctx = { diagnostics: bus, file: relPath };
+    scanText(content, ctx);
+    scanNativePlaceholders(content, ctx);
     if (path.dirname(file).split(path.sep).includes('Story Cards')) {
-      findings.push(...scanStoryCardStructure(content));
+      scanStoryCardStructure(content, ctx);
+      scanPacks(content, cardType, loadedPacks, ctx);
     }
-    fileResults.push({ relPath, findings });
-    if (verbose && findings.length > 0) {
-      console.log(`  linted: ${relPath} (${findings.length} finding(s))`);
+    const raised = bus.length - before;
+    if (raised > 0) log.verbose(`  linted: ${relPath} (${raised} finding(s))`);
+  }
+
+  if (options.scan !== false
+      && loadedPacks.some(({ pack }) => (pack.rules || []).some((r) => r.requireCard))) {
+    for (const leaf of leafNodes(buildTree(rootAbs))) {
+      const label = leaf.branchNames.join('/') || '(root)';
+      for (const { pack, packLevel } of loadedPacks) {
+        for (const f of evaluatePackExistence(pack, leaf.resolved.cards, { branchLabel: label })) {
+          const severity = clampFinding(f.severity, packLevel, null);
+          if (severity === null) continue;
+          bus.add(severity, f.code, f.detail, { branch: f.leaf });
+        }
+      }
     }
   }
 
-  const { text, errorCount, warnCount } = formatReport(rootDirName, fileResults);
-  const reportPath = path.join(outputDir, `${rootDirName}.lint.md`);
+  const { text, errorCount, warnCount } = formatReport(identity.label, bus);
+  fs.mkdirSync(outputDir, { recursive: true });
+  const reportPath = path.join(outputDir, `${identity.stem}.lint.md`);
   fs.writeFileSync(reportPath, text, 'utf8');
 
-  for (const { relPath, findings } of fileResults) {
-    for (const f of findings) {
-      const loc = f.card ? `card "${f.card}" in ${relPath}` : `${relPath}:${f.lines[0]}`;
-      console.warn(`  ${f.severity} [${f.category}]: ${loc} — ${f.hint}`);
-    }
-  }
-
-  console.log(`\nLint: ${errorCount} error(s), ${warnCount} warning(s) across ${files.length} file(s).`);
-
-  return { reportPath, errorCount, warnCount };
+  return { written: [reportPath], reportPath, errorCount, warnCount, fileCount: files.length };
 }
 
-module.exports = { runLintMode, findLintableFiles, scanText, scanStoryCardStructure, parseStoryCards, CHECKS };
+module.exports = {
+  runLintMode, findLintableFiles, scanText, scanStoryCardStructure,
+  scanNativePlaceholders,
+};

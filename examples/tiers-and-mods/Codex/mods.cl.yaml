@@ -1,0 +1,78 @@
+# The mod stubs. Neither ships real script code — a worked example that hosted an old
+# copy of someone else's mod would owe its users maintenance of it. Each is the one
+# story card the mod reads, plus a comment in compile.cl.yaml on installing the real
+# script on AID.
+# doc: 14-convention-packs.md
+
+# ── World Time Generator ─────────────────────────────────────────────────────
+#
+# WTG reads a "WTG Time Config" card on the first turn and deletes it after. The
+# card is a block of literal `Key: Value` lines with no relationship to any item
+# field, so it is rendered through a `.template` escape hatch rather than a field
+# list. The `wtg` pack (bundled) checks it: the four core fields must be present,
+# well-formed, and alone — WTG silently drops any key it does not recognize.
+# doc: 07-templates.md
+- id: WTGTimeConfig
+  name: WTG Time Config
+  aid:
+    title: WTG Time Config
+    type: config
+  render:
+    template: WTGTimeConfig
+  # Present on the two `*/modA` leaves, excluded from every other branch.
+  # doc: 05-branches-and-variants.md#wildcard---baseline-for-every-branch
+  branches:
+    '*': { branches: { modA: [], _: ~ } }
+
+# ── Inner Self ───────────────────────────────────────────────────────────────
+#
+# Inner Self simulates an NPC's inner monologue. The mobile-creator opt-in is an
+# `@`-prefixed card title; a brain card carries the character's first-person thoughts
+# as a flat set of snake_case keys in its notes, with the entry left blank. These
+# three model that shape — a blank entry (an empty `.template`) and a `notes:` map
+# the project-local `inner-self` pack validates.
+# doc: 07-templates.md
+- id: AnessBrain
+  name: '@Aness'
+  aid:
+    title: '@Aness'
+    type: brain
+  kind: reference
+  render:
+    template: InnerSelfBrain
+  notes:
+    surface_read: I clock every exit before I clock a face.
+    running_cost: Someone always owes me, and I never forget which way.
+    private_fear: One day a debt comes due that I cannot broker out of.
+  branches:
+    '*': { branches: { modB: [], _: ~ } }
+
+- id: ZephonBrain
+  name: '@Zephon'
+  aid:
+    title: '@Zephon'
+    type: brain
+  kind: reference
+  render:
+    template: InnerSelfBrain
+  notes:
+    what_i_carry: The stack key is still in my coat, and they still have not asked.
+    how_i_move: Precise about the small things so no one checks the large ones.
+    what_i_want: A reason to stop running that I did not invent myself.
+  branches:
+    '*': { branches: { modB: [], _: ~ } }
+
+- id: KaidenBrain
+  name: '@Kaiden'
+  aid:
+    title: '@Kaiden'
+    type: brain
+  kind: reference
+  render:
+    template: InnerSelfBrain
+  notes:
+    on_the_crew: I ride point because someone has to see the weather first.
+    old_habit: Count the packs twice; the second count is the one that saves you.
+    unspoken: I stayed for the company and would not say so under fire.
+  branches:
+    '*': { branches: { modB: [], _: ~ } }

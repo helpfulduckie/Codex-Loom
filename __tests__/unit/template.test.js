@@ -3,24 +3,25 @@
 const {
   resolveField,
   isTruthy,
-  evaluateJoin,
-  evaluateList,
-  processConditionals,
-  processInline,
-  processIncludes,
   render,
   applyFieldRenderFunctions,
   normalizeWhitespace,
   applyWrapper,
-  resolveTemplateName,
-  evaluateProse,
-  evaluateBlock,
-  evaluateKeys,
-  evaluateInline,
-  processWrapperBlocks,
   applyFieldInterpolation,
   applyVariableInterpolation,
 } = require('../../src/template');
+// The seven render-function evaluators live in render/eval.js; template.js no longer re-exports them.
+const {
+  evaluateInline,
+  evaluateJoin,
+  evaluateList,
+  evaluateAnd,
+  evaluateProse,
+  evaluateBlock,
+  evaluateKeys,
+} = require('../../src/render/eval');
+const { Diagnostics } = require('../../src/diag');
+const { checkMechanicalArtifacts } = require('../../src/util');
 
 describe('resolveField', () => {
   const data = {
@@ -66,6 +67,27 @@ describe('resolveField', () => {
     const d = { name: '' };
     expect(resolveField('$name', d)).toBeNull();
   });
+
+  test('returns null for whitespace-only scalar values', () => {
+    expect(resolveField('$name', { name: ' \t ' })).toBeNull();
+  });
+
+  test('returns null for recursively empty arrays and mappings', () => {
+    const d = { body: { array: ['', ['  ']], mapping: { first: '', nested: { value: ' ' } } } };
+    expect(resolveField('$body.array', d)).toBeNull();
+    expect(resolveField('$body.mapping', d)).toBeNull();
+  });
+
+  test('drops empty aggregate members without rewriting retained values', () => {
+    const d = { body: { array: ['', '  keep  ', { empty: '', value: ' value ' }], mapping: { blank: '', value: '  keep  ', nested: { blank: '', value: ' value ' } } } };
+    expect(resolveField('$body.array', d)).toEqual(['  keep  ', { value: ' value ' }]);
+    expect(resolveField('$body.mapping', d)).toEqual({ value: '  keep  ', nested: { value: ' value ' } });
+  });
+
+  test('keeps false and zero values present for direct rendering', () => {
+    expect(resolveField('$body.no', { body: { no: false } })).toBe('false');
+    expect(resolveField('$body.count', { body: { count: 0 } })).toBe('0');
+  });
 });
 
 describe('isTruthy', () => {
@@ -92,39 +114,28 @@ describe('isTruthy', () => {
   test('empty array is falsy', () => {
     expect(isTruthy('$body.tags', { body: { tags: [] } })).toBe(false);
   });
+
+  test('recursively empty aggregates are falsy while false and zero keep their contract', () => {
+    const data = { body: { array: [''], mapping: { value: ' ' }, no: false, count: 0 } };
+    expect(isTruthy('$body.array', data)).toBe(false);
+    expect(isTruthy('$body.mapping', data)).toBe(false);
+    expect(isTruthy('$body.no', data)).toBe(false);
+    expect(isTruthy('$body.count', data)).toBe(false);
+  });
 });
 
 describe('evaluateJoin', () => {
   const data = { body: { a: 'alpha', c: 'gamma' } };
 
-  test('joins present values with separator (double quotes)', () => {
-    const result = evaluateJoin('join("; ", $body.a, $body.c)', data);
-    expect(result).toBe('alpha; gamma');
-  });
-
-  test('joins present values with separator (single quotes)', () => {
-    const result = evaluateJoin("join('; ', $body.a, $body.c)", data);
-    expect(result).toBe('alpha; gamma');
-  });
-
-  test('joins present values with separator (backtick quotes)', () => {
-    const result = evaluateJoin('join(`; `, $body.a, $body.c)', data);
-    expect(result).toBe('alpha; gamma');
-  });
-
-  test('skips null/missing fields', () => {
-    const result = evaluateJoin('join(", ", $body.a, $body.missing, $body.c)', data);
-    expect(result).toBe('alpha, gamma');
-  });
-
-  test('single value with no separator', () => {
-    const result = evaluateJoin('join("; ", $body.a)', data);
-    expect(result).toBe('alpha');
-  });
-
-  test('all missing returns empty string', () => {
-    const result = evaluateJoin('join("; ", $body.x, $body.y)', data);
-    expect(result).toBe('');
+  test.each([
+    ['joins present values with separator (double quotes)', 'join("; ", $body.a, $body.c)', 'alpha; gamma'],
+    ['joins present values with separator (single quotes)', "join('; ', $body.a, $body.c)", 'alpha; gamma'],
+    ['joins present values with separator (backtick quotes)', 'join(`; `, $body.a, $body.c)', 'alpha; gamma'],
+    ['skips null/missing fields', 'join(", ", $body.a, $body.missing, $body.c)', 'alpha, gamma'],
+    ['single value with no separator', 'join("; ", $body.a)', 'alpha'],
+    ['all missing returns empty string', 'join("; ", $body.x, $body.y)', ''],
+  ])('%s', (_label, expr, expected) => {
+    expect(evaluateJoin(expr, data)).toBe(expected);
   });
 
   test('spreads array field into join', () => {
@@ -136,51 +147,40 @@ describe('evaluateJoin', () => {
     const d = { body: { tags: ['x', 'y'], extra: 'z' } };
     expect(evaluateJoin('join("; ", $body.tags, $body.extra)', d)).toBe('x; y; z');
   });
+
+  test('a mapping member that holds an array joins with the same separator', () => {
+    const d = { body: { magic: { ice: ['high ice-affinity', 'combat trained'], growth: 'moderate' } } };
+    expect(evaluateJoin('join(" | ", $body.magic)', d)).toBe('high ice-affinity | combat trained | moderate');
+  });
 });
 
 describe('evaluateList', () => {
-  test('renders multi-element array as bullet lines with leading newline', () => {
-    const d = { body: { items: ['alpha', 'beta', 'gamma'] } };
-    expect(evaluateList('list($body.items)', d)).toBe('\n- alpha\n- beta\n- gamma');
-  });
-
-  test('passes string value through unchanged', () => {
-    const d = { body: { text: '- already\n- bulleted' } };
-    expect(evaluateList('list($body.text)', d)).toBe('- already\n- bulleted');
-  });
-
-  test('returns empty string for missing field', () => {
-    expect(evaluateList('list($body.missing)', {})).toBe('');
-  });
-
-  test('single-element array → renders inline as bare value (no bullet, no newline)', () => {
-    const d = { body: { items: ['solo'] } };
-    expect(evaluateList('list($body.items)', d)).toBe('solo');
+  test.each([
+    ['renders multi-element array as bullet lines with leading newline',
+      'list($body.items)', { body: { items: ['alpha', 'beta', 'gamma'] } }, '\n- alpha\n- beta\n- gamma'],
+    ['passes string value through unchanged',
+      'list($body.text)', { body: { text: '- already\n- bulleted' } }, '- already\n- bulleted'],
+    ['returns empty string for missing field',
+      'list($body.missing)', {}, ''],
+    ['single-element array → renders inline as bare value (no bullet, no newline)',
+      'list($body.items)', { body: { items: ['solo'] } }, 'solo'],
+    ['a mapping member that holds an array renders as one bullet joined with "; "',
+      'list($body.expanded)',
+      { body: { expanded: { shy: ['quiet with strangers', 'talkative once comfortable'], kind: 'kind' } } },
+      '\n- quiet with strangers; talkative once comfortable\n- kind'],
+    ['a lone mapping member that holds an array renders inline joined with "; "',
+      'list($body.expanded)', { body: { expanded: { shy: ['quiet', 'talkative'] } } }, 'quiet; talkative'],
+    ['an array member that is itself an array renders as one bullet',
+      'list($body.items)', { body: { items: [['a', 'b'], 'c'] } }, '\n- a; b\n- c'],
+  ])('%s', (_label, expr, d, expected) => {
+    expect(evaluateList(expr, d)).toBe(expected);
   });
 });
 
-describe('processConditionals', () => {
-  test('truthy field — body is kept', () => {
-    expect(processConditionals('{if $known}yes{/if}', { known: 'true' })).toBe('yes');
-  });
-
-  test('falsy field — body is removed', () => {
-    expect(processConditionals('{if $known}yes{/if}', {})).toBe('');
-  });
-
-  test('else branch used when condition is false', () => {
-    expect(processConditionals('{if $known}yes{else}no{/if}', {})).toBe('no');
-  });
-
-  test('else branch skipped when condition is true', () => {
-    expect(processConditionals('{if $known}yes{else}no{/if}', { known: '1' })).toBe('yes');
-  });
-
-  test('nested conditionals resolve innermost first', () => {
-    const tmpl = '{if $a}{if $b}both{/if}{/if}';
-    expect(processConditionals(tmpl, { a: 'x', b: 'y' })).toBe('both');
-    expect(processConditionals(tmpl, { a: 'x' })).toBe('');
-    expect(processConditionals(tmpl, {})).toBe('');
+describe('a bare field reference to a mapping with an appended member', () => {
+  test('renders the member as one bullet joined with "; "', () => {
+    const body = { expanded: { shy: ['quiet', 'talkative'], kind: 'kind' } };
+    expect(render('{$body.expanded}', { body })).toBe('- quiet; talkative\n- kind');
   });
 });
 
@@ -228,48 +228,22 @@ describe('render', () => {
   });
 });
 
-// ── processIncludes ──────────────────────────────────────────────────────────
-
-describe('processIncludes', () => {
-  test('expands a simple include', () => {
-    const partials = new Map([['header', { content: 'HEADER' }]]);
-    expect(processIncludes('{include header}', partials)).toBe('HEADER');
+describe('render — parse-failure locations are real token positions, not a template-file fallback', () => {
+  test('a malformed call is located at its own line, not line 1', () => {
+    const diagnostics = new Diagnostics();
+    const tpl = 'line one\nline two\n{join($body.Tagline)}\nline four\n';
+    render(tpl, {}, new Map(), {}, { diagnostics, file: 'multi.template', name: 'Multi' });
+    const diag = diagnostics.all.find((d) => d.code === 'CL0413');
+    expect(diag.line).toBe(3);
+    expect(diag.col).toBe(1);
   });
 
-  test('name lookup is case-insensitive', () => {
-    const partials = new Map([['footer', { content: 'FOOTER' }]]);
-    expect(processIncludes('{include Footer}', partials)).toBe('FOOTER');
-  });
-
-  test('expands nested partials depth-first', () => {
-    const partials = new Map([
-      ['outer', { content: 'A{include inner}B' }],
-      ['inner', { content: 'X' }],
-    ]);
-    expect(processIncludes('{include outer}', partials)).toBe('AXB');
-  });
-
-  test('throws on unknown partial', () => {
-    expect(() => processIncludes('{include ghost}', new Map())).toThrow(/Unknown partial "ghost"/);
-  });
-
-  test('throws on circular include', () => {
-    const partials = new Map([
-      ['a', { content: '{include b}' }],
-      ['b', { content: '{include a}' }],
-    ]);
-    expect(() => processIncludes('{include a}', partials)).toThrow(/Circular partial include/);
-  });
-
-  test('partial content participates in conditional processing via render', () => {
-    const partials = new Map([['cond', { content: '{if $show}yes{/if}' }]]);
-    expect(render('{include cond}', { show: 'true' }, partials)).toBe('yes');
-    expect(render('{include cond}', { show: 'false' }, partials)).toBe('');
-  });
-
-  test('literal braces in partial survive render', () => {
-    const partials = new Map([['lit', { content: '{{curly}}' }]]);
-    expect(render('{include lit}', {}, partials)).toBe('{curly}');
+  test('an unclosed block is located at its opening tag\'s own line', () => {
+    const diagnostics = new Diagnostics();
+    const tpl = 'line one\n{if $show}\nline three\n';
+    render(tpl, { show: 'true' }, new Map(), {}, { diagnostics, file: 'multi.template', name: 'Multi' });
+    const diag = diagnostics.all.find((d) => d.code === 'CL0415');
+    expect(diag.line).toBe(2);
   });
 });
 
@@ -374,26 +348,16 @@ describe('applyFieldRenderFunctions', () => {
     expect(() => applyFieldRenderFunctions(card)).not.toThrow();
   });
 
-  test('emit warning and leave match intact on bad render function call', () => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const card = {
-      body: { broken: '{join($body.oops)}' }, // missing separator arg
-    };
-    // Should not throw; bad calls are caught and warned
-    expect(() => applyFieldRenderFunctions(card)).not.toThrow();
-    warnSpy.mockRestore();
-  });
-
-  describe('cross-card refs via cardMap', () => {
+  describe('cross-card refs via itemMap', () => {
     test('join() spreads mapping values from another card', () => {
       const card = {
         id: 'nyra',
         body: { affinity: '{join("; ", $Aness.body.magic.affinity)}' },
       };
-      const cardMap = new Map([
+      const itemMap = new Map([
         ['aness', { id: 'Aness', body: { magic: { affinity: { ice: 'high ice-affinity', growth: 'moderate growth-affinity' } } } }],
       ]);
-      applyFieldRenderFunctions(card, cardMap);
+      applyFieldRenderFunctions(card, itemMap);
       expect(card.body.affinity).toBe('high ice-affinity; moderate growth-affinity');
     });
 
@@ -402,10 +366,10 @@ describe('applyFieldRenderFunctions', () => {
         id: 'nyra',
         body: { keywords: '{join(", ", $Aness.body.personality.keywords)}' },
       };
-      const cardMap = new Map([
+      const itemMap = new Map([
         ['aness', { id: 'Aness', body: { personality: { keywords: ['inquisitive', 'polite', 'sarcastic'] } } }],
       ]);
-      applyFieldRenderFunctions(card, cardMap);
+      applyFieldRenderFunctions(card, itemMap);
       expect(card.body.keywords).toBe('inquisitive, polite, sarcastic');
     });
 
@@ -414,14 +378,14 @@ describe('applyFieldRenderFunctions', () => {
         id: 'nyra',
         body: { tagline: '{join("; ", $Aness.body.tagline)}' },
       };
-      const cardMap = new Map([
+      const itemMap = new Map([
         ['aness', { id: 'Aness', body: { tagline: 'Journeyman Healer' } }],
       ]);
-      applyFieldRenderFunctions(card, cardMap);
+      applyFieldRenderFunctions(card, itemMap);
       expect(card.body.tagline).toBe('Journeyman Healer');
     });
 
-    test('join() returns empty when no cardMap is passed (backward compat)', () => {
+    test('join() returns empty when no itemMap is passed (backward compat)', () => {
       const card = {
         id: 'nyra',
         body: { affinity: '{join("; ", $Aness.body.magic.affinity)}' },
@@ -430,15 +394,15 @@ describe('applyFieldRenderFunctions', () => {
       expect(card.body.affinity).toBe('');
     });
 
-    test('join() returns empty when card ID not in cardMap', () => {
+    test('join() returns empty when card ID not in itemMap', () => {
       const card = {
         id: 'nyra',
         body: { affinity: '{join("; ", $Unknown.body.field)}' },
       };
-      const cardMap = new Map([
+      const itemMap = new Map([
         ['aness', { id: 'Aness', body: { magic: { affinity: 'ice' } } }],
       ]);
-      applyFieldRenderFunctions(card, cardMap);
+      applyFieldRenderFunctions(card, itemMap);
       expect(card.body.affinity).toBe('');
     });
 
@@ -447,10 +411,10 @@ describe('applyFieldRenderFunctions', () => {
         id: 'bishop',
         body: { member: 'Alice ({join("; ", $Alice.body.traits)})' },
       };
-      const cardMap = new Map([
+      const itemMap = new Map([
         ['alice', { id: 'Alice', body: { traits: { hair: 'blond', eyes: 'blue' } } }],
       ]);
-      applyFieldRenderFunctions(card, cardMap);
+      applyFieldRenderFunctions(card, itemMap);
       expect(card.body.member).toBe('Alice (blond; blue)');
     });
   });
@@ -470,6 +434,14 @@ describe('render — whitespace and wrapper', () => {
     const tmpl = 'before\n{preserve}\nline1\n\nline2\n{/preserve}\nafter';
     const result = render(tmpl, data, new Map());
     expect(result).toBe('before\nline1\n\nline2\nafter');
+  });
+
+  test('presence predicates in partials work inside wrapper and preserve blocks', () => {
+    const partials = new Map([[
+      'conditional', { content: '{wrapper}{if present($body.value)}{preserve}\n{$body.value}\n{/preserve}{/if}{/wrapper}' },
+    ]]);
+    expect(render('{include conditional}', { body: { value: 0 }, render: { wrapper: 'square' } }, partials))
+      .toBe('[\n0\n]');
   });
 
   test('auto-wrapper applied to entire output when template has no {wrapper} block', () => {
@@ -497,40 +469,18 @@ describe('render — template context tokens', () => {
     id:       'roshan',
   };
 
-  test('{$name.display} → display name', () => {
-    expect(render('{$name.display}', richData)).toBe('Roshan');
-  });
-
-  test('{$name.full} → full name string', () => {
-    expect(render('{$name.full}', richData)).toBe('Elder Roshan');
-  });
-
-  test('{$aid.title} → aid title field', () => {
-    expect(render('{$aid.title}', richData)).toBe('Elder Roshan');
-  });
-
-  test('{$aid.type} → aid type field', () => {
-    expect(render('{$aid.type}', richData)).toBe('Character');
-  });
-
-  test('{$aid.known} → "false" for boolean false', () => {
-    expect(render('{$aid.known}', richData)).toBe('false');
-  });
-
-  test('{$aid.encapsulate} → "true" for boolean true', () => {
-    expect(render('{$aid.encapsulate}', richData)).toBe('true');
-  });
-
-  test('{$render.template} → render template field', () => {
-    expect(render('{$render.template}', richData)).toBe('Character');
-  });
-
-  test('{$pronouns} → pronoun set string', () => {
-    expect(render('{$pronouns}', richData)).toBe('male');
-  });
-
-  test('{$v.affiliation} → v block field', () => {
-    expect(render('{$v.affiliation}', richData)).toBe('guild');
+  test.each([
+    ['{$name.display}',    'Roshan'],
+    ['{$name.full}',       'Elder Roshan'],
+    ['{$aid.title}',       'Elder Roshan'],
+    ['{$aid.type}',        'Character'],
+    ['{$aid.known}',       'false'],
+    ['{$aid.encapsulate}', 'true'],
+    ['{$render.template}', 'Character'],
+    ['{$pronouns}',        'male'],
+    ['{$v.affiliation}',   'guild'],
+  ])('%s → %s', (token, expected) => {
+    expect(render(token, richData)).toBe(expected);
   });
 });
 
@@ -591,22 +541,6 @@ describe('applyWrapper', () => {
   });
 });
 
-// ── resolveTemplateName ───────────────────────────────────────────────────────
-
-describe('resolveTemplateName', () => {
-  test('no style → returns name unchanged', () => {
-    expect(resolveTemplateName('character', undefined)).toBe('character');
-  });
-
-  test('hint style → appends .hint suffix', () => {
-    expect(resolveTemplateName('character', 'hint')).toBe('character.hint');
-  });
-
-  test('other style → returns name unchanged', () => {
-    expect(resolveTemplateName('character', 'skip')).toBe('character');
-  });
-});
-
 // ── evaluate* helpers ─────────────────────────────────────────────────────────
 
 const evalData = {
@@ -623,21 +557,17 @@ const evalData = {
 };
 
 describe('evaluateProse', () => {
-  test('string value → capitalized with period', () => {
-    expect(evaluateProse('prose($body.Tagline)', evalData)).toBe('The archivist.');
+  test.each([
+    ['string value → capitalized with period', 'prose($body.Tagline)', 'The archivist.'],
+    ['array → each item sentence-cased and joined with spaces', 'prose($body.Keywords)', 'Brave. Wise.'],
+    ['null field → empty string', 'prose($body.Missing)', ''],
+  ])('%s', (_label, expr, expected) => {
+    expect(evaluateProse(expr, evalData)).toBe(expected);
   });
 
   test('trailing punctuation replaced with period', () => {
     const d = { ...evalData, body: { ...evalData.body, Note: 'done!' } };
     expect(evaluateProse('prose($body.Note)', d)).toBe('Done.');
-  });
-
-  test('array → each item sentence-cased and joined with spaces', () => {
-    expect(evaluateProse('prose($body.Keywords)', evalData)).toBe('Brave. Wise.');
-  });
-
-  test('null field → empty string', () => {
-    expect(evaluateProse('prose($body.Missing)', evalData)).toBe('');
   });
 
   test('malformed syntax → throws', () => {
@@ -646,16 +576,12 @@ describe('evaluateProse', () => {
 });
 
 describe('evaluateBlock', () => {
-  test('string value → returned as-is', () => {
-    expect(evaluateBlock('block($body.Tagline)', evalData)).toBe('the archivist');
-  });
-
-  test('array → joined with newlines', () => {
-    expect(evaluateBlock('block($body.Keywords)', evalData)).toBe('brave\nwise');
-  });
-
-  test('null field → empty string', () => {
-    expect(evaluateBlock('block($body.Missing)', evalData)).toBe('');
+  test.each([
+    ['string value → returned as-is', 'block($body.Tagline)', 'the archivist'],
+    ['array → joined with newlines', 'block($body.Keywords)', 'brave\nwise'],
+    ['null field → empty string', 'block($body.Missing)', ''],
+  ])('%s', (_label, expr, expected) => {
+    expect(evaluateBlock(expr, evalData)).toBe(expected);
   });
 
   test('malformed syntax → throws', () => {
@@ -664,12 +590,16 @@ describe('evaluateBlock', () => {
 });
 
 describe('evaluateKeys', () => {
-  test('object field → - key: value per line', () => {
-    expect(evaluateKeys('keys($body.Traits)', evalData)).toBe('- hair: silver\n- eyes: grey');
+  test.each([
+    ['object field → - key: value per line', 'keys($body.Traits)', '- hair: silver\n- eyes: grey'],
+    ['null field → empty string', 'keys($body.Missing)', ''],
+  ])('%s', (_label, expr, expected) => {
+    expect(evaluateKeys(expr, evalData)).toBe(expected);
   });
 
-  test('null field → empty string', () => {
-    expect(evaluateKeys('keys($body.Missing)', evalData)).toBe('');
+  test('a value that holds an array joins with "; "', () => {
+    const d = { body: { Traits: { hair: ['silver', 'braided'] } } };
+    expect(evaluateKeys('keys($body.Traits)', d)).toBe('- hair: silver; braided');
   });
 
   test('malformed syntax → throws', () => {
@@ -678,47 +608,22 @@ describe('evaluateKeys', () => {
 });
 
 describe('evaluateInline', () => {
-  test('object field → space-joined values', () => {
-    expect(evaluateInline('inline($body.Traits)', evalData)).toBe('silver grey');
+  test.each([
+    ['object field → space-joined values', 'inline($body.Traits)', 'silver grey'],
+    ['array field → space-joined', 'inline($body.Keywords)', 'brave wise'],
+    ['string field → returned as string', 'inline($body.Tagline)', 'the archivist'],
+    ['null field → empty string', 'inline($body.Missing)', ''],
+  ])('%s', (_label, expr, expected) => {
+    expect(evaluateInline(expr, evalData)).toBe(expected);
   });
 
-  test('array field → space-joined', () => {
-    expect(evaluateInline('inline($body.Keywords)', evalData)).toBe('brave wise');
-  });
-
-  test('string field → returned as string', () => {
-    expect(evaluateInline('inline($body.Tagline)', evalData)).toBe('the archivist');
-  });
-
-  test('null field → empty string', () => {
-    expect(evaluateInline('inline($body.Missing)', evalData)).toBe('');
+  test('a mapping member that holds an array joins with "; "', () => {
+    const d = { body: { Traits: { hair: ['silver', 'braided'], eyes: 'grey' } } };
+    expect(evaluateInline('inline($body.Traits)', d)).toBe('silver; braided grey');
   });
 
   test('malformed syntax → throws', () => {
     expect(() => evaluateInline('inline(bad)', evalData)).toThrow('Malformed inline()');
-  });
-});
-
-// ── processWrapperBlocks ──────────────────────────────────────────────────────
-
-describe('processWrapperBlocks', () => {
-  test('square wrapper replaces {wrapper}...{/wrapper} block', () => {
-    expect(processWrapperBlocks('{wrapper}content{/wrapper}', { render: { wrapper: 'square' } }))
-      .toBe('[\ncontent\n]');
-  });
-
-  test('curly wrapper replaces block', () => {
-    expect(processWrapperBlocks('{wrapper}content{/wrapper}', { render: { wrapper: 'curly' } }))
-      .toBe('{\ncontent\n}');
-  });
-
-  test('none wrapper returns content unchanged', () => {
-    expect(processWrapperBlocks('{wrapper}content{/wrapper}', { render: { wrapper: 'none' } }))
-      .toBe('content');
-  });
-
-  test('no render block → treated as none', () => {
-    expect(processWrapperBlocks('{wrapper}content{/wrapper}', {})).toBe('content');
   });
 });
 
@@ -847,12 +752,13 @@ describe('applyVariableInterpolation', () => {
     expect(card.aid.title).toBe('{@main} Codex');
   });
 
-  test('mutates body in place', () => {
+  test('replaces semantic values without mutating their nested source mappings', () => {
     const body = { Tagline: '{%x}' };
     const card = { body };
     applyVariableInterpolation(card, { x: 'y' });
-    expect(card.body).toBe(body);
-    expect(body.Tagline).toBe('y');
+    expect(card.body).not.toBe(body);
+    expect(body.Tagline).toBe('{%x}');
+    expect(card.body.Tagline).toBe('y');
   });
 
   // card.name is normalized to {display, full} by resolveCard before applyVariableInterpolation runs
@@ -888,4 +794,104 @@ describe('applyVariableInterpolation', () => {
     applyVariableInterpolation(card, { x: 'y' });
     expect(card.name).toBe(42);
   });
+
+  test('expands every semantic string value without changing keys or non-string scalars', () => {
+    const card = {
+      body: { '{%literalKey}': [{ detail: '{%value}', count: 3 }, false] },
+      v: { label: '{%value}', nested: [{ text: '{%value}' }] },
+      notes: { text: '{%value}', enabled: true },
+      meta: { source: '{%value}', entries: [{ text: '{%value}' }] },
+      pronouns: { subject: '{%pronoun}', flags: [null, 0] },
+    };
+    applyVariableInterpolation(card, { value: 'expanded', pronoun: 'they', literalKey: 'ignored' });
+    expect(card.body).toEqual({ '{%literalKey}': [{ detail: 'expanded', count: 3 }, false] });
+    expect(card.v).toEqual({ label: 'expanded', nested: [{ text: 'expanded' }] });
+    expect(card.notes).toEqual({ text: 'expanded', enabled: true });
+    expect(card.meta).toEqual({ source: 'expanded', entries: [{ text: 'expanded' }] });
+    expect(card.pronouns).toEqual({ subject: 'they', flags: [null, 0] });
+  });
+});
+
+// ── render — diagnostics (Phase 9 Step 0/1) ──────────────────────────────────
+//
+// `render()`'s fifth argument threads a diagnostics bus through the parser/eval engine.
+// These pin the six stop conditions the Phase 9 Session A handoff names: a malformed call
+// reports CL0413 naming the template file (replacing a bare `console.warn`), an unclosed
+// {if} reports CL0415 and still renders literally (so the CL0433 leak sweep also catches
+// it downstream — the corpus proves that, not a unit test), an unknown/circular partial
+// reports CL0417/CL0416 instead of throwing, the \x00LBRACE\x00/\x00RBRACE\x00 sentinels
+// are gone from src/, and a {preserve} block's boundary survives data that contains the
+// literal text "{/preserve}".
+
+describe('render — diagnostics', () => {
+  test('malformed join() in a template reports CL0413 naming the file', () => {
+    const diagnostics = new Diagnostics();
+    const result = render('{join($body.x)}', { body: { x: 'a' } }, new Map(), null, {
+      diagnostics, file: 'Broken.template', name: 'Broken',
+    });
+    expect(result).toBe('');
+    expect(diagnostics.all).toHaveLength(1);
+    expect(diagnostics.all[0].code).toBe('CL0413');
+    expect(diagnostics.all[0].file).toBe('Broken.template');
+    expect(diagnostics.all[0].line).toBe(1);
+    expect(diagnostics.all[0].col).toBe(1);
+  });
+
+  test('an unclosed {if} block reports CL0415 and still renders as literal text', () => {
+    const diagnostics = new Diagnostics();
+    const result = render('{if $body.x}yes', { body: { x: 'true' } }, new Map(), null, {
+      diagnostics, file: 'Unclosed.template',
+    });
+    // Renders literally — same fallback the v3 regex engine used for a tag it couldn't
+    // match — so the output-sweep's CL0433 LEAKED_TEMPLATE_TAG check still catches it too
+    // (per the Phase 9 Session A handoff's Unknowns: both reports are correct).
+    expect(result).toBe('{if $body.x}yes');
+    expect(diagnostics.all.map(d => d.code)).toEqual(['CL0415']);
+  });
+
+  test('an unclosed presence block reports CL0415 and retains its literal opener', () => {
+    const diagnostics = new Diagnostics();
+    const result = render('{if present($body.x)}yes', { body: { x: false } }, new Map(), null, {
+      diagnostics, file: 'UnclosedPresence.template',
+    });
+    expect(result).toBe('{if present($body.x)}yes');
+    expect(diagnostics.all.map((d) => d.code)).toEqual(['CL0415']);
+  });
+
+  test.each([
+    ['malformed', '{if present()}yes{/if}', 'CL0413'],
+    ['unclosed', '{if present($body.x)}yes', 'CL0415'],
+  ])('%s presence tags remain detectable as leaked template artifacts', (_label, source, code) => {
+    const diagnostics = new Diagnostics();
+    const output = render(source, { body: { x: false } }, new Map(), null, { diagnostics });
+    expect(diagnostics.all.map((d) => d.code)).toContain(code);
+    const artifacts = new Diagnostics();
+    expect(checkMechanicalArtifacts(output, 'presence template', { diagnostics: artifacts })).toBe(true);
+    expect(artifacts.all.map((d) => d.code)).toContain('CL0433');
+  });
+
+  test('an unknown partial reports CL0417 instead of throwing', () => {
+    const diagnostics = new Diagnostics();
+    const result = render('{include ghost}', {}, new Map(), null, { diagnostics, file: 'x.template' });
+    expect(result).toBe('');
+    expect(diagnostics.all.map(d => d.code)).toEqual(['CL0417']);
+  });
+
+  test('a circular partial include reports CL0416 instead of throwing', () => {
+    const diagnostics = new Diagnostics();
+    const partials = new Map([
+      ['a', { content: '{include b}' }],
+      ['b', { content: '{include a}' }],
+    ]);
+    const result = render('{include a}', {}, partials, null, { diagnostics, file: 'x.template' });
+    expect(result).toBe('');
+    expect(diagnostics.all.map(d => d.code)).toEqual(['CL0416']);
+  });
+
+  test('a {preserve} block is bounded by the source, not by data that contains "{/preserve}"', () => {
+    const tmpl = 'A\n{preserve}\n{$body.text}\n{/preserve}\nB';
+    const data = { body: { text: 'line1{/preserve}line2' } };
+    expect(render(tmpl, data, new Map())).toBe('A\nline1{/preserve}line2\nB');
+  });
+
 });

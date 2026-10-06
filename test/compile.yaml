@@ -1,19 +1,27 @@
+version: 4
 structure:
   input:
-    cards:
-      - ./cards
-    canon:
+    library:
       main: ./canon
     templates:
       - ./templates
+    items:
+      - ./cards
   output: ./output
 
-protagonist: Aness
+roles:
+  protagonist: Aness
+
+render:
+  notesTemplate: Notes
 
 branches:
   subject:
-    protagonist: Aness
+    roles:
+      protagonist: Aness
   researcher:
-    protagonist: Veyrn
+    roles:
+      protagonist: Veyrn
   felix:
-    protagonist: Aness
+    roles:
+      protagonist: Aness

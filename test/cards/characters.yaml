@@ -1,8 +1,8 @@
 # Include all cards from this canon file — Felicia will be skipped since she's imported below
-- include: "{@main}/Felicia.yaml"
+- include: "{%main}/Felicia.yaml"
 
 # Explicit import with overrides — takes precedence over the include above
-- import: Grayls
+- import: Felicia
   variants:
     felix:
       importVariants: [Felix]
@@ -24,11 +24,9 @@
   name: Mira Ashfen
   pronouns: female
   aid:
-    title: Mira Ashfen
     type: Character
     triggers: [Mira, Ashfen]
-    encapsulate: true
-    known: true
+  notes: {known: true}
   render:
     template: Character
     wrapper: none
@@ -52,11 +50,9 @@
   name: Kaiden Ventus
   pronouns: male
   aid:
-    title: Kaiden Ventus
     type: Character
     triggers: [Kaiden, Ventus]
-    encapsulate: true
-    known: true
+  notes: {known: true}
   render:
     template: Character
     wrapper: none

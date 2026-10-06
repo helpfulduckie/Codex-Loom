@@ -1,0 +1,318 @@
+# The placement fixture's items. One correct item, then one item per deliberate mistake.
+#
+# `Anchor` is correct and exists so the components have an occupant and render — without
+# it every component would fail the §7.4 "renders to nothing" ERROR and bury the errors
+# this fixture is actually about.
+
+# ── Correct. The control case. ───────────────────────────────────────────────
+- id: Anchor
+  name: Anchor
+  aid:
+    type: Character
+    triggers: [Anchor]
+  body:
+    Tagline: The one item here that is written correctly.
+  render:
+    plotEssential:
+      slot: cast
+      order: 1
+
+# ── §3.3: a null wildcard in a branch spec — CL0327 ─────────────────────────
+# `'*': ~` reads as "exclude from every branch", which nobody means, so the walker skips
+# it and the item stays included everywhere. Before CL0327 that skip was silent; now it
+# is one WARN per spec object, however many leaves resolve against it — so this fires
+# once, not once per branch. `_: ~` is the form the author wanted.
+- id: NullWildcard
+  name: NullWildcard
+  aid:
+    type: Character
+    triggers: [NullWildcard]
+  body:
+    Tagline: Its spec says drop it everywhere; the walker keeps it everywhere instead.
+  branches:
+    '*': ~
+  render:
+    plotEssential:
+      slot: cast
+      order: 6
+
+# ── §3.2: a field op whose target substring is absent — CL0328 ──────────────
+# The `worn` variant removes "in a controlled bun" from a Tagline that never held the
+# phrase. `-{}` is `split().join()`, which hands back the original on a miss, so the op
+# silently does nothing. A standalone `-{}` that matches nothing is always a mistake —
+# usually the text it was written against has drifted. Only `open` dispatches `worn`, so
+# this fires once, on that branch.
+- id: DriftedOp
+  name: DriftedOp
+  aid:
+    type: Character
+    triggers: [DriftedOp]
+  body:
+    Tagline: A tagline that never mentioned how the hair was tied.
+  branches:
+    open: worn
+  variants:
+    worn:
+      Tagline: "-{in a controlled bun}"
+  render:
+    plotEssential:
+      slot: cast
+      order: 7
+
+# ── §12.3 check 1: an undeclared placeholder, latent until Phase 4 ───────────
+# `%heroName%` is declared in ../compile.cl.yaml; `%ghostName%` is not. Today both survive
+# into compiled output as literal text and nothing reports the second.
+- id: Greeter
+  name: Greeter
+  aid:
+    type: Character
+    triggers: [Greeter]
+  body:
+    Tagline: '%heroName% is greeted by a stranger who will not give %ghostName% a name.'
+  render:
+    plotEssential:
+      slot: cast
+      order: 2
+
+# ── §7.4: an item that vanishes on one branch ────────────────────────────────
+# No story card, and its only component target is the `cast` slot — which excludes itself
+# on `gated`. Fine on `open`, CL0610 on `gated`.
+- id: Ghost
+  name: Ghost
+  body:
+    Tagline: Present on the open path, gone entirely on the gated one.
+  render:
+    storyCard: false
+    plotEssential:
+      slot: cast
+      order: 3
+      template: Character
+
+# ── §7.4: an item with no output anywhere ────────────────────────────────────
+# No story card and no component target at all. CL0610 on every branch.
+- id: Silent
+  name: Silent
+  render:
+    storyCard: false
+
+# ── §7.4: a component target that reaches a live slot and renders blank ──────
+# `EmptyBody.template` is one non-firing `{if}`, so it renders to "" for any item that
+# does not carry a `never` key — which is all of them. `party` is declared on every
+# branch and gated off on none, so the target is live on all three: liveTargets is 1 and
+# outputs is 0 everywhere, which is CL0609 per leaf. It is *not* CL0610 — a target did
+# reach a slot — and the slot still counts as unfilled, so `party`'s own CL0614 is
+# unchanged. `~` on the branch dispatch is the way to actually drop it.
+- id: EmptyPlacement
+  name: EmptyPlacement
+  render:
+    storyCard: false
+    plotEssential:
+      slot: party
+      template: EmptyBody
+
+# ── §7.4: a story-card body that renders to nothing ─────────────────────────
+# Same template, no component target, storyCard left on. The body renders "", so the card
+# would ship to AID as a name and triggers with a blank value. CL0609 per leaf, and no
+# card is written. `kind: reference` is the exemption — this item is not one, so it fires.
+- id: EmptyCardBody
+  name: EmptyCardBody
+  aid:
+    type: Character
+    triggers: [EmptyCardBody]
+  render:
+    template: EmptyBody
+
+# ── §7.4: a target naming a slot no component declares ───────────────────────
+# The typo class. `casst` for `cast` — CL0611.
+- id: Typo
+  name: Typo
+  aid:
+    type: Character
+    triggers: [Typo]
+  body:
+    Tagline: Targets a slot that does not exist.
+  render:
+    plotEssential:
+      slot: casst
+
+# ── §7.4: a target naming a section that exists but is not a slot ────────────
+# `genre` is a text section. CL0612 — a different mistake from the typo above.
+- id: NotASlot
+  name: NotASlot
+  aid:
+    type: Character
+    triggers: [NotASlot]
+  body:
+    Tagline: Targets a text section as though it were a slot.
+  render:
+    plotEssential:
+      slot: genre
+
+# ── §7.3: a target naming a slot inside a passthrough component ──────────────
+# `ai-instructions.md` is prose and declares no slots at all. CL0611, with a reason that
+# says so rather than reading as a typo.
+- id: IntoPassthrough
+  name: IntoPassthrough
+  aid:
+    type: Character
+    triggers: [IntoPassthrough]
+  body:
+    Tagline: Targets a slot inside a component that has none.
+  render:
+    aiInstructions:
+      slot: rules
+
+# ── §12.3 check 3: a placeholder in a card's type ─────────────────────────
+# `type` is a category in AID and a folder name in the compiled tree, not a text field
+# AID fills. The key is declared, so what fires is the destination rule alone.
+- id: MistypedType
+  name: MistypedType
+  aid:
+    type: 'Character-%heroName%'
+    triggers: [MistypedType]
+  body:
+    Tagline: Its type carries a placeholder, which is not a thing AID fills.
+
+# ── §17.4: a bare `import:` def, carrying no `id:` of its own ────────────────
+# `buildRegistry` skips a bare import by design — it *is* the item it names, so it claims
+# no id of its own — while `resolveBranchItems` resolves it like any other def. Together
+# that means this def emits a second `Anchor`, under `Anchor`'s id, with no diagnostic
+# anywhere: the registry's duplicate-id check never sees it, because neither def is in
+# the registry twice.
+#
+# Two items sharing an id is a mistake in every case the spec describes, so this reports
+# CL0325 from `resolveBranchItems` — the only stage that sees both resolved items at once.
+# One row per branch on which both defs survive dispatch, because dispatching one of a
+# colliding pair away is the documented way to write mutually exclusive versions.
+- import: Anchor
+  body:
+    Tagline: A second Anchor, arriving with no id and no complaint.
+
+# ── §7.6.2a: the arity-N selectors, on the one directive that already has them ──
+#
+# `include:` stamps its `importVariants:` and its `branches:` onto every item in the file
+# it names, which puts both in the arity-N cell of §7.6.2a's table: a name aimed at every
+# item in a lore file will miss most of them by construction, because naming it on each
+# item is the repetition the include exists to remove. Both should therefore be **silent**
+# where an item does not define the name.
+#
+# Each list carries one real name and one misspelling of it. The real name matches one
+# item of three, which is the normal case and is owed nothing. The misspelling matches
+# zero, which is the typo — and is the one thing arity-N silence would otherwise hide,
+# because a name that applies to nothing changes no output and, without a check, says
+# nothing either. That is CL0326.
+- include: '{%here}/canon/lore.cl.yaml'
+  importVariants: [warm, wrm]
+
+- include: '{%here}/canon/rumors.cl.yaml'
+  branches:
+    gated: [hushed, hshed]
+
+# ── §8.5: a card body past AID's 2,000-character cap ─────────────────────────
+# AID truncates rather than refusing, so this uploads shortened and the author finds out
+# during play. CL0712, ERROR. No placeholders, so compiled length and upload length agree
+# — this is the plain case, and the Openings below carry the case where they do not.
+- id: Bloated
+  name: Bloated
+  aid:
+    type: Character
+    triggers: [Bloated]
+  body:
+    Tagline: >-
+      A story card whose body runs past the 2,000-character cap AID stores. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is he.
+  render:
+    plotEssential:
+      slot: cast
+      order: 4
+
+# ── §4.8 and §8.5 together: a reference card inside the WARN band ────────────
+# `kind: reference` exempts an item from the soft heuristics — empty-triggers, the seed
+# map, the body-size ranking — and exempts it from nothing that the platform enforces.
+# CL0713, WARN, on a card that carries no triggers on purpose. This item is also what
+# pins the fence key: `kind: reference` is written into the `~~~` block, `story` is not.
+- id: Ledger
+  name: Ledger
+  kind: reference
+  aid:
+    type: Character
+    triggers: []
+  body:
+    Tagline: >-
+      A reference card, and reference is not an exemption from a platform cap. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is.
+
+# ── §8.5: notes: past AID's 10,000-character description cap ────────────────
+# `notes:` is assigned straight to AID's `description` (scenario.py:124), which runs the
+# same %key% substitution as everywhere else in §8.5 before measuring. Compiled length is
+# under 10,000 and upload length is not — the case no golden project reaches, the same as
+# the two Openings above. CL0714, ERROR.
+- id: Verbose
+  name: Verbose
+  aid:
+    type: Character
+    triggers: [Verbose]
+  body:
+    Tagline: A story card whose notes, not its body, cross AID's cap.
+  notes: >-
+    %longPrompt% %longPrompt% %longPrompt% %longPrompt% %longPrompt% %longPrompt% %longPrompt% %longPrompt% %longPrompt% This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure.
+
+# ── §13: a malformed render-function call in a .template file, latent until Phase 9 ──
+# `templates/Broken.template` is `{join($body.Tagline)}` — no quoted separator, which
+# fails evaluateJoin's own syntax check. The v3 engine caught this with a bare
+# `console.warn` and no code, file, or line; Phase 9 Step 0 turns it into CL0413 naming
+# the template file. No render target beyond the story card itself.
+- id: BrokenTemplate
+  name: BrokenTemplate
+  aid:
+    type: Character
+    triggers: [BrokenTemplate]
+  render:
+    template: Broken
+  body:
+    Tagline: Exists only to render a malformed template.
+
+# ── §13: an unclosed {if} block — CL0415, and CL0433 fires on the same output ────
+# `templates/Unclosed.template` opens `{if $body.Tagline}` and never closes it, so it
+# renders as literal text (the same fallback the v3 regex engine used for a tag it
+# couldn't match) — which is why the output sweep's CL0433 LEAKED_TEMPLATE_TAG check
+# also fires on the leaked `{if ...}` tag. Per the Phase 9 Session A handoff's Unknowns,
+# both reports are kept: one names the template to edit, the other names the output
+# that is wrong, and this item is what proves it in the real pipeline rather than only
+# in a unit test.
+- id: UnclosedBlock
+  name: UnclosedBlock
+  aid:
+    type: Character
+    triggers: [UnclosedBlock]
+  render:
+    template: Unclosed
+  body:
+    Tagline: Exists only to render an unclosed conditional block.
+
+# ── §9.3: the four role ERRORs, latent until Phase 8 ─────────────────────────
+# `roles:` in ../compile.cl.yaml declares a small table so these tokens have a scope to
+# fail in. No render target, like Bloated/Ledger/Verbose/Chatty above — this item exists
+# only to give the role checks something to fire on, not to test §7.4 placement.
+#   {$Anchor}     — the role name collides with the real item id "Anchor": CL0541.
+#   {$Missing}    — bound to an id that resolves nowhere: CL0542.
+#   {$Loop}       — bound to another role rather than an item id: CL0543.
+#   {$Undeclared} — matches no declared role and no item id at all: CL0540.
+- id: RoleTester
+  name: RoleTester
+  aid:
+    type: Character
+    triggers: [RoleTester]
+  body:
+    Tagline: "{$Anchor} meets {$Missing}, bound through {$Loop}, beside {$Undeclared}."
+
+# ── §8.5: notes: in the WARN band on upload, under it compiled ───────────────
+# Same field, same substitution, smaller push: five %longPrompt% references land the
+# compiled length safely under 9,000 and the upload length inside the band. CL0715, WARN.
+- id: Chatty
+  name: Chatty
+  aid:
+    type: Character
+    triggers: [Chatty]
+  body:
+    Tagline: A story card whose notes sit in the WARN band on upload.
+  notes: >-
+    %longPrompt% %longPrompt% %longPrompt% %longPrompt% %longPrompt% This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure. This sentence is filler and says nothing; it is here only to give the check something long enough to measure.

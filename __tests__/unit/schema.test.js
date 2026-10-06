@@ -1,0 +1,363 @@
+'use strict';
+
+const { TYPES, validate, buildKeyIndex, levenshtein } = require('../../src/schema');
+const { Diagnostics, CODES } = require('../../src/diag');
+
+const S = { type: TYPES.STRING };
+
+/** A small schema exercising every descriptor feature. */
+const SCHEMA = {
+  type: TYPES.MAP,
+  keys: {
+    version: { type: TYPES.NUMBER },
+    title: S,
+    structure: {
+      type: TYPES.MAP,
+      keys: {
+        output: { type: TYPES.STRING, required: true },
+        reports: S,
+        input: {
+          type: TYPES.MAP,
+          keys: {
+            items: { type: TYPES.SEQ, of: S },
+            canon: { type: TYPES.RECORD, of: S },
+          },
+        },
+      },
+    },
+    variables: { type: TYPES.RECORD, of: S },
+    body: { type: TYPES.ANY },
+    future: { type: TYPES.STRING, note: 'Phase 9' },
+    legacy: { type: TYPES.STRING, alias: 'title' },
+    kind: { type: TYPES.STRING, values: ['story', 'reference'] },
+  },
+};
+
+function run(value, schema = SCHEMA) {
+  const diagnostics = new Diagnostics();
+  const result = validate(value, schema, { diagnostics });
+  return { diagnostics, result, codes: diagnostics.all.map((d) => d.code) };
+}
+
+describe('unknown keys', () => {
+  test('an unknown key at the top level is an ERROR', () => {
+    const { diagnostics, codes } = run({ nonsense: 1 });
+    expect(codes).toContain(CODES.UNKNOWN_KEY);
+    expect(diagnostics.hasErrors()).toBe(true);
+  });
+
+  test('an unknown key names the block it was found in', () => {
+    const { diagnostics } = run({ structure: { output: 'o', bogus: 1 } });
+    expect(diagnostics.errors[0].message).toContain('under "structure"');
+  });
+
+  test('a declared key is accepted', () => {
+    expect(run({ title: 'x' }).diagnostics.isEmpty()).toBe(true);
+  });
+
+  test('validation descends into nested maps', () => {
+    const { diagnostics } = run({ structure: { output: 'o', input: { nope: [] } } });
+    expect(diagnostics.errors[0].message).toContain('under "structure.input"');
+  });
+});
+
+describe('relocation suggestions', () => {
+  test('a valid key at the wrong level suggests where it belongs', () => {
+    const { diagnostics, codes } = run({ canon: { a: 'b' }, structure: { output: 'o' } });
+    expect(codes).toContain(CODES.MISPLACED_KEY);
+    expect(diagnostics.errors[0].hint).toBe('"canon" is valid under "structure.input:" — move it there so the compiler reads it; until then, it is ignored here.');
+  });
+
+  test('relocation is preferred over a spelling suggestion', () => {
+    // "reports" exists under structure; misplacing it at the top level should relocate,
+    // not offer an edit-distance guess at some other top-level key.
+    const { diagnostics, codes } = run({ reports: './r', structure: { output: 'o' } });
+    expect(codes).toContain(CODES.MISPLACED_KEY);
+    expect(diagnostics.errors[0].hint).toContain('move it there');
+  });
+
+  test('a misspelling falls back to edit distance', () => {
+    const { diagnostics, codes } = run({ structure: { output: 'o', reprots: './r' } });
+    expect(codes).toContain(CODES.UNKNOWN_KEY);
+    expect(diagnostics.errors[0].hint).toBe('"reprots" is not recognized, so it is ignored; rename it to "reports".');
+  });
+
+  test('a transposition is caught — the commonest typo', () => {
+    const { diagnostics } = run({ titel: 'x' });
+    expect(diagnostics.errors[0].hint).toBe('"titel" is not recognized, so it is ignored; rename it to "title".');
+  });
+
+  test('a key resembling nothing gets no hint rather than a nonsense one', () => {
+    const { diagnostics } = run({ zzzzqqqq: 'x' });
+    expect(diagnostics.errors[0].hint).toBeNull();
+  });
+
+  test('open namespaces are never proposed as a relocation target', () => {
+    // `body:` accepts any key. Were it indexed as a destination, *every* unknown key
+    // anywhere would collect a technically-true, useless "did you mean to nest it under
+    // body?". No hint at all is the correct outcome for a key resembling nothing.
+    const { diagnostics } = run({ anythingAtAll: 1 });
+    expect(diagnostics.errors[0].code).toBe(CODES.UNKNOWN_KEY);
+    expect(diagnostics.errors[0].hint).toBeNull();
+  });
+});
+
+describe('type checking', () => {
+  test('a wrong scalar type is an ERROR', () => {
+    const { diagnostics, codes } = run({ title: 42 });
+    expect(codes).toContain(CODES.WRONG_TYPE);
+    expect(diagnostics.errors[0].message).toContain('must be a string');
+  });
+
+  test('the message describes what was found', () => {
+    const { diagnostics } = run({ title: ['a'] });
+    expect(diagnostics.errors[0].message).toContain('is a sequence');
+  });
+
+  test('a sequence given a non-empty mapping is an ERROR', () => {
+    const { diagnostics } = run({ structure: { output: 'o', input: { items: { a: 1 } } } });
+    expect(diagnostics.errors[0].code).toBe(CODES.WRONG_TYPE);
+  });
+
+  test('sequence elements are checked', () => {
+    const { diagnostics } = run({ structure: { output: 'o', input: { items: ['ok', 42] } } });
+    expect(diagnostics.errors[0].message).toContain('structure.input.items.1');
+  });
+
+  test('record values are checked', () => {
+    const { diagnostics } = run({ variables: { a: 'ok', b: [] } });
+    expect(diagnostics.errors[0].message).toContain('variables.b');
+  });
+
+  test('a union type accepts either member', () => {
+    const schema = { type: TYPES.MAP, keys: { x: { type: [TYPES.STRING, TYPES.SEQ], of: S } } };
+    expect(run({ x: 'a' }, schema).diagnostics.isEmpty()).toBe(true);
+    expect(run({ x: ['a'] }, schema).diagnostics.isEmpty()).toBe(true);
+  });
+
+  test('an open namespace accepts anything', () => {
+    expect(run({ body: { any: ['shape', { at: 'all' }] } }).diagnostics.isEmpty()).toBe(true);
+  });
+});
+
+describe('empty-collection normalization', () => {
+  test('{} is accepted where a sequence is expected, and normalized to []', () => {
+    const { diagnostics, result } = run({ structure: { output: 'o', input: { items: {} } } });
+    expect(diagnostics.isEmpty()).toBe(true);
+    expect(result.structure.input.items).toEqual([]);
+  });
+
+  test('[] is accepted where a mapping is expected, and normalized to {}', () => {
+    const { diagnostics, result } = run({ variables: [] });
+    expect(diagnostics.isEmpty()).toBe(true);
+    expect(result.variables).toEqual({});
+  });
+
+  test('a non-empty value of the wrong type is still an ERROR', () => {
+    expect(run({ variables: ['a'] }).codes).toContain(CODES.WRONG_TYPE);
+  });
+
+  test('null is left alone — `~` means delete, not empty', () => {
+    const { diagnostics, result } = run({ variables: null });
+    expect(diagnostics.isEmpty()).toBe(true);
+    expect(result.variables).toBeNull();
+  });
+});
+
+describe('required keys', () => {
+  test('a missing required key is an ERROR', () => {
+    const { codes } = run({ structure: {} });
+    expect(codes).toContain(CODES.MISSING_REQUIRED);
+  });
+
+  test('present satisfies it', () => {
+    expect(run({ structure: { output: 'o' } }).diagnostics.isEmpty()).toBe(true);
+  });
+
+  test('a required key inside an absent parent is not reported', () => {
+    expect(run({ title: 'x' }).diagnostics.isEmpty()).toBe(true);
+  });
+});
+
+describe('later-phase and superseded keys', () => {
+  test('a key with a note is recognized and WARNs', () => {
+    const { diagnostics, codes } = run({ future: 'x' });
+    expect(codes).toEqual([CODES.NOT_YET_IMPLEMENTED]);
+    expect(diagnostics.hasErrors()).toBe(false);
+    expect(diagnostics.warnings[0].message).toContain('Phase 9');
+  });
+
+  test('a superseded key WARNs and names its replacement', () => {
+    const { diagnostics, codes } = run({ legacy: 'x' });
+    expect(codes).toEqual([CODES.SUPERSEDED_KEY]);
+    expect(diagnostics.warnings[0].message).toContain('"title"');
+  });
+});
+
+/**
+ * `values:` — a closed set, added for §4.8's `kind:`.
+ *
+ * It reports after the type test rather than instead of it, because "must be a string" is
+ * the more actionable message when a value is both wrong-typed and unlisted.
+ */
+describe('closed value sets', () => {
+  test('a listed value passes', () => {
+    expect(run({ kind: 'reference' }).codes).toEqual([]);
+  });
+
+  test('an unlisted value is an ERROR naming the whole set', () => {
+    const { diagnostics, codes } = run({ kind: 'refrence' });
+    expect(codes).toEqual([CODES.VALUE_NOT_ALLOWED]);
+    expect(diagnostics.errors[0].message).toContain('"story" or "reference"');
+  });
+
+  test('case matters — the set is keywords, not prose', () => {
+    expect(run({ kind: 'Reference' }).codes).toEqual([CODES.VALUE_NOT_ALLOWED]);
+  });
+
+  test('a wrong-typed value reports as a type error, not an unlisted one', () => {
+    expect(run({ kind: 42 }).codes).toEqual([CODES.WRONG_TYPE]);
+  });
+
+  test('an absent key is not a violation — `values:` does not imply required', () => {
+    expect(run({ title: 'x' }).codes).toEqual([]);
+  });
+});
+
+/**
+ * `pattern:` is case-insensitive for string values.
+ */
+describe('string pattern', () => {
+  const desc = { type: TYPES.MAP, keys: { d: { type: TYPES.STRING, pattern: '^(AD|CE|BC|BCE)$' } } };
+  const codesFor = (obj) => {
+    const d = new Diagnostics();
+    validate(obj, desc, { diagnostics: d });
+    return d.all.map((x) => x.code);
+  };
+
+  test('a matching string passes', () => {
+    expect(codesFor({ d: 'AD' })).toEqual([]);
+  });
+
+  test('a non-matching string is CL0208 naming the value and the pattern', () => {
+    const d = new Diagnostics();
+    validate({ d: 'AnnoDomini' }, desc, { diagnostics: d });
+    expect(d.all.map((x) => x.code)).toEqual([CODES.PATTERN_MISMATCH]);
+    expect(d.errors[0].message).toContain('"AnnoDomini"');
+    expect(d.errors[0].message).toContain('AD|CE|BC|BCE');
+  });
+
+  test('the match is case-insensitive — the `i` flag is always on', () => {
+    expect(codesFor({ d: 'bce' })).toEqual([]);
+    expect(codesFor({ d: 'Ad' })).toEqual([]);
+  });
+
+  test('a non-string skips the pattern check and reports the type error instead', () => {
+    expect(codesFor({ d: 42 })).toEqual([CODES.WRONG_TYPE]);
+    expect(codesFor({ d: 42 })).not.toContain(CODES.PATTERN_MISMATCH);
+  });
+
+  test('an absent key is not a violation — `pattern:` does not imply required', () => {
+    expect(codesFor({})).toEqual([]);
+  });
+});
+
+/**
+ * `keys:` on `type: record` — declared keys validated, undeclared keys allowed through
+ * with no CL0201 (Phase 15). The open-mapping counterpart to `type: map`.
+ */
+describe('keys on a record', () => {
+  const desc = {
+    type: TYPES.RECORD,
+    keys: {
+      Known: { type: TYPES.STRING, pattern: '^\\d+$' },
+      Needed: { type: TYPES.STRING, required: true },
+    },
+  };
+  const codesFor = (obj) => {
+    const d = new Diagnostics();
+    validate(obj, desc, { diagnostics: d });
+    return d.all.map((x) => x.code);
+  };
+
+  test('a present declared key is validated against its child descriptor', () => {
+    expect(codesFor({ Known: 'x7', Needed: 'ok' })).toEqual([CODES.PATTERN_MISMATCH]);
+    expect(codesFor({ Known: '123', Needed: 'ok' })).toEqual([]);
+  });
+
+  test('an undeclared key passes with no CL0201', () => {
+    expect(codesFor({ Whatever: 'anything', Needed: 'ok' })).toEqual([]);
+  });
+
+  test('a missing required declared key is CL0203', () => {
+    expect(codesFor({ Known: '1' })).toEqual([CODES.MISSING_REQUIRED]);
+  });
+
+  test('keyPattern checks every key, including declared keys, at the key location', () => {
+    const d = new Diagnostics();
+    const sourceMap = { nearest: (p) => ({ file: 'card.yaml', line: p[p.length - 1] === 'Bad-Key' ? 9 : 4 }) };
+    validate({ known: '1', 'Bad-Key': '2' },
+      { type: TYPES.RECORD, keys: { known: { type: TYPES.STRING }, 'Bad-Key': { type: TYPES.STRING } }, keyPattern: '^[a-z_]+$' },
+      { diagnostics: d, sourceMap });
+    expect(d.all.filter((x) => x.code === CODES.PATTERN_MISMATCH)).toHaveLength(1);
+    expect(d.all.find((x) => x.message.includes('Bad-Key'))).toMatchObject({ file: 'card.yaml', line: 9 });
+  });
+
+  test('lower snake case passes and uppercase, spaces, and hyphens fail', () => {
+    const descriptor = { type: TYPES.RECORD, keyPattern: '^[a-z][a-z0-9_]*$' };
+    const passDiagnostics = new Diagnostics();
+    validate({ lower_snake2: 'ok' }, descriptor, { diagnostics: passDiagnostics });
+    expect(passDiagnostics.all).toEqual([]);
+    for (const key of ['Uppercase', 'two words', 'two-words']) {
+      const d = new Diagnostics();
+      validate({ [key]: 'ok' }, descriptor, { diagnostics: d });
+      expect(d.all.map((x) => x.code)).toEqual([CODES.PATTERN_MISMATCH]);
+    }
+  });
+
+  test('a key mismatch does not stop value validation', () => {
+    const d = new Diagnostics();
+    validate({ 'Bad-Key': 42 }, { type: TYPES.RECORD, keyPattern: '^[a-z_]+$', of: { type: TYPES.STRING } },
+      { diagnostics: d });
+    expect(d.all.map((x) => x.code)).toEqual([CODES.PATTERN_MISMATCH, CODES.WRONG_TYPE]);
+  });
+
+  test('record keys and of validate declared and fallback values once', () => {
+    const d = new Diagnostics();
+    validate({ known: 7, extra: 8 }, { type: TYPES.RECORD,
+      keys: { known: { type: TYPES.NUMBER, required: true } }, of: { type: TYPES.STRING } }, { diagnostics: d });
+    expect(d.errors).toHaveLength(1);
+    expect(d.errors[0].code).toBe(CODES.WRONG_TYPE);
+    expect(d.errors[0].message).toContain('extra');
+  });
+});
+
+describe('buildKeyIndex', () => {
+  test('indexes nested keys by their dotted path', () => {
+    expect(buildKeyIndex(SCHEMA).get('canon')).toEqual(['structure.input.canon']);
+  });
+
+  test('terminates on a self-referential schema', () => {
+    const node = { type: TYPES.MAP, keys: { title: S } };
+    node.keys.branches = { type: TYPES.RECORD, of: node };
+    expect(() => buildKeyIndex({ type: TYPES.MAP, keys: { branches: node.keys.branches } })).not.toThrow();
+  });
+
+  test('does not index open namespaces', () => {
+    expect(buildKeyIndex(SCHEMA).has('any')).toBe(false);
+  });
+});
+
+describe('levenshtein', () => {
+  test.each([
+    ['abc', 'abc', 0],
+    ['abc', 'abd', 1],
+    ['titel', 'title', 1],
+    ['abc', '', 3],
+    ['', 'abc', 3],
+    ['reprots', 'reports', 1],
+    ['kitten', 'sitting', 3],
+  ])('distance(%s, %s) === %i', (a, b, expected) => {
+    expect(levenshtein(a, b)).toBe(expected);
+  });
+});

@@ -1,15 +1,15 @@
 # compile.yaml Reference
 
-`compile.yaml` is the entry point for every Codex Loom project. It tells the compiler where to find cards and templates, where to write output, how the scenario branches, and what the protagonist is for each branch.
+`compile.yaml` is the entry point for every Codex Loom project. It tells the compiler where to find items and templates, where to write output, how the scenario branches, and what roles (including the protagonist) each branch binds.
 
 ---
 
 ## Minimal Example
 
-```yaml
+```yaml surface=config
 structure:
   input:
-    cards: [./cards]
+    items: [./Codex]
     templates: [./templates]
   output: ./output
 ```
@@ -18,59 +18,57 @@ structure:
 
 ## Full Structure
 
-```yaml
+```yaml surface=config
 structure:
   input:
-    cards:                        # sequence of project card directories
-      - ./cards
-    canon:                        # named mapping of canonical card directories
-      main: ../../_Canon
+    items:                        # sequence of project item directories
+      - ./Codex
+    library:                      # named mapping of shared item/component directories
+      main: ../../_Library
       lore: ../../_Lore
     templates:                    # sequence of template directories (later overrides earlier)
       - ../../_SharedTemplates
       - ./templates
-    components:                   # named directory mappings per component type
-      aiInstructions:
-        default: ./ai-instructions.yaml
-      plotEssential:
-        default: ./plot-essentials.yaml
-      authorsNote:
-        default: ./authors-note.yaml
-      opening:
-        default: ./openings
-      openingChoice:
-        default: ./openings
-      scripts:
-        default: ./scripts
-      description:
-        default: ./description.yaml
+    snapshot: ./snapshot          # optional; freezes library entries (see 12-snapshot.md)
   output: ./output
 
-protagonist: Aness                # global default protagonist ID
 title: The Royal Academy          # optional; written once to {output}/Label.md
 
 variables:                        # key-value pairs; used in templates as {%key}
   setting: The Royal Academy
   year: "1315"
 
+roles:                            # per-branch name -> item id bindings (see 13-roles.md)
+  protagonist: Aness              # the built-in role — global default
+
 components:                       # root-level component specs (inline or file path)
   opening: "Who are you?"
-  plotEssential: "{@default}"     # reference to the "default" plotEssential dir/file
+  plotEssential: ./plot-essentials.yaml   # inline text or a path to a component file
+
+render:                           # project-wide rendering defaults
+  notesTemplate: ProjectNotes     # template that renders every card's notes:
+
+lint:                             # the opinion layer's controls
+  level: warn                     # off | error | warn
 
 branches:
   subject:
-    protagonist: Aness
+    roles:
+      protagonist: Aness
     components:
       opening: ./openings/subject.md
+    render:                       # merges over the root block, key by key
+      notesTemplate: NoNotes
     variables:
       role: research subject
   researcher:
-    protagonist: Veyrn
+    roles:
+      protagonist: Veyrn
     components:
       opening: "You are a researcher."
   tier2:
     components:
-      openingChoice: "Choose a specialisation."
+      branchFraming: "Choose a specialisation."
     branches:
       alpha: {}
       beta: {}
@@ -82,100 +80,87 @@ branches:
 
 All path resolution happens under `structure:`.
 
-### `structure.input.cards`
+### `structure.input.items`
 
-A sequence of directories to load project card YAML files from. All `.yaml` files are loaded recursively. Entries support the same `{%variable}` and `{@canonName}` token expansion as `structure.input.templates` (resolved before the path is made absolute), so a shared path prefix variable can be reused here.
+A sequence of directories to load project item YAML files from. All `.yaml` files are loaded recursively. Entries support the same `{%variable}` and `{%libraryName}` token expansion as `structure.input.templates` (resolved before the path is made absolute), so a shared path prefix variable can be reused here.
 
-```yaml
-cards: [./cards]
-# or
-cards:
+```yaml surface=config level=structure.input
+items: [./Codex]
+```
+
+```yaml surface=config level=structure.input
+items:
   - ./cards
-  - ./extra-cards
+  - ./extra-items
 ```
 
-### `structure.input.canon`
+### `structure.input.library`
 
-A **named mapping** of directories containing canonical (shared) card definitions. Each name is used in `{@name}` references and when reporting errors. All `.yaml` files are loaded recursively.
+A **named mapping** of directories containing shared item and component definitions — the
+project's **shared library**, though the key covers more than characters and lore.
+Each name is used in `{%name}` references and when reporting errors. All `.yaml`
+files are loaded recursively.
 
-```yaml
-canon:
-  main: ../../_Canon
-  lore: ./lore-cards
+```yaml surface=config level=structure.input
+library:
+  main: ../../_Library
+  lore: ./lore-items
 ```
 
-Canon names are matched case-insensitively in `{@key}` references. Use the name to refer to canon directories in `include:` paths:
+Library names are matched case-insensitively in `{%key}` references. Use the name to refer to a library directory in `include:` paths:
 
-```yaml
-- include: "{@main}/Characters/Aness.yaml"
+```yaml surface=item
+- include: "{%main}/Characters/Aness.yaml"
 ```
 
-**Token expansion in canon values** — Canon path values support token expansion before path resolution:
+**Token expansion in library values** — Library path values support token expansion before path resolution:
 
 - `{%variableName}` — replaced with the value from the top-level `variables:` block
-- `{@otherCanonName}` — replaced with the resolved absolute path of another canon entry
+- `{%otherLibraryName}` — replaced with the resolved absolute path of another library entry
 
 This makes it practical to define a root path once as a variable and reference it for multiple subdirectory entries, rather than repeating the full path:
 
-```yaml
+```yaml surface=config
 variables:
-  canonRoot: C:\Shared\AID\_Canon
+  libraryRoot: C:\Shared\AID\_Library
 
 structure:
   input:
-    canon:
-      canonGeneral: '{%canonRoot}\StoryCards\_General'
-      canonNovalune: '{%canonRoot}\StoryCards\Novalune'
+    library:
+      libGeneral: '{%libraryRoot}\StoryCards\_General'
+      libNovalune: '{%libraryRoot}\StoryCards\Novalune'
 ```
 
-Canon-to-canon `{@}` references resolve after all plain-path entries are built, so an entry with no `{@}` tokens can be referenced by a later sibling that does. Unresolved tokens are left as-is and will trigger the standard missing-path warning.
+**Every library name is also exposed as a variable**, so a library entry can reference a sibling — `esudia: '{%libraryRoot}/Esudia'` then `esudiaChars: '{%esudia}/Character'` — and so can any other path in the config. A library name colliding with a declared variable is an ERROR (`CL0521`), since the two share one namespace.
+
+**A directory may carry a reserved `library.cl.yaml`**, skipped by the item loader rather than parsed — see [Roles](13-roles.md#libraryclyaml--reserved-not-yet-read).
+
+**`structure.input.snapshot` freezes library entries into a copy the project carries with it.** See [The Library Snapshot](12-snapshot.md) for `--snapshot`, the drift notice, and `requiresRoles`.
 
 ### `structure.input.templates`
 
 A sequence of directories to load `.template` and `.partial` files from. When multiple directories are listed, **later directories override earlier ones** on name collision. Duplicate names within the same directory are an error.
 
-```yaml
+```yaml surface=config level=structure.input
 templates:
   - ../../_SharedTemplates   # base library — loaded first
   - ./templates              # project overrides — same name here wins
 ```
 
-Template path entries support the same token expansion as canon values: `{%variableName}` and `{@canonName}`. The full canon map is available when templates are resolved, so any named canon entry can be referenced:
+Template path entries support the same token expansion as library values: `{%variableName}` and `{%libraryName}`. The full library map is available when templates are resolved, so any named library entry can be referenced:
 
-```yaml
+```yaml surface=config level=structure.input
 templates:
-  - '{%canonRoot}\templates'   # {%variable} expanded to absolute path
-  - '{@canonGeneral}\templates'  # {@ canon name} expanded to that dir's path
+  - '{%libraryRoot}\templates'   # {%variable} expanded to absolute path
+  - '{%libGeneral}\templates'  # a library name, exposed as a variable
   - ./templates
-```
-
-### `structure.input.components`
-
-Named directory (or file) mappings for each component type. These are referenced in `components:` specs via `{@name}` tokens. The supported component types are:
-
-| Key | Written to |
-|---|---|
-| `aiInstructions` | `Components/AI Instructions.md` |
-| `plotEssential` | `Components/Plot Essentials.md` |
-| `authorsNote` | `Components/Author's Note.md` |
-| `opening` | `Components/Opening.md` |
-| `openingChoice` | `Components/Opening.md` (branch-point nodes only) |
-| `scripts` | `Scripts/` (directory copy) |
-| `description` | `Description.md` (output root, written once — not per-branch) |
-
-```yaml
-components:
-  plotEssential:
-    default: ./plot-essentials.yaml
-  aiInstructions:
-    default: ./ai-instructions.yaml
 ```
 
 ### `structure.output`
 
-Directory where compiled output is written. Relative to `compile.yaml`. Defaults to `./output` if omitted.
+Directory where compiled output is written. Relative to `compile.yaml`. **Required** — omitting it is `CL0203` at load, and nothing compiles.
 
-```yaml
+```yaml surface=config level=structure
 output: ./output
 ```
 
@@ -185,27 +170,45 @@ output: ./output
 
 These keys sit **outside** `structure:` at the top level of `compile.yaml`.
 
-### `protagonist`
+### `roles`
 
-Global default protagonist ID. Used when a branch doesn't declare its own. Matched case-insensitively against card `id` values.
+Per-branch name → item id bindings, merged down the branch chain like `variables:` and
+`placeholders:`. `protagonist` is the built-in role — a global default is set at root and
+a branch overrides or unbinds (`~`) it like any other role.
 
-```yaml
-protagonist: Aness
+Role-binding values are semantic strings, so `{%variable}` expands against the active branch
+scope before role lookup; role names remain literal structural keys.
+
+```yaml surface=config
+roles:
+  protagonist: Aness
+
+branches:
+  researcher:
+    roles:
+      protagonist: Veyrn
 ```
+
+An item's `{$Id}` matching the active branch's bound `protagonist` resolves to `"you"`
+rather than the item's display name, case-insensitively. See [Roles](13-roles.md) for the
+full mechanism — declaring other roles, `{$RoleName}` resolution, and the diagnostics a
+misused role raises.
 
 ### `title`
 
 Optional scenario title. Written once to `{output}/Label.md` after all branches compile, expanding `{%variable}` tokens against root `variables`. This is distinct from a branch's own `title:` field, which writes `Label.md` into that branch's own output folder (see [Branch Tree & Variant Dispatch](05-branches-and-variants.md)) — the root `title` only ever produces the single top-level file, alongside `Description.md`.
 
-```yaml
+The authored root title also names generated reports: its trimmed literal value supplies their readable headings and filename stems. Report naming does not expand variable or role tokens; a title such as `{%setting}` appears literally in a report. A missing, empty, or whitespace-only title falls back to the compiled output folder name. Offline report commands always use that folder name because they have no config title. Filename stems replace unsafe characters and protect reserved Windows names; the readable heading remains unchanged. Earlier reports are left in place after a title change.
+
+```yaml surface=config
 title: The Royal Academy
 ```
 
 ### `variables`
 
-Key-value pairs available in templates and field values as `{%key}`. Variables at the branch level override root-level variables for that branch's subtree.
+Key-value pairs available in templates and field values as `{%key}`. Variables at the branch level override root-level variables for that branch's subtree. `{%key}` expands in semantic string values; mapping keys, branch names, and selectors remain literal.
 
-```yaml
+```yaml surface=config
 variables:
   setting: "The Royal Academy"
   year: "1315"
@@ -213,27 +216,192 @@ variables:
 
 Used in a template as: `The year is {%year}.`
 
-`{%key}` is expanded consistently across card bodies, templates, opening prose, component specs, branch `title`/`protagonist`, and the config path fields (`structure.input.cards`, `structure.input.canon`, and `structure.input.templates`), making variables useful both as content values and as shared path prefixes across the config (see the `structure.input.canon` section above for an example). The one exception is `include:`/`import:` paths, which resolve once before branches are enumerated and therefore see **root** variables only, not per-branch overrides.
+`{%key}` is expanded consistently across item bodies, templates, opening prose, component specs, branch `title`/`roles`, and the config path fields (`structure.input.items`, `structure.input.library`, and `structure.input.templates`), making variables useful both as content values and as shared path prefixes across the config (see the `structure.input.library` section above for an example). The one exception is `include:`/`import:` paths, which resolve once before branches are enumerated and therefore see **root** variables only, not per-branch overrides.
+
+A branch `title:` and the root scenario `title:` also resolve role and pronoun tokens (`{$Role}`, `{$Role.pronoun}` — see [Roles](13-roles.md)), the same as any other rendered text, and `{%key}` still expands first.
+
+A `placeholders:` question's text resolves role and pronoun tokens too, after its `%key%` nesting expands — a question that reads `What is {$LI}'s name?` ships to `Placeholders.yaml` with the bound role's name in place, and the same resolved text is what the platform length caps measure.
 
 ### `components`
 
-Specifies what content to write for root-level component files. Each value is an inline string, a relative file path, a `{%variable}`, or a `{@key}` reference to a named directory/file in `structure.input.components` (or a canon entry — `{@key}` resolves against components first, then canon).
+Specifies what content to write for root-level component files. Each value is an inline string, a relative file path, or a `{%variable}` / `{%libraryName}` token that expands to one (component specs go through the same single `{%…}` expander as every other path — there is no separate component namespace).
 
-```yaml
+```yaml surface=config
 components:
-  opening: "Who are you?"                     # inline text
+  opening: "Who are you?"                      # inline text
   plotEssential: ./plot-essentials.yaml        # file path
-  aiInstructions: "{@default}"                # component key reference
+  aiInstructions: "{%shared}/ai-instructions.yaml"   # a library-name token
   authorsNote: ./authors-note.yaml
-  scripts: ./scripts
-  description: ./description.yaml             # project-level description
+  description: ./description.cl.yaml            # the scenario blurb, root only
+  adventureDescription: ./adventure.cl.yaml    # per-leaf, inherits down the tree
 ```
 
-**`opening:`** — Written to `{output}/Components/Opening.md`. Inherits down to leaf branches unless overridden.
+Each key writes one file. Every component except `branchFraming:` inherits down the branch tree, so a value declared at an interior node reaches the leaves beneath it:
 
-**`openingChoice:`** — Written to branch-point nodes' `Components/Opening.md`. Does **not** inherit; ignored on leaf nodes with a warning.
+| Key | Output file | Inherits | Items route in |
+|---|---|---|---|
+| `plotEssential` | `Components/Plot Essentials.md` | yes | yes |
+| `summary` | `Components/Summary.md` (VL reads this into `storySummary`) | yes | yes |
+| `aiInstructions` | `Components/AI Instructions.md` | yes | yes |
+| `authorsNote` | `Components/Author Notes.md` (Velvet Lattice's spelling) | yes | yes |
+| `opening` | `Components/Opening.md`, at each leaf | yes | yes |
+| `branchFraming` | `Components/Opening.md`, at branch-point nodes only | no | no |
+| `description` | `Description.md` at the output root, written once | n/a | no |
+| `adventureDescription` | `Description.md`, at each leaf | yes | yes |
 
-**`description:`** — Written once to `{output}/Description.md` after all branches compile. Accepts a `.md`/`.txt` file (body only), a `.js` file (script banner only), or a `.yaml` config combining both. Not per-branch; branch-level overrides are ignored. See [Components → Description](09-components.md#description) for full details.
+`scripts:` is **not** a component — it is a top-level key with its own directory and hook-map rules (see [scripts](#scripts) below).
+
+**`opening:`** — Written to each leaf's `Components/Opening.md`. An ordinary component: it inherits down the tree, may be a `sections:` document, and items may route into its slots. A `.md` file expands `{%variables}` at the leaf while preserving its other text, and a spec naming no file is used as literal text, which is what most openings are. Capped at 4,000 characters (`CL0710`/`CL0711`).
+
+**`branchFraming:`** — Written to branch-point nodes' `Components/Opening.md`. Does **not** inherit; ignored on leaf nodes with a warning. Takes the same three shapes `opening:` does, but items cannot route into it — framing sits at an interior node, where no items are resolved.
+
+**Declared at the project root — sibling to `branches:` rather than inside any branch node — `branchFraming:` writes once to `{output}/Components/Opening.md`** and otherwise behaves like framing at any interior node. It reads the project's own `roles:` and resolves `{%variable}`, `{$role}` and pronoun tokens in every shape — a literal sentence, a prose `.md`, or a `sections:` document (see [Roles](13-roles.md)). `{$protagonist}` renders as "you" only when a `protagonist` role is bound at the root; every other `{$role}` token resolves regardless.
+
+**`description:`** — The scenario blurb AID shows on the listing page. Written once to `{output}/Description.md` after all branches compile. Accepts a `.md`/`.txt` file whose `{%variables}` expand at root scope, or a component document with `sections:`. Not per-branch; branch-level declarations are ignored.
+
+**`adventureDescription:`** — The description a leaf carries, which AID applies to the adventure started from that leaf. An ordinary component: declared anywhere in the tree, inherited down it, written to each leaf's `Description.md`, and items may route into its slots. A leaf that has one and no `Opening.md` is `CL0616`, because Velvet Lattice would open the adventure on the blurb.
+
+See [Components → Description](09-components.md#description) for both keys, the `file:`/`from:` section sources, and `metadata:` frontmatter.
+
+### `scripts`
+
+Selects files for the Velvet Lattice `Scripts/` folder. It is a **top-level key** — sibling
+to `components:`, not a key inside it. Declarations resolve from the root through each
+branch to the leaf, using that leaf's final variables and paths relative to the config file.
+
+Two forms:
+
+```yaml surface=config
+scripts: ./scripts               # a directory bundle
+```
+
+```yaml surface=config
+scripts:                         # select hooks by their Velvet Lattice names
+  input:   ./scripts/input.js
+  context: ./scripts/context.js
+  output:  ./scripts/output.js
+  library: ./scripts/library.js
+```
+
+**A directory declaration replaces all four hook selections.** The compiler looks for
+`input.js`, `output.js`, `context.js`, and `library.js` at the directory root; a missing
+hook removes the inherited hook. Other files, including files in nested directories, are
+retained as auxiliary files. A later directory replaces the earlier auxiliary-file set.
+
+**A mapping changes only the hooks it names.** Omitted keys inherit the current selection,
+and a named `null` removes that hook. An empty mapping changes nothing; `scripts: ~` is
+equivalent to setting all four hook keys to `null`, so a later partial mapping can restore
+only its named hooks. Mapping operations preserve the most recent directory's auxiliary
+files.
+
+**A path that does not exist is an error (`CL0636`).** That covers a `scripts:` directory
+that is missing and a mapped hook path that names no file; write `null` to remove a hook on
+purpose. The bad hook is still removed instead of falling back to an inherited source. A
+directory that exists but lacks one of the four hook files is not an error.
+
+**Only the four top-level canonical filenames are loaded as hooks by Velvet Lattice.**
+File bytes are copied unchanged. Directory files keep their relative names; mapped sources
+are written under their canonical hook filenames. The compiler places each relative output
+file at the fewest branch nodes that preserve every leaf's selected bytes; an ancestor copy
+is blocked when any leaf must lack that file, and a local override is added only when it
+saves a write. A one-leaf project keeps its scripts at that leaf; an unbranched project
+writes at the root. See [Components → Scripts](09-components.md#scripts).
+
+### `render`
+
+Rendering defaults for the whole project. One key so far:
+
+```yaml surface=config
+render:
+  notesTemplate: ProjectNotes
+```
+
+`notesTemplate` names the template that renders every card's `notes:` field when the item does not name one itself and no `templateFor.notes` entry matches its `aid.type` — the scalar half of rung 2 of the ladder in [Item YAML → Rendering notes through a template](03-item-yaml.md). Naming a template that is not loaded is ERROR `CL0411`, reported at load rather than once per card.
+
+**It merges down the branch chain, key by key.** A branch can replace `notesTemplate` without changing the other project-wide rendering defaults. Which mods a branch loads decides whether a marker in the notes field means anything on that branch.
+
+```yaml surface=config
+render:
+  notesTemplate: WTGNotes         # [e] suppresses the mod's discovery timestamp
+
+branches:
+  modded: {}                      # inherits WTGNotes
+  vanilla:
+    render:
+      notesTemplate: NoNotes      # a blank template — no notes line is written at all
+```
+
+**Use a blank template rather than `~` to turn notes off.** `notesTemplate: ~` unbinds the inherited value, which drops the branch to rung 3 — the built-in rendering of the notes value itself. For a scalar like `'[e]'` that is the same marker again; for a mapping it is `known: true` reaching AID as text. A template that renders nothing emits no `notes:` line at all, which is what "off" should mean.
+
+### `storyCardType`
+
+The AID story-card `type` that a component's `render.storyCards` alternates land under — one per component, project-wide.
+
+**`storyCardType` is root-only.** Its values expand `{%variables}` against the completed root table; its component-name keys remain literal. A branch-only variable here is out of scope. Entry-level `title:` and `type:` are separate leaf-scoped values; expansion happens before trimming, empty checks, collision checks, and type validation.
+
+```yaml surface=config
+storyCardType:
+  aiInstructions: zz_AIN            # sorts the alternates to the end of the player's card list
+  plotEssential:  zz_PE
+```
+
+This is the middle rung of the ladder in [Components → Swappable alternates](09-components.md#swappable-alternates--renderstorycards): an entry's own `type:` wins over it, and with neither set the card takes the component's display label (`AI Instructions`). It is **not** branch-addressable — which category a reference card sorts under is a whole-scenario decision — so unlike `render:` it has no branch rung.
+
+### `lint`
+
+Controls for Codex Loom's **opinion layer** — the checks that judge quality rather than
+report facts.
+
+```yaml surface=config
+lint:
+  level: error        # off | error | warn
+```
+
+**`level` cannot reach anything the compiler knows is wrong.** Unknown keys, undeclared
+roles, platform field caps, a leaked `{$she}` or `{join}` — those are facts about your
+output, they stay errors at every level, and that is what makes `off` a safe thing to
+write. What `level` governs is the other half: trigger-less cards, prose heuristics, unused
+placeholder declarations, and convention-pack findings.
+
+Read `error` as **"validate my mod configs, skip the prose heuristics"**. The prose
+heuristics are all warnings, so they disappear; pack findings about mod config survive at
+full severity and can still fail a build.
+
+| `level` | What you hear from the opinion layer |
+|---|---|
+| `off` | Nothing. |
+| `error` | Its errors only — pack findings about mod config. |
+| `warn` | Everything, demoted so that nothing in the layer fails your build. |
+| *(unset)* | Everything, at the severity each finding was raised with. The default. |
+
+`--lint-level=off|error|warn` overrides the key for one run, and is separate from
+`--verbose`. See [Diagnostic Codes](11-diagnostics.md) and [design-spec §12.5](design-spec.md)
+for the compiler/lint split and which checks sit in which layer.
+
+`lint.packs` — convention packs — is a mapping keyed by pack name. `{}` names a bundled
+pack, `{ source: <path> }` a project-local or library-hosted one, and either may carry a
+per-pack `level:` ceiling. It is legal on a branch node and merges down the chain key-wise
+(`<name>: ~` unbinds an inherited pack), because which packs should validate a branch's
+`notes:` depends on which mods that branch ships. See [Convention Packs](14-convention-packs.md).
+
+`lint.level` on a branch is a per-branch ceiling: it clamps the opinion layer for that
+branch's subtree, and a finding it clamps names the branch that raised it. The order of the
+ceilings is per-pack `level:`, then per-branch `lint.level`, then project-level
+`lint.level`; the tightest wins.
+
+**`lint.scenario: false` declares a project nobody plays**, such as one that renders a
+shared library at several variants so it can be read and measured. It drops the checks that
+only make sense for a playable leaf: `CL0630` (no opening), `CL0631` (no AI Instructions)
+and every pack's `requireCard` existence check. Per-card and per-item pack rules, and
+everything the compiler knows is wrong, still run. The key is accepted at the root only;
+the default is `true`.
+
+```yaml surface=config
+lint:
+  scenario: false
+  packs:
+    duckieConv: {}
+```
 
 ### `branches`
 
@@ -241,20 +409,22 @@ The branch tree. Each key is a branch name; each value is a branch config object
 
 See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) for full details.
 
-```yaml
+```yaml surface=config
 branches:
   subject:
     title: The Subject's Path     # output folder: Branches/The Subject's Path/
-    protagonist: Aness
+    roles:
+      protagonist: Aness
     components:
       opening: "You are a research subject."
     variables:
       role: subject
   researcher:
-    protagonist: Veyrn             # no title: folder is Branches/researcher/
+    roles:
+      protagonist: Veyrn           # no title: folder is Branches/researcher/
   multipath:
     components:
-      openingChoice: "Choose a path."
+      branchFraming: "Choose a path."
     branches:
       alpha: {}
       beta: {}
@@ -264,8 +434,8 @@ branches:
 
 | Key | Description |
 |---|---|
-| `title` | Output folder name for this branch node. When set, the compiler uses this string as the filesystem folder name instead of the YAML key. The key is still used for card branch dispatch and all internal matching; `title` only affects the output path. |
-| `protagonist` | Protagonist ID for this branch leaf (overrides root `protagonist`) |
+| `title` | Output folder name for this branch node. When set, the compiler uses this string as the filesystem folder name instead of the YAML key. The key is still used for item branch dispatch and all internal matching; `title` only affects the output path. |
+| `roles` | Role bindings for this branch, merged over inherited ones — `protagonist` included (see [Roles](13-roles.md)) |
 | `components` | Component specs for this branch (same keys as root `components:`) |
 | `variables` | Variables for this branch subtree (merged on top of parent variables) |
 | `branches` | Child branches (makes this node a non-leaf) |
@@ -276,4 +446,4 @@ branches:
 
 All paths in `compile.yaml` are resolved relative to the location of `compile.yaml` itself. Absolute paths are also valid.
 
-The compiler warns if a declared `cards`, `canon`, or `templates` path does not exist. Missing `components` file paths are handled at compile time per component.
+The compiler warns if a declared `items`, `library`, or `templates` path does not exist. Missing `components` file paths are handled at compile time per component.

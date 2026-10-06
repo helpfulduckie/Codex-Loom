@@ -1,0 +1,27 @@
+# Field table for the unread-field audit fixture.
+
+fields:
+  name:      { label: Name }
+  vibe:      { label: Vibe }
+  homeland:  { label: Homeland }
+  quirk:     { label: Quirk }
+  deadField: { label: "Never Rendered" }   # named by no template -> CL0428
+
+groups:
+  origin: [homeland, quirk]
+
+templates:
+  # Reads name + vibe only. An item routed here with a `homeland` (a real field, in the
+  # `origin` group) is CL0427; with an undeclared key it is CL0426.
+  Person:
+    - name
+    - vibe
+
+  Place:
+    - name
+    - origin
+
+  # Opts the whole template out of the audit.
+  Loose:
+    - { allowExtra: true }
+    - name

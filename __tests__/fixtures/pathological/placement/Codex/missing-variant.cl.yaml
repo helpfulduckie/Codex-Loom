@@ -1,0 +1,10 @@
+id: MissingVariant
+name: Missing Variant
+render:
+  storyCard: false
+  plotEssential: {slot: cast, template: Character}
+body:
+  Tagline: Dispatches to a missing variant.
+branches:
+  open: absent
+  _: null

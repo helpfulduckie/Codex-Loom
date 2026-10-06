@@ -1,0 +1,37 @@
+# A shared library file, reached as {%main}. Each library name is auto-exposed as {%name}.
+
+- id: Academy
+  name: The Royal Academy
+  aid:
+    title: The Royal Academy
+    type: location
+    triggers: [Academy, Royal Academy]
+  render:
+    template: Location
+  body:
+    Tagline: Seven towers around a frozen courtyard
+    vibe: [austere, competitive, old]
+    landmarks:
+      - The lower stacks
+      - The frozen courtyard
+    pantheon:
+      Vashet: keeper of records
+      Ilm: patron of oaths
+  variants:
+    noble:
+      body:
+        Tagline: +{the wing that admits only sworn houses}
+
+- id: Warrens
+  name: The Warrens
+  aid:
+    title: The Warrens
+    type: location
+    triggers: [Warrens]
+  render:
+    template: Location
+  body:
+    Tagline: Tenements below the Academy wall
+    vibe: [crowded, wary, resourceful]
+    landmarks:
+      - The cistern market

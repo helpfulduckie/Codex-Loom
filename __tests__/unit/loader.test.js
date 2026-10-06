@@ -1,19 +1,21 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const { loadTemplates } = require('../../src/loader');
 const {
-  buildRegistry, mergeRegistries, loadTemplates,
-  loadCardsFromDir, buildOverlays, loadCompileConfig,
-} = require('../../src/loader');
+  buildRegistry, mergeRegistries, loadItemsFromDir,
+} = require('../../src/loader/registry');
+const { loadCompileConfig } = require('../../src/config/load');
+const { Diagnostics, CODES } = require('../../src/diag');
+const { withTmpDir } = require('../helpers/project');
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function makeTmpDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'cl-test-'));
+  return withTmpDir();
 }
 
 function writeTemplate(dir, name, content) {
@@ -47,7 +49,37 @@ describe('loadTemplates', () => {
     const dir = makeTmpDir();
     writeTemplateIn(dir, 'A', 'character', 'version A');
     writeTemplateIn(dir, 'B', 'character', 'version B');
-    expect(() => loadTemplates(dir)).toThrow(/Duplicate .template name "character"/);
+    expect(() => loadTemplates(dir)).toThrow(/CL0429: Duplicate .template name "character"/);
+    let caught;
+    try { loadTemplates(dir); } catch (e) { caught = e; }
+    expect(caught.code).toBe(CODES.DUPLICATE_NAMED_FILE);
+  });
+
+  test('a template that still writes a fence is an ERROR naming the file', () => {
+    const dir = makeTmpDir();
+    writeTemplate(dir, 'Character', '## {$name.full}\n~~~\ntriggers: []\n~~~\nbody');
+    const diagnostics = new Diagnostics();
+    loadTemplates(dir, { diagnostics });
+    expect(diagnostics.errors).toHaveLength(1);
+    expect(diagnostics.errors[0].code).toBe(CODES.TEMPLATE_CONTAINS_FENCE);
+    expect(diagnostics.errors[0].file).toContain('Character.template');
+  });
+
+  test('partials are checked for fences too — the envelope lived in one', () => {
+    const dir = makeTmpDir();
+    writePartial(dir, 'cardHeader', '## {$name.full}\n~~~\n~~~\n{wrapper}');
+    const diagnostics = new Diagnostics();
+    loadTemplates(dir, { diagnostics });
+    expect(diagnostics.errors.map((d) => d.file.replace(/\\/g, '/')))
+      .toEqual([expect.stringContaining('cardHeader.partial')]);
+  });
+
+  test('a body-only template loads clean', () => {
+    const dir = makeTmpDir();
+    writeTemplate(dir, 'Character', '{wrapper}{$body.tagline}{/wrapper}');
+    const diagnostics = new Diagnostics();
+    loadTemplates(dir, { diagnostics });
+    expect(diagnostics.isEmpty()).toBe(true);
   });
 
   test('multiple directories — all templates loaded when no collision', () => {
@@ -75,7 +107,7 @@ describe('loadTemplates', () => {
     writeTemplateIn(dir1, 'X', 'character', 'version A');
     writeTemplateIn(dir1, 'Y', 'character', 'version B');
     writeTemplate(dir2, 'Location', 'loc');
-    expect(() => loadTemplates([dir1, dir2])).toThrow(/Duplicate .template name "character"/);
+    expect(() => loadTemplates([dir1, dir2])).toThrow(/CL0429: Duplicate .template name "character"/);
   });
 
   test('single string still works (no regression)', () => {
@@ -101,7 +133,7 @@ describe('loadTemplates', () => {
     fs.mkdirSync(sub);
     writePartial(dir, 'shared', 'v1');
     writePartial(sub, 'shared', 'v2');
-    expect(() => loadTemplates(dir)).toThrow(/Duplicate .partial name "shared"/);
+    expect(() => loadTemplates(dir)).toThrow(/CL0429: Duplicate .partial name "shared"/);
   });
 
   test('empty directory returns empty partials map', () => {
@@ -113,35 +145,28 @@ describe('loadTemplates', () => {
 
 describe('buildRegistry', () => {
   test('normalizes id keys to lowercase and backfills id from name', () => {
-    const cards = [{ name: 'Felicia', type: 'Character', _source: 'x.yaml' }];
-    const reg = buildRegistry(cards, 'test');
+    const items = [{ name: 'Felicia', type: 'Character', _source: 'x.yaml' }];
+    const reg = buildRegistry(items, 'test');
     expect(reg.has('felicia')).toBe(true);
     expect(reg.get('felicia').id).toBe('Felicia');
   });
 
-  test('throws on duplicate id (case-insensitive)', () => {
-    const cards = [
+  test('raises CL0141 on the bus for a duplicate id (case-insensitive)', () => {
+    const items = [
       { id: 'Zephon', name: 'Zephon', _source: 'a.yaml' },
       { id: 'zephon', name: 'Zephon Alt', _source: 'b.yaml' },
     ];
-    expect(() => buildRegistry(cards, 'test')).toThrow(/Duplicate card ID/i);
+    const diagnostics = new Diagnostics();
+    buildRegistry(items, 'test', { diagnostics });
+    expect(diagnostics.errors.some((d) => /Duplicate item ID/i.test(d.message))).toBe(true);
   });
 
-  test('skips import and include entries', () => {
-    const cards = [
-      { import: 'Zephon', _source: 'a.yaml' },
-      { include: 'some/file.yaml', _source: 'b.yaml' },
-    ];
-    const reg = buildRegistry(cards, 'test');
-    expect(reg.size).toBe(0);
-  });
-
-  test('stores multiple distinct cards', () => {
-    const cards = [
+  test('stores multiple distinct items', () => {
+    const items = [
       { id: 'Alpha', name: 'Alpha', _source: 'a.yaml' },
       { id: 'Beta', name: 'Beta', _source: 'b.yaml' },
     ];
-    const reg = buildRegistry(cards, 'test');
+    const reg = buildRegistry(items, 'test');
     expect(reg.size).toBe(2);
     expect(reg.has('alpha')).toBe(true);
     expect(reg.has('beta')).toBe(true);
@@ -149,22 +174,15 @@ describe('buildRegistry', () => {
 });
 
 describe('mergeRegistries', () => {
-  test('merges disjoint registries', () => {
-    const canon = new Map([['a', { id: 'a' }]]);
-    const project = new Map([['b', { id: 'b' }]]);
-    const merged = mergeRegistries(canon, project);
-    expect(merged.size).toBe(2);
-    expect(merged.has('a')).toBe(true);
-    expect(merged.has('b')).toBe(true);
-  });
-
-  test('throws when same id appears in both registries', () => {
+  test('raises CL0141 on the bus when same id appears in both registries', () => {
     const canon = new Map([['felicia', { _source: 'canon/Felicia.yaml' }]]);
-    const project = new Map([['felicia', { _source: 'cards/Felicia.yaml' }]]);
-    expect(() => mergeRegistries(canon, project)).toThrow(/felicia/i);
+    const project = new Map([['felicia', { _source: 'items/Felicia.yaml' }]]);
+    const diagnostics = new Diagnostics();
+    mergeRegistries(canon, project, { diagnostics });
+    expect(diagnostics.errors.some((d) => /felicia/i.test(d.message))).toBe(true);
   });
 
-  test('project-only cards are included', () => {
+  test('project-only items are included', () => {
     const canon = new Map();
     const project = new Map([['hero', { id: 'hero' }]]);
     const merged = mergeRegistries(canon, project);
@@ -173,40 +191,22 @@ describe('mergeRegistries', () => {
 });
 
 // ---------------------------------------------------------------------------
-// loadCardsFromDir
+// loadItemsFromDir
 // ---------------------------------------------------------------------------
 
-describe('loadCardsFromDir', () => {
+describe('loadItemsFromDir', () => {
   test('returns empty array when directory is empty', () => {
     const dir = makeTmpDir();
-    expect(loadCardsFromDir([dir])).toEqual([]);
+    expect(loadItemsFromDir([dir])).toEqual([]);
   });
 
-  test('loads a single-card YAML (non-array) and wraps it', () => {
+  test('normalizes vars: field to v: on each item', () => {
     const dir = makeTmpDir();
-    fs.writeFileSync(path.join(dir, 'card.yaml'), 'id: Aria\nname: Aria Voss\n', 'utf8');
-    const cards = loadCardsFromDir([dir]);
-    expect(cards).toHaveLength(1);
-    expect(cards[0].id).toBe('Aria');
-    expect(cards[0]._source).toContain('card.yaml');
-  });
-
-  test('loads a multi-card YAML (array sequence)', () => {
-    const dir = makeTmpDir();
-    fs.writeFileSync(path.join(dir, 'cards.yaml'), '- id: Alpha\n- id: Beta\n', 'utf8');
-    const cards = loadCardsFromDir([dir]);
-    expect(cards).toHaveLength(2);
-    expect(cards[0].id).toBe('Alpha');
-    expect(cards[1].id).toBe('Beta');
-  });
-
-  test('normalizes vars: field to v: on each card', () => {
-    const dir = makeTmpDir();
-    fs.writeFileSync(path.join(dir, 'card.yaml'), 'id: Hero\nvars:\n  role: knight\n', 'utf8');
-    const [card] = loadCardsFromDir([dir]);
-    expect(card).toHaveProperty('v');
-    expect(card).not.toHaveProperty('vars');
-    expect(card.v.role).toBe('knight');
+    fs.writeFileSync(path.join(dir, 'item.yaml'), 'id: Hero\nvars:\n  role: knight\n', 'utf8');
+    const [item] = loadItemsFromDir([dir]);
+    expect(item).toHaveProperty('v');
+    expect(item).not.toHaveProperty('vars');
+    expect(item.v.role).toBe('knight');
   });
 
   test('loads from multiple directories', () => {
@@ -214,55 +214,15 @@ describe('loadCardsFromDir', () => {
     const dir2 = makeTmpDir();
     fs.writeFileSync(path.join(dir1, 'a.yaml'), 'id: Alpha\n', 'utf8');
     fs.writeFileSync(path.join(dir2, 'b.yaml'), 'id: Beta\n', 'utf8');
-    expect(loadCardsFromDir([dir1, dir2])).toHaveLength(2);
+    expect(loadItemsFromDir([dir1, dir2])).toHaveLength(2);
   });
 
   test('accepts a scalar string path (not wrapped in array)', () => {
     const dir = makeTmpDir();
-    fs.writeFileSync(path.join(dir, 'card.yaml'), 'id: Solo\n', 'utf8');
-    const cards = loadCardsFromDir(dir);
-    expect(cards).toHaveLength(1);
-    expect(cards[0].id).toBe('Solo');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildOverlays
-// ---------------------------------------------------------------------------
-
-describe('buildOverlays', () => {
-  test('returns empty map when no cards have import:', () => {
-    expect(buildOverlays([{ id: 'Aria', _source: 'cards.yaml' }]).size).toBe(0);
-  });
-
-  test('maps import: target (lowercased) to the card', () => {
-    const card = { import: 'Felicia', _source: 'cards.yaml' };
-    const overlays = buildOverlays([card]);
-    expect(overlays.has('felicia')).toBe(true);
-    expect(overlays.get('felicia')).toBe(card);
-  });
-
-  test('key is stored lowercase regardless of import: casing', () => {
-    const card = { import: 'MYCARD', _source: 'x.yaml' };
-    expect(buildOverlays([card]).has('mycard')).toBe(true);
-  });
-
-  test('duplicate import: target warns and keeps first', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation();
-    const first  = { import: 'Felicia', _source: 'a.yaml' };
-    const second = { import: 'Felicia', _source: 'b.yaml' };
-    const overlays = buildOverlays([first, second]);
-    expect(overlays.get('felicia')).toBe(first);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Felicia'));
-    warn.mockRestore();
-  });
-
-  test('ignores non-import cards, includes only import cards', () => {
-    const cards = [
-      { id: 'Hero', _source: 'a.yaml' },
-      { import: 'Villain', _source: 'b.yaml' },
-    ];
-    expect(buildOverlays(cards).size).toBe(1);
+    fs.writeFileSync(path.join(dir, 'item.yaml'), 'id: Solo\n', 'utf8');
+    const items = loadItemsFromDir(dir);
+    expect(items).toHaveLength(1);
+    expect(items[0].id).toBe('Solo');
   });
 });
 
@@ -275,94 +235,90 @@ describe('loadCompileConfig', () => {
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
-    jest.spyOn(console, 'warn').mockImplementation();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
     jest.restoreAllMocks();
   });
 
+  /**
+   * `loadCompileConfig` requires a bus and returns `null` (rather than throwing) for a
+   * config it cannot load. This mirrors the old owned-bus behavior for the tests below
+   * that still want a throw to assert against.
+   */
+  function load(cfgPath) {
+    const diagnostics = new Diagnostics();
+    const config = loadCompileConfig(cfgPath, { diagnostics });
+    if (diagnostics.hasErrors()) {
+      const count = diagnostics.errors.length;
+      throw new Error(`Configuration has ${count} error${count === 1 ? '' : 's'}; nothing was compiled.`);
+    }
+    return config;
+  }
+
+  /**
+   * v4 requires `version:`, `structure:` and `structure.output` (§6). Each fixture below
+   * states only the keys it is actually testing, so the scaffolding is injected here —
+   * otherwise every case would repeat three lines that have nothing to do with it.
+   */
   function writeConfig(yaml) {
+    let text = yaml;
+    if (!/^version:/m.test(text)) text = `version: 4\n${text}`;
+    if (!/^structure:/m.test(text)) text += '\nstructure:\n  output: ./out\n';
+    else if (!/^ {2}output:/m.test(text)) text = text.replace(/^structure:\s*(\{\}\s*)?$/m, 'structure:\n  output: ./out');
     const p = path.join(tmpDir, 'compile.yaml');
-    fs.writeFileSync(p, yaml, 'utf8');
+    fs.writeFileSync(p, text, 'utf8');
     return p;
   }
 
-  test('_base is set to the directory containing compile.yaml', () => {
-    const cfgPath = writeConfig('structure: {}\n');
-    expect(loadCompileConfig(cfgPath)._base).toBe(tmpDir);
-  });
-
-  test('resolves structure.output relative to config dir', () => {
+  test('_resolvedReports is null when structure.reports is not specified', () => {
     const cfgPath = writeConfig('structure:\n  output: ./out\n');
-    expect(loadCompileConfig(cfgPath)._resolvedOutput).toBe(path.resolve(tmpDir, 'out'));
+    expect(load(cfgPath)._resolvedReports).toBeNull();
   });
 
-  test('defaults output to ./output when not specified', () => {
-    const cfgPath = writeConfig('structure: {}\n');
-    expect(loadCompileConfig(cfgPath)._resolvedOutput).toBe(path.resolve(tmpDir, 'output'));
-  });
-
-  test('resolves structure.overview relative to config dir', () => {
-    const cfgPath = writeConfig('structure:\n  output: ./out\n  overview: ./reviews\n');
-    expect(loadCompileConfig(cfgPath)._resolvedOverview).toBe(path.resolve(tmpDir, 'reviews'));
-  });
-
-  test('_resolvedOverview is null when structure.overview is not specified', () => {
-    const cfgPath = writeConfig('structure:\n  output: ./out\n');
-    expect(loadCompileConfig(cfgPath)._resolvedOverview).toBeNull();
-  });
-
-  test('resolves cards sequence to absolute paths', () => {
-    const cfgPath = writeConfig('structure:\n  input:\n    cards:\n      - ./cards\n');
-    expect(loadCompileConfig(cfgPath)._resolvedCards)
-      .toEqual([path.resolve(tmpDir, 'cards')]);
-  });
-
-  test('expands {%variable} and {@canon} in cards paths (parity with templates)', () => {
+  test('expands {%variable} and library names in items paths', () => {
+    // Library names are auto-exposed as variables (§6.1), so `{%Base}` does what `{@Base}`
+    // used to — one naming system instead of two.
     const cfgPath = writeConfig([
       'variables:',
       '  root: shared',
       'structure:',
+      '  output: ./out',
       '  input:',
-      '    canon:',
+      '    library:',
       '      Base: ./base',
-      '    cards:',
+      '    items:',
       '      - "{%root}/Canon"',
-      '      - "{@Base}/extra"',
+      '      - "{%Base}/extra"',
     ].join('\n') + '\n');
-    const { _resolvedCards } = loadCompileConfig(cfgPath);
-    expect(_resolvedCards[0]).toBe(path.resolve(tmpDir, 'shared/Canon'));
-    expect(_resolvedCards[1]).toBe(path.resolve(tmpDir, 'base/extra'));
+    const { _resolvedItems } = load(cfgPath);
+    expect(_resolvedItems[0]).toBe(path.resolve(tmpDir, 'shared/Canon'));
+    expect(_resolvedItems[1]).toBe(path.resolve(tmpDir, 'base/extra'));
   });
 
-  test('resolves canon mapping entries to absolute paths', () => {
-    const cfgPath = writeConfig('structure:\n  input:\n    canon:\n      Core: ./canon/core\n');
-    const { _resolvedCanon } = loadCompileConfig(cfgPath);
-    expect(_resolvedCanon.get('Core')).toBe(path.resolve(tmpDir, 'canon/core'));
-  });
-
-  test('two-pass canon: entry using {@Name} resolves after first pass', () => {
+  test('a library entry may reference a sibling library name', () => {
+    // v3 needed a bespoke two-pass resolver for this. Library names are variables now, so
+    // it falls out of ordinary variable resolution.
     const cfgPath = writeConfig([
       'structure:',
+      '  output: ./out',
       '  input:',
-      '    canon:',
+      '    library:',
       '      Base: ./base',
-      '      Ext: "{@Base}/ext"',
+      '      Ext: "{%Base}/ext"',
     ].join('\n') + '\n');
-    const { _resolvedCanon } = loadCompileConfig(cfgPath);
-    const ext = _resolvedCanon.get('Ext');
+    const { _resolvedLibrary } = load(cfgPath);
+    const ext = _resolvedLibrary.get('Ext');
     expect(ext).toContain('base');
     expect(ext).toContain('ext');
   });
 
-  test('passes through protagonist, variables, and branches', () => {
+  test('passes through roles (protagonist included), variables, and branches', () => {
     const cfgPath = writeConfig(
-      'protagonist: Aria\nvariables:\n  role: knight\nbranches:\n  main: {}\n'
+      'roles:\n  protagonist: Aria\nvariables:\n  role: knight\nbranches:\n  main: {}\n'
     );
-    const config = loadCompileConfig(cfgPath);
-    expect(config.protagonist).toBe('Aria');
+    const config = load(cfgPath);
+    expect(config.roles).toEqual({ protagonist: 'Aria' });
     expect(config.variables).toEqual({ role: 'knight' });
     expect(config.branches).toHaveProperty('main');
   });

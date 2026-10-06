@@ -1,0 +1,373 @@
+'use strict';
+
+
+const { resolveBranchSpec } = require('./branches');
+const { applyFieldOp } = require('./fieldops');
+const { findKey, setCI } = require('../util');
+const { CODES } = require('../diag');
+const {
+  transferOrigins, copyOrigins, originAt, originLocation, getOrigins,
+} = require('../origin');
+
+function isMapping(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function dropOrigin(target, path) {
+  if (getOrigins(target)) transferOrigins(null, target, [], path);
+}
+
+// A nested delta read on its own, carrying the owner's origins rebased to its root.
+function originView(owner, path, value) {
+  return isMapping(value) ? transferOrigins(owner, { ...value }, path, []) : value;
+}
+
+function sectionVariant(section, key) {
+  return originView(section, ['variants', key], section.variants[key]);
+}
+
+// Authored path → normalized field. A default has no authored path, so its lookup
+// falls back to the section key.
+const NORMALIZED_ORIGINS = [
+  [['slot'], ['isSlot']], [['text'], ['text']], [['heading'], ['heading']],
+  [['headingLevel'], ['headingLevel']], [['render', 'position'], ['position']],
+  [['render', 'wrapper'], ['wrapper']], [['render', 'wrap'], ['wrap']],
+  [['render', 'compact'], ['compact']], [['render', 'bullet'], ['bullet']],
+  [['branches'], ['branches']], [['variants'], ['variants']],
+];
+
+const VARIANT_RENDER_KEYS = ['position', 'wrapper', 'wrap', 'compact', 'bullet'];
+
+const WRAP = Object.freeze({
+  EACH: 'each',
+  ALL: 'all',
+});
+
+const DEFAULT_POSITION = 5;
+
+function normalizeComponent(doc, options = {}) {
+  const { onWarn = () => {} } = options;
+
+  const rawSections = (doc && doc.sections) || {};
+  const sections = Object.entries(rawSections)
+    .filter(([, def]) => def !== null && def !== undefined)
+    .map(([name, def], index) => normalizeSection(name, def, index, onWarn));
+
+  sections.sort((a, b) => (a.position - b.position) || (a.index - b.index));
+
+  const slots = new Map();
+  for (const section of sections) {
+    if (section.isSlot) slots.set(section.name, section);
+  }
+
+  return {
+    sections,
+    slots,
+    branches: (doc && doc.branches) || null,
+    render: (doc && doc.render) || null,
+    metadata: (doc && doc.metadata) || null,
+  };
+}
+
+function normalizeSection(name, def, index, onWarn) {
+  const raw = (def && typeof def === 'object' && !Array.isArray(def)) ? def : {};
+  const render = (raw.render && typeof raw.render === 'object') ? raw.render : {};
+
+  const isSlot = raw.slot === true;
+  const hasSource = (typeof raw.file === 'string' && raw.file !== '')
+    || (raw.from && typeof raw.from === 'object' && !Array.isArray(raw.from));
+  const hasText = (raw.text !== undefined && raw.text !== null && raw.text !== '') || hasSource;
+  const hasHeading = typeof raw.heading === 'string' && raw.heading !== '';
+
+  if (isSlot && hasText) {
+    onWarn(CODES.SECTION_TEXT_AND_SLOT,
+      `section "${name}" declares both "text:" and "slot: true" — a section is one or the other. `
+      + 'Move the text into its own section positioned ahead of the slot.',
+      originLocation(raw, ['slot']));
+  }
+
+  if (!isSlot && !hasText && !hasHeading) {
+    const importedFrom = typeof raw.__importedFrom === 'string' ? raw.__importedFrom : null;
+    onWarn(CODES.SECTION_RENDERS_NOTHING,
+      `section "${name}" has no text, no heading and is not a slot, so it renders nothing.`
+      + (importedFrom
+        ? ` (inherited from ${importedFrom}, which already reports this for its own copy of `
+          + 'the section — fix it there; this is the same section, merged.)'
+        : '') + ' Add content, make it a slot, or remove it.',
+      originLocation(raw, []));
+  }
+
+  let wrap = render.wrap === undefined ? WRAP.EACH : String(render.wrap).toLowerCase();
+  if (wrap !== WRAP.EACH && wrap !== WRAP.ALL) {
+    onWarn(CODES.SECTION_WRAP_UNKNOWN,
+      `section "${name}" sets wrap: "${render.wrap}", which is neither "each" nor "all" — using "each". Change it to "each" or "all".`,
+      originLocation(raw, ['render', 'wrap']));
+    wrap = WRAP.EACH;
+  }
+
+  const section = {
+    name,
+    index,
+    isSlot,
+    text: raw.text === undefined ? null : raw.text,
+    heading: hasHeading ? raw.heading : null,
+    headingLevel: raw.headingLevel,
+    position: typeof render.position === 'number' ? render.position : DEFAULT_POSITION,
+    wrapper: render.wrapper || 'none',
+    wrap,
+    compact: render.compact === true,
+    bullet: render.bullet === true,
+    branches: raw.branches || null,
+    variants: raw.variants || null,
+  };
+  if (getOrigins(raw)) {
+    transferOrigins(raw, section, [], [], { replace: false, descendants: false });
+    for (const [from, to] of NORMALIZED_ORIGINS) {
+      if (originAt(raw, from)) transferOrigins(raw, section, from, to);
+    }
+  }
+  return section;
+}
+
+function sectionOpLabel(name, path) {
+  return [name ? `section "${name}"` : 'section', ...path].join('.');
+}
+
+function applySectionVariant(section, delta, onWarn = null) {
+  if (!delta || typeof delta !== 'object' || Array.isArray(delta)) return section;
+  const result = copyOrigins(section, { ...section });
+  const take = (from, to = from) => transferOrigins(delta, result, from, to);
+  const opCtx = (path) => ({
+    source: delta, sourcePath: path, target: result, targetPath: path,
+    onWarn, label: sectionOpLabel(section.name, path),
+  });
+
+  if (delta.text !== undefined) {
+    if (delta.text === null) {
+      result.text = null;
+      take(['text']);
+    } else if (typeof delta.text === 'string') {
+      const next = applyFieldOp(result.text, delta.text, opCtx(['text']));
+      result.text = next === '__DELETE__' ? null : next;
+    } else if (typeof delta.text === 'object') {
+      const keyed = isMapping(result.text);
+      const base = keyed ? { ...result.text } : {};
+      transferOrigins(delta, result, ['text'], ['text'], { replace: !keyed, descendants: false });
+      for (const [key, op] of Object.entries(delta.text)) {
+        if (op === null) { delete base[key]; dropOrigin(result, ['text', key]); continue; }
+        const next = applyFieldOp(base[key], op, opCtx(['text', key]));
+        if (next === '__DELETE__') { delete base[key]; dropOrigin(result, ['text', key]); } else base[key] = next;
+      }
+      result.text = base;
+    }
+  }
+
+  if (delta.heading !== undefined) { result.heading = delta.heading; take(['heading']); }
+  if (delta.headingLevel !== undefined) { result.headingLevel = delta.headingLevel; take(['headingLevel']); }
+
+  const render = (delta.render && typeof delta.render === 'object') ? delta.render : null;
+  if (render) {
+    if (render.position !== undefined) result.position = render.position;
+    if (render.wrapper !== undefined) result.wrapper = render.wrapper;
+    if (render.wrap !== undefined) result.wrap = String(render.wrap).toLowerCase();
+    if (render.compact !== undefined) result.compact = render.compact === true;
+    if (render.bullet !== undefined) result.bullet = render.bullet === true;
+    for (const key of VARIANT_RENDER_KEYS) {
+      if (render[key] !== undefined) take(['render', key], [key]);
+    }
+  }
+
+  return result;
+}
+
+
+const CONTENT_KEYS = ['text', 'file', 'from'];
+
+function layerSectionDef(base, over, { onWarn = null, name = null } = {}) {
+  const from = (base && typeof base === 'object' && !Array.isArray(base)) ? base : {};
+  const raw = (over && typeof over === 'object' && !Array.isArray(over)) ? over : {};
+  const result = copyOrigins(from, { ...from });
+  // The section key stays with the base: an overlay changes the paths it names, not the
+  // section it lands on.
+  if (!originAt(result, []) && originAt(raw, [])) {
+    transferOrigins(raw, result, [], [], { replace: false, descendants: false });
+  }
+  const take = (path) => transferOrigins(raw, result, path, path);
+  const takeContainer = (key) => transferOrigins(raw, result, [key], [key],
+    { replace: false, descendants: false });
+
+  const overridesContent = CONTENT_KEYS.filter((k) => k in raw);
+  if (overridesContent.length > 0) {
+    for (const key of CONTENT_KEYS) {
+      if (!overridesContent.includes(key)) { delete result[key]; dropOrigin(result, [key]); }
+    }
+  }
+
+  for (const [key, value] of Object.entries(raw)) {
+    if (key === 'text') {
+      if (value === null) { result.text = null; take(['text']); continue; }
+      const next = applyFieldOp(from.text, value, {
+        source: raw, sourcePath: ['text'], target: result, targetPath: ['text'],
+        onWarn, label: sectionOpLabel(name, ['text']),
+      });
+      result.text = next === '__DELETE__' ? null : next;
+    } else if (key === 'render') {
+      result.render = Object.assign({}, from.render || {}, value || {});
+      if (isMapping(value)) {
+        takeContainer('render');
+        for (const child of Object.keys(value)) take(['render', child]);
+      }
+    } else if (key === 'variants') {
+      const merged = { ...(from.variants || {}) };
+      if (isMapping(value)) takeContainer('variants');
+      for (const [name, delta] of Object.entries(value || {})) {
+        const existing = findKey(merged, name);
+        if (existing !== null) merged[existing] = delta; else setCI(merged, name, delta);
+        transferOrigins(raw, result, ['variants', name], ['variants', existing !== null ? existing : name]);
+      }
+      result.variants = merged;
+    } else {
+      result[key] = value;
+      take([key]);
+    }
+  }
+  return result;
+}
+
+function mergeSectionRecords(base, over, onWarn = () => {}) {
+  const merged = {};
+  const keyOf = new Map();
+  for (const [name, def] of Object.entries(base || {})) {
+    merged[name] = def;
+    keyOf.set(name.toLowerCase(), name);
+  }
+
+  for (const [name, def] of Object.entries(over || {})) {
+    const existing = keyOf.get(name.toLowerCase());
+
+    if (def === null || def === undefined) {
+      if (existing === undefined) {
+        onWarn(CODES.IMPORT_DELETE_UNKNOWN,
+          `section "${name}" is deleted with ~ but no import provided it — nothing was `
+          + `removed. A bare "${name}:" with no body also parses as ~, which is usually `
+          + 'the cause. Remove the deletion or import the section first.',
+          originLocation(over, [name]));
+      } else {
+        delete merged[existing];
+        keyOf.delete(name.toLowerCase());
+      }
+      continue;
+    }
+
+    if (existing !== undefined) {
+      merged[existing] = layerSectionDef(merged[existing], def, { onWarn, name: existing });
+    } else {
+      merged[name] = def;
+      keyOf.set(name.toLowerCase(), name);
+    }
+  }
+
+  return merged;
+}
+
+function applySectionSelector(sections, name, onWarn = null) {
+  const result = {};
+  let matched = 0;
+
+  for (const [sectionName, def] of Object.entries(sections || {})) {
+    const variants = def && typeof def === 'object' ? def.variants : null;
+    const key = variants
+      ? Object.keys(variants).find((k) => k.toLowerCase() === String(name).toLowerCase())
+      : undefined;
+    if (key === undefined) {
+      result[sectionName] = def;
+      continue;
+    }
+    matched += 1;
+    result[sectionName] = layerSectionDef(def, originView(def, ['variants', key], variants[key]),
+      { onWarn, name: sectionName });
+  }
+
+  return { sections: result, matched };
+}
+
+function findSectionVariant(section, name) {
+  if (!section.variants) return undefined;
+  return Object.keys(section.variants)
+    .find((k) => k.toLowerCase() === String(name).toLowerCase());
+}
+
+// Pass null, not a no-op, when not reporting: resolveBranchSpec warns about a wildcard
+// unbind once per spec, and a no-op callback spends that once before the rendering pass
+// (vault assumption "A No-Op Warner Spends The Wildcard-Unbind Warning").
+function sectionsForBranch(component, branchPath, onWarn = null) {
+  const warn = onWarn || (() => {});
+  const selections = [];
+  const fanned = resolveBranchSpec(component.branches, branchPath, onWarn,
+    { source: component, path: ['branches'], selections });
+  if (fanned === null) return null; // component-level ~ — excluded from this branch
+
+  fanned.forEach((name, i) => {
+    const matched = component.sections.filter((s) => findSectionVariant(s, name) !== undefined);
+    if (matched.length > 0) return;
+    warn(CODES.COMPONENT_DISPATCH_MATCHED_NOTHING,
+      `the component dispatches to variant "${name}" on this branch, and none of its `
+      + `${component.sections.length} sections define it. A component-level dispatch names `
+      + 'every section (§7.6.2a), so it is silent on the ones that do not define the name — '
+          + 'which makes this the only report a misspelling produces. Correct the variant name or define it.',
+      selections[i] && selections[i].loc);
+  });
+
+  const applicable = [];
+  for (const section of component.sections) {
+    const sectionSelections = [];
+    const variants = section.branches
+      ? resolveBranchSpec(section.branches, branchPath, onWarn,
+        { source: section, path: ['branches'], selections: sectionSelections })
+      : [];
+    if (variants === null) continue;
+
+    let resolved = section;
+
+    for (const name of fanned) {
+      const key = findSectionVariant(section, name);
+      if (key === undefined) continue;
+      resolved = applySectionVariant(resolved, sectionVariant(section, key), onWarn);
+    }
+
+    variants.forEach((name, i) => {
+      const key = findSectionVariant(section, name);
+      if (key === undefined) {
+        warn(CODES.SECTION_VARIANT_NOT_FOUND,
+          `section "${section.name}" dispatches to variant "${name}", which it does not define. Correct the variant name or define it.`,
+          sectionSelections[i] && sectionSelections[i].loc);
+        return;
+      }
+      resolved = applySectionVariant(resolved, sectionVariant(section, key), onWarn);
+    });
+    applicable.push({ section: resolved, variants: [...fanned, ...variants] });
+  }
+  applicable.sort((a, b) => (a.section.position - b.section.position)
+    || (a.section.index - b.section.index));
+  return applicable;
+}
+
+function slotsForBranch(component, branchPath) {
+  const slots = new Map();
+  for (const { section } of sectionsForBranch(component, branchPath) || []) {
+    if (section.isSlot) slots.set(section.name, section);
+  }
+  return slots;
+}
+
+module.exports = {
+  normalizeComponent,
+  applySectionVariant,
+  layerSectionDef,
+  mergeSectionRecords,
+  applySectionSelector,
+  sectionsForBranch,
+  slotsForBranch,
+  WRAP,
+  DEFAULT_POSITION,
+};

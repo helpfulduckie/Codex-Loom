@@ -1,0 +1,34 @@
+# The crew, imported from the core library set. All three render a `character` story
+# card and a Plot Essentials cast-roster line on every one of the six leaves. What
+# changes across the grid is the field list those renders use — full under
+# `fullContext`, terse under `lowContext` — not which items are present.
+# doc: 04-imports-and-includes.md
+
+# Aness and Kaiden render through `Character`, so the tier's terse `Character` list
+# shortens their cards on the `lowContext` branch. Zephon writes
+# `render.template: CharacterFull` — a free-standing name the shared field table
+# never defines, so it falls back to the full `Character` list on `fullContext` and
+# selects the tier's full `CharacterFull` list on `lowContext`. That is how one card
+# stays detailed even in the low-context tier, with no per-item flag.
+# doc: 10-field-declarations.md#keeping-one-card-at-full-detail
+
+- import: Aness
+  render:
+    template: Character
+    plotEssential: { slot: cast, order: 1, template: CharacterRoster }
+
+- import: Zephon
+  render:
+    template: CharacterFull
+    plotEssential: { slot: cast, order: 2, template: CharacterRoster }
+
+- import: Kaiden
+  render:
+    template: Character
+    plotEssential: { slot: cast, order: 3, template: CharacterRoster }
+
+# The placeholder-defined player. Its library render already targets the `you` slot
+# with the `Player` template and carries `storyCard: false`, so a bare import is the
+# whole dispatch — it fills the Plot Essentials You block on every leaf.
+# doc: 09-components.md
+- import: Wayfarer

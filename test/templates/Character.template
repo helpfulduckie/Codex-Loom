@@ -1,10 +1,4 @@
-## {$aid.title}
-~~~
-triggers: [{join(", ", $aid.triggers)}]
-{if $aid.encapsulate}encapsulate: {$aid.encapsulate}
-{/if}{if $aid.known}notes: [e]
-{/if}~~~
-{$aid.title} - {$body.Tagline}
+{$name.full} - {$body.Tagline}
 Physical Traits: {join("; ", $body.Physical Traits.gender, $body.Physical Traits.age, $body.Physical Traits.hair, $body.Physical Traits.eyes, $body.Physical Traits.build, $body.Physical Traits.other)}
 Personality: {join(", ", $body.Personality.keywords)}
 {if $body.Personality.expanded}{$body.Personality.expanded}

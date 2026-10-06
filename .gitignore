@@ -1,8 +1,28 @@
 /test/output
 /node_modules
-CLAUDE.md
 
-# The golden fixtures are a separate private repo, cloned into goldenFixtures/ on the
-# v4-phase1 branch. This branch has no golden harness and never needs them, but the
-# directory persists across a branch switch — so it must not be committed here either.
+# Machine-local Claude Code permissions. The shared half is .claude/settings.json.
+/.claude/settings.local.json
+
+# The golden fixtures are real scenario projects, so they live in a separate private repo
+# rather than in this tree. Clone it here to run the golden suite; without it,
+# __tests__/fixtures/golden.test.js skips and the rest of the suite is unaffected.
+#
+#   git clone https://github.com/helpfulduckie/Codex-Loom-Fixtures.git goldenFixtures
+#
 /goldenFixtures/
+
+# The pathological fixture's harness compiles into a temp copy, so an
+# out/ tree here only appears if the CLI was pointed at the fixture directly.
+/__tests__/fixtures/pathological/*/out/
+
+# The .skill bundle is a zip of skill/aid-codex-loom/ — a build output, not source.
+# Regenerate it before uploading; the unpacked tree is the thing to edit.
+/skill/*.skill
+
+# The example projects' compiled output is committed on purpose — it is the baseline
+# `__tests__/fixtures/examples.test.js` asserts against, and the worked output a reader
+# browses beside the source that produced it. Regenerate through `scripts/rebaseline.js`,
+# which classifies the diff before it will write; see v4 spec §14.3.
+/.claude/skills
+/.codex/skills

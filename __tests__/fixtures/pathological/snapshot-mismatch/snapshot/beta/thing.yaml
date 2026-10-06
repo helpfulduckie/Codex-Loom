@@ -1,0 +1,10 @@
+# Frozen byte-for-byte in snapshot/beta/thing.yaml — its hash matches the manifest, so
+# this file raises neither drift nor CL0115. The mistake in this entry is the untracked
+# sibling `snapshot/beta/extra.yaml`, not this one.
+- id: Beta Thing
+  name: Beta Thing
+  aid:
+    type: Character
+    triggers: [BetaThing]
+  body:
+    Tagline: Exists so the manifest can pin its hash.

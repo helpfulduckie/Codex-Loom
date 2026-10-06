@@ -1,64 +1,88 @@
 # Imports & Includes
 
-Project card files can pull in cards from the canonical registry in two ways:
+Project item files can pull in items from the shared library in two ways:
 
-- **`include:`** — loads every card from a canon file as-is, with optional per-card overrides
-- **`import:`** — loads a single named card and applies variant chains, field overrides, and branch dispatch
+- **`include:`** — loads every item from a library file or directory as-is, with optional per-item overrides
+- **`import:`** — loads a single named item and applies variant chains, field overrides, and branch dispatch
 
 ---
 
 ## `include:` Directive
 
-Loads all cards from a canonical YAML file. Cards are compiled exactly as defined in canon, with no modifications unless you attach `importVariants:` or `branches:` to the include directive itself.
+Loads all items from a library YAML file. Items are compiled exactly as defined in the library, with no modifications unless you attach `importVariants:` or `branches:` to the include directive itself.
 
-```yaml
-- include: "{@main}/Characters/Felicia.yaml"
+```yaml surface=item
+- include: "{%main}/Characters/Felicia.yaml"
 ```
 
-`{@main}` in an include path resolves to the **directory path** for the `main` canon entry declared in `compile.yaml`. This is different from how `{@Key}` works in prose contexts (openings, component text), where it returns the file's contents. In an `include:` path, it always returns the path string so the compiler can locate the file. `{@Key}` is matched against named components first, then canon entries.
+`{%main}` expands to the **directory path** of the `main` entry declared under `structure.input.library` in `compile.yaml`. Library names are auto-exposed as `{%…}` variables — there is one `{%…}` family and one expander — so the same token works here, in component specs, and in template or opening prose, and it always expands to that directory-path string.
 
 Include and import paths also support `{%variable}` expansion, but — because includes are resolved once, before branches are enumerated — only **root-level** `variables:` are available there, not per-branch overrides.
 
-```yaml
+```yaml surface=config
 structure:
   input:
-    canon:
-      main: ../../_Canon
+    library:
+      main: ../../_Library
 ```
 
-You can also use a direct relative path, but the `{@name}` form is preferred for portability.
+You can also use a direct relative path, but the `{%name}` form is preferred for portability.
+
+### Including a directory
+
+**An include path that names a directory loads every YAML file under it, subdirectories included**, in name order. The directive's `importVariants:` and `branches:` apply to every item from every file, exactly as they would for one file.
+
+```yaml surface=item
+- include: "{%main}/Characters"
+  branches: {major: major, anchor: major/anchor}
+```
+
+**The directory is one include for the zero-match check.** `CL0326` fires only when no item in *any* file under the directory defines the selector, so a variant that lives in one file of forty is not a typo forty times over. A directory holding no YAML files raises `CL0130`.
+
+**Each file is still included at most once.** Including a directory and also one file inside it is `CL0131`; use an explicit `import:` to override a single item instead (see [Include vs explicit import](#include-vs-explicit-import)).
 
 ### Branch filtering on includes
 
-To exclude all cards in an included file from specific branches, attach a `branches:` dispatch spec to the `include:` directive. All cards loaded from the file inherit it.
+To exclude all items in an included file from specific branches, attach a `branches:` dispatch spec to the `include:` directive. All items loaded from the file inherit it.
 
-```yaml
-- include: "{@main}/Characters/Guards.yaml"
+```yaml surface=item
+- include: "{%main}/Characters/Guards.yaml"
   branches:
     '*': []         # include with no variant for all branches
-    flashback: ~    # exclude all cards in this file from the flashback branch
+    flashback: ~    # exclude all items in this file from the flashback branch
 ```
 
-### `importVariants:` on includes — silent skip
+### Selectors on includes — silent skip, and one check that isn't
 
-You can attach `importVariants:` to an include directive to apply a variant to every card in the file. Cards that **do not define** a variant by that name are **silently skipped** (no warning). This differs from a single `import:`, where a missing variant always emits a warning.
+Both `importVariants:` and `branches:` on an include directive name a variant for **every item in the file**. Items that **do not define** a variant by that name are **silently skipped** — no warning. That is the point of an include: naming the variant on each item is the repetition it exists to remove, so most items missing the name is correct authoring, not a mistake.
 
-```yaml
-- include: "{@main}/Characters/Grayls.yaml"
-  importVariants: [human]    # applied to every card that defines a "human" variant;
-                              # cards without it are silently unaffected
+```yaml surface=item
+- include: "{%main}/Characters/Felicia.yaml"
+  importVariants: [human]    # applied to every item that defines a "human" variant;
+                             # items without it are silently unaffected
 ```
+
+This differs from a single `import:` and from an item's own `branches:`. Both of those name **one** item, so a variant it does not define is a typo and raises `CL0321`.
+
+What silence cannot hide is a name that matches **nothing**. A misspelled selector applies to no item, changes no output, and would otherwise say nothing at all — so a selector matching zero targets raises `CL0326`, naming the selector and how many items it was aimed at:
+
+```yaml surface=item
+- include: "{%main}/Characters/Guards.yaml"
+  importVariants: [hmuan]    # CL0326: matched none of the 6 items included from Guards.yaml
+```
+
+Three of seven items matched is normal and reports nothing. Zero of seven is the one case worth a word.
 
 ### Include vs explicit import
 
-If a card from an `include:` file is also listed in an explicit `import:` entry, the explicit import **wins silently** — the included version is skipped. Use this to include a whole file while overriding one specific card:
+If an item from an `include:` file is also listed in an explicit `import:` entry, the explicit import **wins silently** — the included version is skipped. Use this to include a whole file while overriding one specific item:
 
-```yaml
-# Include all cards from Felicia.yaml — Felicia will be skipped below
-- include: "{@main}/Characters/Felicia.yaml"
+```yaml surface=item
+# Include all items from Felicia.yaml — Felicia will be skipped below
+- include: "{%main}/Characters/Felicia.yaml"
 
 # Explicit import with overrides — takes precedence over the include
-- import: Grayls
+- import: Felicia
   variants:
     felix:
       importVariants: [Felix]
@@ -70,9 +94,9 @@ If a card from an `include:` file is also listed in an explicit `import:` entry,
 
 ## `import:` Directive
 
-Imports a single card from the canonical registry by ID and applies variant chains, field overrides, and branch dispatch.
+Imports a single item from the shared library by ID and applies variant chains, field overrides, and branch dispatch.
 
-```yaml
+```yaml surface=item
 - import: Aness
   importVariants: [networked]
   body:
@@ -87,51 +111,94 @@ Imports a single card from the canonical registry by ID and applies variant chai
 
 ### Import resolution order
 
-1. Load the canonical base card by ID
+1. Load the library base item by ID
 2. Apply the primary import path variant chain (slash-separated ID: `Zephon/human/noble`)
-3. Apply `importVariants:` list entries in order (each is a slash-separated variant path on the canon card)
+3. Apply `importVariants:` list entries in order (each is a slash-separated variant path on the library item)
 4. Apply top-level `body:` field overrides from the import definition
 5. Apply top-level `name:`, `pronouns:`, `aid:`, `render:` overrides (if present)
 6. Resolve `branches:` dispatch → determine which local variant names apply for the active branch
-7. For each dispatched local variant, apply any `importVariants:` declared inside that variant (sourced from the canonical card's variant tree)
+7. For each dispatched local variant, apply any `importVariants:` declared inside that variant (sourced from the library item's variant tree)
 8. Apply each dispatched variant's delta fields
 9. Recurse into sub-branches if the dispatch spec has nested `branches:`
 
 ---
 
+## Qualified References
+
+A reference is a plain id (`kaiden`) or one qualified with the library set that owns it (`grimwood:magic`). Qualification is optional and needed only where two sets define the same id. A `:` is illegal inside an item id, so the first colon is always the separator.
+
+This exists because a shared library is not always yours. Two settings can both name an item `magic` — one meaning elemental manipulation, the other blood magic — and both authors are right. Renaming your copy of someone else's set is the answer that breaks the [library snapshot](12-snapshot.md); qualifying the reference is the one that does not.
+
+```yaml surface=config
+structure:
+  input:
+    library:
+      core: ../library/core
+      grimwood: ../library/grimwood
+```
+
+Declaring two sets that share an id is **not** an error. Both copies are kept and reachable by their qualified names, and the plain key `magic` is simply left empty. Only a reference that cannot choose between them fails, and it fails at the reference:
+
+| Code | When |
+|---|---|
+| `CL0340` | `magic` is defined in more than one set and the reference did not qualify it. The message names both rivals and the two qualified spellings. |
+| `CL0341` | The qualifier names a set that `structure.input.library` does not declare. |
+| `CL0342` | The set is declared but holds no item with that id. |
+
+### Holding both sides — rename-on-import
+
+An `import:` def may carry its own `id:`, which registers the imported item under the local name. That is how one project holds two items that arrived with the same id:
+
+```yaml surface=item
+- import: core:magic
+
+- id: blood-magic
+  import: grimwood:magic
+```
+
+**Only the id moves.** `name:` stays whatever the imported item called it — `id: dragon` over `import: wyvern` is still named Wyvern until you write `name: Dragon`, which is the line that says what you meant. Inferring a display name from an id would be guessing from a slug.
+
+The same shape is worth using with one library set, and that is really what justifies it: `id: dragon` over `import: wyvern` with local `body:` deltas gives you a library monster plus a near neighbor, without touching the library.
+
+Two import defs renaming to the same local id are a duplicate the registry can no longer see, so that check moves to where renamed imports register (`CL0325`). A renamed item's provenance row reads `project` rather than `library:<set>`, with the library reference it came from in the `Via` column.
+
+`examples/library/` is the worked pair: two sets, `core/` and `grimwood/`, that both define `magic` and nothing else.
+
+---
+
 ## `importVariants:`
 
-Applies named variant chains from the **canonical card's own variant tree** and folds them into the card in progress. Each entry is a slash-separated variant path, applied in order.
+Applies named variant chains from the **library item's own variant tree** and folds them into the item in progress. Each entry is a slash-separated variant path, applied in order.
 
-```yaml
+```yaml surface=item
 - import: Zephon
   importVariants: [human/noble, sci-fi/near-future]
 ```
 
-This applies the `human` variant, then `human/noble`, then `sci-fi`, then `sci-fi/near-future` — each walking the canon card's `variants:` tree.
+This applies the `human` variant, then `human/noble`, then `sci-fi`, then `sci-fi/near-future` — each walking the library item's `variants:` tree.
 
-`importVariants:` can also appear **inside a branch variant** on the import, where it sources from the same canonical card's variant tree:
+`importVariants:` can also appear **inside a branch variant** on the import, where it sources from the same library item's variant tree:
 
-```yaml
-- import: Grayls
+```yaml surface=item
+- import: Felicia
   variants:
     felix:
-      importVariants: [Felix]    # applies Felix variant from Felicia's canon variants
+      importVariants: [Felix]    # applies Felix variant from Felicia's library variants
       body:
         Tagline: +{; security officer}
   branches:
     felix: felix
 ```
 
-`importVariants:` always sources from the **original canonical card's** variant tree, not the partially resolved card. `variants:` on an import defines local named deltas for branch dispatch — it is never a list of variant chains.
+`importVariants:` always sources from the **original library item's** variant tree, not the partially resolved item. `variants:` on an import defines local named deltas for branch dispatch — it is never a list of variant chains.
 
 ---
 
 ## Primary Import Variant Path
 
-A slash-separated suffix on the card ID applies variant deltas before any `importVariants:` or field overrides:
+A slash-separated suffix on the item ID applies variant deltas before any `importVariants:` or field overrides:
 
-```yaml
+```yaml surface=item
 - import: Zephon/human/noble
 ```
 
@@ -143,7 +210,7 @@ This is equivalent to loading `Zephon` then applying `importVariants: [human/nob
 
 Top-level fields (`name`, `pronouns`, `aid`, `render`) and `body` can be overridden directly on the import entry. These are applied after all variant chains resolve.
 
-```yaml
+```yaml surface=item
 - import: Zephon
   name:
     display: Zeph
@@ -163,7 +230,7 @@ Field operations (`+{}`, `-{}`, `/{}`) work on `body` fields the same as in vari
 
 `variants:` on an import defines **local named deltas** for branch dispatch. `branches:` maps branch names to those variant names.
 
-```yaml
+```yaml surface=item
 - import: Aness
   importVariants: [networked]
   variants:
@@ -186,7 +253,7 @@ For the full syntax of `branches:` dispatch values (including wildcards, arrays,
 
 To exclude an import from specific branches, use null (`~`) in the `branches:` dispatch map. There are no `only:` or `except:` keys on imports.
 
-```yaml
+```yaml surface=item
 - import: Zephon
   branches:
     '*': []         # include with no variant for all branches
@@ -195,9 +262,11 @@ To exclude an import from specific branches, use null (`~`) in the `branches:` d
 - import: Guard
   branches:
     garrison: base  # only compiled for the garrison branch
-    '*': ~          # excluded from all other branches
+    _: ~            # excluded from all other branches
   variants:
     base: {}
 ```
+
+**Use `_`, not `'*'`, to exclude the branches you did not name.** A null wildcard is skipped rather than honored, so `'*': ~` leaves the import **included** everywhere — the opposite of what it reads as, and a warning (`CL0327`). See [Fallback `_`](05-branches-and-variants.md#fallback-_--only-when-nothing-else-matched).
 
 See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) for the full `branches:` dispatch syntax including wildcards, arrays, and nested dispatch.

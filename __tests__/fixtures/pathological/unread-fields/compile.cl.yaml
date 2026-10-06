@@ -1,0 +1,30 @@
+# The pathological fixture, unread-field audit layer (v4 spec §13.6, Phase 12 Step 4).
+#
+# Load-clean on purpose, like placement/ and card-collision/, so the compile phase runs in
+# full and the audit has bodies to check. Every finding here is one the fixture means to
+# raise:
+#
+#   CL0426  Alba.body.strength    — no declaration names it
+#   CL0427  Cairn.body.homeland   — declared in group `origin`, which template Person omits
+#   CL0428  deadField             — declared, named by no template
+#
+# The two branches exist to prove the `(item id, field path)` dedupe: every item resolves
+# on both leaves, and each finding is reported once, not twice. Nook uses a template with
+# `{ allowExtra: true }` and raises nothing.
+
+version: 4
+title: Pathological — Unread Fields
+
+structure:
+  input:
+    items:
+      - './Codex'
+    templates:
+      - './templates'
+  output: './out'
+
+branches:
+  north:
+    title: North
+  south:
+    title: South

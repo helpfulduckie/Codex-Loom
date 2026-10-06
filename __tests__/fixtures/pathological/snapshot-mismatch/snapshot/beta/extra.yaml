@@ -1,0 +1,4 @@
+# Present under snapshot/beta/ and absent from snapshot/manifest.json's file list for
+# "beta" — CL0114. Not a canon file at all; it exists only to be untracked.
+- id: Extra Thing
+  name: Extra Thing

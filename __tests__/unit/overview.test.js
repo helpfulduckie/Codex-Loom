@@ -1,55 +1,26 @@
 'use strict';
 
 const fs   = require('fs');
-const os   = require('os');
 const path = require('path');
 
 const {
-  readComponents,
   buildStoryCardsBlock,
   discoverLeaves,
   compileLeaf,
   runLeafReviewMode,
 } = require('../../src/overview');
+const { withTmpDir } = require('../helpers/project');
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function makeTmp() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'cl-overview-test-'));
+  return withTmpDir();
 }
 
 function write(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, 'utf8');
 }
-
-// ── readComponents ────────────────────────────────────────────────────────────
-
-describe('readComponents', () => {
-  test('returns {} for missing Components dir', () => {
-    const tmp = makeTmp();
-    expect(readComponents(tmp)).toEqual({});
-    fs.rmSync(tmp, { recursive: true });
-  });
-
-  test('returns map of basename → content for .md files', () => {
-    const tmp = makeTmp();
-    write(path.join(tmp, 'Components', 'Opening.md'), 'Hello world');
-    write(path.join(tmp, 'Components', 'Plot Essentials.md'), 'Some essentials');
-    const result = readComponents(tmp);
-    expect(result['Opening']).toBe('Hello world');
-    expect(result['Plot Essentials']).toBe('Some essentials');
-    fs.rmSync(tmp, { recursive: true });
-  });
-
-  test('skips empty files', () => {
-    const tmp = makeTmp();
-    write(path.join(tmp, 'Components', 'Empty.md'), '   ');
-    const result = readComponents(tmp);
-    expect(result).toEqual({});
-    fs.rmSync(tmp, { recursive: true });
-  });
-});
 
 // ── buildStoryCardsBlock ──────────────────────────────────────────────────────
 
@@ -95,10 +66,10 @@ describe('discoverLeaves', () => {
   test('flat root with no Branches/ returns single leaf', () => {
     const tmp = makeTmp();
     write(path.join(tmp, 'Story Cards', 'Char', 'Alice.md'), 'Alice');
-    const leaves = discoverLeaves(tmp, [], []);
+    const leaves = discoverLeaves(tmp);
     expect(leaves).toHaveLength(1);
     expect(leaves[0].branchNames).toEqual([]);
-    expect(leaves[0].cards.join('')).toContain('Alice');
+    expect(leaves[0].cards).toContain('Alice');
     fs.rmSync(tmp, { recursive: true });
   });
 
@@ -111,21 +82,44 @@ describe('discoverLeaves', () => {
     // branch B
     write(path.join(tmp, 'Branches', 'B', 'Story Cards', 'Char', 'B.md'), 'B card');
 
-    const leaves = discoverLeaves(tmp, [], []);
+    const leaves = discoverLeaves(tmp);
     expect(leaves).toHaveLength(2);
 
     const a = leaves.find(l => l.branchNames[0] === 'A');
     const b = leaves.find(l => l.branchNames[0] === 'B');
 
     // both inherit root card
-    expect(a.cards.join('\n')).toContain('Root card');
-    expect(b.cards.join('\n')).toContain('Root card');
+    expect(a.cards).toContain('Root card');
+    expect(b.cards).toContain('Root card');
     // each has its own card
-    expect(a.cards.join('\n')).toContain('A card');
-    expect(b.cards.join('\n')).toContain('B card');
+    expect(a.cards).toContain('A card');
+    expect(b.cards).toContain('B card');
     // no cross-contamination
-    expect(a.cards.join('\n')).not.toContain('B card');
-    expect(b.cards.join('\n')).not.toContain('A card');
+    expect(a.cards).not.toContain('B card');
+    expect(b.cards).not.toContain('A card');
+    // the merged block carries one heading per type, not one per contributing node
+    expect(a.cards.match(/^### Char$/gm)).toHaveLength(1);
+
+    fs.rmSync(tmp, { recursive: true });
+  });
+
+  test("a leaf's own card replaces the inherited card of the same name, as VL does", () => {
+    const tmp = makeTmp();
+    write(path.join(tmp, 'Story Cards', 'Char', 'Char.md'), '## Elder\nFull version\n\n## Guard\nGuard card');
+    write(path.join(tmp, 'Branches', 'Terse', 'Story Cards', 'NPC', 'NPC.md'), '## Elder\nTerse version');
+    write(path.join(tmp, 'Branches', 'Full', 'Story Cards', 'Char', 'Char.md'), '## Other\nOther card');
+
+    const leaves = discoverLeaves(tmp);
+    const terse = leaves.find((l) => l.branchNames[0] === 'Terse');
+    const full = leaves.find((l) => l.branchNames[0] === 'Full');
+
+    expect(terse.cards).toContain('Terse version');
+    expect(terse.cards).not.toContain('Full version');
+    expect(terse.cards.match(/^#### Elder$/gm)).toHaveLength(1);
+    // the override is listed under its own type, and the inherited sibling card stays
+    expect(terse.cards).toMatch(/### NPC\s+#### Elder/);
+    expect(terse.cards).toContain('Guard card');
+    expect(full.cards).toContain('Full version');
 
     fs.rmSync(tmp, { recursive: true });
   });
@@ -195,7 +189,7 @@ describe('runLeafReviewMode', () => {
     const outDir = path.join(tmp, 'out');
     fs.mkdirSync(outDir);
     write(path.join(tmp, 'Story Cards', 'Char', 'Card.md'), 'content');
-    const written = runLeafReviewMode(tmp, outDir);
+    const { written } = runLeafReviewMode(tmp, outDir);
     expect(written).toHaveLength(1);
     fs.rmSync(tmp, { recursive: true });
   });
@@ -206,7 +200,7 @@ describe('runLeafReviewMode', () => {
     fs.mkdirSync(outDir);
     write(path.join(tmp, 'Branches', 'A', 'Story Cards', 'T', 'x.md'), 'x');
     write(path.join(tmp, 'Branches', 'B', 'Story Cards', 'T', 'y.md'), 'y');
-    const written = runLeafReviewMode(tmp, outDir);
+    const { written } = runLeafReviewMode(tmp, outDir);
     expect(written).toHaveLength(2);
     expect(written.every(p => p.endsWith('.leaf.md'))).toBe(true);
     fs.rmSync(tmp, { recursive: true });
@@ -217,7 +211,7 @@ describe('runLeafReviewMode', () => {
     const outDir = path.join(tmp, 'out');
     fs.mkdirSync(outDir);
     // No Story Cards, no Branches — but IS a leaf, just empty
-    const written = runLeafReviewMode(tmp, outDir);
+    const { written } = runLeafReviewMode(tmp, outDir);
     // one empty leaf still counts
     expect(written).toHaveLength(1);
     fs.rmSync(tmp, { recursive: true });

@@ -1,0 +1,157 @@
+# World Time Generator — convention pack (v4 spec §8.2.2).
+#
+# Validates a scenario's use of WTG 3.0, checked against its source
+# (Scripts/WTG/World-Time-Generator-3.0/src/library.js). Four rules:
+#
+#   1. the two per-card timestamp markers used together, which contradict;
+#   2. WARN — the "WTG Time Config" card must exist wherever WTG runs, must carry the
+#      four core fields, must carry nothing else WTG will not read, and must give each
+#      of the 28 DEFAULT_SETTINGS overrides it does carry a value WTG will accept — an
+#      enum, a positive number, or true/false per library.js:1775, matched
+#      case-insensitively. The card is
+#      authored as plain `Key: Value` in the card ENTRY (Codex Loom `body`), read by
+#      `parseWTGTimeConfig` (library.js:1663) and DELETED by WTG after initialization —
+#      so a key it does not recognize is silently lost, which is why the key set is
+#      closed to the four core fields plus WTG's 28 DEFAULT_SETTINGS override names
+#      (library.js:1775).
+#   3. ERROR — for a present "WTG Time Config" card, the four core fields must be
+#      well-formed: `M/D/year` (1-6-digit year), `H:MM AM|PM`, an era in {AD, CE, BC,
+#      BCE}, and `Initialized` true/false — all matched case-insensitively. The 28
+#      override keys and any stray key pass here; unknown-key is rule 2's job.
+#   4. ERROR — the same literal timestamp marker may appear only once in each of a
+#      card's body and notes; repeats across lines still count.
+#
+# Enable with `lint: { packs: { wtg: {} } }`. Findings are coded `CL-wtg/NNNN`.
+
+name: wtg
+rules:
+  # ── CL-wtg/0001 — contradictory timestamp markers ────────────────────────────
+  #
+  # `[e]` / `[wtg-no-timestamp]` excludes a card from WTG timestamps entirely; `/]`
+  # marks where on the card a timestamp should be inserted. A card carrying both is
+  # self-contradictory — the exclusion wins in WTG, so the `/]` placement can never
+  # apply. WTG accepts either marker in a card's Notes *or* its Entry and normalizes
+  # the position itself, so the check scans the notes text and the body together
+  # (`match`), not the parsed mapping. This re-homes v3 lint's `e-marker-conflict`.
+  - id: 1
+    severity: error
+    forbid:
+      all:
+        - match: '\[(?:e|wtg-no-timestamp)\]'
+        - match: '/\]'
+    message: >-
+      This card carries both an exclude-from-timestamps marker ([e] /
+      [wtg-no-timestamp]) and a timestamp-placement marker (/]). They contradict:
+      the first tells WTG never to timestamp this card, the second positions a
+      timestamp that will then never be written. Keep one.
+
+  # ── CL-wtg/0002 — the "WTG Time Config" card exists and is complete ──────────
+  #
+  # `requireCard` is a per-leaf existence check: on a branch where WTG is a mod but no
+  # "WTG Time Config" card resolves, one WARN names that branch. Codex Loom cannot
+  # detect where a mod is active, so an author who does not run WTG on a branch
+  # unbinds this pack there (`wtg: ~`).
+  #
+  # The `schema:` is a CLOSED `type: map` over all 32 recognized keys — the four core
+  # fields (required) plus WTG's 28 DEFAULT_SETTINGS override names, each now carrying a
+  # value descriptor: a case-insensitive `pattern:` alternation for the five
+  # multiple-choice settings, a numeric `pattern:` for the three rate settings,
+  # `^(true|false)$` for the eighteen booleans, and a bare `type: string` for the two
+  # free-form settings. Every enum is a `pattern:` rather than `values:` so it matches
+  # case-insensitively, the same way CL-wtg/0003's era check does — WTG lower-cases
+  # these before comparing. A key outside the 32 is CL0201, demoted to WARN by
+  # runSchemaCheck's error->severity mapping, and carries a Damerau-Levenshtein typo
+  # suggestion for free. A bad override value is CL0208 PATTERN_MISMATCH, likewise
+  # demoted to WARN.
+  - id: 2
+    severity: warn
+    requireCard: { titleMatch: '^WTG Time Config$' }
+    appliesTo: { titleMatch: '^WTG Time Config$' }
+    over: body
+    schema:
+      type: map
+      keys:
+        Starting Date: { type: string, required: true }
+        Starting Era:  { type: string, required: true }
+        Starting Time: { type: string, required: true }
+        Initialized:   { type: string, required: true }
+        # WTG's 28 DEFAULT_SETTINGS override names (library.js:1775), each entry's
+        # `entry:` string, each with a value descriptor. The card entry parses to an
+        # all-strings mapping, so a numeric setting is `type: string` + a numeric
+        # `pattern:` — `type: number` could never match "600" and would fire CL0202
+        # on every well-formed card, and `min:`/`max:` only act on real numbers. The
+        # eighteen booleans use the same `^(true|false)$` case-insensitive pattern
+        # CL-wtg/0003 runs on `Initialized`, and the five enums use a case-insensitive
+        # `pattern:` alternation for the same reason. Defaults resolved against the WTG
+        # source at library.js:1719 and library.js:1775.
+        Enable WTG: { type: string, pattern: '^(true|false)$' }
+        Time Duration Multiplier: { type: string, pattern: '^(?!0+(?:\.0+)?$)\d+(?:\.\d+)?$' }  # positive number; rejects 0 and negatives
+        Text Characters per Turn: { type: string, pattern: '^[1-9]\d*$' }  # positive integer
+        Number of Turns per Hour: { type: string, pattern: '^[1-9]\d*$' }  # positive integer
+        Enable Dynamic Time: { type: string, pattern: '^(true|false)$' }
+        Enable Localization: { type: string, pattern: '^(true|false)$' }
+        Clock Format: { type: string, pattern: '^(12h|24h)$' }
+        Date Format: { type: string, pattern: '^(american|european|iso)$' }
+        Player Command Clean Mode: { type: string, pattern: '^(full|prepend|in-place)$' }
+        Player Command Merge Mode: { type: string, pattern: '^(none|command-based|all)$' }
+        AI Command Nudge: { type: string, pattern: '^(true|false)$' }
+        Nudge Show Date: { type: string, pattern: '^(true|false)$' }
+        Nudge Show Era: { type: string, pattern: '^(true|false)$' }
+        Nudge Show Time: { type: string, pattern: '^(true|false)$' }
+        Nudge Show Day of Week: { type: string, pattern: '^(true|false)$' }
+        Nudge Show Phase: { type: string, pattern: '^(true|false)$' }
+        Instruction Injection Mode: { type: string, pattern: '^(invisible|visible|cached-invisible)$' }
+        Show Date: { type: string, pattern: '^(true|false)$' }
+        Show Era: { type: string, pattern: '^(true|false)$' }
+        Show Time: { type: string, pattern: '^(true|false)$' }
+        Show Day of Week: { type: string, pattern: '^(true|false)$' }
+        Show Phase: { type: string, pattern: '^(true|false)$' }
+        DateTime Card Show Phase: { type: string, pattern: '^(true|false)$' }
+        Enable Generated Cards: { type: string, pattern: '^(true|false)$' }
+        Generated Card Type: { type: string }  # arbitrary story-card type name — no closed set
+        Enable Fuzzy Duplicate Matching: { type: string, pattern: '^(true|false)$' }
+        Enable Card Timestamps: { type: string, pattern: '^(true|false)$' }
+        Exclude Card Types: { type: string }  # a bracketed [a,b,c] list string — shape not validated
+    message: >-
+      A "WTG Time Config" card should exist and carry all four of Starting Date,
+      Starting Era, Starting Time and Initialized, and nothing WTG will not read —
+      WTG deletes this card after initialization, so anything it does not recognize
+      is silently lost.
+
+  # ── CL-wtg/0003 — the "WTG Time Config" core fields are well-formed ──────────
+  #
+  # An OPEN `type: record` with `keys:` naming only the four core fields: each is
+  # pattern-checked, and the 28 overrides and any stray key pass untouched (unknown-key
+  # is CL-wtg/0002's job, and an ERROR here would double-report at the wrong severity).
+  # Patterns compile case-insensitively, so `bc` / `9:00 am` / `TRUE` all pass. The era
+  # set is {AD, CE, BC, BCE} only — stricter than WTG's normalizeEra, which also takes
+  # the dotted forms; the lint nudges toward the canonical spelling.
+  - id: 3
+    severity: error
+    appliesTo: { titleMatch: '^WTG Time Config$' }
+    over: body
+    schema:
+      type: record
+      keys:
+        Starting Date: { type: string, pattern: '^\d{1,2}/\d{1,2}/\d{1,6}$' }
+        Starting Era:  { type: string, pattern: '^(AD|CE|BC|BCE)$' }
+        Starting Time: { type: string, pattern: '^\d{1,2}:\d{2}\s*(AM|PM)$' }
+        Initialized:   { type: string, pattern: '^(true|false)$' }
+    message: 'A "WTG Time Config" field is malformed — see the detail.'
+
+  # ── CL-wtg/0004 — repeated literal markers within one area ───────────────────
+  #
+  # Notes and Entry are checked separately: one marker in each area is valid, while
+  # repeating the same literal marker within either area is an authoring error.
+  # Rule 4 checks each marker independently, so distinct exclusion aliases remain distinct.
+  - id: 4
+    severity: error
+    forbid:
+      any:
+        - bodyMatch: '\[e\][\s\S]*\[e\]'
+        - bodyMatch: '\[wtg-no-timestamp\][\s\S]*\[wtg-no-timestamp\]'
+        - bodyMatch: '/\][\s\S]*/\]'
+        - notesMatch: '\[e\][\s\S]*\[e\]'
+        - notesMatch: '\[wtg-no-timestamp\][\s\S]*\[wtg-no-timestamp\]'
+        - notesMatch: '/\][\s\S]*/\]'
+    message: 'The same WTG marker appears more than once in this card body or notes; keep one occurrence per area.'

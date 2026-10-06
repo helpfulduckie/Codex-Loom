@@ -1,0 +1,35 @@
+# The named cast, imported from the core library set. All three render into the
+# shared `character` story card and into the Plot Essentials cast roster, on every
+# leaf. Which of them a card addresses as "you" is decided by `roles.protagonist`,
+# set per protagonist branch in compile.cl.yaml - a pronoun-POV switch, separate
+# from the Plot Essentials `you` slot, which the placeholder player fills on every
+# leaf whoever the protagonist is.
+# doc: 13-roles.md#using-a-role-in-prose
+
+# Each character's `Personality.expanded` line carries its own `{$Id}` / `{$Id.pron}`
+# tokens from the library. On a leaf where that character is the protagonist the line
+# renders in second person while its siblings in the same card file stay third - the
+# you-mode rewrite happening inside one story card body.
+# doc: 08-pronouns.md#protagonist-declaration
+
+- import: Aness
+  render:
+    template: Character
+    plotEssential: { slot: cast, order: 1, template: CharacterRoster }
+
+- import: Zephon
+  render:
+    template: Character
+    plotEssential: { slot: cast, order: 2, template: CharacterRoster }
+
+- import: Kaiden
+  render:
+    template: Character
+    plotEssential: { slot: cast, order: 3, template: CharacterRoster }
+
+# The placeholder-defined player. Its library render already targets the `you` slot
+# with the `Player` template and carries `storyCard: false`, so a bare import is the
+# whole dispatch - it appears on every leaf and is named `protagonist` only on the
+# `wayfarer` subtree.
+# doc: 04-imports-and-includes.md
+- import: Wayfarer

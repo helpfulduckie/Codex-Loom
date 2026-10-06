@@ -1,12 +1,14 @@
 # Pronoun System
 
-Codex Loom resolves pronoun tokens in card field values and templates. Tokens are braced `{$...}` expressions. There are three forms:
+Codex Loom resolves pronoun tokens in item field values and templates. Tokens are braced `{$...}` expressions. There are three forms:
 
-1. **Unscoped pronoun tokens** — resolve against the card's own `pronouns:` field
+1. **Unscoped pronoun tokens** — resolve against the item's own `pronouns:` field
 2. **Character ID references** — resolve to "you" or the character's name based on protagonist context
 3. **Scoped pronoun tokens** — resolve against a specific character's pronouns, protagonist-aware
 
-Verb conjugation markers `[s]`, `[es]`, `[is]`, `[was]`, `[has]` are also resolved based on the most recently referenced character's pronoun set.
+Verb conjugation markers `[s]`, `[es]`, `[ies]`, `[is]`, `[was]`, `[has]` are also resolved from the most recent reference: a bare `{$Id}` name conjugates singular, "you" and scoped `{$Id.pronoun}` tokens conjugate from the pronoun set.
+
+**A leading `{$X...}` identifier may also be a role** — a per-branch name bound to an item id, resolved to that id before anything on this page runs. See [Roles](13-roles.md); everything below applies identically once a role has resolved to the item it names.
 
 ---
 
@@ -29,27 +31,44 @@ All tokens in each column are synonymous — use whichever reads most naturally 
 | `{$herself}` / `{$himself}` / `{$themselves}` | reflexive | herself | himself | themselves | yourself |
 | `{$she's}` / `{$he's}` / `{$they're}` | contraction | she's | he's | they're | you're |
 
-Case of the first letter is preserved: `{$She}` → `She` or `He` depending on the pronoun set.
+Case of the first letter is preserved — `{$She}` renders `She` or `He` depending on the pronoun set:
+
+```text transform=pronoun-pass id=pron-case
+text: "{$She} studies; {$She} is admired."
+itemPronouns: male
+```
+
+``` expect=pron-case
+He studies; He is admired.
+```
 
 ---
 
 ## 1. Unscoped Pronoun Tokens
 
-Written as `{$she}`, `{$her~}`, etc. Resolve against the **card's own `pronouns:` field**. Do not set the conjugation scope.
+Written as `{$she}`, `{$her~}`, etc. Resolve against the **item's own `pronouns:` field**. Subject forms (`{$she}`, `{$he}`, `{$they}`) set the conjugation scope to the item's effective pronoun set; every other form leaves it unchanged.
 
-Use these in field values and templates where the token refers to the card subject (the character the card is about).
+Use these in field values and templates where the token refers to the item subject (the character the item is about).
 
-```yaml
+```yaml surface=item
 body:
   Background: |
     one of the top Academy mages; has built {$her~} reputation through research
     that requires things most researchers won't do to their subjects
 ```
 
-If `pronouns: female`, this renders as:
-> one of the top Academy mages; has built her reputation through research...
+If `pronouns: female`, `{$her~}` resolves against the item's own set:
 
-Swapping `pronouns: male` (via a variant) automatically updates all `{$her~}` tokens throughout the card.
+```text transform=pronoun-pass id=pron-unscoped
+text: "has built {$her~} reputation through research"
+itemPronouns: female
+```
+
+``` expect=pron-unscoped
+has built her reputation through research
+```
+
+Swapping `pronouns: male` (via a variant) automatically updates all `{$her~}` tokens throughout the item.
 
 ---
 
@@ -62,7 +81,7 @@ Written as `{$Aness}`, `{$Felicia}`, etc., using the character's `id`. Resolves 
 
 Also sets the conjugation scope to that character's effective pronoun set.
 
-```yaml
+```yaml surface=item
 body:
   Personality:
     expanded: |
@@ -70,20 +89,27 @@ body:
 ```
 
 When `protagonist: Aness` (Aness is the player character):
-> you love magic research — you instinctively leap to explore theoretical implications
+> You love magic research — you instinctively leap to explore theoretical implications
 
 When `protagonist: Veyrn` (Aness is an NPC):
 > Aness loves magic research — she instinctively leaps to explore theoretical implications
+
+**A protagonist swap follows source sentence position, not the id's capitalization.** `{$Aness}`
+and `{$Aness's}` render `You` and `Your` at the start of a text value or after sentence-ending
+punctuation; elsewhere they render `you` and `your`. Item ids conventionally start with a capital,
+so their spelling cannot carry this instruction. Scoped and unscoped pronoun tokens keep their
+existing explicit-case rule: write `{$She}` or `{$Aness.She}` when the pronoun itself needs a
+capital initial.
 
 ---
 
 ## 3. Scoped Pronoun Tokens — `{$Id.pronoun}`
 
-Written as `{$Aness.she}`, `{$Aness.her~}`, etc. Resolve against the **referenced character's `pronouns:` field**, protagonist-aware. Also sets the conjugation scope to that character.
+Written as `{$Aness.she}`, `{$Aness.her~}`, etc. Resolve against the **referenced character's `pronouns:` field**, protagonist-aware. Subject forms set the conjugation scope to that character; every other form leaves it unchanged.
 
 Use these when writing about a specific named character where you want the pronouns to track that character's settings (and protagonist mode).
 
-```yaml
+```yaml surface=item
 body:
   expanded: |
     - {$Aness} love[s] magic research — {$Aness.she} instinctively leap[s]
@@ -97,67 +123,123 @@ You can also access name forms via scoped tokens:
 | `{$Aness.display}` | Display name (`Aness`) |
 | `{$Aness.full}` | Full name (`Aness Rozen`) |
 
+```text transform=pronoun-pass id=pron-name-forms
+text: "{$Aness.display} / {$Aness.full}"
+cast:
+  Aness: { name: { display: Aness, full: Aness Rozen }, pronouns: female }
+```
+
+``` expect=pron-name-forms
+Aness / Aness Rozen
+```
+
 ---
 
 ## Verb Conjugation
 
-The markers `[s]`, `[es]`, `[is]`, `[was]`, `[has]` conjugate based on the **most recently referenced `{$Id}` or `{$Id.pronoun}` token** in the string (the "current scope").
+The markers `[s]`, `[es]`, `[ies]`, `[is]`, `[was]`, `[has]` conjugate from the current subject scope. A bare `{$Id}` or a subject pronoun establishes that scope; every other pronoun-token form leaves it unchanged.
 
-| Marker | Singular (she/he) | Plural (they/you) |
+| Marker | Singular (she/he, a name) | Plural (they/you) |
 |---|---|---|
 | `[s]` | `s` | `` (empty) |
 | `[es]` | `es` | `` (empty) |
+| `[ies]` | `ies` | `y` |
 | `[is]` | `is` | `are` |
 | `[was]` | `was` | `were` |
 | `[has]` | `has` | `have` |
 
-```yaml
-- {$Aness} love[s] magic research — {$Aness.she} instinctively leap[s]
+**Write consonant + `y` verbs with the stem before `[ies]`: `carr[ies]` becomes "carries" or "carry", and `tr[ies]` becomes "tries" or "try".** Vowel + `y` verbs keep the `y`: `play[s]` becomes "plays" or "play".
+
+**A marker agrees with what the preceding token rendered, not with the character's pronouns.** A bare `{$Id}` renders a proper name, and a name takes a singular verb whatever the character's `pronouns:` — `{$Zephon} answer[s]` is "Zephon answers" even when Zephon is they/them. The plural forms come from a pronoun: either a scoped `{$Id.they}` token, or the protagonist "you" swap turning a bare `{$Id}` into "you".
+
+```text transform=pronoun-pass id=conj-name-vs-pronoun
+text: "{$Zephon} answer[s] the question {$Zephon.they} wish[es] had been asked"
+cast:
+  Zephon: { name: Zephon, pronouns: they }
+protagonist: Veyrn
 ```
 
-When Aness is the protagonist (you-set, plural):
-> you love magic research — you instinctively leap
+``` expect=conj-name-vs-pronoun
+Zephon answers the question they wish had been asked
+```
 
-When Aness is an NPC with `pronouns: female` (singular):
-> Aness loves magic research — she instinctively leaps
+When Aness is the protagonist, `{$Aness}` becomes "You" at the start of this sentence and the plural `you`-set drives the markers:
+
+```text transform=pronoun-pass id=conj-protagonist
+text: "{$Aness} love[s] magic research — {$Aness.she} instinctively leap[s]"
+cast:
+  Aness: { name: { display: Aness, full: Aness Rozen }, pronouns: female }
+protagonist: Aness
+```
+
+``` expect=conj-protagonist
+You love magic research — you instinctively leap
+```
+
+When Aness is an NPC with `pronouns: female`, the singular set drives them instead:
+
+```text transform=pronoun-pass id=conj-npc
+text: "{$Aness} love[s] magic research — {$Aness.she} instinctively leap[s]"
+cast:
+  Aness: { name: { display: Aness, full: Aness Rozen }, pronouns: female }
+protagonist: Veyrn
+```
+
+``` expect=conj-npc
+Aness loves magic research — she instinctively leaps
+```
+
+**Write consonant + `y` verbs with the stem before `[ies]`: `carr[ies]` becomes "carries" or "carry", and `tr[ies]` becomes "tries" or "try".** Vowel + `y` verbs keep the `y`: `play[s]` becomes "plays" or "play".
 
 **Scope rules:**
-- `{$Id}` sets the scope to that character's effective pronoun set
-- `{$Id.pronoun}` sets the scope to that character's effective pronoun set
-- `{$she}` (unscoped) does NOT set the scope
-- Scope carries forward within the string until a new `{$Id}` or `{$Id.pronoun}` is encountered
-- If no scope has been set, conjugation falls back to the card's own `pronouns:` field
+- `{$Id}` rendering a name sets the scope to **singular** — a name conjugates `[s]`/`[is]`/`[was]`/`[has]` regardless of the character's pronoun set
+- `{$Id}` for the **protagonist** renders "you" and sets the scope to the plural `you`-set
+- A subject pronoun sets the scope to its effective pronoun set, whether item-local (`{$she}`) or scoped (`{$Id.she}`)
+- Every other pronoun-token form leaves the scope unchanged, including object, possessive and reflexive forms, whether item-local (`{$her}`) or scoped (`{$Id.her}`)
+- Scope carries forward within the string until a bare `{$Id}` or subject pronoun establishes a new one
+- If no scope has been set, conjugation falls back to the item's own `pronouns:` field
 
 ---
 
-## Cross-Card Field References
+## Cross-Item Field References
 
-After all cards for a branch are compiled, a second pass resolves `{$Id.body.FieldName}` references:
+**Cross-item references get their own stage, and it runs before every token above.** It happens once per branch rather than once per item, because it needs the branch's whole cast resolved at the same time.
 
 ```
-{$Mentor.body.Tagline}       → resolves Tagline from the card with id "Mentor"
-{$Setting.body.Era}          → resolves Era from the Setting card
+{$Mentor.body.Tagline}       → resolves Tagline from the item with id "Mentor"
+{$Setting.body.Era}          → resolves Era from the Setting item
 ```
 
-These are left as-is during the first pass and resolved in a second pass once all cards are available. The lookup checks the branch's compiled cards first; if the referenced card was excluded from this branch (via null dispatch), it falls back to the **canonical base card** in the registry. If the card is not found anywhere or the field doesn't exist, a warning is emitted and the token is left as-is.
+The lookup checks the branch's resolved items first. If the referenced item was excluded from this branch by a null dispatch, it falls back to **the item as the registry holds it** — so a reference to an item this branch dropped still reads that item's base text rather than failing.
+
+The two failure modes differ, which matters when you are hunting one:
+
+- **The item is not found anywhere** — `CL0330`, a WARN, and the token is left as written.
+- **The item resolves but the field path does not** — silent. The token is left as written and surfaces later as `CL0430` at the output sweep, with nothing naming the missing field.
+
+> **This stage runs before roles are rewritten, so it understands item ids only.** `{$SomeRole.body.Field}` does not resolve — name the item directly. Every other role form works normally; see [Roles](13-roles.md#using-a-role-in-prose).
 
 ---
 
 ## Protagonist Declaration
 
-The protagonist for a branch is declared in `compile.yaml`:
+The protagonist is the built-in role (see [Roles](13-roles.md)) — an ordinary entry in
+`roles:`, declared per branch:
 
-```yaml
-protagonist: Aness              # global default
+```yaml surface=config
+roles:
+  protagonist: Aness              # global default
 
 branches:
   subject:
-    protagonist: Aness
+    roles:
+      protagonist: Aness
   researcher:
-    protagonist: Veyrn
+    roles:
+      protagonist: Veyrn
 ```
 
-A card's `{$Id}` tokens resolve to "you" when `Id` matches the active branch protagonist. All protagonist matching is case-insensitive.
+An item's `{$Id}` tokens resolve to "you" when `Id` matches the active branch protagonist. All protagonist matching is case-insensitive.
 
 ---
 
@@ -165,9 +247,9 @@ A card's `{$Id}` tokens resolve to "you" when `Id` matches the active branch pro
 
 | Situation | Use |
 |---|---|
-| The card is about character X and refers to X's own pronouns | `{$she}` unscoped — resolves against the card's `pronouns:` |
-| Referring to a specific named character from any card | `{$Aness.she}` scoped — resolves against Aness's pronouns, protagonist-aware |
+| The item is about character X and refers to X's own pronouns | `{$she}` unscoped — resolves against the item's `pronouns:` |
+| Referring to a specific named character from any item | `{$Aness.she}` scoped — resolves against Aness's pronouns, protagonist-aware |
 | Referring to a character by name (may become "you") | `{$Aness}` ID reference |
-| Verb agreement following a character reference | `[s]`, `[is]` etc. — follows the most recent `{$Id}` scope |
+| Verb agreement following a character reference | `[s]`, `[is]` etc. — a bare `{$Id}` name conjugates singular; a scoped `{$Id.pronoun}` or the "you" swap conjugates from the pronoun set |
 
-**Avoid mixing forms for the same character.** Use scoped tokens `{$Id.pronoun}` consistently when writing about a specific character, so the conjugation scope is always explicitly set.
+**Mixing `{$Id}` and `{$Id.pronoun}` for one character is fine.** A bare `{$Id}` renders a name and its verb is singular; a scoped `{$Id.they}` renders the pronoun and its verb agrees with the set. Each marker follows the token in front of it, so `{$Zephon} answer[s]` and `{$Zephon.they} wish[es]` in one sentence both read correctly.

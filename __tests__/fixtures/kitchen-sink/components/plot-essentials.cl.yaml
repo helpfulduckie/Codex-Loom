@@ -1,0 +1,125 @@
+# The kitchen-sink component: every key the v4 component surface declares, exercised once.
+#
+# Third companion to ../compile.cl.yaml and ../Codex/items.cl.yaml, under the same
+# contract — `__tests__/unit/kitchen-sink.test.js` walks COMPONENT_SCHEMA and fails if a
+# declared key is missing here, so a key added in a later phase cannot quietly stop being
+# covered.
+#
+# Validated, not compiled. The variant and branch names name nothing real, because the
+# subject is the key surface rather than resolution.
+#
+# It is named `plot-essentials.cl.yaml` because ../compile.cl.yaml already points
+# `components.plotEssential` at this path — one component file serving as the corpus for
+# all seven, since §7.2 gives them one grammar.
+
+sections:
+  # ── A text section: the shape with no slot ─────────────────────────────────
+  genre:
+    text: |
+      Genre: Psychological Thriller | Dark Character Study
+      Setting: {%setting}
+    heading: Genre and Setting
+    headingLevel: 0
+    render:
+      position: 1
+      wrapper: square
+      compact: true
+
+  # ── Text as a mapping of named lines ───────────────────────────────────────
+  # AI Instructions' existing shape: naming each line is what lets a variant replace or
+  # delete one rule without restating the block.
+  rules:
+    text:
+      pacing: Scenes advance on player action, never on their own.
+      register: Narrate in close third person.
+    heading: Rules
+    headingLevel: 2
+    render:
+      position: 2
+      bullet: true
+    variants:
+      terse:
+        text:
+          register: ~
+
+  # ── A slot: per-occupant wrapping, the default ─────────────────────────────
+  cast:
+    slot: true
+    heading: Cast
+    render:
+      position: 6
+      wrapper: curly
+      wrap: each
+    branches:
+      flashback: ~
+
+  # ── `~` deleting a section an import provided (§7.6.3) ─────────────────────
+  # `legalese` exists only in the imported base. Deleting one no import provided is CL0608.
+  legalese: ~
+
+  # ── A slot that wraps its occupants as one collection ──────────────────────
+  party:
+    slot: true
+    render:
+      position: 7
+      wrapper: curly
+      wrap: all
+
+  # ── §7.7's two sources besides `text:` ─────────────────────────────────────
+  # `file:` includes a file verbatim; `from:` reads one through a named transform. Both
+  # resolve to `text:` in the loader, once per component file rather than once per leaf,
+  # so nothing downstream has to know a section had a source. Between them they replace
+  # v3's `description.yaml` — `body:` was the first and `script:` was the second.
+  houseStyle:
+    file: '{%components}/house-style.md'
+    render:
+      position: 8
+
+  modBanner:
+    from:
+      script: '{%scriptDir}/library.js'
+      extract: scriptBanner
+    render:
+      position: 9
+
+# ── Document level ───────────────────────────────────────────────────────────
+# `variants:` is deliberately absent, because a component declares no variants of its own.
+# `branches:` is present and is a *selector* over what the sections declare (§7.6.2a): the
+# name is looked up in each section's own `variants:` and applied wherever it is found —
+# `terse` here reaches `rules:` above and no other section, which is the ordinary case and
+# is silent. `~` at this position would exclude the whole component from the branch.
+#
+# This is not v3's document layer. That one brought its own branch walker; this runs on
+# `resolveBranchSpec` like every other dispatch in the language.
+branches:
+  flashback: terse
+#
+# §7.6 — one import, exercising all three things a local file does to what it pulls in:
+# `genre` above overrides an imported section by name, `importVariants: [terse]` selects a
+# variant from every imported section that defines one, and `legalese: ~` deletes an
+# inherited section outright. The selector is silent on the sections that do not define
+# `terse`, which is most of them and is the point (§7.6.2a).
+imports:
+  - from: '{%components}/base-plot-essentials.cl.yaml'
+    importVariants: [terse]
+
+# §7.8 — the multi-target render, live as of Phase 13. `component.variant` selects what
+# ships in the component field; each `storyCards` entry is an independent rendering emitted
+# as a trigger-less `kind: reference` card. The `type:` on the second entry overrides the
+# `storyCardType[plotEssential]` default from compile.yaml (rung 3 over rung 2).
+render:
+  component:
+    variant: terse
+  storyCards:
+    - title: Plot Essentials — Full
+      variant: verbose
+    - title: Plot Essentials — Scenario Rules Only
+      sections: [genre, rules]
+      type: zz_PE_rules
+
+# §7.7 — frontmatter for the component's output file. Declared on every component because
+# the key is about a document's own metadata, and emitted by the rows whose output has
+# somewhere to put it: Description alone today, which is where Velvet Lattice reads
+# scenario tags from (`scenario.py:193`). On this file it is CL0620 rather than silence.
+metadata:
+  tags: [thriller, dark]

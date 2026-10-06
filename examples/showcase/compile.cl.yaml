@@ -1,0 +1,83 @@
+# Codex Loom v4 — worked example.
+#
+# Every construct here is copied from documentation/ or skill/aid-codex-loom/ and compiled
+# to prove the snippets are valid. If a doc snippet changes, change it here too and recompile.
+
+version: 4
+title: The Showcase
+
+structure:
+  input:
+    items: [./Codex]
+    library:
+      main: ./library/main
+    templates: [./templates]
+  output: ./output
+  reports: ./Review
+
+variables:
+  setting: The Royal Academy
+
+roles:
+  protagonist: Aria
+  LI: Kaiden
+  rival: Voss
+
+placeholders:
+  heroName: What should we call you?
+  house: 'Which wing of {%setting} claims you?'
+  liName: What is your Love Interest's name?
+  liGender: What is %liName%'s gender?
+
+templateFor:
+  base: fields.cl.yaml
+
+storyCardType:
+  aiInstructions: zz_AIN
+
+render:
+  notesTemplate: Notes
+
+lint:
+  level: warn
+  packs:
+    duckieConv: {}
+
+components:
+  plotEssential: ./components/plot-essentials.cl.yaml
+  aiInstructions: ./components/ai-instructions.cl.yaml
+  authorsNote: ./components/authors-note.cl.yaml
+  opening: "Who are you?"
+
+branches:
+  knight:
+    title: The Knight's Path
+    roles:
+      LI: Kaiden
+    placeholders:
+      oath: Which oath did you swear?
+    components:
+      # An inline prose opening resolves role and pronoun tokens exactly as a sections:
+      # opening does. {$rival} here is Voss, bound as `rival` at the project root; a
+      # placeholder (%oath%) and a compile variable both still work alongside it.
+      opening: "%heroName% woke with %oath% still ringing, and {$rival} already gone."
+    variables:
+      role: sworn protector
+
+  mage:
+    roles:
+      LI: Felicia
+      rival: ~                  # this branch has no rival
+    components:
+      opening: "%heroName% woke to the smell of chalk dust."
+    variables:
+      role: academy mage
+
+  lowContext:
+    title: Low Context
+    templateFor:
+      base: terse.cl.yaml
+    components:
+      opening: "%heroName% woke."
+    variables:
+      role: sworn protector
