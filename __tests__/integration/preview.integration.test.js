@@ -124,9 +124,38 @@ describe('preview field provenance on variants-and-fieldops', () => {
 
   const tagline = (label) => {
     const leaf = result.leaves.find((l) => l.label === label);
-    const item = leaf.items.find((i) => i.id === 'Zephon');
+    const item = leaf.items.map((i) => result.items[i]).find((i) => i.id === 'Zephon');
     return item.fields.find((f) => f.path.join('.') === 'body.Tagline');
   };
+
+  test('an item that resolves the same on several leaves is held once', () => {
+    const references = result.leaves.flatMap((l) => l.items);
+    expect(references.every((i) => Number.isInteger(i) && i >= 0 && i < result.items.length)).toBe(true);
+    expect(new Set(references).size).toBe(result.items.length);
+    expect(references.length).toBeGreaterThan(result.items.length);
+    expect(new Set(result.items.map((i) => JSON.stringify(i))).size).toBe(result.items.length);
+  });
+
+  test('an item a variant changes on one leaf is a different entry there', () => {
+    const zephonOn = (label) => result.leaves.find((l) => l.label === label).items
+      .find((i) => result.items[i].id === 'Zephon');
+    expect(zephonOn('medieval/mundane')).not.toBe(zephonOn('medieval/magical'));
+  });
+
+  test('a card is held once and each leaf lists the cards it carries', () => {
+    const references = result.leaves.flatMap((l) => l.cards);
+    expect(references.every((i) => Number.isInteger(i) && i >= 0 && i < result.cards.length)).toBe(true);
+    expect(new Set(references).size).toBe(result.cards.length);
+    expect(new Set(result.cards.map((c) => JSON.stringify(c))).size).toBe(result.cards.length);
+  });
+
+  test('an origin names its file by position in sourceFiles', () => {
+    const field = tagline('medieval/mundane');
+    expect(Number.isInteger(field.origin.file)).toBe(true);
+    expect(fs.existsSync(result.sourceFiles[field.origin.file])).toBe(true);
+    expect(field.layers[0].file).toBe(field.origin.file);
+    expect(new Set(result.sourceFiles).size).toBe(result.sourceFiles.length);
+  });
 
   test('a field a variant supplies points into the variant block and records each layer', () => {
     const field = tagline('medieval/mundane');
@@ -227,9 +256,10 @@ describe('preview with source overrides', () => {
       sources: { [itemFile]: widget('  render: {template: Item}', 'item from override') },
     });
 
-    expect(plain.leaves[0].cards[0].rendered).toContain('item on disk');
-    expect(overridden.leaves[0].cards[0].rendered).toContain('item from override');
-    expect(overridden.leaves[0].cards[0].rendered).not.toContain('item on disk');
+    const firstCard = (result) => result.cards[result.leaves[0].cards[0]];
+    expect(firstCard(plain).rendered).toContain('item on disk');
+    expect(firstCard(overridden).rendered).toContain('item from override');
+    expect(firstCard(overridden).rendered).not.toContain('item on disk');
     expect(fs.readFileSync(itemFile, 'utf8')).toBe(onDisk);
   });
 });

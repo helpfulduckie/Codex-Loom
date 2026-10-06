@@ -66,7 +66,26 @@ function leafPaths(value, prefix, out) {
   }
 }
 
-function buildFields(item, libraries) {
+// A value kept once and referred to by position. Most items resolve the same on most
+// leaves and every field names its source file, so repeating either in full makes the
+// result grow with items times leaves.
+function createTable(keyOf = (value) => value) {
+  const index = new Map();
+  const values = [];
+  return {
+    values,
+    indexOf(value) {
+      const key = keyOf(value);
+      if (!index.has(key)) {
+        index.set(key, values.length);
+        values.push(value);
+      }
+      return index.get(key);
+    },
+  };
+}
+
+function buildFields(item, libraries, fileIndex) {
   const found = [];
   for (const key of FIELD_ROOTS) {
     if (key.startsWith('_') || item[key] === undefined) continue;
@@ -79,7 +98,7 @@ function buildFields(item, libraries) {
       path: fieldPath,
       value: plain(value),
       origin: record ? {
-        file: record.file || null,
+        file: fileIndex(record.file),
         line: typeof record.line === 'number' ? record.line : null,
         col: typeof record.col === 'number' ? record.col : null,
         authoredPath: record.path || null,
@@ -92,7 +111,7 @@ function buildFields(item, libraries) {
           name: entry.layer.name === undefined ? null : entry.layer.name,
           library: entry.layer.library || libraryOf(at && at.file, libraries),
           op: plain(entry.op),
-          file: at ? at.file || null : null,
+          file: fileIndex(at && at.file),
           line: at && typeof at.line === 'number' ? at.line : null,
           col: at && typeof at.col === 'number' ? at.col : null,
           before: plain(entry.before),
@@ -104,15 +123,15 @@ function buildFields(item, libraries) {
   });
 }
 
-function buildCards(grouped) {
+function buildCards(grouped, cardTable) {
   const cards = [];
   for (const type of [...grouped.keys()].sort((a, b) => a.localeCompare(b))) {
     const entries = grouped.get(type).slice()
       .sort((a, b) => a.sortKey.localeCompare(b.sortKey) || a.rendered.localeCompare(b.rendered));
     for (const entry of entries) {
-      cards.push({
+      cards.push(cardTable.indexOf({
         type, name: entry.name, rendered: entry.rendered, itemId: entry.id || null,
-      });
+      }));
     }
   }
   return cards;
@@ -127,9 +146,10 @@ function buildComponents(components) {
   return out;
 }
 
-function buildLeaves(run, libraries) {
+function buildLeaves(run, libraries, tables) {
   const dataByLabel = new Map(run.leafData.map((d) => [d.label, d]));
   const slotsByLabel = new Map(run.inventoryData.map((d) => [d.label, d]));
+  const fileIndex = (file) => (file ? tables.sourceFiles.indexOf(file) : null);
   return run.deferredCardLeaves.map((leaf) => {
     const label = leaf.branchPath.length > 0 ? leaf.branchPath.join('/') : '(root)';
     const data = dataByLabel.get(label);
@@ -138,12 +158,12 @@ function buildLeaves(run, libraries) {
       branchPath: [...leaf.branchPath],
       folderPath: plain(leaf.folderPath),
       roles: plain(data ? data.roles : {}),
-      items: leaf.resolvedItems.map((item) => ({
+      items: leaf.resolvedItems.map((item) => tables.items.indexOf({
         id: item.id === undefined ? null : item.id,
-        source: item._source || null,
-        fields: buildFields(item, libraries),
+        source: fileIndex(item._source),
+        fields: buildFields(item, libraries, fileIndex),
       })),
-      cards: buildCards(leaf.grouped),
+      cards: buildCards(leaf.grouped, tables.cards),
       components: buildComponents(data && data.components),
       slots: plain(slotsByLabel.get(label) || null),
     };
@@ -198,17 +218,27 @@ function preview(configPath, options = {}) {
     }
     return {
       status: 'blocked', droppedKeys: 0, diagnostics: describeDiagnostics(diagnostics),
-      leaves: [], files: [],
+      sourceFiles: [], items: [], cards: [], leaves: [], files: [],
     };
   }
 
   const libraries = run.config._resolvedLibrary instanceof Map
     ? [...run.config._resolvedLibrary] : [];
+  // Items and cards are equal when they serialize the same; a file is equal by its path.
+  const tables = {
+    sourceFiles: createTable(),
+    items: createTable(JSON.stringify),
+    cards: createTable(JSON.stringify),
+  };
+  const leaves = buildLeaves(run, libraries, tables);
   return {
     status: 'ok',
     droppedKeys: run.droppedKeys,
     diagnostics: describeDiagnostics(diagnostics),
-    leaves: buildLeaves(run, libraries),
+    sourceFiles: tables.sourceFiles.values,
+    items: tables.items.values,
+    cards: tables.cards.values,
+    leaves,
     files: buildFiles(run.captured, run.config._resolvedOutput),
   };
 }
