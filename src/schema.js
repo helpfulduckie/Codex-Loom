@@ -156,7 +156,7 @@ function normalizeEmpty(value, types) {
 function validate(value, schema, options = {}) {
   const {
     diagnostics, sourceMap, path = [], keyIndex = buildKeyIndex(schema),
-    displayOffset = 0, context = null,
+    displayOffset = 0, context = null, dropUnknown = false,
   } = options;
 
   const locate = (at) => (sourceMap ? sourceMap.nearest(at) : {});
@@ -264,6 +264,7 @@ function validate(value, schema, options = {}) {
             const shown = display(currentPath);
             const where = shown ? `under "${shown}"` : 'at the top level';
             diagnostics.error(code, `Unknown key "${key}" ${where}${inContext}; remove it or rename/move it to a supported location, or it is ignored.`, locate([...currentPath, key]), { hint });
+            if (dropUnknown) delete normalized[key];
             continue;
           }
 

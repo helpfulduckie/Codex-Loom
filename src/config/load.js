@@ -128,7 +128,7 @@ function loadCompileConfig(configPath, options = {}) {
     diagnostics.error(
       err.code,
       `${err.message} Configuration loading stops because compile.yaml cannot be loaded.`,
-      { file: configPath },
+      err.location(),
     );
     return null;
   }
@@ -165,7 +165,7 @@ function loadCompileConfig(configPath, options = {}) {
     return null;
   }
 
-  validate(config, CONFIG_SCHEMA, { diagnostics, sourceMap });
+  validate(config, CONFIG_SCHEMA, { diagnostics, sourceMap, dropUnknown: !!options.tolerant });
 
   const variableNames = collectVariableNames(config);
   checkVariableGraph(config, diagnostics, sourceMap, variableNames);

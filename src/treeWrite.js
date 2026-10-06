@@ -21,6 +21,7 @@ const {
 } = require('./emit/placeholders');
 const { LIMITS, checkLimit } = require('./limits');
 const { writeOutputFile, removeOutputFile, ensureOutputDir } = require('./outputLedger');
+const { readSource } = require('./sources');
 
 function resolveComponentSpec(spec, base, variables, sink) {
   if (spec == null) return null;
@@ -101,7 +102,7 @@ function writeFramingRecursive(rootNode, outputBase, opts = {}) {
       return { text, at };
     }
     const literal = isFile
-      ? resolveVariables(fs.readFileSync(resolvedSpec, 'utf8').trimEnd(), vars, { diagnostics, location: at })
+      ? resolveVariables(readSource(resolvedSpec, 'utf8').trimEnd(), vars, { diagnostics, location: at })
       : String(resolvedSpec).trimEnd();
     return {
       text: applyTokenPass(literal, {

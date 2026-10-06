@@ -1,11 +1,11 @@
 'use strict';
 
 
-const fs = require('fs');
 const YAML = require('yaml');
 const { preparse, findSwallowedTokens } = require('./preparse');
 const { CODES } = require('../diag');
 const { createOriginIndex } = require('../origin');
+const { readSource } = require('../sources');
 
 const PATH_SEP = '\u0000';
 
@@ -82,7 +82,15 @@ function parseYaml(raw, filePath) {
   const lineCounter = new YAML.LineCounter();
   const doc = YAML.parseDocument(source, { lineCounter, keepSourceTokens: false });
 
-  if (doc.errors.length > 0) throw new Error(doc.errors[0].message);
+  if (doc.errors.length > 0) {
+    const first = doc.errors[0];
+    const err = new Error(first.message);
+    if (first.linePos && first.linePos[0]) {
+      err.line = first.linePos[0].line;
+      err.col = first.linePos[0].col;
+    }
+    throw err;
+  }
 
   const value = doc.contents === null ? undefined : doc.toJS({ maxAliasCount: -1 });
   const sourceMap = new SourceMap(filePath, buildPositions(doc, lineCounter));
@@ -97,6 +105,10 @@ function parseYaml(raw, filePath) {
       + 'Quote the value so it is read as text; other files continue loading.'
     );
     err.code = CODES.TOKEN_SWALLOWED_BY_YAML;
+    if (line !== undefined) {
+      err.line = line;
+      err.col = col;
+    }
     throw err;
   }
 
@@ -117,6 +129,15 @@ class YamlLoadError extends Error {
       ? CODES.YAML_FILE_UNREADABLE
       : (cause.code || CODES.YAML_PARSE_FAILED);
     this.cause = cause;
+    if (typeof cause.line === 'number') this.line = cause.line;
+    if (typeof cause.col === 'number') this.col = cause.col;
+  }
+
+  /** The diagnostic location: the file, plus the parser's line and column when it gave them. */
+  location() {
+    return typeof this.line === 'number'
+      ? { file: this.file, line: this.line, col: this.col }
+      : { file: this.file };
   }
 }
 
@@ -127,7 +148,7 @@ function loadYaml(filePath) {
 function loadYamlDocument(filePath) {
   let raw;
   try {
-    raw = fs.readFileSync(filePath, 'utf8');
+    raw = readSource(filePath, 'utf8');
   } catch (err) {
     throw new YamlLoadError('read', filePath, err);
   }

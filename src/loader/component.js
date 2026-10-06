@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { loadYamlDocument, YamlLoadError } = require('./yaml');
+const { readSource } = require('../sources');
 const { validate } = require('../schema');
 const { COMPONENT_SCHEMA } = require('./component-schema');
 const { normalizeComponent, mergeSectionRecords, applySectionSelector } = require('../model/component');
@@ -39,7 +40,7 @@ function loadComponentDocument(spec, options = {}) {
     ({ value: doc, sourceMap } = loadYamlDocument(spec));
   } catch (err) {
     if (!(err instanceof YamlLoadError)) throw err;
-    diagnostics.error(err.code, `${label}: ${err.message}`, { file: spec });
+    diagnostics.error(err.code, `${label}: ${err.message}`, err.location());
     return null;
   }
   if (doc === null || doc === undefined) return null;
@@ -248,7 +249,7 @@ function resolveOneSource(def, label, options) {
     return result;
   }
 
-  const source = fs.readFileSync(resolved, 'utf8');
+  const source = readSource(resolved, 'utf8');
 
   if (hasFile) {
     result.text = source.trimEnd();

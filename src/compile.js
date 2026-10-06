@@ -33,6 +33,7 @@ const {
   PlaceholderTracker, RoleTracker, GapList, ComponentLoader,
 } = require('./compileState');
 const { NULL_LOG } = require('./log');
+const { withSourceOverrides } = require('./sources');
 
 
 function resolveRoles(config, configPath, diagnostics) {
@@ -136,9 +137,16 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
   }
 }
 
-function abortOnLoadErrors(diagnostics) {
-  if (diagnostics.hasErrors()) {
-    const count = diagnostics.errors.length;
+// A tolerant compile drops unknown keys and keeps going, so those two errors are reported
+// without stopping the load.
+const TOLERATED_CODES = new Set([DIAG_CODES.UNKNOWN_KEY, DIAG_CODES.MISPLACED_KEY]);
+
+function abortOnLoadErrors(diagnostics, { tolerant } = {}) {
+  const errors = tolerant
+    ? diagnostics.errors.filter((d) => !TOLERATED_CODES.has(d.code))
+    : diagnostics.errors;
+  if (errors.length > 0) {
+    const count = errors.length;
     throw new Error(`${count} error${count === 1 ? '' : 's'} while loading; nothing was compiled.`);
   }
 }
@@ -147,7 +155,7 @@ function abortOnLoadErrors(diagnostics) {
 function compile(configPath, options = {}) {
   const buses = {};
   try {
-    return compileRun(configPath, options, buses);
+    return withSourceOverrides(options.sources, () => compileRun(configPath, options, buses));
   } finally {
     takeOutputLedger(); // a run that threw before its sweep leaves no ledger behind
     if (options.diagnostics) {
@@ -166,11 +174,13 @@ function compileRun(configPath, options, buses) {
   const compileDiagnostics = new Diagnostics();
   buses.compile = compileDiagnostics;
 
-  const config = loadCompileConfig(configPath, { diagnostics: loadDiagnostics, live: options.live });
+  const config = loadCompileConfig(configPath, {
+    diagnostics: loadDiagnostics, live: options.live, tolerant: options.tolerant,
+  });
 
   if (config) checkDrift(config, loadDiagnostics, log);
 
-  abortOnLoadErrors(loadDiagnostics);
+  abortOnLoadErrors(loadDiagnostics, { tolerant: options.tolerant });
 
   compileDiagnostics.setLintLevel(
     options.lintLevel || (config.lint && config.lint.level) || null,
@@ -182,26 +192,32 @@ function compileRun(configPath, options, buses) {
 
   const { templates, partials, fieldTable } = loadTemplates(config._resolvedTemplates, { diagnostics: loadDiagnostics });
   checkConfigNotesTemplates(config, templates, loadDiagnostics, configPath, fieldTable);
-  abortOnLoadErrors(loadDiagnostics);
+  abortOnLoadErrors(loadDiagnostics, { tolerant: options.tolerant });
   log.info(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
   const tierTemplates = config ? gatherTierTemplates(config, configPath) : [];
   const fieldAudit = buildFieldAudit({ fieldTable, partials, tierTemplates });
   const cardTypeAudit = buildCardTypeAudit();
 
-  const canonRegistry = buildCanonRegistry(config._resolvedLibrary, { diagnostics: loadDiagnostics });
+  const canonRegistry = buildCanonRegistry(config._resolvedLibrary, {
+    diagnostics: loadDiagnostics, tolerant: options.tolerant,
+  });
   if (canonRegistry.itemCount > 0) {
     log.info(`Loaded ${canonRegistry.itemCount} library item(s).`);
   }
 
-  const rawProjectItems = loadItemsFromDir(config._resolvedItems, { diagnostics: loadDiagnostics });
+  const rawProjectItems = loadItemsFromDir(config._resolvedItems, {
+    diagnostics: loadDiagnostics, tolerant: options.tolerant,
+  });
 
-  const includedItems = resolveIncludes(rawProjectItems, canonRegistry, config, { diagnostics: loadDiagnostics });
+  const includedItems = resolveIncludes(rawProjectItems, canonRegistry, config, {
+    diagnostics: loadDiagnostics, tolerant: options.tolerant,
+  });
   if (includedItems.length > 0) {
     log.info(`Loaded ${includedItems.length} included library item(s).`);
   }
 
-  abortOnLoadErrors(loadDiagnostics);
+  abortOnLoadErrors(loadDiagnostics, { tolerant: options.tolerant });
 
   const projectItems = rawProjectItems.filter((d) => !d.include);
 

@@ -61,6 +61,22 @@ describe('unknown keys', () => {
   });
 });
 
+describe('dropUnknown', () => {
+  test('an unknown key is removed from the result and still reported', () => {
+    const diagnostics = new Diagnostics();
+    const value = { title: 'x', nonsense: 1 };
+    validate(value, SCHEMA, { diagnostics, dropUnknown: true });
+    expect(diagnostics.all.map((d) => d.code)).toContain(CODES.UNKNOWN_KEY);
+    expect(Object.keys(value)).toEqual(['title']);
+  });
+
+  test('an unknown key stays in the result when dropUnknown is off', () => {
+    const value = { title: 'x', nonsense: 1 };
+    run(value);
+    expect(Object.keys(value)).toContain('nonsense');
+  });
+});
+
 describe('relocation suggestions', () => {
   test('a valid key at the wrong level suggests where it belongs', () => {
     const { diagnostics, codes } = run({ canon: { a: 'b' }, structure: { output: 'o' } });

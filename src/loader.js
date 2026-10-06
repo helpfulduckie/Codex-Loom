@@ -1,8 +1,8 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const { findFiles } = require('./util');
+const { readSource } = require('./sources');
 const { loadFieldTable } = require('./loader/field-table');
 const { CODES } = require('./diag');
 
@@ -21,7 +21,7 @@ function loadNamedFiles(dirs, ext) {
         err.code = CODES.DUPLICATE_NAMED_FILE;
         throw err;
       }
-      dirEntries.set(name, { content: fs.readFileSync(file, 'utf8'), _source: file });
+      dirEntries.set(name, { content: readSource(file, 'utf8'), _source: file });
     }
     for (const [name, entry] of dirEntries) {
       result.set(name, entry);

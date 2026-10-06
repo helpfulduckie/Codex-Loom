@@ -1,7 +1,6 @@
 'use strict';
 
 
-const fs = require('fs');
 const path = require('path');
 const YAML = require('yaml');
 
@@ -9,6 +8,7 @@ const { sectionsForBranch, WRAP } = require('../model/component');
 const { applyWrapper } = require('../template');
 const { applyTokenPass } = require('../model/pronouns');
 const { writeOutputFile } = require('../outputLedger');
+const { readSource } = require('../sources');
 const {
   resolveVariables, transformStringValues, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts,
 } = require('../util');
@@ -96,7 +96,7 @@ function isPassthrough(spec) {
 }
 
 function readPassthrough(spec) {
-  return fs.readFileSync(spec, 'utf8').trimEnd() || null;
+  return readSource(spec, 'utf8').trimEnd() || null;
 }
 
 

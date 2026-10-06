@@ -1,12 +1,12 @@
 'use strict';
 
 
-const fs = require('fs');
 const path = require('path');
 
 const YAML = require('yaml');
 const { applyLintLevel, Diagnostics, CODES } = require('../diag');
 const { resolveVariables } = require('../util');
+const { readSource } = require('../sources');
 const { validate, TYPES } = require('../schema');
 const { parseNotesBlock, parseSettingsBlock } = require('../emit/vl');
 const { resolveField } = require('../render/eval');
@@ -41,7 +41,7 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
 
   let raw;
   try {
-    raw = fs.readFileSync(filePath, 'utf8');
+    raw = readSource(filePath, 'utf8');
   } catch (err) {
     return fail(source ? `could not be read at ${filePath}` : 'is not a bundled pack');
   }

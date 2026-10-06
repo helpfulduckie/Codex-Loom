@@ -73,13 +73,14 @@ function isComponentDocument(entry) {
     && (entry.name === undefined || typeof entry.name !== 'string');
 }
 
-function prepareItem(entry, { file, index, path: entryPath, sourceMap, diagnostics }) {
+function prepareItem(entry, { file, index, path: entryPath, sourceMap, diagnostics, tolerant }) {
   const label = entry && (entry.id || (typeof entry.name === 'string' ? entry.name : null));
   validate(entry, ITEM_SCHEMA, {
     diagnostics,
     sourceMap,
     path: entryPath,
     displayOffset: entryPath.length,
+    dropUnknown: !!tolerant,
     context: label ? `item "${label}"` : `item ${index + 1} of ${path.basename(file)}`,
   });
 
@@ -110,7 +111,7 @@ function loadItemsFromDir(dirs, options = {}) {
         ({ value: data, sourceMap } = loadYamlDocument(file));
       } catch (err) {
         if (!(err instanceof YamlLoadError)) throw err;
-        diagnostics.error(err.code, err.message, { file });
+        diagnostics.error(err.code, err.message, err.location());
         continue;
       }
 
@@ -129,7 +130,9 @@ function loadItemsFromDir(dirs, options = {}) {
         if (isComponentDocument(entry)) return;
 
         const entryPath = Array.isArray(data) ? [String(index)] : [];
-        const loaded = prepareItem(entry, { file, index, path: entryPath, sourceMap, diagnostics });
+        const loaded = prepareItem(entry, {
+          file, index, path: entryPath, sourceMap, diagnostics, tolerant: options.tolerant,
+        });
         if (loaded) items.push(loaded);
       });
     }
@@ -264,7 +267,9 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
     // selector only when no file under it defines the name.
     const fromThisInclude = [];
     for (const file of files) {
-      fromThisInclude.push(...includeFile(file, def, fullPath, { seenFiles, explicitIds, diagnostics }));
+      fromThisInclude.push(...includeFile(file, def, fullPath, {
+        seenFiles, explicitIds, diagnostics, tolerant: options.tolerant,
+      }));
     }
     included.push(...fromThisInclude);
 
@@ -274,7 +279,7 @@ function resolveIncludes(itemDefs, canonRegistry, config, options = {}) {
   return included;
 }
 
-function includeFile(file, def, includeKey, { seenFiles, explicitIds, diagnostics }) {
+function includeFile(file, def, includeKey, { seenFiles, explicitIds, diagnostics, tolerant }) {
   const importerSource = def._source || '(unknown)';
   if (seenFiles.has(file)) {
     seenFiles.get(file).push(importerSource);
@@ -293,7 +298,7 @@ function includeFile(file, def, includeKey, { seenFiles, explicitIds, diagnostic
     ({ value: raw, sourceMap } = loadYamlDocument(file));
   } catch (err) {
     if (!(err instanceof YamlLoadError)) throw err;
-    diagnostics.error(err.code, err.message, { file });
+    diagnostics.error(err.code, err.message, err.location());
     return [];
   }
   if (raw === null || raw === undefined) {
@@ -313,7 +318,9 @@ function includeFile(file, def, includeKey, { seenFiles, explicitIds, diagnostic
     if (explicitIds.has(id)) continue; // an explicit import wins
 
     const entryPath = Array.isArray(raw) ? [String(index)] : [];
-    const prepared = prepareItem(item, { file, index, path: entryPath, sourceMap, diagnostics });
+    const prepared = prepareItem(item, {
+      file, index, path: entryPath, sourceMap, diagnostics, tolerant,
+    });
     if (!prepared) continue;
 
     // `_include_key` names the directive, which for a directory include spans many files;

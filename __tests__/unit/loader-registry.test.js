@@ -41,6 +41,36 @@ describe('a file that will not load is one coded ERROR, and the walk goes on (CL
   });
 });
 
+describe('a YAML syntax error carries its position (CL0101)', () => {
+  test('an unclosed flow sequence reports a numeric line and column', () => {
+    write('Codex/bad.cl.yaml', 'id: Bad\nname: [unclosed\n');
+    const { diagnostics } = loadWithDiagnostics();
+    const failure = diagnostics.errors.find((d) => d.code === CODES.YAML_PARSE_FAILED);
+    expect(typeof failure.line).toBe('number');
+    expect(typeof failure.col).toBe('number');
+  });
+});
+
+describe('tolerant loading', () => {
+  const misspelled = 'id: W\nname: W\naid: {type: Item}\nrender: {template: T, wraper: curly}\n';
+
+  test('an unknown key is reported and kept when loading is not tolerant', () => {
+    write('Codex/w.cl.yaml', misspelled);
+    const { items, codes } = loadWithDiagnostics();
+    expect(codes).toContain(CODES.UNKNOWN_KEY);
+    expect(items[0].render).toHaveProperty('wraper');
+  });
+
+  test('an unknown key is reported and dropped when loading is tolerant', () => {
+    write('Codex/w.cl.yaml', misspelled);
+    const diagnostics = new Diagnostics();
+    const items = loadItemsFromDir([tmpDir], { diagnostics, tolerant: true });
+    expect(diagnostics.errors.map((d) => d.code)).toContain(CODES.UNKNOWN_KEY);
+    expect(items[0].render).not.toHaveProperty('wraper');
+    expect(items[0].render.template).toBe('T');
+  });
+});
+
 describe('file discovery across every accepted suffix', () => {
   test.each(YAML_SUFFIXES)('loads %s', (suffix) => {
     write(`Codex/item${suffix}`, 'id: A\n');
