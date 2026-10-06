@@ -176,7 +176,7 @@ describe('script output is swept from the current file selections', () => {
     const tmpDir = scriptProject(scriptsConfig('./unusedBundle', [
       '  a: {scripts: {input: ./input.js, output: ./output.js}}',
       '  b: {scripts: {input: ./input.js, output: ./output.js}}',
-    ]), { 'input.js': 'input', 'output.js': 'output' });
+    ]), { 'input.js': 'input', 'output.js': 'output', 'unusedBundle/input.js': 'bundle input' });
     compileSuccessfully(tmpDir);
     writeTree(tmpDir, {
       'compile.yaml': scriptsConfig('./unusedBundle', [

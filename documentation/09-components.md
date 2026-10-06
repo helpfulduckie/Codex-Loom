@@ -536,8 +536,9 @@ directory replaces the previous auxiliary-file set.
 **A mapping applies only its named hooks.** Unmentioned keys inherit, a named `null`
 removes that hook, and an empty map changes nothing. `scripts: ~` removes all four hooks;
 a later partial map restores only the hooks it names. Mapping and null operations preserve
-the nearest directory's auxiliary files. A mapped source path may be missing, which makes
-that hook absent rather than restoring an inherited file.
+the nearest directory's auxiliary files. A mapped path that names no file, or a `scripts:`
+directory that does not exist, is an error (`CL0636`); the hook is left absent rather than
+restored from an inherited file.
 
 **Script bytes remain unchanged.** Directory files keep their relative names; mapped sources
 are written under canonical hook filenames. Velvet Lattice loads only those four top-level

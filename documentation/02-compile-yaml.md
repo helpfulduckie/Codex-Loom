@@ -292,8 +292,12 @@ retained as auxiliary files. A later directory replaces the earlier auxiliary-fi
 and a named `null` removes that hook. An empty mapping changes nothing; `scripts: ~` is
 equivalent to setting all four hook keys to `null`, so a later partial mapping can restore
 only its named hooks. Mapping operations preserve the most recent directory's auxiliary
-files. A named path that does not exist is allowed and removes that hook instead of falling
-back to an inherited source.
+files.
+
+**A path that does not exist is an error (`CL0636`).** That covers a `scripts:` directory
+that is missing and a mapped hook path that names no file; write `null` to remove a hook on
+purpose. The bad hook is still removed instead of falling back to an inherited source. A
+directory that exists but lacks one of the four hook files is not an error.
 
 **Only the four top-level canonical filenames are loaded as hooks by Velvet Lattice.**
 File bytes are copied unchanged. Directory files keep their relative names; mapped sources

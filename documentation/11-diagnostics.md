@@ -450,6 +450,7 @@ interpolated value, and the property belongs to the template, not to each field.
 | `CL0633` | WARN | `branchFraming` is set where no child branches exist, so it has no effect; remove it or move it to a branching node. |
 | `CL0634` | ERROR | A requested component produces no output anywhere, so the compiled scenario is missing it; provide renderable content or correct its source. |
 | `CL0635` | WARN | A story card has no triggers, so AID cannot pull it into context; add triggers or use `kind: reference`. |
+| `CL0636` | ERROR | `scripts:` names a directory or hook file that does not exist, so the script is missing from the compiled scenario; correct the path, or write `null` to remove a hook. |
 
 `CL0630` and `CL0631` are not raised in a project that declares `lint.scenario: false`
 ([compile.yaml → lint](02-compile-yaml.md#lint)), because no leaf of it is played.

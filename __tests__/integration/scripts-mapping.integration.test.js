@@ -110,3 +110,19 @@ test('nested branches restore only hooks named after an ancestor whole-null', ()
   expect(fs.existsSync(restored)).toBe(true);
   expect(fs.existsSync(empty)).toBe(false);
 });
+
+test('a script path that does not exist fails the compile once, however many leaves inherit it', () => {
+  const config = (scripts) => [
+    'version: 4', 'structure:', '  input:', "    items: ['./Codex']", "    templates: ['./templates']",
+    "  output: './out'", `scripts: ${scripts}`, 'branches:', '  a: {}', '  b: {}', '  c: {}', '',
+  ].join('\n');
+
+  const directory = compile('./nowhere', { 'compile.yaml': config('./nowhere') });
+  expect(directory.threw).not.toBe(null);
+  expect(directory.diagnostics.errors.map((entry) => entry.code)).toEqual(['CL0636']);
+
+  const hook = compile('{input: ./nowhere.js}', { 'compile.yaml': config('{input: ./nowhere.js}') });
+  expect(hook.threw).not.toBe(null);
+  expect(hook.diagnostics.errors.map((entry) => entry.code)).toEqual(['CL0636']);
+  expect(hook.diagnostics.errors[0]).toMatchObject({ line: 7 });
+});

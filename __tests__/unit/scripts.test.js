@@ -116,6 +116,68 @@ describe('script input selection', () => {
     expect(fs.readFileSync(result.files.get('input.js'), 'utf8')).toBe('');
   });
 
+  test('a mapped hook path that is not a file is an error at the authored hook', () => {
+    const result = resolve([
+      'scripts: ./base', 'branches:', '  Main:', '    scripts:',
+      '      output: ./missing.js', '      input: ./base', '',
+    ].join('\n'), { 'base/input.js': 'old', 'base/output.js': 'old' }, ['main']);
+    const findings = result.diagnostics.errors.filter((entry) => entry.code === 'CL0636');
+    expect(findings).toHaveLength(2);
+    expect(findings[0]).toMatchObject({ file: path.join(result.base, 'compile.yaml'), line: 5, col: 7 });
+    expect(findings[0].message).toContain('scripts.output names "./missing.js"');
+    expect(findings[1].message).toContain('scripts.input names "./base"');
+  });
+
+  test('a script directory that does not exist is an error and selects nothing', () => {
+    const result = resolve([
+      'scripts: ./base', 'branches:', '  Main:', '    scripts: ./nowhere', '',
+    ].join('\n'), { 'base/input.js': 'old', 'base/note.txt': 'aux' }, ['main']);
+    expect(result.files.size).toBe(0);
+    const findings = result.diagnostics.errors.filter((entry) => entry.code === 'CL0636');
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ file: path.join(result.base, 'compile.yaml'), line: 4 });
+    expect(findings[0].message).toContain('scripts: names "./nowhere"');
+  });
+
+  test('a script path naming a file where a directory belongs is an error', () => {
+    const result = resolve('scripts: ./input.js\n', { 'input.js': 'input' });
+    expect(result.diagnostics.errors.map((entry) => entry.code)).toEqual(['CL0636']);
+  });
+
+  test('an override directory without a hook file removes that hook silently', () => {
+    const result = resolve([
+      'scripts: ./base', 'branches:', '  Main:', '    scripts: ./override', '',
+    ].join('\n'), {
+      'base/input.js': 'base input', 'base/output.js': 'base output', 'override/output.js': 'override output',
+    }, ['main']);
+    expect(contents(result.files)).toEqual({ 'output.js': 'override output' });
+    expect(result.diagnostics.all).toEqual([]);
+  });
+
+  test('an explicit null and an empty directory report nothing', () => {
+    const result = resolve([
+      'scripts: ./base', 'branches:', '  Main:', '    scripts: {input: null}', '',
+    ].join('\n'), { 'base/input.js': 'old' }, ['main']);
+    expect(result.files.size).toBe(0);
+    expect(result.diagnostics.all).toEqual([]);
+  });
+
+  test('an undeclared variable in a script path is not also reported as a missing source', () => {
+    const result = resolve('scripts: {input: "{%missing}"}\nbranches: {Main: {scripts: "{%alsoMissing}"}}\n', {}, ['main']);
+    expect(result.diagnostics.errors.map((entry) => entry.code)).toEqual(['CL0510', 'CL0510']);
+  });
+
+  test('a shared reported set reports one bad declaration once across leaves', () => {
+    const base = withTmpDir();
+    const config = { _base: base, scripts: './nowhere' };
+    const chain = { nodes: [], folderPath: [] };
+    const diagnostics = new Diagnostics();
+    const reported = new Set();
+    resolveScriptFiles(config, chain, {}, { diagnostics, reported });
+    resolveScriptFiles(config, chain, {}, { diagnostics, reported });
+    expect(diagnostics.errors).toHaveLength(1);
+  });
+
   test('nested overrides use actual-cased branch keys for origin lookup', () => {
     const result = resolve([
       'scripts: ./base', 'branches:', '  Main:', '    branches:',

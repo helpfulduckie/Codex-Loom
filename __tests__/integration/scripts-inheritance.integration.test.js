@@ -119,7 +119,6 @@ test('an equal-cost two-version split keeps one copy at each leaf', () => {
 test('absence on any leaf blocks inherited hooks and retains only authored files', () => {
   const result = compile([
     'scripts: ./bundle', 'branches:', '  present: {}',
-    '  missingBundle: {scripts: ./missing}',
     '  missingHook: {scripts: ./partial}',
     '  allRemoved: {scripts: null}',
     '  oneRemoved: {scripts: {input: null}}',
@@ -128,7 +127,6 @@ test('absence on any leaf blocks inherited hooks and retains only authored files
     'bundle/aux.txt': 'aux', 'partial/output.js': 'partial output',
   });
   expectLeafScripts(result.output, ['present'], { 'input.js': 'input', 'output.js': 'output', 'aux.txt': 'aux' });
-  expectLeafScripts(result.output, ['missingBundle'], {});
   expectLeafScripts(result.output, ['missingHook'], { 'output.js': 'partial output' });
   expectLeafScripts(result.output, ['allRemoved'], { 'aux.txt': 'aux' });
   expectLeafScripts(result.output, ['oneRemoved'], { 'output.js': 'output', 'aux.txt': 'aux' });

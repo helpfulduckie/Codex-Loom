@@ -146,7 +146,8 @@ const REGISTRY = Object.freeze({
   CARD_TYPE_INVALID:            { id: 'CL0632', severity: ERROR, summary: 'aid.type is not a legal path segment, so card files cannot be written safely; use a nonempty type without illegal characters, . / .. or trailing space/period.' },
   BRANCH_FRAMING_IGNORED:       { id: 'CL0633', severity: WARN,  summary: 'branchFraming is set where there are no child branches to frame, so it has no effect; remove it or move it to a branching node.' },
   COMPONENT_NO_OUTPUT:          { id: 'CL0634', severity: ERROR, summary: 'A requested component produces no output anywhere, so the compiled scenario is missing that component; provide renderable content or correct its source.' },
-  CARD_NO_TRIGGERS:             { id: 'CL0635', severity: WARN,  layer: 'opinion', summary: 'A story card has no triggers, so AID can never pull it into context; add trigger values or use kind: reference.' },
+  SCRIPT_SOURCE_NOT_FOUND:      { id: 'CL0636', severity: ERROR, summary: 'scripts: names a directory or hook file that does not exist, so the script is missing from the compiled scenario; correct the path, or write null to remove a hook.' },
+  CARD_NO_TRIGGERS:            { id: 'CL0635', severity: WARN,  layer: 'opinion', summary: 'A story card has no triggers, so AID can never pull it into context; add trigger values or use kind: reference.' },
 
   TRIGGER_CONTAINS_COMMA:       { id: 'CL0701', severity: ERROR, summary: 'A trigger value contains a comma, so Velvet Lattice splits it into two triggers; split it into separate entries or remove the comma.' },
   TRIGGER_EMPTY:                { id: 'CL0702', severity: WARN,  summary: 'A trigger value is empty, so AID receives an empty key; remove the empty entry or provide a trigger.' },

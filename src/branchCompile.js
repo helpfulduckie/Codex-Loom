@@ -62,6 +62,7 @@ function buildCompileContext(config, branchPath, options = {}) {
     diagnostics: options.diagnostics,
     configPath: options.configPath,
     directoryCache: options.scriptDirectoryCache,
+    reported: options.scriptSourcesReported,
   });
 
   const templateFor = {};

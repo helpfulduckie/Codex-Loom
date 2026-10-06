@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { resolveVariables, listFilesRelative } = require('./util');
 const { originLocation } = require('./origin');
+const { CODES } = require('./diag');
 
 const HOOKS = Object.freeze(['input', 'output', 'context', 'library']);
 const HOOK_FILES = new Set(HOOKS.map((hook) => `${hook}.js`));
@@ -12,6 +13,8 @@ function resolveScriptFiles(config, chain, variables, options = {}) {
   const hooks = new Map();
   let auxiliaries = new Map();
   const cache = options.directoryCache || new Map();
+  // Every leaf re-applies its ancestors' declarations, so a bad path is reported once per run.
+  const reported = options.reported || new Set();
   const configFile = { file: options.configPath || undefined };
 
   const location = (declPath) => originLocation(config, declPath, configFile);
@@ -26,9 +29,28 @@ function resolveScriptFiles(config, chain, variables, options = {}) {
     return cache.get(key);
   };
 
+  const errorCount = () => (options.diagnostics ? options.diagnostics.errors.length : 0);
+  const isDirectory = (target) => fs.existsSync(target) && fs.statSync(target).isDirectory();
+  const isFile = (target) => fs.existsSync(target) && fs.statSync(target).isFile();
+  const reportMissing = (declPath, target, message, at) => {
+    const key = JSON.stringify([declPath, target]);
+    if (!options.diagnostics || reported.has(key)) return;
+    reported.add(key);
+    options.diagnostics.error(CODES.SCRIPT_SOURCE_NOT_FOUND, message, at);
+  };
+
   const applyDirectory = (spec, declPath) => {
-    const dir = absolute(spec, location(declPath));
-    const relatives = filesIn(dir);
+    const at = location(declPath);
+    const errorsBefore = errorCount();
+    const dir = absolute(spec, at);
+    const found = isDirectory(dir);
+    // An unexpanded variable is already an error; the literal path it leaves is not a second one.
+    if (!found && errorCount() === errorsBefore) {
+      reportMissing(declPath, dir,
+        `scripts: names "${spec}", which is not a directory (resolved to ${dir}), so no script files are selected from it; correct the path or create the directory.`,
+        at);
+    }
+    const relatives = found ? filesIn(dir) : [];
     const nextHooks = new Map();
     const nextAuxiliaries = new Map();
     for (const relative of relatives) {
@@ -52,9 +74,19 @@ function resolveScriptFiles(config, chain, variables, options = {}) {
         continue;
       }
       const at = location([...declPath, hook]);
+      const errorsBefore = errorCount();
       const source = absolute(value, at);
-      if (fs.existsSync(source) && fs.statSync(source).isFile()) hooks.set(filename, source);
-      else hooks.delete(filename);
+      if (isFile(source)) {
+        hooks.set(filename, source);
+        continue;
+      }
+      // The inherited hook is dropped rather than kept, so a bad path never ships the parent's script.
+      hooks.delete(filename);
+      if (errorCount() === errorsBefore) {
+        reportMissing([...declPath, hook], source,
+          `scripts.${hook} names "${value}", which is not a file (resolved to ${source}), so this branch has no ${hook} hook; correct the path, or write null to remove the hook.`,
+          at);
+      }
     }
   };
 

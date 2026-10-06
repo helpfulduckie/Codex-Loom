@@ -47,6 +47,7 @@ function compileLeaf(branchPath, ctx) {
     configPath,
     roleStateByPath,
     scriptDirectoryCache: ctx.scriptDirectoryCache,
+    scriptSourcesReported: ctx.scriptSourcesReported,
   });
   const branchProtagonist = cctx.branchProtagonist;
 
@@ -230,7 +231,7 @@ function compileLeaf(branchPath, ctx) {
 function runLeafLoop(ctx) {
   let filesWritten = 0;
   const scriptDirectoryCache = new Map();
-  const leafContext = { ...ctx, scriptDirectoryCache };
+  const leafContext = { ...ctx, scriptDirectoryCache, scriptSourcesReported: new Set() };
   for (const branchPath of leafContext.leaves) {
     filesWritten += compileLeaf(branchPath, leafContext);
   }

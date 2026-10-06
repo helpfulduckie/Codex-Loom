@@ -197,7 +197,7 @@ branches:
 
 ## Scripts
 
-**`scripts:` is top-level, not a component.** A directory replaces all four hook selections; missing canonical hook files remove inherited hooks. A mapping changes only named hooks, omitted keys inherit, and `null` removes a named hook. Whole `scripts: ~` removes all four hooks; an empty map changes nothing. Paths resolve with each leaf's final variables against the config directory, and missing mapped files leave the hook absent.
+**`scripts:` is top-level, not a component.** A directory replaces all four hook selections; missing canonical hook files remove inherited hooks. A mapping changes only named hooks, omitted keys inherit, and `null` removes a named hook. Whole `scripts: ~` removes all four hooks; an empty map changes nothing. Paths resolve with each leaf's final variables against the config directory, and a mapped path that names no file, or a directory that does not exist, is an error (`CL0636`).
 
 Non-hook files in the nearest directory are kept recursively; a newer directory replaces that auxiliary set, while maps and nulls preserve it. File bytes stay unchanged; directory files keep relative names, and mapped sources use canonical hook filenames. The compiler places each relative output file at the fewest branch nodes that preserve every leaf's selection, with local overrides only when they save a write. See the [compile.yaml reference](compile-yaml.md#scripts) for the full rules.
 
