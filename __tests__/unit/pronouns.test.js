@@ -379,6 +379,37 @@ describe('applyTokenPass — scoped pronoun tokens {$Id.pronoun}', () => {
 });
 
 describe('applyTokenPass — verb conjugation markers', () => {
+  test.each([
+    ['female', 'carries'], ['male', 'carries'],
+    ['they', 'carry'], ['nonbinary', 'carry'], ['you', 'carry'],
+  ])('[ies] follows the %s item-pronoun fallback', (pronouns, expected) => {
+    const item = makeItem('hero', pronouns);
+    expect(applyTokenPass('carr[ies]', { item, registry: new Map(), branchProtagonist: null }))
+      .toBe(expected);
+  });
+
+  test.each([
+    ['{$Guide} carr[ies]', null, 'Guide carries'],
+    ['{$Guide.they} carr[ies]', null, 'they carry'],
+    ['{$Guide} carr[ies]', 'guide', 'You carry'],
+    ['{$LI} carr[ies]', null, 'guide carries'],
+    ['{$LI.they} carr[ies]', null, 'they carry'],
+    ['{$LI} carr[ies]', 'guide', 'You carry'],
+  ])('[ies] agrees with %s with protagonist %s', (text, branchProtagonist, expected) => {
+    const guide = makeItem('guide', 'nonbinary');
+    const item = makeItem('hero', 'female');
+    expect(applyTokenPass(text, {
+      item, registry: new Map([['guide', guide]]), roles: { LI: 'guide' }, branchProtagonist,
+    })).toBe(expected);
+  });
+
+  test('[ies] follows subject changes while object references preserve scope', () => {
+    const guide = makeItem('guide', 'nonbinary');
+    expect(applyTokenPass('{$Guide} carr[ies] {$Guide.them}, then {$Guide.they} tr[ies] and stud[ies]', {
+      item: guide, registry: new Map([['guide', guide]]), branchProtagonist: null,
+    })).toBe('Guide carries them, then they try and study');
+  });
+
   function scopedStr(str, pronouns) {
     // Use item's own pronouns as scope via unscoped tokens feeding into [marker]
     const item = makeItem('hero', pronouns);

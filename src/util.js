@@ -243,8 +243,8 @@ const FIELD_TOKEN_RE    = /\{\$[^{}]+\}/g;
 const VAR_TOKEN_RE       = /\{%[^}]+\}/g;
 const TEMPLATE_FN_RE     = new RegExp('\\{(?:' + FUNCTION_NAMES.join('|') + ')\\([^{}]*\\)\\}', 'g');
 const TEMPLATE_TAG_RE    = /\{\/?if\b[^{}]*\}|\{\/?wrapper\}|\{\/?preserve\}|\{include\s+[^{}]+\}/g;
-const VERB_MARKER_RE     = /\[(?:s|es|is|was|has)\]/g;
-const SUSPECT_VERB_MARKER_RE = /\[(?!s\]|es\]|is\]|was\]|has\]|e\])[a-z]{1,8}\]/g;
+const VERB_MARKER_RE     = /\[(?:s|es|ies|is|was|has)\]/g;
+const SUSPECT_VERB_MARKER_RE = /\[(?!s\]|es\]|ies\]|is\]|was\]|has\]|e\])[a-z]{1,8}\]/g;
 const JS_ARTIFACT_RE     = /\[object (?:Object|Undefined|Null|Array)\]/g;
 const JS_WORD_RE         = /\b(?:undefined|NaN)\b/g;
 

@@ -210,7 +210,7 @@ function applyTokenPass(str, opts) {
 
   let currentScope = null;
 
-  const TOKEN_RE = /\{(\$[^{}]+)\}|\[(s|es|is|was|has)\]/g;
+  const TOKEN_RE = /\{(\$[^{}]+)\}|\[(s|es|ies|is|was|has)\]/g;
 
   return str.replace(TOKEN_RE, (match, braceContent, verbMarker, offset, source) => {
     if (verbMarker) {
@@ -219,6 +219,7 @@ function applyTokenPass(str, opts) {
       switch (verbMarker) {
         case 's':   return plural ? '' : 's';
         case 'es':  return plural ? '' : 'es';
+        case 'ies': return plural ? 'y' : 'ies';
         case 'is':  return plural ? 'are' : 'is';
         case 'was': return plural ? 'were' : 'was';
         case 'has': return plural ? 'have' : 'has';

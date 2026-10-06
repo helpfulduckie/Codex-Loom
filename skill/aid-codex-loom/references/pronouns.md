@@ -108,9 +108,12 @@ Based on the current subject scope. A bare `{$Id}` or subject pronoun establishe
 |---|---|---|
 | `[s]` | `s` | `` (empty) |
 | `[es]` | `es` | `` (empty) |
+| `[ies]` | `ies` | `y` |
 | `[is]` | `is` | `are` |
 | `[was]` | `was` | `were` |
 | `[has]` | `has` | `have` |
+
+**Write consonant + `y` verbs with the stem before `[ies]`: `carr[ies]` becomes "carries" or "carry", and `tr[ies]` becomes "tries" or "try".** Vowel + `y` verbs keep the `y`: `play[s]` becomes "plays" or "play".
 
 **Scope rules:**
 - `{$Id}` rendering a name sets the scope to **singular**, regardless of the character's pronoun set

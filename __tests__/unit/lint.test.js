@@ -72,6 +72,14 @@ describe('scanText', () => {
     expect(diags.some((d) => d.code === 'CL0434' && d.message.includes('[s]'))).toBe(true);
   });
 
+  test('a leaked [ies] is a supported unresolved marker', () => {
+    const diags = collect((ctx) => scanText('Guide carr[ies] the bag', ctx));
+    expect(diags).toContainEqual(expect.objectContaining({
+      code: 'CL0434', severity: SEVERITY.ERROR, message: expect.stringContaining('[ies]'),
+    }));
+    expect(codes(diags)).not.toContain('CL0436');
+  });
+
   test('flags a made-up verb marker like [does] as a suspect marker, not silently', () => {
     const diags = collect((ctx) => scanText('Aness love[does] magic research', ctx));
     expect(diags).toContainEqual(expect.objectContaining({

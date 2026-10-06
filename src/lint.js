@@ -49,13 +49,13 @@ const CHECKS = [
     severity: SEVERITY.ERROR,
     code: DIAG_CODES.LEAKED_VERB_MARKER,
     re: VERB_MARKER_RE,
-    hint: 'verb conjugation marker ([s]/[es]/[is]/[was]/[has]) left unresolved — needs a preceding {$Id} or {$Id.pronoun} scope',
+    hint: 'verb conjugation marker ([s]/[es]/[ies]/[is]/[was]/[has]) left unresolved — needs a preceding {$Id} or {$Id.pronoun} scope',
   },
   {
     severity: SEVERITY.WARN,
     code: DIAG_CODES.SUSPECT_VERB_MARKER,
     re: SUSPECT_VERB_MARKER_RE,
-    hint: "bracketed lowercase word that isn't a recognized verb-conjugation marker ([s]/[es]/[is]/[was]/[has]) or the [e] marker — likely a typo (e.g. [does] instead of [s]/[is])",
+    hint: "bracketed lowercase word that isn't a recognized verb-conjugation marker ([s]/[es]/[ies]/[is]/[was]/[has]) or the [e] marker — likely a typo (e.g. [does] instead of [s]/[is])",
   },
   {
     severity: SEVERITY.ERROR,

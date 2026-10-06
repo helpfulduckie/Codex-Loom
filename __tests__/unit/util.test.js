@@ -343,6 +343,14 @@ describe('checkUnresolvedFieldTokens', () => {
 });
 
 describe('checkMechanicalArtifacts', () => {
+  test('a leaked [ies] is a supported unresolved marker', () => {
+    const { rows } = collect((sink) =>
+      checkMechanicalArtifacts('Guide carr[ies] the bag', 'item "X" (Y)', sink));
+    expect(rows).toContainEqual(expect.objectContaining({
+      code: 'CL0434', severity: 'error', message: expect.stringContaining('[ies]'),
+    }));
+    expect(rows.map((r) => r.code)).not.toContain('CL0436');
+  });
   test('a guessed verb marker like [does] is CL0436 at WARN — an opinion, not a fact', () => {
     const { found, rows } = collect((sink) =>
       checkMechanicalArtifacts('Aness love[does] magic research', 'item "X" (Y)', sink));

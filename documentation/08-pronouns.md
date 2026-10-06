@@ -6,7 +6,7 @@ Codex Loom resolves pronoun tokens in item field values and templates. Tokens ar
 2. **Character ID references** — resolve to "you" or the character's name based on protagonist context
 3. **Scoped pronoun tokens** — resolve against a specific character's pronouns, protagonist-aware
 
-Verb conjugation markers `[s]`, `[es]`, `[is]`, `[was]`, `[has]` are also resolved from the most recent reference: a bare `{$Id}` name conjugates singular, "you" and scoped `{$Id.pronoun}` tokens conjugate from the pronoun set.
+Verb conjugation markers `[s]`, `[es]`, `[ies]`, `[is]`, `[was]`, `[has]` are also resolved from the most recent reference: a bare `{$Id}` name conjugates singular, "you" and scoped `{$Id.pronoun}` tokens conjugate from the pronoun set.
 
 **A leading `{$X...}` identifier may also be a role** — a per-branch name bound to an item id, resolved to that id before anything on this page runs. See [Roles](13-roles.md); everything below applies identically once a role has resolved to the item it names.
 
@@ -137,15 +137,18 @@ Aness / Aness Rozen
 
 ## Verb Conjugation
 
-The markers `[s]`, `[es]`, `[is]`, `[was]`, `[has]` conjugate from the current subject scope. A bare `{$Id}` or a subject pronoun establishes that scope; every other pronoun-token form leaves it unchanged.
+The markers `[s]`, `[es]`, `[ies]`, `[is]`, `[was]`, `[has]` conjugate from the current subject scope. A bare `{$Id}` or a subject pronoun establishes that scope; every other pronoun-token form leaves it unchanged.
 
 | Marker | Singular (she/he, a name) | Plural (they/you) |
 |---|---|---|
 | `[s]` | `s` | `` (empty) |
 | `[es]` | `es` | `` (empty) |
+| `[ies]` | `ies` | `y` |
 | `[is]` | `is` | `are` |
 | `[was]` | `was` | `were` |
 | `[has]` | `has` | `have` |
+
+**Write consonant + `y` verbs with the stem before `[ies]`: `carr[ies]` becomes "carries" or "carry", and `tr[ies]` becomes "tries" or "try".** Vowel + `y` verbs keep the `y`: `play[s]` becomes "plays" or "play".
 
 **A marker agrees with what the preceding token rendered, not with the character's pronouns.** A bare `{$Id}` renders a proper name, and a name takes a singular verb whatever the character's `pronouns:` — `{$Zephon} answer[s]` is "Zephon answers" even when Zephon is they/them. The plural forms come from a pronoun: either a scoped `{$Id.they}` token, or the protagonist "you" swap turning a bare `{$Id}` into "you".
 
@@ -185,6 +188,8 @@ protagonist: Veyrn
 ``` expect=conj-npc
 Aness loves magic research — she instinctively leaps
 ```
+
+**Write consonant + `y` verbs with the stem before `[ies]`: `carr[ies]` becomes "carries" or "carry", and `tr[ies]` becomes "tries" or "try".** Vowel + `y` verbs keep the `y`: `play[s]` becomes "plays" or "play".
 
 **Scope rules:**
 - `{$Id}` rendering a name sets the scope to **singular** — a name conjugates `[s]`/`[is]`/`[was]`/`[has]` regardless of the character's pronoun set

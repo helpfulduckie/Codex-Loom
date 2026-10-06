@@ -292,7 +292,7 @@ Three rules there are justified by what `velvet_lattice/loader.py` actually does
 - `{$Id.pronoun}` (registry ID + pronoun token) → resolve pronoun against Id's effective pronoun set. Subject forms set scope to Id's pronoun set; every other form leaves the current scope unchanged.
 - `{$Id.full}` / `{$Id.display}` → full or display name. Does not set scope.
 - `{$Id.body.Field}` (registry ID + body path) → re-emitted as `{$<id>.body.Field}`. On the item path `applyCrossItemRefs` already resolved every such ref whose field exists, so a survivor is a missing field; on the other paths there is no cross-item resolution and it leaks. Either way the output sweep reports it as `CL0430`.
-- `[s]` / `[es]` / `[is]` / `[was]` / `[has]` → conjugate using the current scope (or item's own pronouns if no scope set). `NAME_SCOPE` and the singular pronoun sets take the singular form; `they`/`nonbinary`/`you` take the plural.
+- `[s]` / `[es]` / `[ies]` / `[is]` / `[was]` / `[has]` → conjugate using the current scope (or item's own pronouns if no scope set). `NAME_SCOPE` and the singular pronoun sets take the singular form; `they`/`nonbinary`/`you` take the plural.
 - A leading name that resolves to neither a role nor a registry ID, when the branch is role-aware (`roles` non-null) → `CL0540` (`CL0541`–`CL0543` cover a role that is declared but cannot resolve).
 
 Scope tracking via `currentScope` is local to each string processed by `applyTokenPass`, reset for each call. `applyRolePass`, `applyCrossItemRefs` and `applyPronounPasses` all route through `walkItemTextFields`, so they reach the same fields (`body`/`aid`/`render`/`name`).
