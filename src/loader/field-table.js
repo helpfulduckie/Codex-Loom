@@ -54,7 +54,7 @@ function checkSourceConflict(decl, label, currentPath, sourceMap, diagnostics) {
   }
 }
 
-function foldDocument(doc, file, sourceMap, acc, diagnostics) {
+function foldDocument(doc, file, sourceMap, acc, diagnostics, tolerant) {
   if (doc === undefined || doc === null) return;
   if (!isPlainObject(doc)) {
     diagnostics.error(CODES.FIELD_TABLE_UNUSABLE,
@@ -65,7 +65,9 @@ function foldDocument(doc, file, sourceMap, acc, diagnostics) {
     return;
   }
 
-  validate(doc, FIELD_TABLE_SCHEMA, { diagnostics, sourceMap, context: path.basename(file) });
+  validate(doc, FIELD_TABLE_SCHEMA, {
+    diagnostics, sourceMap, context: path.basename(file), dropUnknown: !!tolerant,
+  });
 
   const fields = doc.fields;
   if (fields !== undefined && fields !== null && isPlainObject(fields)) {
@@ -161,7 +163,7 @@ function loadFieldTable(dirs, options = {}) {
           { hint: `YAML error: ${(err.cause && err.cause.message) || err.message}` });
         continue;
       }
-      foldDocument(doc, file, sourceMap, acc, diagnostics);
+      foldDocument(doc, file, sourceMap, acc, diagnostics, options.tolerant);
       acc._sources.push(file);
     }
   }

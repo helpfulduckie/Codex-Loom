@@ -36,7 +36,8 @@ class GapList {
 }
 
 class ComponentLoader {
-  constructor({ diagnostics, variables, base }) {
+  constructor({ diagnostics, variables, base, tolerant = false }) {
+    this._tolerant = !!tolerant;
     this._diagnostics = diagnostics;
     this._variables = variables;
     this._base = base;
@@ -52,6 +53,7 @@ class ComponentLoader {
           variables: this._variables,
           base: this._base,
           dependencyLedger: this.dependencyLedger,
+          tolerant: this._tolerant,
           requestedAt: requestedAt && requestedAt.file ? requestedAt : null,
         });
         const metadataAt = (...parts) => originLocation(loaded, ['metadata', ...parts], { file: String(spec) });

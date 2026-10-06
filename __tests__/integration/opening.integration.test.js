@@ -313,8 +313,8 @@ describe('the deleted block list', () => {
     expect(codes(diagnostics, CODES.OPENING_NEAR_LIMIT)).toHaveLength(1);
   });
 
-  test('a v3 block list fails with a message naming what it becomes', () => {
-    const { threw } = compileProject({
+  test('a v3 block list is reported with a hint naming what it becomes', () => {
+    const { diagnostics } = compileProject({
       ...BASE,
       'compile.yaml': config([
         'components: {opening: ./components/opening.yaml}',
@@ -323,8 +323,9 @@ describe('the deleted block list', () => {
       'components/opening.yaml': '- text: A world awaits.\n- text: You are late.\n',
     });
 
-    expect(threw).toBeTruthy();
-    expect(threw.message).toContain('Opening block becomes a named text section');
-    expect(threw.message).toContain('migrateProjectFully');
+    const [finding] = codes(diagnostics, CODES.WRONG_TYPE);
+    expect(finding).toBeDefined();
+    expect(finding.hint).toContain('Opening block becomes a named text section');
+    expect(finding.hint).toContain('migrateProjectFully');
   });
 });

@@ -47,10 +47,34 @@ describe('loadComponentDocument', () => {
     expect(loadComponentDocument(write('bare.yaml', 'sections: {}\n'), {})).toBeNull();
   });
 
-  test('a v3 block sequence is refused with a message that names the change', () => {
+  test('a v3 block sequence is reported with a hint that names the change and loads nothing', () => {
+    const diagnostics = new Diagnostics();
     const spec = write('v3.yaml', '- id: genreBlock\n  body: {text: Genre}\n');
-    expect(() => loadComponentDocument(spec, {}))
-      .toThrow(/YAML sequence.*`sections:` record/s);
+    expect(loadComponentDocument(spec, { diagnostics, label: 'Opening' })).toBeNull();
+    const [finding] = diagnostics.errors;
+    expect(finding.code).toBe(CODES.WRONG_TYPE);
+    expect(finding.file).toBe(spec);
+    expect(finding.message).toMatch(/YAML sequence.*`sections:` record/s);
+    expect(finding.hint).toMatch(/migrateProjectFully/);
+  });
+
+  test('a bare scalar document is reported and loads nothing', () => {
+    const diagnostics = new Diagnostics();
+    const spec = write('scalar.yaml', 'just text\n');
+    expect(loadComponentDocument(spec, { diagnostics, label: 'Opening' })).toBeNull();
+    expect(diagnostics.errors.map((d) => d.code)).toEqual([CODES.WRONG_TYPE]);
+    expect(diagnostics.errors[0].file).toBe(spec);
+  });
+
+  test('an unknown section key is dropped when tolerant and kept otherwise', () => {
+    const text = 'sections:\n  cast:\n    text: Hi\n    wraper: curly\n';
+    const kept = loadComponentDocument(write('keep.yaml', text), { diagnostics: new Diagnostics() });
+    expect(kept.rawSections.cast).toHaveProperty('wraper');
+
+    const diagnostics = new Diagnostics();
+    const dropped = loadComponentDocument(write('drop.yaml', text), { diagnostics, tolerant: true });
+    expect(dropped.rawSections.cast).not.toHaveProperty('wraper');
+    expect(diagnostics.all.map((d) => d.code)).toContain(CODES.UNKNOWN_KEY);
   });
 
   test('sections are normalized and slots indexed', () => {

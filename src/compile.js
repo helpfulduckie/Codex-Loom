@@ -195,7 +195,9 @@ function compileRun(configPath, options, buses) {
   startOutputLedger({ capture: !!options.capture });
   ensureOutputDir(config._resolvedOutput);
 
-  const { templates, partials, fieldTable } = loadTemplates(config._resolvedTemplates, { diagnostics: loadDiagnostics });
+  const { templates, partials, fieldTable } = loadTemplates(config._resolvedTemplates, {
+    diagnostics: loadDiagnostics, tolerant: options.tolerant,
+  });
   checkConfigNotesTemplates(config, templates, loadDiagnostics, configPath, fieldTable);
   abortOnLoadErrors(loadDiagnostics, { tolerant: options.tolerant });
   log.info(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
@@ -261,12 +263,14 @@ function compileRun(configPath, options, buses) {
   const leafData = [];
 
   const inventoryData = [];
+  const componentDetails = [];
 
   const gaps = new GapList();
 
   const rootVariables = config._variables || config.variables || null;
   const componentLoader = new ComponentLoader({
     diagnostics: compileDiagnostics, variables: rootVariables, base: config._base,
+    tolerant: options.tolerant,
   });
 
   const descriptionLeaves = new Set();
@@ -289,7 +293,7 @@ function compileRun(configPath, options, buses) {
     placeholderState, roleState, gaps, componentLoader, roleStateByPath,
     deferredComponents, deferredScripts, deferredCardLeaves,
     descriptionLeaves, openingLeaves,
-    leafData, inventoryData, leafSummaries, allItemIds,
+    leafData, inventoryData, componentDetails, leafSummaries, allItemIds,
   });
 
   runPackChecks(config, deferredCardLeaves, configPath, compileDiagnostics);
@@ -329,11 +333,14 @@ function compileRun(configPath, options, buses) {
   if (!options.capture) sweepOutput(config, leaves, writtenFiles, log);
 
   if (options.capture) {
+    // Components and field tables are read on both buses, so a drop is counted on either.
     const droppedKeys = options.tolerant
-      ? loadDiagnostics.all.filter((d) => TOLERATED_CODES.has(d.code)).length
+      ? [...loadDiagnostics.all, ...compileDiagnostics.all]
+        .filter((d) => TOLERATED_CODES.has(d.code)).length
       : 0;
     return {
       config, leaves, leafData, inventoryData, deferredCardLeaves, captured, droppedKeys,
+      componentDetails,
     };
   }
 

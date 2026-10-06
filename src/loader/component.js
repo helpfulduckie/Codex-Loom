@@ -23,7 +23,7 @@ function isMapping(value) {
 function loadComponentDocument(spec, options = {}) {
   const {
     diagnostics, label = 'component', variables = null, base = null, stack = [],
-    dependencyLedger = null, requestedAt = null,
+    dependencyLedger = null, requestedAt = null, tolerant = false,
   } = options;
 
   if (!spec || typeof spec !== 'string') return null;
@@ -45,26 +45,46 @@ function loadComponentDocument(spec, options = {}) {
   }
   if (doc === null || doc === undefined) return null;
 
+  // Both wrong shapes are author mistakes, so they report and skip the component rather than
+  // abort the run; the position is the document root.
+  const rootAt = () => {
+    const at = sourceMap.nearest([]);
+    return at && at.file ? at : { file: spec };
+  };
   if (Array.isArray(doc)) {
-    throw new Error(
-      `${label} file "${spec}" is a YAML sequence. A component is a mapping with a `
-      + '`sections:` record (§7.2), and v3\'s ordered block lists have no equivalent — a '
-      + 'block had no name, so nothing could override or reposition it. An Opening block '
-      + 'becomes a named text section; a Plot Essentials block becomes an item declaring its '
-      + 'own placement. `migrateProjectFully()` in `src/migrate/index.js` converts both.'
+    diagnostics.error(
+      CODES.WRONG_TYPE,
+      `${label} file is a YAML sequence, but a component must be a mapping with a `
+      + '`sections:` record, so this component is skipped. Rewrite the file as a mapping.',
+      rootAt(),
+      {
+        hint: 'v3\'s ordered block lists have no equivalent: a block had no name, so nothing '
+          + 'could override or reposition it. An Opening block becomes a named text section; '
+          + 'a Plot Essentials block becomes an item declaring its own placement. '
+          + '`migrateProjectFully()` in `src/migrate/index.js` converts both.',
+      },
     );
+    return null;
   }
   if (typeof doc !== 'object') {
-    throw new Error(`${label} file must be a YAML mapping: ${spec}`);
+    diagnostics.error(
+      CODES.WRONG_TYPE,
+      `${label} file must be a YAML mapping with a \`sections:\` record, so this component `
+      + 'is skipped. Rewrite the file as a mapping.',
+      rootAt(),
+    );
+    return null;
   }
 
-  validate(doc, COMPONENT_SCHEMA, { diagnostics, sourceMap, context: `the ${label} component` });
+  validate(doc, COMPONENT_SCHEMA, {
+    diagnostics, sourceMap, context: `the ${label} component`, dropUnknown: !!tolerant,
+  });
 
   const onWarn = busWarner(diagnostics, { file: spec });
   const document = attachOrigins({}, sourceMap.exportOrigins());
 
   const inherited = resolveImports(doc, spec, {
-    diagnostics, label, variables, base, stack, onWarn, dependencyLedger, document,
+    diagnostics, label, variables, base, stack, onWarn, dependencyLedger, document, tolerant,
   });
   const local = localSections(doc.sections, document);
   const sections = inherited === null ? local : mergeSectionRecords(inherited, local, onWarn);
@@ -94,7 +114,7 @@ function localSections(sections, document) {
 
 function resolveImports(doc, spec, options) {
   const {
-    diagnostics, label, variables, base, stack, onWarn, dependencyLedger, document,
+    diagnostics, label, variables, base, stack, onWarn, dependencyLedger, document, tolerant,
   } = options;
   const entries = Array.isArray(doc.imports) ? doc.imports : [];
   if (entries.length === 0) return null;
@@ -130,7 +150,7 @@ function resolveImports(doc, spec, options) {
     }
 
     const imported = loadComponentDocument(resolved, {
-      diagnostics, label, variables, base, stack: chain, dependencyLedger,
+      diagnostics, label, variables, base, stack: chain, dependencyLedger, tolerant,
     });
     if (!imported) return;
 

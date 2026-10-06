@@ -31,7 +31,7 @@ function compileLeaf(branchPath, ctx) {
     placeholderState, roleState, gaps, componentLoader, roleStateByPath,
     deferredComponents, deferredScripts, deferredCardLeaves,
     descriptionLeaves, openingLeaves,
-    leafData, inventoryData, leafSummaries, allItemIds,
+    leafData, inventoryData, componentDetails, leafSummaries, allItemIds,
   } = ctx;
 
   let leafFiles = 0;
@@ -185,6 +185,11 @@ function compileLeaf(branchPath, ctx) {
     if (wrote) {
       sectionedWritten[descriptor.key] = true;
       sectionedSegments[descriptor.key] = segments;
+      if (options.capture) {
+        componentDetails.push({
+          label, key: descriptor.key, source: textAt, inline: !!inline, metadata,
+        });
+      }
       if (descriptor.key === 'adventureDescription') descriptionLeaves.add(label);
       if (descriptor.key === 'opening') openingLeaves.add(label);
     } else if (!excluded) {

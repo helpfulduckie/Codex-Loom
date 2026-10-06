@@ -243,6 +243,133 @@ describe('preview of a project with problems', () => {
   });
 });
 
+describe('preview of a component file with the wrong shape', () => {
+  const { preview } = require('../../src/compile');
+  const withComponent = (content) => smallProject({
+    'components/pe.yaml': content,
+    'compile.yaml': BASE_PROJECT['compile.yaml'].replace(
+      'branches:', 'components:\n  plotEssential: ./components/pe.yaml\nbranches:',
+    ),
+  });
+
+  test.each([
+    ['a YAML sequence', '- text: hello\n'],
+    ['a bare scalar', 'just some words\n'],
+  ])('%s is reported as CL0202 against that file and does not throw', (_name, content) => {
+    const { dir, config } = withComponent(content);
+    const result = preview(config);
+    expect(result.status).toBe('ok');
+    const finding = result.diagnostics.find((d) => d.code === 'CL0202');
+    expect(finding).toBeDefined();
+    expect(path.resolve(finding.file)).toBe(path.join(dir, 'components', 'pe.yaml'));
+  });
+});
+
+describe('preview of unknown keys in components and field tables', () => {
+  const { preview } = require('../../src/compile');
+  const { loadTemplates } = require('../../src/loader');
+  const { Diagnostics } = require('../../src/diag');
+  const withComponent = () => smallProject({
+    'components/pe.yaml': 'sections:\n  cast:\n    text: Hello\n    wraper: curly\n',
+    'compile.yaml': BASE_PROJECT['compile.yaml'].replace(
+      'branches:', 'components:\n  plotEssential: ./components/pe.yaml\nbranches:',
+    ),
+  });
+
+  test('a component section key is reported, dropped and counted by default', () => {
+    const result = preview(withComponent().config);
+    expect(result.status).toBe('ok');
+    expect(diagnosticCodes(result)).toContain('CL0201');
+    expect(result.droppedKeys).toBe(1);
+  });
+
+  test('a component section key stays a non-blocking error when tolerant is false', () => {
+    const result = preview(withComponent().config, { tolerant: false });
+    expect(result.status).toBe('ok');
+    expect(result.diagnostics.find((d) => d.code === 'CL0201')).toMatchObject({ severity: 'error' });
+    expect(result.droppedKeys).toBe(0);
+  });
+
+  test('a field table key is reported and counted when tolerant and absent from the loaded table', () => {
+    const files = { 'templates/fields.cl.yaml': 'fields:\n  Desc:\n    from: Desc\n    wraper: curly\n' };
+    const { config } = smallProject(files);
+    const result = preview(config);
+    expect(result.status).toBe('ok');
+    expect(diagnosticCodes(result)).toContain('CL0201');
+    expect(result.droppedKeys).toBe(1);
+
+    const { dir } = smallProject(files);
+    const diagnostics = new Diagnostics();
+    const { fieldTable } = loadTemplates([path.join(dir, 'templates')], { diagnostics, tolerant: true });
+    expect(fieldTable.fields.Desc).not.toHaveProperty('wraper');
+  });
+});
+
+describe('preview of a field a variant deletes', () => {
+  const { preview } = require('../../src/compile');
+  const { config } = smallProject({
+    'items/items.yaml': [
+      '- id: Widget',
+      '  name: Widget',
+      '  aid: {type: Item, title: Widget}',
+      '  render: {template: Item}',
+      '  body: {A: base, Desc: kept}',
+      '  variants:',
+      '    strip:',
+      '      body: {A: ~}',
+      '  branches:',
+      '    B: strip',
+    ].join('\n'),
+    'compile.yaml': BASE_PROJECT['compile.yaml'].replace('  A: {}', '  A: {}\n  B: {}'),
+  });
+  const result = preview(config);
+  const itemOn = (label) => result.items[
+    result.leaves.find((l) => l.label === label).items[0]
+  ];
+
+  test('the leaf with the variant lists the deleted field as removed and not as a field', () => {
+    const item = itemOn('B');
+    expect(item.fields.some((f) => f.path.join('.') === 'body.A')).toBe(false);
+    expect(item.removedFields).toHaveLength(1);
+    expect(item.removedFields[0].path).toEqual(['body', 'A']);
+    const last = item.removedFields[0].layers[item.removedFields[0].layers.length - 1];
+    expect(last).toMatchObject({ deleted: true, before: 'base' });
+  });
+
+  test('the leaf without the variant keeps the field and has no removed fields', () => {
+    const item = itemOn('A');
+    expect(item.removedFields).toEqual([]);
+    expect(item.fields.some((f) => f.path.join('.') === 'body.A')).toBe(true);
+  });
+});
+
+describe('preview component records', () => {
+  const { preview } = require('../../src/compile');
+  const { config } = smallProject({
+    'components/adv.cl.yaml': 'metadata:\n  tags: [harbor]\nsections:\n  pitch:\n    text: You wake.\n',
+    'components/pe.yaml': 'sections:\n  cast:\n    text: Hello\n',
+    'compile.yaml': BASE_PROJECT['compile.yaml'].replace(
+      'branches:',
+      'components:\n  adventureDescription: ./components/adv.cl.yaml\n'
+      + '  plotEssential: ./components/pe.yaml\nbranches:',
+    ),
+  });
+  const result = preview(config);
+  const components = result.leaves[0].components;
+
+  test('a component names its source file by position in sourceFiles', () => {
+    const { source, inline } = components.plotEssential;
+    expect(fs.existsSync(result.sourceFiles[source.file])).toBe(true);
+    expect(result.sourceFiles[source.file]).toMatch(/pe\.yaml$/);
+    expect(inline).toBe(false);
+  });
+
+  test('a component exposes its metadata, and one without any has null', () => {
+    expect(components.adventureDescription.metadata).toEqual({ tags: ['harbor'] });
+    expect(components.plotEssential.metadata).toBeNull();
+  });
+});
+
 describe('preview with source overrides', () => {
   const { preview } = require('../../src/compile');
 
