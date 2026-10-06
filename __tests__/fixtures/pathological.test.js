@@ -78,10 +78,11 @@ function diagnoseProject(name) {
   };
 
   // The branch is rendered so the snapshot pins which leaf a per-branch row came from —
-  // the sequence assertion above says rows arrive per leaf, and this says which one.
+  // the sequence assertion above says rows arrive per leaf, and this says which one. A
+  // finding aggregated across leaves renders its list, as Diagnostic#format does.
   return diagnostics.all.map((d) => {
     const loc = locationOf(d.file, d.line, d.col);
-    const head = [d.severity.toUpperCase(), d.code, loc, d.branch ? `(branch ${d.branch})` : '']
+    const head = [d.severity.toUpperCase(), d.code, loc, d.branchLabel ? `(${d.branchLabel})` : '']
       .filter(Boolean).join(' ');
     const body = d.message.replace(/\r?\n\s*/g, ' ').trim();
     const parts = [head, `  ${body}`];

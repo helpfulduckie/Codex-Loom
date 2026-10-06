@@ -458,6 +458,22 @@ describe('runLintMode', () => {
     fs.rmSync(outDir, { recursive: true });
   });
 
+  test('the report names every leaf of a compile finding that covers several', () => {
+    const tmp = makeTmp();
+    const outDir = makeTmp();
+    const bus = new Diagnostics();
+    bus.warn('CL0426', 'some of them', { file: 'items.yaml', line: 4, branches: ['a', 'c'] });
+    bus.warn('CL0427', 'every one', { file: 'items.yaml', line: 9, branches: ['a', 'b', 'c'], allBranches: true });
+
+    const result = runLintMode(tmp, outDir, { diagnostics: bus, scan: false });
+    const reportText = fs.readFileSync(result.reportPath, 'utf8');
+    expect(reportText).toContain('CL0426 line 4 leaves "a", "c": some of them');
+    expect(reportText).toContain('CL0427 line 9 all 3 leaves: every one');
+
+    fs.rmSync(tmp, { recursive: true });
+    fs.rmSync(outDir, { recursive: true });
+  });
+
   test('a wtg requireCard rule fires per leaf offline — names only the branch with no card', () => {
     const tmp = makeTmp();
     const outDir = makeTmp();

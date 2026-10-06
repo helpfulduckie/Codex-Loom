@@ -192,7 +192,7 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
     if (!acc) {
       acc = {
         content: new Set(), ack: new Set(), allowExtra: false,
-        sawRealTemplate: false, bodies: [], seenBodies: new Set(),
+        sawRealTemplate: false, bodies: [], seenBodies: new Map(),
       };
       perItem.set(itemId, acc);
     }
@@ -201,30 +201,39 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
     if (allowExtra) acc.allowExtra = true;
     if (!fromTemplateFor) acc.sawRealTemplate = true;
 
-    if (!acc.seenBodies.has(body)) {
-      acc.seenBodies.add(body);
+    let seen = acc.seenBodies.get(body);
+    if (!seen) {
       const pa = item._projectAuthoredBody;
-      acc.bodies.push({
+      seen = {
         body,
-        item, branch: opts.branch,
+        item, branch: opts.branch, branches: [],
         projectAuthored: Array.isArray(pa) ? new Set(pa) : null,
-      });
+      };
+      acc.seenBodies.set(body, seen);
+      acc.bodies.push(seen);
     }
+    if (opts.branch && !seen.branches.includes(opts.branch)) seen.branches.push(opts.branch);
   }
 
-  function finish(diagnostics) {
+  // `leaves` is every leaf label in compile order. It orders each finding's branch list and
+  // decides whether the list covers the whole project; without it neither is known.
+  function finish(diagnostics, { leaves = null } = {}) {
     const findings = new Map();
     for (const [itemId, acc] of perItem) {
       if (acc.allowExtra) continue;
       const { content, ack } = acc;
-      for (const { body, item, branch, projectAuthored } of acc.bodies) {
+      for (const { body, item, branch, branches, projectAuthored } of acc.bodies) {
         for (const { qualified: qualifiedLeaf, path } of bodyLeafPaths(body, content, true)) {
           const leaf = qualifiedLeaf.slice('body.'.length);
           const leafLc = leaf.toLowerCase();
           if (ack.has(qualifiedLeaf.toLowerCase())) continue;
           const key = `${itemId}\x00${leaf}`;
-          if (findings.has(key)) continue;
           if (projectAuthored && !projectAuthored.has(leafLc)) continue;
+          const reported = findings.get(key);
+          if (reported) {
+            for (const b of branches) reported.branches.add(b);
+            continue;
+          }
 
           const firstSeg = leaf.split('.')[0];
           const declKey = isDeclared(leaf) ? leaf : (isDeclared(firstSeg) ? firstSeg : null);
@@ -242,19 +251,26 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
               code: CODES.FIELD_UNREAD_MISROUTED,
               message: `body key "${leaf}" on item "${itemId}" ${where} — its content is dropped from the compiled card; include the field in a rendered template or remove it.`,
               loc: originLocation(item, path, { branch }),
+              branches: new Set(branches),
             });
           } else {
             findings.set(key, {
               code: CODES.FIELD_UNREAD_UNKNOWN,
               message: `body key "${leaf}" on item "${itemId}" is read by no template this item renders through and no declaration names it — its content is dropped from the compiled card; remove or declare and render the key.`,
               loc: originLocation(item, path, { branch }),
+              branches: new Set(branches),
             });
           }
         }
       }
     }
-    for (const { code, message, loc } of findings.values()) {
-      diagnostics.warn(code, message, loc);
+    for (const { code, message, loc, branches } of findings.values()) {
+      const list = leaves ? leaves.filter((l) => branches.has(l)) : [...branches];
+      if (list.length === 0) { diagnostics.warn(code, message, loc); continue; }
+      diagnostics.warn(code, message, {
+        ...loc, branch: list[0], branches: list,
+        allBranches: !!leaves && list.length === leaves.length,
+      });
     }
 
     const named = new Set();

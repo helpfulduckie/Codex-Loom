@@ -230,7 +230,8 @@ Having a declaration to compare against produces three checks, all WARN:
 **The audit runs on resolved leaf paths**, so `from: [personality.keywords, personality.expanded]`
 still flags a typo in a sub-key. Findings key on `(item id, field path)` and emit once — a
 `body:` field resolves through every `variants:` and `branches:` expansion, so one mistake
-would otherwise report once per leaf.
+would otherwise report once per leaf. The one finding names every leaf it applies to in its
+header: `(all 3 branches)`, `(branches a, c)`, or `(branch a)`.
 
 None of the three is an opinion-layer code: a field is read or it is not.
 

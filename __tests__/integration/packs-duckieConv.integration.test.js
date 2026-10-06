@@ -298,8 +298,8 @@ describe('a variant that sets meta.duckieConv.role resolves per leaf', () => {
     });
     const hits = find(d, BUDGET);
     expect(hits).toHaveLength(1);
-    expect(hits[0].message).toContain('branch "small"');
-    expect(hits.some((h) => /branch "big"/.test(h.message))).toBe(false);
+    expect(hits[0].branches).toEqual(['small']);
+    expect(hits.some((h) => h.branches.includes('big'))).toBe(false);
   });
 });
 

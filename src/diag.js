@@ -208,7 +208,7 @@ function busWarner(diagnostics, fallback = {}) {
 }
 
 class Diagnostic {
-  constructor({ code, severity, message, file, line, col, hint, branch, related = [] }) {
+  constructor({ code, severity, message, file, line, col, hint, branch, branches, allBranches, related = [] }) {
     this.code = code;
     this.severity = severity;
     this.message = message;
@@ -216,7 +216,12 @@ class Diagnostic {
     this.line = typeof line === 'number' ? line : null;
     this.col = typeof col === 'number' ? col : null;
     this.hint = hint || null;
-    this.branch = branch || null;
+    // `branches` is set only by a check that reports one finding for several leaves.
+    // `branch` then stays the first of them, so a reader of `branch` alone still gets a leaf.
+    this.branches = Array.isArray(branches) && branches.length > 0 ? [...new Set(branches)] : null;
+    // Whether the list covers every leaf is the caller's to say: the bus never sees the tree.
+    this.allBranches = this.branches !== null && allBranches === true;
+    this.branch = branch || (this.branches ? this.branches[0] : null);
     this.related = related.map(({ label, file, line, col }) => ({
       label: label || null,
       file: file || null,
@@ -232,10 +237,19 @@ class Diagnostic {
     return `${this.file}:${this.line}:${this.col}`;
   }
 
+  get branchLabel() {
+    if (this.branches && this.branches.length > 1) {
+      return this.allBranches
+        ? `all ${this.branches.length} branches`
+        : `branches ${this.branches.join(', ')}`;
+    }
+    return this.branch ? `branch ${this.branch}` : '';
+  }
+
   format() {
     const head = [
       SEVERITY_LABEL[this.severity] || this.severity, this.code, this.location,
-      this.branch ? `(branch ${this.branch})` : '',
+      this.branchLabel ? `(${this.branchLabel})` : '',
     ].filter(Boolean).join(' ');
     const indent = (text) => String(text).split('\n').map((l) => `  ${l}`).join('\n');
     const parts = [head, indent(this.message)];
@@ -283,6 +297,8 @@ class Diagnostics {
       line: loc.line,
       col: loc.col,
       branch: loc.branch,
+      branches: loc.branches || opts.branches,
+      allBranches: loc.allBranches === undefined ? opts.allBranches : loc.allBranches,
       hint: opts.hint,
       related: opts.related,
     });

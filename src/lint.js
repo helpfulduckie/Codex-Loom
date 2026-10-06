@@ -183,6 +183,15 @@ function scanPacks(content, type, loadedPacks, { diagnostics, file = null } = {}
 
 const NO_FILE_GROUP = '(convention packs)';
 
+function leafLabel(d) {
+  if (d.branches && d.branches.length > 1) {
+    return d.allBranches
+      ? `all ${d.branches.length} leaves`
+      : `leaves ${d.branches.map((b) => `"${b}"`).join(', ')}`;
+  }
+  return d.branch ? `leaf "${d.branch}"` : null;
+}
+
 function formatReport(rootDirName, diagnostics) {
   const out = [`# Codex Loom Syntax Lint — ${rootDirName}`, ''];
 
@@ -198,7 +207,7 @@ function formatReport(rootDirName, diagnostics) {
     for (const d of items) {
       const where = [
         d.line !== null ? `line ${d.line}` : null,
-        d.branch ? `leaf "${d.branch}"` : null,
+        leafLabel(d),
       ].filter(Boolean).join(' ');
       out.push(`- [${SEVERITY_LABEL[d.severity]}] ${d.code}${where ? ` ${where}` : ''}: ${d.message}`);
       if (d.hint) out.push(`  ${d.hint}`);

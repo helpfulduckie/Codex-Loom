@@ -256,9 +256,10 @@ function buildDescriptor(node) {
 }
 
 
-function evaluatePack(pack, cards, { branchLabel = null } = {}) {
+// No finding's message names a leaf: the caller attaches the leaves to the diagnostic, which
+// is what lets a finding raised identically on several leaves be reported once.
+function evaluatePack(pack, cards) {
   const findings = [];
-  const where = branchLabel ? ` on branch "${branchLabel}"` : '';
 
   for (const card of cards) {
     const notes = parseNotesBlock(card.notes);
@@ -274,14 +275,12 @@ function evaluatePack(pack, cards, { branchLabel = null } = {}) {
       if (!evalPredicate(rule.appliesTo, view)) continue;
 
       const emit = (f) => {
-        const relabel = (w) => `[${pack.name}] card "${card.title}"${w}: ${f.message}`;
         findings.push({
           severity: f.severity,
           code: f.code,
           card: card.title,
           detail: f.message,
-          message: relabel(where),
-          relabel,
+          message: `[${pack.name}] card "${card.title}": ${f.message}`,
         });
       };
 
@@ -318,7 +317,6 @@ function evaluatePack(pack, cards, { branchLabel = null } = {}) {
 
 function evaluatePackExistence(pack, cards, { branchLabel = null } = {}) {
   const findings = [];
-  const where = branchLabel && branchLabel !== '(root)' ? ` on branch "${branchLabel}"` : '';
 
   for (const rule of pack.rules) {
     if (!rule.requireCard) continue;
@@ -332,14 +330,12 @@ function evaluatePackExistence(pack, cards, { branchLabel = null } = {}) {
     }));
     if (satisfied) continue;
 
-    const relabel = (w) => `[${pack.name}]${w}: ${rule.message}`;
     findings.push({
       severity: rule.severity,
       code: rule.code,
       leaf: branchLabel || '(root)',
       detail: rule.message,
-      message: relabel(where),
-      relabel,
+      message: `[${pack.name}]: ${rule.message}`,
     });
   }
   return findings;
@@ -355,15 +351,13 @@ function collectionSize(value) {
 function checkCountField(rule, pack, where, label, fieldPath, value, bounds, findings) {
   if (!bounds || typeof bounds !== 'object') return;
   const push = (msg) => {
-    const relabel = (w) => `[${pack.name}]${w} — item "${label}", ${fieldPath}: ${msg}`;
     findings.push({
       severity: rule.severity,
       code: rule.code,
       leaf: where.leaf,
       file: where.file,
       detail: msg,
-      message: relabel(where.suffix),
-      relabel,
+      message: `[${pack.name}] — item "${label}", ${fieldPath}: ${msg}`,
     });
   };
 
@@ -386,10 +380,7 @@ function checkCountField(rule, pack, where, label, fieldPath, value, bounds, fin
 function evaluatePackItemRules(pack, items, { branchLabel = null } = {}) {
   const findings = [];
   const list = Array.isArray(items) ? items : [];
-  const where = {
-    leaf: branchLabel || '(root)',
-    suffix: branchLabel && branchLabel !== '(root)' ? ` on branch "${branchLabel}"` : '',
-  };
+  const where = { leaf: branchLabel || '(root)' };
 
   for (const rule of pack.rules) {
     if (!rule.count && !rule.mutexHint) continue;
@@ -427,16 +418,14 @@ function evaluatePackItemRules(pack, items, { branchLabel = null } = {}) {
         const present = names.filter((f) => resolveField(`$body.${f}`, data) !== null);
         if (present.length > max) {
           const msg = mh.message || rule.message;
-          const relabel = (w) => `[${pack.name}]${w} — item "${label}": ${msg} `
-            + `(${present.length} of ${names.length} present: ${present.join(', ')})`;
           findings.push({
             severity: rule.severity,
             code: rule.code,
             leaf: where.leaf,
             file: where.file,
             detail: msg,
-            message: relabel(where.suffix),
-            relabel,
+            message: `[${pack.name}] — item "${label}": ${msg} `
+              + `(${present.length} of ${names.length} present: ${present.join(', ')})`,
           });
         }
       }

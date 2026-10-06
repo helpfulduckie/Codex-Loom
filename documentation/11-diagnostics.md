@@ -33,6 +33,27 @@ ERROR CL0542 compile.cl.yaml (branch felix/hard)
   role "LI" is bound to "Liesel", which does not resolve on this branch.
 ```
 
+**A check that reports one finding for several leaves lists them in the header instead.**
+The unread-field audit (`CL0426`, `CL0427`) and the convention packs each raise a finding
+once however many leaves it applies to. The header reads `(branches a, c)` when the finding
+applies to some leaves, `(all 3 branches)` when it applies to every leaf of the project,
+and the ordinary `(branch a)` when it applies to one.
+
+```
+WARN CL0426 Codex/items.cl.yaml:13:5 (all 2 branches)
+  body key "strength" on item "Alba" is read by no template this item renders through …
+```
+
+**The same list is on the diagnostic as data, for a consumer that is not reading text.**
+`branches` is the array of leaf labels in leaf order, `allBranches` is `true` when that
+array is every leaf of the project, and `branch` is the first entry. A diagnostic raised
+for a single leaf has `branch` set and `branches` null. A pack finding always carries
+`branches`, including when it fired on one leaf, and its message does not name them.
+
+**Checks inside the per-leaf compile are not merged.** They are raised once per leaf, each
+with its own `branch`; a consumer that wants one entry per problem groups them by code and
+source location.
+
 **Template-level positions are real token positions.** The tokenizer tracks line and
 column as it scans, so a malformed `{join(...)}` or an unclosed `{if}`/`{wrapper}` is
 located at its own line in the `.template`/`.partial` file, not merely at the file. (An
@@ -872,8 +893,8 @@ set yields the same codes in every project that loads it and a suppression stays
 
 Every `CL-` code is opinion-layer by construction — recognized by its `CL-` prefix, not by
 a registry entry. Every opinion-layer ERROR lives in a pack, and `lint.level` — plus the
-per-pack and per-branch `level:` ceilings — has to be able to reach them. A pack finding names the pack, the
-card, and the branch it fired on, because a pack can validate one branch's `notes:`
+per-pack and per-branch `level:` ceilings — has to be able to reach them. A pack finding names the pack and the
+card in its message and the branches it fired on in its header, because a pack can validate one branch's `notes:`
 config and not another's.
 
 The two bundled packs are `wtg` (`CL-wtg/0001`–`CL-wtg/0004`, the World Time Generator mod

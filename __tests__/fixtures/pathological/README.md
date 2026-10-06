@@ -7,7 +7,7 @@ These six projects are intentionally invalid. Their committed snapshot freezes t
 - `schema/` checks invalid configuration shapes that abort during loading.
 - `snapshot-mismatch/` checks manifest/configuration and manifest/disk disagreement.
 - `snapshot-corrupt/` checks a frozen file changed after its manifest was written; this error aborts before compilation.
-- `unread-fields/` checks body fields no template reads, including per-item deduplication across branches.
+- `unread-fields/` checks body fields no template reads, including per-item deduplication across branches and the branch list each deduplicated finding carries.
 
 ## Execution boundaries
 

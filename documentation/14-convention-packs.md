@@ -92,10 +92,15 @@ branch it fired on.
 
 **A finding raised identically on several leaves is reported once.** A card that renders
 the same on every leaf raises the same finding on each, so the compile groups findings that
-agree on pack, code, severity, file and message, and names the branches instead:
-`on branch "a"` for one, `on branches "a", "c"` for some, `on all 12 branches` for every
-leaf the pack ran on. A card whose text differs between branches gives different findings,
+agree on pack, code, severity, file and message, and names the branches in the diagnostic
+header: `(branch a)` for one, `(branches a, c)` for some, `(all 12 branches)` for every
+leaf of the project. A card whose text differs between branches gives different findings,
 so each stays separate. The offline `--lint` arm reports per card and is unaffected.
+
+**The message itself never names a branch.** The branches are in the header and in the
+diagnostic's `branches` array, so the same finding reads the same wherever it fires. "All"
+counts against every leaf of the project, so a pack bound on part of the tree lists its
+branches rather than claiming all of them.
 
 ---
 

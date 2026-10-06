@@ -191,7 +191,7 @@ function finalizeDiagnostics({
   });
 
   reportUnusedRoles(roleState.declarations, roleState.usage, { diagnostics, file: configPath });
-  fieldAudit.finish(diagnostics);
+  fieldAudit.finish(diagnostics, { leaves: leafSummaries.map((s) => s.label) });
   cardTypeAudit.finish(diagnostics);
   reportUnusedPlaceholders(placeholderState.declarations, placeholderState.usage, {
     diagnostics, file: configPath,

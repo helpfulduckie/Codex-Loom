@@ -53,8 +53,10 @@ describe('a pack finding raised identically on several leaves', () => {
     });
     const hits = find(d, BUDGET);
     expect(hits).toHaveLength(1);
-    expect(hits[0].message).toContain('card "npc" on all 3 branches:');
+    expect(hits[0].message).toContain('card "npc": ');
     expect(hits[0].message).toContain('this card\'s body is 500');
+    expect(hits[0]).toMatchObject({ branches: ['a', 'b', 'c'], allBranches: true });
+    expect(hits[0].format().split('\n')[0]).toMatch(/\(all 3 branches\)$/);
   });
 
   test('lists the branches when only some of them raised it', () => {
@@ -65,10 +67,11 @@ describe('a pack finding raised identically on several leaves', () => {
     });
     const hits = find(d, BUDGET);
     expect(hits).toHaveLength(1);
-    expect(hits[0].message).toContain('on branches "a", "c":');
+    expect(hits[0]).toMatchObject({ branches: ['a', 'c'], allBranches: false });
+    expect(hits[0].format().split('\n')[0]).toMatch(/\(branches a, c\)$/);
   });
 
-  test('keeps the single-branch wording when one leaf raised it', () => {
+  test('keeps the single-branch header when one leaf raised it', () => {
     const { diagnostics: d } = compileProject({
       ...TEMPLATE,
       'compile.yaml': config(['a', 'b']),
@@ -76,7 +79,17 @@ describe('a pack finding raised identically on several leaves', () => {
     });
     const hits = find(d, BUDGET);
     expect(hits).toHaveLength(1);
-    expect(hits[0].message).toContain('card "npc" on branch "b":');
+    expect(hits[0]).toMatchObject({ branch: 'b', branches: ['b'], allBranches: false });
+    expect(hits[0].format().split('\n')[0]).toMatch(/\(branch b\)$/);
+  });
+
+  test('carries the branches in the header and the fields, never in the message', () => {
+    const { diagnostics: d } = compileProject({
+      ...TEMPLATE,
+      'compile.yaml': config(['a', 'b', 'c']),
+      'Codex/items.yaml': item({ long: ['a', 'c'] }),
+    });
+    expect(find(d, BUDGET)[0].message).not.toMatch(/\bbranch/);
   });
 
   test('stays separate per branch when the finding differs, as a card of another length does', () => {
@@ -96,8 +109,9 @@ describe('a pack finding raised identically on several leaves', () => {
     });
     const hits = find(d, BUDGET);
     expect(hits).toHaveLength(2);
-    expect(hits.map((h) => h.message).join('\n')).toMatch(/on branch "a".*450/);
-    expect(hits.map((h) => h.message).join('\n')).toMatch(/on branch "b".*600/);
+    expect(hits.find((h) => h.branch === 'a').message).toContain('450');
+    expect(hits.find((h) => h.branch === 'b').message).toContain('600');
+    expect(hits.map((h) => h.branches)).toEqual([['a'], ['b']]);
   });
 
   test('an item-rule finding is grouped the same way', () => {
@@ -111,7 +125,7 @@ describe('a pack finding raised identically on several leaves', () => {
     });
     const hits = find(d, COUNT);
     expect(hits).toHaveLength(1);
-    expect(hits[0].message).toContain('on all 2 branches');
+    expect(hits[0]).toMatchObject({ branches: ['a', 'b'], allBranches: true });
   });
 });
 

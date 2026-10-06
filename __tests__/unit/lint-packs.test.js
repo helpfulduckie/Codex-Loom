@@ -315,12 +315,10 @@ describe('evaluatePack', () => {
     expect(found).toHaveLength(2);
     expect(found.map((f) => f.code)).toEqual(['CL-t/0001', 'CL-t/0001']);
   });
-  test('the finding message names the pack, the card, and the branch', () => {
+  test('the finding message names the pack and the card', () => {
     const pack = { name: 'wtg', rules: [{ id: '1', code: 'CL-wtg/0001', severity: 'error', message: 'boom', forbid: {} }] };
-    const [f] = evaluatePack(pack, card({ title: 'Gate' }), { branchLabel: 'a/x' });
-    expect(f.message).toContain('[wtg]');
-    expect(f.message).toContain('"Gate"');
-    expect(f.message).toContain('branch "a/x"');
+    const [f] = evaluatePack(pack, card({ title: 'Gate' }));
+    expect(f.message).toBe('[wtg] card "Gate": boom');
   });
 });
 
@@ -473,12 +471,12 @@ describe('evaluatePackItemRules — count', () => {
     expect(found).toHaveLength(1);
     expect(found[0].message).toContain('background');
   });
-  test('the branch label rides the finding, with the (root) special-case', () => {
+  test('the branch label rides the finding as its leaf and stays out of the message', () => {
     const onBranch = run({ fields: { vibe: { min: 3 } } }, { vibe: ['a'] }, { branchLabel: 'a/x' });
-    expect(onBranch[0].message).toContain('on branch "a/x"');
+    expect(onBranch[0].message).not.toContain('a/x');
     expect(onBranch[0].leaf).toBe('a/x');
     const atRoot = run({ fields: { vibe: { min: 3 } } }, { vibe: ['a'] }, { branchLabel: '(root)' });
-    expect(atRoot[0].message).not.toContain('branch');
+    expect(atRoot[0].message).toBe(onBranch[0].message);
     expect(atRoot[0].leaf).toBe('(root)');
   });
 });
@@ -534,7 +532,7 @@ describe('evaluatePackExistence', () => {
     expect(found[0].code).toBe('CL-wtg/0002');
     expect(found[0].severity).toBe('warn');
     expect(found[0].leaf).toBe('main');
-    expect(found[0].message).toContain('branch "main"');
+    expect(found[0].message).toBe('[wtg]: a card should exist');
   });
 
   test('nothing when a card does match', () => {

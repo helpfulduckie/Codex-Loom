@@ -151,7 +151,7 @@ describe('CL-wtg/0002 — the "WTG Time Config" card exists and is complete', ()
     const hits = find(d, SETTINGS);
     expect(hits).toHaveLength(1);
     expect(hits[0].severity).toBe('warn');
-    expect(hits[0].message).toContain('branch "main"');
+    expect(hits[0].branches).toEqual(['main']);
   });
 
   test('(b) a core field missing → one WARN naming that field', () => {
@@ -391,8 +391,7 @@ describe('level: and declaration control whether the pack runs', () => {
     });
     const hits = find(d, SETTINGS);
     expect(hits).toHaveLength(1);
-    expect(hits[0].message).toContain('branch "bound"');
-    expect(hits.some((h) => /branch "freed"/.test(h.message))).toBe(false);
+    expect(hits[0].branches).toEqual(['bound']);
   });
 
   test('wtg: ~ on a branch unbinds it there while a sibling branch still fires', () => {
@@ -415,11 +414,9 @@ describe('level: and declaration control whether the pack runs', () => {
     });
     const hits = find(d, MARKER);
     expect(hits.length).toBeGreaterThan(0);
-    expect(hits.every((h) => /branch "bound"/.test(h.message))).toBe(true);
-    expect(hits.some((h) => /branch "freed"/.test(h.message))).toBe(false);
+    expect(hits.every((h) => h.branches.join() === 'bound')).toBe(true);
     const repeated = find(d, REPEATED);
     expect(repeated.length).toBeGreaterThan(0);
-    expect(repeated.every((h) => /branch "bound"/.test(h.message))).toBe(true);
-    expect(repeated.some((h) => /branch "freed"/.test(h.message))).toBe(false);
+    expect(repeated.every((h) => h.branches.join() === 'bound')).toBe(true);
   });
 });

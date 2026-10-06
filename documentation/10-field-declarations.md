@@ -416,7 +416,7 @@ Having a declaration to compare against produces three checks, all WARN:
 
 **On an imported item, only the consuming project's own keys are checked.** A `body:` key that came through `import:` unchanged is the library author's concern; `CL0426`/`CL0427` fire only on keys the consuming project introduced or gave a new value to. A library item can carry fields for consumers who want them without nagging one that renders a subset.
 
-**The audit runs on resolved leaf paths**, so `from: [personality.keywords, personality.expanded]` still flags a typo in a sub-key. Findings key on `(item id, field path)` and emit once — a `body:` field resolves through every `variants:` and `branches:` expansion, so one mistake would otherwise report once per leaf.
+**The audit runs on resolved leaf paths**, so `from: [personality.keywords, personality.expanded]` still flags a typo in a sub-key. Findings key on `(item id, field path)` and emit once — a `body:` field resolves through every `variants:` and `branches:` expansion, so one mistake would otherwise report once per leaf. The one finding names every leaf it applies to in its header: `(all 3 branches)`, `(branches a, c)`, or `(branch a)`.
 
 None of the three is an opinion-layer code: a field is read or it is not. See [Diagnostic Codes](11-diagnostics.md).
 

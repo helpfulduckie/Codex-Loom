@@ -82,9 +82,8 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
   const isScenario = !(config.lint && config.lint.scenario === false);
 
   // A card that renders the same on several leaves raises the same finding on each, so
-  // findings are grouped across leaves and reported once, naming the branches.
-  const grouped = new Map(); // finding key -> { finding, sev, labels }
-  const leavesRun = new Map(); // pack name -> number of leaves it ran on
+  // findings are grouped across leaves and reported once, carrying the branches.
+  const grouped = new Map(); // finding key -> { finding, sev, file, labels }
 
   for (const leaf of deferredCardLeaves) {
     const lint = leaf.lint || { packs: {}, level: null };
@@ -103,7 +102,6 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
       }
       const pack = loaded.get(name);
       if (!pack) continue;
-      leavesRun.set(name, (leavesRun.get(name) || 0) + 1);
 
       const leafCards = [];
       for (const [type, entries] of leaf.grouped) {
@@ -113,7 +111,7 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
       }
 
       const routed = [
-        ...evaluatePack(pack, leafCards, { branchLabel: label }),
+        ...evaluatePack(pack, leafCards),
         // A card a playable leaf must carry is meaningless in a project that is not one.
         ...(isScenario ? evaluatePackExistence(pack, leafCards, { branchLabel: label }) : []),
         ...evaluatePackItemRules(pack, leaf.resolvedItems, { branchLabel: label }),
@@ -122,21 +120,20 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
         const sev = clampFinding(f.severity, packLevel, branchLevel);
         if (sev === null) continue;
         const file = f.file || configPath;
-        const key = [name, sev, f.code, file, f.relabel('')].join('\u0000');
-        if (!grouped.has(key)) grouped.set(key, { finding: f, pack: name, sev, file, labels: [] });
+        const key = [name, sev, f.code, file, f.message].join('\u0000');
+        if (!grouped.has(key)) grouped.set(key, { finding: f, sev, file, labels: [] });
         grouped.get(key).labels.push(label);
       }
     }
   }
 
-  for (const { finding, pack, sev, file, labels } of grouped.values()) {
-    let message = finding.message;
-    if (labels.length > 1) {
-      message = finding.relabel(labels.length === leavesRun.get(pack)
-        ? ` on all ${labels.length} branches`
-        : ` on branches ${labels.map((l) => `"${l}"`).join(', ')}`);
-    }
-    diagnostics.add(sev, finding.code, message, { file });
+  // `allBranches` counts against every leaf compiled, not the leaves a pack was bound on, so
+  // a pack bound on part of the tree is never reported as covering all of it.
+  for (const { finding, sev, file, labels } of grouped.values()) {
+    const branches = [...new Set(labels)];
+    diagnostics.add(sev, finding.code, finding.message, {
+      file, branches, allBranches: branches.length === deferredCardLeaves.length,
+    });
   }
 }
 

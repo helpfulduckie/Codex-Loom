@@ -28,6 +28,54 @@ test('unread fields retain an exact authored key, including literal dots, and br
   expect(diagnostics.all.find(d => d.code === 'CL0426')).toMatchObject({ file: 'item.yaml', line: 4, col: 3, branch: 'main' });
 });
 
+describe('a finding that applies on several leaves', () => {
+  const table = { fields: { shown: {} }, templates: { Character: ['shown'] } };
+  // Each leaf resolves its own copy of the item, so the bodies are distinct objects.
+  const onLeaf = (body) => ({ id: 'Hero', _source: 'item.yaml', body });
+  const unread = (audit, leaves) => {
+    const diagnostics = new Diagnostics();
+    audit.finish(diagnostics, leaves ? { leaves } : undefined);
+    return diagnostics.all.filter((d) => d.code === 'CL0426');
+  };
+
+  test('is one diagnostic carrying every leaf of a two-branch project', () => {
+    const audit = buildFieldAudit({ fieldTable: table });
+    audit.collectForItem(onLeaf({ shown: 'a', stray: 'b' }), ['shown'], { branch: 'north' });
+    audit.collectForItem(onLeaf({ shown: 'a', stray: 'b' }), ['shown'], { branch: 'south' });
+    const hits = unread(audit, ['north', 'south']);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ branch: 'north', branches: ['north', 'south'], allBranches: true });
+    expect(hits[0].format().split('\n')[0]).toBe('WARN CL0426 item.yaml (all 2 branches)');
+  });
+
+  test('lists only the leaves whose body carries the key, in leaf order', () => {
+    const audit = buildFieldAudit({ fieldTable: table });
+    audit.collectForItem(onLeaf({ shown: 'a', stray: 'b' }), ['shown'], { branch: 'south' });
+    audit.collectForItem(onLeaf({ shown: 'a' }), ['shown'], { branch: 'middle' });
+    audit.collectForItem(onLeaf({ shown: 'a', stray: 'b' }), ['shown'], { branch: 'north' });
+    const hits = unread(audit, ['north', 'middle', 'south']);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ branch: 'north', branches: ['north', 'south'], allBranches: false });
+    expect(hits[0].format().split('\n')[0]).toBe('WARN CL0426 item.yaml (branches north, south)');
+  });
+
+  test('records each leaf once when one body is collected through several lists', () => {
+    const audit = buildFieldAudit({ fieldTable: table });
+    const item = onLeaf({ shown: 'a', stray: 'b' });
+    audit.collectForItem(item, ['shown'], { branch: 'north' });
+    audit.collectForItem(item, ['shown'], { branch: 'north' });
+    audit.collectForItem(item, ['shown'], { branch: 'south' });
+    expect(unread(audit, ['north', 'south'])[0].branches).toEqual(['north', 'south']);
+  });
+
+  test('does not claim every leaf when the leaf list is not supplied', () => {
+    const audit = buildFieldAudit({ fieldTable: table });
+    audit.collectForItem(onLeaf({ shown: 'a', stray: 'b' }), ['shown'], { branch: 'north' });
+    audit.collectForItem(onLeaf({ shown: 'a', stray: 'b' }), ['shown'], { branch: 'south' });
+    expect(unread(audit)[0]).toMatchObject({ branches: ['north', 'south'], allBranches: false });
+  });
+});
+
 /** Minimal diagnostics sink — records `warn(code, message)` calls. */
 function sink() {
   const calls = [];

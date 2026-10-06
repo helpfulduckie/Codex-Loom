@@ -59,8 +59,9 @@ the key it flags. A per-branch `lint.level` composes on top of the per-pack ceil
 project-level `lint.level` on top of that — tightest wins.
 
 **A finding raised identically on several leaves is reported once**, naming the branches
-(`on branches "a", "c"`, or `on all 12 branches`). A card that renders differently per
-branch gives distinct findings, which stay separate.
+in the diagnostic header: `(branch a)`, `(branches a, c)`, or `(all 12 branches)` when it
+covers every leaf of the project. The message itself never names a branch. A card that
+renders differently per branch gives distinct findings, which stay separate.
 
 ---
 

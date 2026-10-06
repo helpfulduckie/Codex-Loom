@@ -61,6 +61,41 @@ describe('Diagnostic.format', () => {
     expect(d.format().split('\n')[0]).toBe('ERROR CL0542 (branch (root))');
   });
 
+  test('lists the branches in the header when a finding covers some of the leaves', () => {
+    const d = new Diagnostic({
+      code: 'CL0426', severity: SEVERITY.WARN, message: 'x', file: 'items.cl.yaml', line: 3,
+      branches: ['a', 'c/deep'],
+    });
+    expect(d.format().split('\n')[0]).toBe('WARN CL0426 items.cl.yaml:3 (branches a, c/deep)');
+    expect(d.allBranches).toBe(false);
+  });
+
+  test('counts the branches in the header when the caller says the list is every leaf', () => {
+    const d = new Diagnostic({
+      code: 'CL0426', severity: SEVERITY.WARN, message: 'x', branches: ['a', 'b', 'c'], allBranches: true,
+    });
+    expect(d.format().split('\n')[0]).toBe('WARN CL0426 (all 3 branches)');
+  });
+
+  test('keeps the single-branch header for a one-leaf list, even when that leaf is the whole tree', () => {
+    const d = new Diagnostic({
+      code: 'CL0426', severity: SEVERITY.WARN, message: 'x', branches: ['(root)'], allBranches: true,
+    });
+    expect(d.format().split('\n')[0]).toBe('WARN CL0426 (branch (root))');
+  });
+
+  test('branch is the first listed leaf when only branches is given', () => {
+    const d = new Diagnostic({ code: 'CL0426', severity: SEVERITY.WARN, message: 'x', branches: ['a', 'b', 'a'] });
+    expect(d.branch).toBe('a');
+    expect(d.branches).toEqual(['a', 'b']);
+  });
+
+  test('branches is null on a diagnostic raised for one leaf', () => {
+    const d = new Diagnostic({ code: 'CL0542', severity: SEVERITY.ERROR, message: 'x', branch: 'a' });
+    expect(d.branches).toBeNull();
+    expect(d.allBranches).toBe(false);
+  });
+
   test('appends an indented hint when present', () => {
     const d = new Diagnostic({
       code: 'CL0210',
@@ -119,6 +154,16 @@ describe('Diagnostics collection', () => {
   test('carries the location through from the loc argument', () => {
     diags.error('CL0101', 'bad', { file: 'x.yaml', line: 4, col: 2 });
     expect(diags.all[0].location).toBe('x.yaml:4:2');
+  });
+
+  test('carries a branch list through from the loc argument', () => {
+    diags.warn('CL0426', 'bad', { file: 'x.yaml', branches: ['a', 'b'], allBranches: true });
+    expect(diags.all[0]).toMatchObject({ branch: 'a', branches: ['a', 'b'], allBranches: true });
+  });
+
+  test('carries a branch list through from opts', () => {
+    diags.warn('CL0426', 'bad', { file: 'x.yaml' }, { branches: ['a', 'b'] });
+    expect(diags.all[0]).toMatchObject({ branches: ['a', 'b'], allBranches: false });
   });
 
   test('carries a hint through from opts', () => {
