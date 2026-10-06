@@ -50,7 +50,8 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/leafLoop.js` | The per-leaf compile loop: branch-chain merge, sectioned components, slot index, card + slot render in one pass |
 | `src/inherit.js` | Component placement; per-file script placement and story-card placement with overrides, `placeWithOverrides` (§7.3a) |
 | `src/outputPaths.js` | Where a branch node's folder lands on disk; the post-write sweep that removes output the compile did not write and archives stale nodes |
-| `src/outputLedger.js` | The files a compile has written, recorded by every output writer for the sweep (§8.7) |
+| `src/outputLedger.js` | The output writers (`writeOutputFile`, `removeOutputFile`, `ensureOutputDir`), the ledger of files a compile has written for the sweep (§8.7), and capture mode, which holds output in memory instead of writing it |
+| `src/preview.js` | `preview`: a whole compile in capture mode, returned as plain JSON-safe data (see Preview API) |
 | `src/sources.js` | Text overrides for the files a compile reads (`options.sources`), consulted by the six text readers through `readSource` |
 | `src/treeWrite.js` | Recursive writers for interior-node framing, labels, placeholders and descriptions; component-spec resolution |
 | `src/compiledTree.js` | The one compiled-output-tree traversal `seedmap`/`bodysize`/`overview` are built from — child lists, ancestor walk, per-node merge (§7.3a) |
@@ -391,6 +392,34 @@ Library path resolution no longer needs a bespoke two-pass. v3 resolved plain-pa
 **Project reports share one identity rule.** A config-backed writer uses the trimmed literal root `title:` as its readable label and a safe form of that label as its filename stem. Variable and role tokens are not expanded. A missing or blank title uses the compiled output folder basename; offline writers always use that basename, regardless of `Label.md`. Unsafe characters, control characters, trailing dots/spaces, and Windows device names are handled by the report-specific stem helper, leaving the general filename sanitizer and compiled paths unchanged. Earlier reports remain in place after a title changes.
 
 **Seed-map branch pairs live under `seed-map/leaves/`.** The overall Markdown/CSV pair stays directly in `seed-map/`; every per-branch pair is below `leaves/`, using its ordinary branch stem where unique and a paired ` (leaf)` suffix for collisions. The directory boundary keeps a title equal to a branch from replacing the overall pair.
+
+## Preview API
+
+**`preview(configPath, options)` returns what a compile would produce, as plain data, without touching the disk.** It exists for a caller that holds unsaved edits, such as an editor, and wants the compiled cards, the diagnostics and where each field's value came from. `compile` and `preview` are both exported from `src/compile.js`; `preview` is loaded on first use so `src/preview.js` can require `compile` without a load-time cycle.
+
+**The options are `sources`, `live`, `tolerant` and `lintLevel`.** `sources` is the path-to-text map `compile` takes. `live` and `lintLevel` pass straight through. `tolerant` defaults to true here, so an unknown or misplaced key (`CL0201`, `CL0210`) is reported, dropped and counted in `droppedKeys` instead of stopping the load; `tolerant: false` makes those keys block.
+
+**The result is `{ status, droppedKeys, diagnostics, leaves, files }`.**
+
+- `diagnostics` holds every diagnostic on the bus as `{ code, severity, message, hint, file, line, col, branch, branches, allBranches, related }`, with `related` as `{ label, file, line, col }` entries.
+- `leaves` has one entry per compiled leaf: `label`, `branchPath`, `folderPath`, `roles`, `items`, `cards`, `components` and `slots`.
+- `items` lists `{ id, source, fields }`. Each field is `{ path, value, origin, layers }`: `path` is the key path to a leaf value (an array counts as one value), `origin` is `{ file, line, col, authoredPath, library }` or null, and `library` names the configured library that holds the file, or is null for a project file. Each layer is `{ kind, name, library, op, file, line, col, before, after, deleted }`, in the order variants applied, and lists only the layers that touched that field or a parent of it. A field no variant touched has no layers.
+- `cards` lists `{ type, name, rendered, itemId }` in the order the writers use. `itemId` is null for a card that no single item renders, such as a component's story card.
+- `components` maps each component key to `{ text, segments }`, and `slots` is the leaf's slot inventory.
+- `files` lists `{ path, content }`, or `{ path, binary: true, bytes }` for a binary file, with `path` relative to the output directory and sorted. Script files are listed without content.
+- Absent values are null, so the result survives `JSON.parse(JSON.stringify(result))` unchanged.
+
+**Only an unreadable project blocks.** `status` is `'blocked'` when the load aborts (the loader's own errors, including an unknown key when `tolerant` is false) or when a coded `CL` error is thrown outright, such as a duplicate template name. A blocked result carries the diagnostics and no leaves or files. A compile-phase error, such as a story card targeting a slot that does not exist, does not block: `status` is `'ok'`, the error is in `diagnostics`, and the leaves are the output the compiler would have written. Any other thrown error is a crash and is rethrown.
+
+**It runs the full pipeline with the output captured rather than a lighter model of it.** The checks run inside the writers (limits, collisions, placement), and where a card lands is decided after the leaf loop, so a second implementation would drift from the compiler. Capture mode (`startOutputLedger({ capture: true })`) sends every write to a map, skips the sweep, skips report files and does not throw for gaps or compile errors. The leaf loop also resolves items with a layer record and collects the inventory, which a normal compile does not.
+
+**Limits.**
+
+- A source override replaces the content of a file that exists on disk; it cannot add a file.
+- A project with `structure.input.snapshot` compiles against its frozen library unless `live: true` is passed.
+- Source overrides and the output ledger are module-level state, so two compiles cannot interleave in one process.
+
+---
 
 ## Provenance Report (§17.2)
 

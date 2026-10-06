@@ -51,7 +51,9 @@ function compileLeaf(branchPath, ctx) {
   });
   const branchProtagonist = cctx.branchProtagonist;
 
-  const resolvedItems = resolveBranchItems(allItemDefs, registry, branchPath, cctx.variables, diagnostics);
+  const resolvedItems = resolveBranchItems(
+    allItemDefs, registry, branchPath, cctx.variables, diagnostics, { layers: !!options.capture },
+  );
 
   for (const item of resolvedItems) {
     if (item.id) allItemIds.add(item.id.toLowerCase());

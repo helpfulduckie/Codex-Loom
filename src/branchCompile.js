@@ -127,7 +127,7 @@ function reportUnmatchedIncludeDispatch(allItemDefs, branchPath, diagnostics) {
   }
 }
 
-function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagnostics) {
+function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagnostics, options = {}) {
   const resolvedItems = [];
   const claimedBy = new Map();
 
@@ -139,7 +139,7 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagno
     try {
       item = resolveItem(itemDef, registry, branchPath, (code, message, loc) => {
         diagnostics.add(severityOf(code), code, message, { ...originLocation(itemDef), ...loc, branch });
-      });
+      }, { layers: options.layers });
     } catch (err) {
       const label = itemDef.id || itemDef.import || itemDef.name || '?';
       diagnostics.error(

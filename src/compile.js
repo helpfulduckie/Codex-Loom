@@ -13,7 +13,9 @@ const {
   checkConfigNotesTemplates, gatherTierTemplates,
 } = require('./templateResolve');
 const { sweepOutput } = require('./outputPaths');
-const { startOutputLedger, takeOutputLedger, ensureOutputDir } = require('./outputLedger');
+const {
+  startOutputLedger, takeOutputLedger, takeCapturedOutput, ensureOutputDir,
+} = require('./outputLedger');
 const {
   loadItemsFromDir, buildRegistry, mergeRegistries,
   resolveIncludes, buildCanonRegistry,
@@ -147,7 +149,10 @@ function abortOnLoadErrors(diagnostics, { tolerant } = {}) {
     : diagnostics.errors;
   if (errors.length > 0) {
     const count = errors.length;
-    throw new Error(`${count} error${count === 1 ? '' : 's'} while loading; nothing was compiled.`);
+    const err = new Error(`${count} error${count === 1 ? '' : 's'} while loading; nothing was compiled.`);
+    // Lets a caller that reads the diagnostics tell this from a crash.
+    err.loadAborted = true;
+    throw err;
   }
 }
 
@@ -250,7 +255,8 @@ function compileRun(configPath, options, buses) {
   const allItemIds = new Set();
   const leafSummaries = [];
 
-  const captureReports = !!(options.diff || options.annotate || options.variance);
+  // Capture mode returns report data to its caller, so it collects what a report run would.
+  const captureReports = !!(options.capture || options.diff || options.annotate || options.variance);
   const rootDirName = path.basename(config._resolvedOutput);
   const leafData = [];
 
@@ -271,8 +277,11 @@ function compileRun(configPath, options, buses) {
 
   const deferredCardLeaves = [];
 
+  // A copy, so collecting inventory for a capture does not change the caller's options.
+  const leafOptions = options.capture ? { ...options, inventory: true } : options;
+
   totalFiles += runLeafLoop({
-    leaves, config, configPath, options, log,
+    leaves, config, configPath, options: leafOptions, log,
     diagnostics: compileDiagnostics,
     allItemDefs, registry, templates, partials,
     fieldTable, fieldAudit, cardTypeAudit,
@@ -314,8 +323,19 @@ function compileRun(configPath, options, buses) {
   // Every output file is written by now, so what the compiler owns and did not write is
   // stale. The errors below describe a complete tree, so they do not stop the sweep; an
   // exception before this point skips it and leaves the previous output in place.
+  // The captured content goes first: taking the ledger ends capture mode and drops it.
+  const captured = options.capture ? takeCapturedOutput() : null;
   const writtenFiles = takeOutputLedger();
   if (!options.capture) sweepOutput(config, leaves, writtenFiles, log);
+
+  if (options.capture) {
+    const droppedKeys = options.tolerant
+      ? loadDiagnostics.all.filter((d) => TOLERATED_CODES.has(d.code)).length
+      : 0;
+    return {
+      config, leaves, leafData, inventoryData, deferredCardLeaves, captured, droppedKeys,
+    };
+  }
 
   if (gaps.length > 0) {
     throw new Error(
@@ -335,4 +355,7 @@ function compileRun(configPath, options, buses) {
 
 module.exports = {
   compile,
+  // Required on first use: preview.js requires this module, so a top-level require here
+  // would make the two load each other.
+  get preview() { return require('./preview').preview; },
 };
