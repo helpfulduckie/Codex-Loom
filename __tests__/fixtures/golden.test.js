@@ -73,7 +73,7 @@ const { getTmpDir } = describeBaselineSet({
 const { parseCards, isSubsequence } = require('../helpers/tier-wellformed');
 
 (HAVE_GOLDENS ? describe : describe.skip)('Coinflip Company — lowContext tier is well-formed', () => {
-  const CARD = ['Branches', '%b', 'Story Cards', 'Character', 'Character.md'];
+  const CARD = ['Branches', '%b', 'Story Cards', 'character', 'character.md'];
   const read = (branch) => {
     const rel = CARD.map((s) => (s === '%b' ? branch : s));
     return fs.readFileSync(
