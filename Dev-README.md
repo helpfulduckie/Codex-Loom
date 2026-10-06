@@ -17,16 +17,24 @@ npm test
 Also available: `test:unit`, `test:integration`, `test:coverage`. `npm run compile` compiles
 `test/compile.yaml` as a smoke check.
 
-Two fixture sets back the suite, and they fail differently:
+Three fixture sets back the suite, and they fail differently:
 
-- **`__tests__/fixtures/pathological/`** freezes the *diagnostic stream* — two projects that
-  are wrong on purpose, with a committed snapshot of every code, severity, file and message
+- **`examples/`** freezes compiled *output* and is committed here. The example projects are
+  the worked examples the documentation points at, and
+  `__tests__/fixtures/examples.test.js` asserts their output byte-for-byte.
+  `scripts/rebaseline.js` regenerates a baseline after a deliberate output change and
+  classifies the diff before it will write.
+- **`__tests__/fixtures/pathological/`** freezes the *diagnostic stream*: projects that are
+  wrong on purpose, with a committed snapshot of every code, severity, file and message
   they raise. It is authored from the spec, so where the compiler disagrees the fixture pins
   the disagreement rather than being edited to match.
-- **`goldenFixtures/`** freezes v3.3.2-compiled *output* and asserts the v4 compiler
-  reproduces it byte-for-byte. These are real scenario projects and unpublished
-  worldbuilding, so they live in a
-  separate **private** repository — `helpfulduckie/Codex-Loom-Fixtures`, cloned into the
-  gitignored `goldenFixtures/` — rather than in this tree. You will not have access to it,
-  and you do not need it: `__tests__/fixtures/golden.test.js` reports its tests as skipped
-  when the directory is absent, and the other 50 suites run normally.
+- **`goldenFixtures/`** freezes compiled *output* for real scenario projects and asserts the
+  compiler reproduces it byte-for-byte. Those projects contain unpublished worldbuilding, so
+  they live in a separate **private** repository, cloned into the gitignored
+  `goldenFixtures/`. You will not have access to it, and you do not need it:
+  `golden.test.js` and `migrate.integration.test.js` report their tests as skipped when the
+  directory is absent, and every other suite runs normally.
+
+`AGENTS.md` carries the working rules for a change: what done means, how baselines are
+regenerated, where compiled files are placed, and the comment conventions.
+`documentation/dev-guide.md` is the module map.
