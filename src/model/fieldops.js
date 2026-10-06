@@ -6,7 +6,7 @@ const {
   ITEM_TOP_LEVEL_FIELDS, normalizeNotesKey,
 } = require('../util');
 const { CODES } = require('../diag');
-const { transferOrigins, copyOrigins, originLocation } = require('../origin');
+const { transferOrigins, copyOrigins, originLocation, nearestOrigin } = require('../origin');
 
 function applyFieldOp(current, op, ctx = null) {
   const { value, changed, targeted } = applyOp(current, op, ctx);
@@ -23,6 +23,20 @@ function operationLocation(ctx) {
 
 function trackOrigins(current, op, ctx) {
   const mapping = op !== null && typeof op === 'object' && !Array.isArray(op);
+  if (!mapping && ctx.record && ctx.layer) {
+    // Run purely (ctx null) so a no-op warning is not raised a second time.
+    const after = applyOp(current, op, null).value;
+    const deleted = after === '__DELETE__';
+    ctx.record.push({
+      path: ctx.targetPath.map(String),
+      layer: ctx.layer,
+      op: deepClone(op),
+      origin: nearestOrigin(ctx.source, ctx.sourcePath) || null,
+      before: deepClone(current),
+      after: deleted ? undefined : deepClone(after),
+      deleted,
+    });
+  }
   transferOrigins(ctx.source, ctx.target, ctx.sourcePath, ctx.targetPath,
     { replace: !mapping, descendants: !mapping && !isOperationChain(op) });
   if (!mapping) return;
@@ -189,7 +203,7 @@ function chainNoopMessage(label, ops) {
     + 'swap-chain is built that way); one where none of them do is drift or a typo.';
 }
 
-function applyFieldsDelta(item, delta, onWarn) {
+function applyFieldsDelta(item, delta, onWarn, trace) {
   if (!delta || typeof delta !== 'object') return;
 
   const topLevelFields = ITEM_TOP_LEVEL_FIELDS;
@@ -199,6 +213,7 @@ function applyFieldsDelta(item, delta, onWarn) {
   const opCtx = (field, sourceKey, targetPath) => ({
     onWarn, label: joinLabel(labelBase, field), source: delta, sourcePath: [sourceKey],
     target: item, targetPath,
+    ...(trace ? { layer: trace.layer, record: trace.record } : {}),
   });
 
   const deltaAliasKeys = Object.keys(delta).filter(k => VAR_ALIASES.has(k.toLowerCase()));
@@ -244,12 +259,12 @@ function applyFieldsDelta(item, delta, onWarn) {
   }
 }
 
-function applyDelta(item, delta, onWarn) {
+function applyDelta(item, delta, onWarn, trace) {
   if (!delta) return;
   for (const [key, value] of Object.entries(delta)) {
     const keyLower = key.toLowerCase();
     if (['variants', 'importvariants', '_source'].includes(keyLower)) continue;
-    applyFieldsDelta(item, copyOrigins(delta, { [key]: value }), onWarn);
+    applyFieldsDelta(item, copyOrigins(delta, { [key]: value }), onWarn, trace);
   }
 }
 

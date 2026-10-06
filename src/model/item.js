@@ -113,9 +113,12 @@ function variantSelectors(source, key) {
   }));
 }
 
-function resolveItem(itemDef, registry, branchPath, onWarn) {
+function resolveItem(itemDef, registry, branchPath, onWarn, options = {}) {
   let item;
   let sourceItemForVariants; // the item definition that holds the variants library
+  const record = options.layers ? [] : null;
+  const traceOf = (kind, name, library) => (record
+    ? { layer: { kind, name, library: library || null }, record } : undefined);
 
   if (itemDef.import) {
     const found = resolveItemRef(registry, itemDef.import);
@@ -134,8 +137,9 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     for (const { name: vPath, loc } of variantSelectors(itemDef, 'importVariants')) {
       const ivDeltas = collectVariantDeltas(canonItem, vPath, onWarn, { loc });
       if (ivDeltas === null) return null; // null variant = exclude
+      const ivTrace = traceOf('library-variant', vPath, canonItem._canonSource);
       for (const delta of ivDeltas) {
-        applyDelta(item, delta, onWarn);
+        applyDelta(item, delta, onWarn, ivTrace);
       }
     }
 
@@ -147,15 +151,17 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
       bodySnap = now;
     };
 
+    const projectTrace = traceOf('project', null, null);
     if (itemDef.body) {
-      applyFieldsDelta(item, copyOrigins(itemDef, { body: itemDef.body }), onWarn);
+      applyFieldsDelta(item, copyOrigins(itemDef, { body: itemDef.body }), onWarn, projectTrace);
     }
     recordProjectBodyEdits();
     for (const key of ITEM_TOP_LEVEL_FIELDS) {
       if (itemDef[key] !== undefined) {
         const label = `${itemDef.id || item.id || item.name || '(unknown)'}.${key}`;
         const newVal = applyFieldOp(item[key], itemDef[key], { onWarn, label,
-          source: itemDef, sourcePath: [key], target: item, targetPath: [key] });
+          source: itemDef, sourcePath: [key], target: item, targetPath: [key],
+          ...(projectTrace || {}) });
         if (newVal === '__DELETE__') delete item[key]; else item[key] = newVal;
       }
     }
@@ -173,17 +179,21 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
       const variantSource = hasVariant(itemDef, vName) ? itemDef : canonItem;
       const deltas = collectVariantDeltas(variantSource, vName, onWarn, { loc });
       if (deltas === null) return null; // null variant = exclude
+      const variantTrace = variantSource === itemDef
+        ? traceOf('project-variant', vName, null)
+        : traceOf('library-variant', vName, canonItem._canonSource);
       for (const delta of deltas) {
         if (delta.importVariants && canonItem) {
           for (const { name: cvPath, loc: canonLoc } of variantSelectors(delta, 'importVariants')) {
             const canonDeltas = collectVariantDeltas(canonItem, cvPath, onWarn, { loc: canonLoc });
             if (canonDeltas === null) return null; // null variant = exclude
+            const canonTrace = traceOf('library-variant', cvPath, canonItem._canonSource);
             for (const canonDelta of canonDeltas) {
-              applyDelta(item, canonDelta, onWarn);
+              applyDelta(item, canonDelta, onWarn, canonTrace);
             }
           }
         }
-        applyDelta(item, delta, onWarn);
+        applyDelta(item, delta, onWarn, variantTrace);
       }
       if (variantSource === itemDef) recordProjectBodyEdits();
       else bodySnap = bodyLeafValues(item.body);
@@ -196,13 +206,15 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
   } else {
     item = copyOrigins(itemDef, deepClone(stripMeta(itemDef)));
     sourceItemForVariants = itemDef;
+    const variantKind = itemDef._include_key ? 'library-variant' : 'project-variant';
 
     if (itemDef._include_variants) {
       for (const vPath of parseVariantsList(itemDef._include_variants)) {
         const incDeltas = collectVariantDeltas(itemDef, vPath, onWarn, { silent: true });
         if (incDeltas === null) return null; // null variant = exclude
+        const incTrace = traceOf(variantKind, vPath, null);
         for (const delta of incDeltas) {
-          applyDelta(item, delta, onWarn);
+          applyDelta(item, delta, onWarn, incTrace);
         }
       }
     }
@@ -215,11 +227,18 @@ function resolveItem(itemDef, registry, branchPath, onWarn) {
     for (const { name: vName, loc } of branchVariantNames) {
       const localDeltas = collectVariantDeltas(sourceItemForVariants, vName, onWarn, { silent: fannedOut, loc });
       if (localDeltas === null) return null; // null variant = exclude
+      const localTrace = traceOf(variantKind, vName, null);
       for (const delta of localDeltas) {
-        applyDelta(item, delta, onWarn);
+        applyDelta(item, delta, onWarn, localTrace);
       }
     }
 
+  }
+
+  if (record) {
+    Object.defineProperty(item, '_layers', {
+      value: record, enumerable: false, configurable: true, writable: true,
+    });
   }
 
   if (!item.aid) item.aid = {};
