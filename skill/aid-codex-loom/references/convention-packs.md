@@ -130,6 +130,12 @@ markdown cannot give back. An author who wants the full check runs a compile, no
 
 ### The schema check
 
+`hasKey` and `equals.key` match Notes keys in any capitalization. `equals.value` still
+compares exactly after string conversion, and regexes keep their existing case rules.
+Budget roles also match in any capitalization, including the `standard` fallback; a
+finding preserves the budget name's authored spelling. These lookups do not rewrite card
+Notes or metadata.
+
 `schema:` is a descriptor tree evaluated over a mapping recovered from the card.
 
 - **`type`** — `map`, `record`, `seq`, `string`, `number`, `boolean`, `any`, or a list for

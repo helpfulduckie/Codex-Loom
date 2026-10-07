@@ -4,7 +4,7 @@
 const path = require('path');
 
 const { applyLintLevel, Diagnostics, CODES } = require('../diag');
-const { resolveVariables } = require('../util');
+const { resolveVariables, findKey, getCI } = require('../util');
 const { loadYamlDocument } = require('../loader/yaml');
 const { validate, TYPES } = require('../schema');
 const { PACK_SCHEMA } = require('./pack-schema');
@@ -177,11 +177,11 @@ function evalPredicate(pred, view) {
   }
 
   if (pred.hasKey !== undefined) {
-    if (!Object.prototype.hasOwnProperty.call(view.notes, String(pred.hasKey))) return false;
+    if (findKey(view.notes, String(pred.hasKey)) === null) return false;
   }
   if (pred.equals && typeof pred.equals === 'object') {
     const { key, value } = pred.equals;
-    if (String(view.notes[key]) !== String(value)) return false;
+    if (String(getCI(view.notes, String(key))) !== String(value)) return false;
   }
   if (pred.notesMatch !== undefined) {
     if (!toRegExp(pred.notesMatch).test(view.notesText)) return false;
@@ -269,8 +269,7 @@ function evaluatePack(pack, cards) {
       }
       if (rule.budget) {
         const rawRole = String((view.meta[pack.name] || {}).role || 'standard');
-        const role = Object.prototype.hasOwnProperty.call(rule.budget, rawRole)
-          ? rawRole : 'standard';
+        const role = findKey(rule.budget, rawRole) ?? findKey(rule.budget, 'standard') ?? 'standard';
         const cap = rule.budget[role];
         if (typeof cap === 'number' && view.body.length > cap) {
           emit({

@@ -160,6 +160,9 @@ inside the origin module.
 **Convention-pack `map` schemas use the same normalization on a copy of the checked data.**
 Later predicates and rules must see the original recovered card mapping. Open `record`
 keys retain their existing behavior. Pack descriptor property names normalize at load.
+`hasKey`, `equals.key`, and budget role lookup use `findKey` / `getCI` on the original
+mapping. Equality values remain exact after string conversion; budget fallback looks up
+`standard` with the same key identity and findings preserve the budget's authored spelling.
 
 **Pack validation separates the envelope from individual rules.** `loadPack` uses
 `loadYamlDocument` for source positions and validates against `PACK_SCHEMA`: the envelope

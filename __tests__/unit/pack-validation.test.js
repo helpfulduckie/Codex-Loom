@@ -102,3 +102,25 @@ test.each(['wtg', 'duckieConv'])('bundled pack %s loads without diagnostics', na
   expect(loadPack(name, {}, { diagnostics }).rules.length).toBeGreaterThan(0);
   expect(diagnostics.all).toEqual([]);
 });
+
+test.each(['Starting Date', 'starting date', 'STARTING DATE'])('hasKey and equals.key match card key %s', key => {
+  const { pack, diagnostics } = load(YAML.stringify({ rules: [
+    { require: { hasKey: 'Starting Date' } },
+    { require: { equals: { key: 'STARTING DATE', value: 'Today' } } },
+    { forbid: { hasKey: 'starting date' } },
+  ] }));
+  expect(diagnostics.all).toEqual([]);
+  expect(evaluatePack(pack, [{ ...card, notes: `${key}: Today` }]).map(f => f.code)).toEqual(['CL-test/0003']);
+  expect(evaluatePack(pack, [{ ...card, notes: `${key}: today` }]).map(f => f.code))
+    .toEqual(['CL-test/0002', 'CL-test/0003']);
+});
+
+test.each(['major', 'MAJOR', 'Major'])('budget role %s matches preserved authored role names', role => {
+  const { pack, diagnostics } = load('rules: [{budget: {Major: 1, STANDARD: 2}}]\n');
+  expect(diagnostics.all).toEqual([]);
+  const findings = evaluatePack(pack, [{ ...card, body: 'xx', meta: { meta: { test: { role } } } }]);
+  expect(findings).toHaveLength(1);
+  expect(findings[0].message).toContain('role "Major" targets 1');
+  expect(evaluatePack(pack, [{ ...card, body: 'xx', meta: { meta: { test: { role: 'other' } } } }])).toEqual([]);
+  expect(evaluatePack(pack, [{ ...card, body: 'xxx', meta: {} }])[0].message).toContain('role "STANDARD" targets 2');
+});

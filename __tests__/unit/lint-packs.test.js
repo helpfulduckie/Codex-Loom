@@ -22,13 +22,14 @@ const { withTmpDir, writeTree } = require('../helpers/project');
 let TMP;
 beforeAll(() => { TMP = withTmpDir(); });
 
-test('map schemas accept declared key casing without changing later predicate inputs', () => {
+test('map schemas preserve recovered key spelling for later record checks', () => {
   const pack = { name: 'case', rules: [
     { code: 'CL-case/0001', severity: 'error', schema: {
       type: 'map', keys: { Rank: { type: 'string', required: true } },
     } },
-    { code: 'CL-case/0002', severity: 'error', forbid: { hasKey: 'Rank' }, message: 'must retain authored casing' },
-    { code: 'CL-case/0003', severity: 'error', require: { hasKey: 'rank' }, message: 'must retain original key' },
+    { code: 'CL-case/0002', severity: 'error', require: { hasKey: 'Rank' }, message: 'key must remain available' },
+    { code: 'CL-case/0003', severity: 'error', require: { equals: { key: 'rank', value: 'low' } }, message: 'value must remain available' },
+    { code: 'CL-case/0004', severity: 'error', schema: { type: 'record', keyPattern: '^rank$' } },
   ] };
   expect(evaluatePack(pack, [{ title: 'Card', notes: 'rank: low', body: '' }])).toEqual([]);
 });

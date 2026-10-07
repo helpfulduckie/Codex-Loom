@@ -734,6 +734,8 @@ while retaining valid siblings. Compile, offline lint, and tolerant preview shar
 boundary, because removing a broken condition would change a rule's meaning. Pack errors
 still fail a normal compile; preview returns cards and diagnostics, and skipped rules do
 not contribute to its dropped-key count.
+Names in `hasKey`, `equals.key`, and budget role lookup match in any capitalization;
+equality values remain exact after string conversion. These lookups preserve card data.
 
 ### §8.4 `encapsulate` and `wrapper` are the same operation
 

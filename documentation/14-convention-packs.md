@@ -194,6 +194,12 @@ The inline compile pass is branch-merge-aware and authoritative.
 two-surface rule needs — WTG accepts a marker in a card's Notes *or* its Entry and
 normalizes the position itself, so `wtg`'s marker rule scans both.
 
+`hasKey` and `equals.key` match recovered Notes keys in any capitalization. The value
+compared by `equals.value` stays exact after string conversion, and regexes keep their
+existing case rules. Budget role lookup also ignores capitalization, including the
+fallback to `standard`, while preserving the authored budget name in findings. This
+lookup does not rewrite the card's Notes or metadata.
+
 ### The schema check
 
 A rule's `schema:` block is a schema-descriptor tree — the same descriptor language the
