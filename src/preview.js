@@ -9,7 +9,7 @@ const path = require('path');
 const { compile } = require('./compile');
 const { Diagnostics } = require('./diag');
 const { nearestOrigin } = require('./origin');
-const { ITEM_TOP_LEVEL_FIELDS, isPlainObject, findKey } = require('./util');
+const { ITEM_TOP_LEVEL_FIELDS, isPlainObject, findKey, pathId, pathStartsWith } = require('./util');
 
 const FIELD_ROOTS = [...ITEM_TOP_LEVEL_FIELDS, 'body'];
 
@@ -51,13 +51,8 @@ function libraryOf(file, libraries) {
   return best;
 }
 
-// Field keys match without regard to case, so a path is identified the same way: a field
-// deleted as `A` and set again as `a` is one field with one history.
-const pathId = (parts) => JSON.stringify(parts.map((part) => String(part).toLowerCase()));
-
 function isPrefix(prefix, parts) {
-  return prefix.length <= parts.length
-    && pathId(prefix) === pathId(parts.slice(0, prefix.length));
+  return pathStartsWith(parts, prefix);
 }
 
 function leafPaths(value, prefix, out) {

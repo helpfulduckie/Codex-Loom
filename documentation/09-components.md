@@ -4,6 +4,10 @@ Components are non-story-card files written to each branch leaf's `Components/` 
 
 Components are declared in `compile.yaml` under the root-level `components:` key and/or per-branch `components:` overrides.
 
+Component section names, named-text map keys, variant names and branch-dispatch selectors
+identify keys case-insensitively. A case-only duplicate among siblings in one mapping is
+`CL0211`. See [Authored mapping key identity](02-compile-yaml.md#authored-mapping-key-identity).
+
 ---
 
 ## Opening

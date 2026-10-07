@@ -3,6 +3,7 @@
 
 const { render } = require('../template');
 const { FUNCTION_NAMES, entryName } = require('./parse');
+const { getCI } = require('../util');
 
 function wrapChars(wrap) {
   const w = String(wrap);
@@ -30,16 +31,17 @@ function expandList(list, table) {
       return;
     }
     if (typeof entry === 'string') {
-      if (allowGroup && table.groups && Array.isArray(table.groups[entry])) {
-        for (const member of table.groups[entry]) pushEntry(member, false);
+      const group = getCI(table.groups, entry);
+      if (allowGroup && Array.isArray(group)) {
+        for (const member of group) pushEntry(member, false);
         return;
       }
-      out.push({ name: entry, decl: (table.fields && table.fields[entry]) || {} });
+      out.push({ name: entry, decl: getCI(table.fields, entry) || {} });
       return;
     }
     if (entry && typeof entry === 'object') {
       const name = entryName(entry);
-      const base = (name && table.fields && table.fields[name]) || {};
+      const base = (name && getCI(table.fields, name)) || {};
       const { field: _f, name: _n, ...override } = entry;
       out.push({ name, decl: { ...base, ...override } });
     }

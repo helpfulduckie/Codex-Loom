@@ -47,9 +47,9 @@ const TEMPLATE_LIST = { type: TYPES.SEQ, of: TEMPLATE_ENTRY };
 const FIELD_TABLE_SCHEMA = {
   type: TYPES.MAP,
   keys: {
-    fields: { type: TYPES.RECORD, of: FIELD_DECL },
-    groups: { type: TYPES.RECORD, of: GROUP_LIST },
-    templates: { type: TYPES.RECORD, of: TEMPLATE_LIST },
+    fields: { type: TYPES.RECORD, caseInsensitiveKeys: true, of: FIELD_DECL },
+    groups: { type: TYPES.RECORD, caseInsensitiveKeys: true, of: GROUP_LIST },
+    templates: { type: TYPES.RECORD, caseInsensitiveKeys: true, of: TEMPLATE_LIST },
   },
 };
 

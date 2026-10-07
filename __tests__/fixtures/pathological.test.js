@@ -96,6 +96,9 @@ function diagnoseProject(name) {
 }
 
 describe('pathological fixture', () => {
+  test('case-only authored keys report both source declarations', () => {
+    expect(diagnoseProject('duplicate-keys')).toMatchSnapshot();
+  });
   /**
    * The placement project: load-clean on purpose, so the compile phase runs in full and
    * §7.4's invariants have something to report.

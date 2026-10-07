@@ -5,6 +5,7 @@ const { TYPES, STRING } = require('../schema');
 
 const STRING_SEQ = { type: TYPES.SEQ, of: STRING };
 const STRING_RECORD = { type: TYPES.RECORD, of: STRING };
+const CI_STRING_RECORD = { ...STRING_RECORD, caseInsensitiveKeys: true };
 
 const SCRIPTS = {
   type: [TYPES.STRING, TYPES.MAP],
@@ -52,6 +53,7 @@ const STORY_CARD_TYPE = {
 
 const TEMPLATE_FOR = {
   type: TYPES.RECORD,
+  caseInsensitiveKeys: true,
   of: { type: [TYPES.STRING, TYPES.SEQ], of: STRING },
 };
 
@@ -89,8 +91,8 @@ const BRANCH_NODE = {
   type: TYPES.MAP,
   keys: {
     title: STRING,
-    variables: STRING_RECORD,
-    roles: { type: TYPES.RECORD, of: STRING },
+    variables: CI_STRING_RECORD,
+    roles: CI_STRING_RECORD,
     placeholders: STRING_RECORD,
     scripts: SCRIPTS,
     lint: LINT,
@@ -101,7 +103,7 @@ const BRANCH_NODE = {
   },
 };
 
-const BRANCHES = { type: TYPES.RECORD, of: BRANCH_NODE };
+const BRANCHES = { type: TYPES.RECORD, caseInsensitiveKeys: true, of: BRANCH_NODE };
 BRANCH_NODE.keys.branches = BRANCHES;
 
 
@@ -120,7 +122,7 @@ const CONFIG_SCHEMA = {
           keys: {
             items: STRING_SEQ,
             templates: STRING_SEQ,
-            library: STRING_RECORD,
+            library: CI_STRING_RECORD,
             snapshot: STRING,
 
           },
@@ -130,8 +132,8 @@ const CONFIG_SCHEMA = {
       },
     },
 
-    variables: STRING_RECORD,
-    roles: { type: TYPES.RECORD, of: STRING },
+    variables: CI_STRING_RECORD,
+    roles: CI_STRING_RECORD,
     placeholders: STRING_RECORD,
     scripts: SCRIPTS,
     lint: ROOT_LINT,

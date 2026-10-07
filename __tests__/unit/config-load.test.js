@@ -347,6 +347,7 @@ describe('bus ownership', () => {
  */
 describe('every diagnostic the config surface can emit', () => {
   const CASES = [
+    ['case-only sibling keys', CODES.DUPLICATE_KEY_CASE, 'variables:\n  Mood: bright\n  mood: dark\n', {}],
     ['unknown key', CODES.UNKNOWN_KEY, 'bogus: 1\n', {}],
     ['a v3 key that was renamed', CODES.UNKNOWN_KEY, 'overview: ./Review\n', {}],
     ['wrong type, non-empty', CODES.WRONG_TYPE, 'variables:\n  - a\n  - b\n', {}],

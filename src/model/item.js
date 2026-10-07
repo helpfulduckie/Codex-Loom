@@ -18,7 +18,7 @@ const DEFAULT_ORDER = 5;
 function hasVariant(itemDef, variantPath) {
   if (!itemDef.variants || typeof itemDef.variants !== 'object') return false;
   const firstPart = variantPath.split('/')[0].trim().toLowerCase();
-  return Object.keys(itemDef.variants).some(k => k.toLowerCase() === firstPart);
+  return findKey(itemDef.variants, firstPart) !== null;
 }
 
 function basename(source) {
@@ -44,7 +44,7 @@ function collectVariantDeltas(itemDef, variantPath, onWarn, options = {}) {
       }
       break;
     }
-    const actualKey = Object.keys(variantTree).find(k => k.toLowerCase() === part.toLowerCase());
+    const actualKey = findKey(variantTree, part);
     if (!actualKey) {
       if (warn) {
         warn(CODES.VARIANT_NOT_FOUND,

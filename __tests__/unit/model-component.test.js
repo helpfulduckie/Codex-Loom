@@ -15,6 +15,13 @@ const {
 } = require('../../src/model/component');
 const { CODES } = require('../../src/diag');
 
+test('named text variants override and delete inherited keys across capitalization changes', () => {
+  const section = { name: 'premise', text: { Mood: 'bright', Place: 'hall' } };
+  const changed = applySectionVariant(section, { text: { mood: 'dark', PLACE: null } });
+  expect(changed.text).toEqual({ Mood: 'dark' });
+  expect(section.text).toEqual({ Mood: 'bright', Place: 'hall' });
+});
+
 /** Collect `onWarn(code, message)` calls the way `compile.js` collects them from model/. */
 function collector() {
   const seen = [];

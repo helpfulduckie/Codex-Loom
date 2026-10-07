@@ -186,6 +186,10 @@ resting on nothing. Sync still runs and the entry's files are still frozen; only
 | `CL0208` | ERROR | A string value or record key does not match its descriptor's `pattern:` or `keyPattern:` regex, so the value or key is rejected; change it to match the pattern. Used by convention-pack schemas; no `compile.yaml` key declares a pattern. |
 | `CL0209` | ERROR | The project is not declared as v4, so configuration loading stops; set `version: 4` or run `--migrate` for a v3 project. A missing key or `version: 3` names `--migrate`; any other value is reported as unsupported. |
 | `CL0210` | ERROR | A valid key is at the wrong level, so it is ignored there; move it to the reported level. Relocation is suggested before edit-distance spelling. |
+| `CL0211` | ERROR | Sibling keys differ only by capitalization and identify the same key; keep one definition or give them distinct names. |
+
+`CL0211` applies only to selected authored mappings whose keys identify named entities;
+it does not make every YAML mapping case-insensitive. See [Authored mapping key identity](02-compile-yaml.md#authored-mapping-key-identity).
 
 ### CL0210 in detail
 

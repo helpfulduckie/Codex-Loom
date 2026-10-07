@@ -7,7 +7,7 @@ const {
   localRoleKeysOf, mergeUnbindable,
 } = require('./model/branches');
 const { buildFieldAudit } = require('./render/field-audit');
-const { resolveVariables } = require('./util');
+const { resolveVariables, getCI } = require('./util');
 const { buildCardTypeAudit } = require('./cardType');
 const {
   checkConfigNotesTemplates, gatherTierTemplates,
@@ -55,8 +55,9 @@ function resolveRoles(config, configPath, diagnostics) {
         key, resolveVariables(value, variables, { diagnostics, file: configPath }),
       ]))
       : state.resolved;
-    const protagonist = resolved.protagonist
-      ? String(resolved.protagonist).toLowerCase()
+    const protagonistId = getCI(resolved, 'protagonist');
+    const protagonist = protagonistId
+      ? String(protagonistId).toLowerCase()
       : null;
     const roleInfo = { raw, resolved, declared, protagonist };
     byPath.set(nodePath.join('/'), roleInfo);
@@ -202,7 +203,8 @@ function compileRun(configPath, options, buses) {
   abortOnLoadErrors(loadDiagnostics, { tolerant: options.tolerant });
   log.info(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
-  const tierTemplates = config ? gatherTierTemplates(config, configPath) : [];
+  const tierTemplates = config ? gatherTierTemplates(config, configPath, loadDiagnostics) : [];
+  abortOnLoadErrors(loadDiagnostics, { tolerant: options.tolerant });
   const fieldAudit = buildFieldAudit({ fieldTable, partials, tierTemplates });
   const cardTypeAudit = buildCardTypeAudit();
 

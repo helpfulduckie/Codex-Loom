@@ -3,7 +3,7 @@
 const fs = require('fs');
 const {
   findFiles, loadYaml, deepClone, findKey,
-  getCI, setCI, deleteCI, normalizeVarKey, resolveVariables, checkUnexpandedVariables,
+  getCI, setCI, deleteCI, pathId, pathStartsWith, normalizeVarKey, resolveVariables, checkUnexpandedVariables,
   walkItemTextFields, checkUnresolvedFieldTokens, checkMechanicalArtifacts, maskFencedRegions,
 } = require('../../src/util');
 const { Diagnostics } = require('../../src/diag');
@@ -132,6 +132,25 @@ describe('deleteCI', () => {
 });
 
 // ── normalizeVarKey ───────────────────────────────────────────────────────────
+
+describe('key path identity', () => {
+  test('matches mixed-case segments and numeric indices', () => {
+    expect(pathId(['Body', 'Traits', 0])).toBe(pathId(['body', 'TRAITS', '0']));
+    expect(pathStartsWith(['BODY', 'Traits', 'hair'], ['body', 'traits'])).toBe(true);
+  });
+
+  test('keeps literal punctuation distinct from segment boundaries', () => {
+    expect(pathId(['body', 'a.b'])).not.toBe(pathId(['body', 'a', 'b']));
+    expect(pathId(['a\u0000b'])).not.toBe(pathId(['a', 'b']));
+    expect(pathStartsWith(['body', 'a.b'], ['body', 'a'])).toBe(false);
+    expect(pathStartsWith(['body', 'hairline'], ['body', 'hair'])).toBe(false);
+  });
+
+  test('accepts the root prefix and rejects longer prefixes', () => {
+    expect(pathStartsWith(['body'], [])).toBe(true);
+    expect(pathStartsWith([], ['body'])).toBe(false);
+  });
+});
 
 describe('normalizeVarKey', () => {
   test.each(['v', 'var', 'vars', 'variable', 'variables'])('"%s" normalizes to "v"', (key) => {

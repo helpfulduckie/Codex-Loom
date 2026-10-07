@@ -25,6 +25,10 @@ branches:
 `protagonist` is the built-in role, bound inside a branch's `roles:` block like any other
 role (see [Roles](13-roles.md)).
 
+Branch names and item branch-dispatch and variant selector names identify keys
+case-insensitively. A case-only duplicate among siblings in one mapping is `CL0211`;
+overrides at different layers may change capitalization. See [Authored mapping key identity](02-compile-yaml.md#authored-mapping-key-identity).
+
 This produces four leaf outputs — `subject`, `researcher`, `tier2/alpha`, `tier2/beta`:
 
 ```yaml transform=branch-dispatch id=leaves-nested

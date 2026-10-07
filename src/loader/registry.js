@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { findFiles, deepClone, resolveVariables, isPlainObject, VAR_ALIASES, YAML_SUFFIXES, RESERVED_LIBRARY_BASENAMES } = require('../util');
+const { findFiles, deepClone, findKey, setCI, resolveVariables, isPlainObject, VAR_ALIASES, YAML_SUFFIXES, RESERVED_LIBRARY_BASENAMES } = require('../util');
 const { loadYamlDocument, YamlLoadError } = require('./yaml');
 const { attachOrigins, copyOrigins, transferOrigins, originLocation } = require('../origin');
 const { validate } = require('../schema');
@@ -45,8 +45,7 @@ function normalizeItemVarField(entry, onWarn) {
   const merged = {};
   for (const key of aliasKeys) {
     const value = entry[key];
-    if (value && typeof value === 'object' && !Array.isArray(value)) Object.assign(merged, deepClone(value));
-    else Object.assign(merged, deepClone(value) || {});
+    for (const [field, val] of Object.entries(deepClone(value) || {})) setCI(merged, field, val);
   }
 
   const out = {};
@@ -59,7 +58,7 @@ function normalizeItemVarField(entry, onWarn) {
   for (const key of aliasKeys) {
     transferOrigins(entry, out, [key], ['v'], { replace: false, descendants: false });
     for (const sub of Object.keys(entry[key] || {})) {
-      transferOrigins(entry, out, [key, sub], ['v', sub]);
+      transferOrigins(entry, out, [key, sub], ['v', findKey(merged, sub) ?? sub]);
     }
   }
   return out;

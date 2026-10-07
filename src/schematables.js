@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { FUNCTION_NAMES, entryName } = require('./render/parse');
+const { getCI } = require('./util');
 
 const DASH = '—';
 const SLASH = ' / ';
@@ -59,8 +60,9 @@ function expandForDisplay(list, groups) {
   const rows = [];
   for (const entry of list || []) {
     const name = entryName(entry);
-    if (typeof entry === 'string' && Array.isArray(groups[entry])) {
-      rows.push({ label: `**${entry}** _(group)_`, members: groups[entry].map(entryLabel) });
+    const group = typeof entry === 'string' ? getCI(groups, entry) : null;
+    if (Array.isArray(group)) {
+      rows.push({ label: `**${entry}** _(group)_`, members: group.map(entryLabel) });
     } else {
       rows.push({ label: entryLabel(entry), members: null, name });
     }

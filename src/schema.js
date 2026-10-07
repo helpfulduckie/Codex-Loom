@@ -13,6 +13,7 @@ const TYPES = Object.freeze({
 
 const { CODES } = require('./diag');
 const { isPlainObject, damerauLevenshtein } = require('./util');
+const { checkSiblingKeys } = require('./keyIdentity');
 
 const STRING = { type: TYPES.STRING };
 const NUMBER = { type: TYPES.NUMBER };
@@ -165,6 +166,9 @@ function validate(value, schema, options = {}) {
 
   const walk = (node, descriptor, currentPath) => {
     if (!descriptor) return node;
+    const keyContext = { diagnostics, sourceMap, path: currentPath };
+    if (descriptor.caseInsensitiveKeys) checkSiblingKeys(node, keyContext);
+    if (descriptor.checkKeys) descriptor.checkKeys(node, keyContext);
     const types = Array.isArray(descriptor.type) ? descriptor.type : [descriptor.type];
 
     if (types.includes(TYPES.ANY)) return node;

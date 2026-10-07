@@ -1227,6 +1227,21 @@ separately.
 
 ## §14. Migration
 
+### Authored mapping key identity
+
+**Selected authored mappings identify named keys case-insensitively.** This covers item
+body/variables/notes, variant and dispatch maps, config branches/variables/roles/library
+names, component sections/named-text maps, and field/group/template names, including
+`templateFor` role keys and produced template names. A case-only sibling duplicate is
+`CL0211`; identical duplicates remain YAML parse errors. Separate layers may override
+with changed capitalization, retaining authored output labels. The field, group and
+template maps remain separate namespaces, and structural schema keys and metadata retain
+their existing rules.
+
+This behavior does not change how field declaration references, merges or unbinds resolve:
+they match case-insensitively, with group expansion precedence when a field and group
+share a name.
+
 ### §14.1 Clean break — no compatibility mode
 
 **`version: 4` is required, and its absence is how a v3 project is detected.** A missing

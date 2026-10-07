@@ -49,6 +49,7 @@ const REGISTRY = Object.freeze({
   PATTERN_MISMATCH:             { id: 'CL0208', severity: ERROR, summary: "A string value or record key does not match its descriptor's pattern, so the value or key is rejected; change it to match the required regex." },
   UNSUPPORTED_VERSION:          { id: 'CL0209', severity: ERROR, summary: 'The project is not declared as v4, so configuration loading stops; set version: 4 or run --migrate for a v3 project.' },
   MISPLACED_KEY:                { id: 'CL0210', severity: ERROR, summary: 'A valid key is at the wrong level, so it is ignored there; move it to the reported level.' },
+  DUPLICATE_KEY_CASE:           { id: 'CL0211', severity: ERROR, summary: 'Sibling keys differ only by capitalization and identify the same key; keep one definition or give them distinct names.' },
 
   VARIANT_DELTA_VAR_ALIASES:    { id: 'CL0320', severity: WARN,  summary: 'A variant delta declares multiple variable-block aliases; they merge with later fields winning.' },
   VARIANT_NOT_FOUND:            { id: 'CL0321', severity: WARN,  summary: 'A variant dispatch names no variant in the selected item tree, so that dispatch has no effect.' },

@@ -137,8 +137,8 @@ function applySectionVariant(section, delta, onWarn = null) {
   if (!delta || typeof delta !== 'object' || Array.isArray(delta)) return section;
   const result = copyOrigins(section, { ...section });
   const take = (from, to = from) => transferOrigins(delta, result, from, to);
-  const opCtx = (path) => ({
-    source: delta, sourcePath: path, target: result, targetPath: path,
+  const opCtx = (path, targetPath = path) => ({
+    source: delta, sourcePath: path, target: result, targetPath,
     onWarn, label: sectionOpLabel(section.name, path),
   });
 
@@ -154,9 +154,10 @@ function applySectionVariant(section, delta, onWarn = null) {
       const base = keyed ? { ...result.text } : {};
       transferOrigins(delta, result, ['text'], ['text'], { replace: !keyed, descendants: false });
       for (const [key, op] of Object.entries(delta.text)) {
-        if (op === null) { delete base[key]; dropOrigin(result, ['text', key]); continue; }
-        const next = applyFieldOp(base[key], op, opCtx(['text', key]));
-        if (next === '__DELETE__') { delete base[key]; dropOrigin(result, ['text', key]); } else base[key] = next;
+        const actual = findKey(base, key) ?? key;
+        if (op === null) { delete base[actual]; dropOrigin(result, ['text', actual]); continue; }
+        const next = applyFieldOp(base[actual], op, opCtx(['text', key], ['text', actual]));
+        if (next === '__DELETE__') { delete base[actual]; dropOrigin(result, ['text', actual]); } else base[actual] = next;
       }
       result.text = base;
     }
@@ -277,7 +278,7 @@ function applySectionSelector(sections, name, onWarn = null) {
   for (const [sectionName, def] of Object.entries(sections || {})) {
     const variants = def && typeof def === 'object' ? def.variants : null;
     const key = variants
-      ? Object.keys(variants).find((k) => k.toLowerCase() === String(name).toLowerCase())
+      ? findKey(variants, String(name)) ?? undefined
       : undefined;
     if (key === undefined) {
       result[sectionName] = def;
@@ -293,8 +294,7 @@ function applySectionSelector(sections, name, onWarn = null) {
 
 function findSectionVariant(section, name) {
   if (!section.variants) return undefined;
-  return Object.keys(section.variants)
-    .find((k) => k.toLowerCase() === String(name).toLowerCase());
+  return findKey(section.variants, String(name)) ?? undefined;
 }
 
 // Pass null, not a no-op, when not reporting: resolveBranchSpec warns about a wildcard

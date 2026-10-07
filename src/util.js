@@ -130,6 +130,16 @@ function getCI(obj, key) {
   return actual !== null ? obj[actual] : undefined;
 }
 
+// Segment boundaries are part of identity, even when a key contains punctuation.
+function pathId(parts) {
+  return JSON.stringify(parts.map((part) => String(part).toLowerCase()));
+}
+
+function pathStartsWith(parts, prefix) {
+  return prefix.length <= parts.length
+    && pathId(prefix) === pathId(parts.slice(0, prefix.length));
+}
+
 function setCI(obj, key, value) {
   const actual = findKey(obj, key);
   if (actual !== null) {
@@ -176,8 +186,8 @@ function resolveVariables(text, variables, sink = {}) {
       return match;
     }
 
-    const actualKey = Object.keys(declared).find((k) => k.toLowerCase() === lower);
-    if (actualKey === undefined || declared[actualKey] === null || declared[actualKey] === undefined) {
+    const actualKey = findKey(declared, key);
+    if (actualKey === null || declared[actualKey] === null || declared[actualKey] === undefined) {
       if (branchOnly && branchOnly.has(lower)) {
         diagnostics.error(
           DIAG_CODES.VARIABLE_PRE_BRANCH,
@@ -295,6 +305,7 @@ function checkMechanicalArtifacts(text, label, sink) {
 
 module.exports = {
   damerauLevenshtein,
+  pathId, pathStartsWith,
   findFiles, readFileTrim, listFilesRelative, loadYaml, deepClone, transformStringValues, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
   ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
   YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix, PATH_UNSAFE_CHARS, PLACEHOLDER_RE, isPlainObject,

@@ -2,7 +2,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { resolveVariables, loadYaml } = require('./util');
+const { resolveVariables, findKey, getCI, setCI } = require('./util');
+const { loadYamlDocument } = require('./loader/yaml');
+const { checkSiblingKeys } = require('./keyIdentity');
 const { walkBranchTree } = require('./model/branches');
 const { render } = require('./template');
 const { renderFieldList } = require('./render/field-list');
@@ -13,7 +15,7 @@ function checkConfigNotesTemplates(config, templates, diagnostics, configPath, f
 
   const check = (node, where) => {
     const name = node && node.render && node.render.notesTemplate;
-    if (!name || templates.has(String(name).toLowerCase()) || fieldListTemplates[String(name)]) return;
+    if (!name || templates.has(String(name).toLowerCase()) || getCI(fieldListTemplates, String(name))) return;
     diagnostics.error(
       CODES.NOTES_TEMPLATE_NOT_FOUND,
       `${where} declares render.notesTemplate "${name}", which is not loaded, so configured notes rendering cannot run; add or rename the notes template, and the notes fallback is used.`,
@@ -87,8 +89,9 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
         continue;
       }
       let doc;
+      let sourceMap;
       try {
-        doc = loadYaml(abs);
+        ({ value: doc, sourceMap } = loadYamlDocument(abs));
       } catch (err) {
         diagnostics.error(CODES.FIELD_TABLE_UNUSABLE,
           `templateFor.${role} names this file, and it could not be read — so the templates `
@@ -99,7 +102,8 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
         continue;
       }
       if (doc && doc.templates && typeof doc.templates === 'object') {
-        Object.assign(merged, doc.templates);
+        if (diagnostics) checkSiblingKeys(doc.templates, { diagnostics, sourceMap, path: ['templates'] });
+        for (const [name, list] of Object.entries(doc.templates)) setCI(merged, name, list);
       }
     }
     roleMaps[role] = merged;
@@ -107,14 +111,14 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
   return roleMaps;
 }
 
-function gatherTierTemplates(config, configPath) {
+function gatherTierTemplates(config, configPath, diagnostics = null) {
   const variables = config._variables || config.variables || {};
   const rows = [];
   walkBranchTree(config, ({ node, path: nodePath, isRoot }) => {
     if (!node || !node.templateFor) return;
     const maps = resolveTemplateForMaps(
       node.templateFor, config._resolvedTemplates || [], config._base || '.',
-      variables, null, configPath,
+      variables, diagnostics, configPath,
     );
     for (const [role, typeMap] of Object.entries(maps)) {
       for (const [name, list] of Object.entries(typeMap)) {
@@ -127,9 +131,7 @@ function gatherTierTemplates(config, configPath) {
 
 function lookupSlotList(name, map) {
   if (!name || !map) return null;
-  if (Object.prototype.hasOwnProperty.call(map, name)) return map[name];
-  const lower = String(name).toLowerCase();
-  const key = Object.keys(map).find((k) => k.toLowerCase() === lower);
+  const key = findKey(map, String(name));
   return key ? map[key] : null;
 }
 
@@ -139,9 +141,7 @@ function lookupNamedTemplate(name, templates, fieldTable) {
   if (templates.has(lower)) return { kind: 'text', entry: templates.get(lower), name: String(name) };
   const ft = fieldTable && fieldTable.templates;
   if (ft) {
-    const key = Object.prototype.hasOwnProperty.call(ft, name)
-      ? name
-      : Object.keys(ft).find((k) => k.toLowerCase() === lower);
+    const key = findKey(ft, String(name));
     if (key) return { kind: 'fieldList', list: ft[key], name: String(name) };
   }
   return null;
@@ -182,7 +182,7 @@ function resolveBodyRender(item, templates, fieldTable, templateForMaps) {
   const type = item.aid && item.aid.type;
   return resolveRenderLadder(item, templates, fieldTable, {
     choice: item.render && item.render.template,
-    maps: [(templateForMaps && templateForMaps.base) || {}],
+    maps: [getCI(templateForMaps, 'base') || {}],
     typeSlotName: type,
   });
 }
@@ -194,7 +194,7 @@ function resolveNotesRender(item, templates, fieldTable, projectNotesTemplate, t
     return hit || { kind: 'missing', name: String(explicit) };
   }
   const type = item.aid && item.aid.type;
-  const notesMap = (templateForMaps && templateForMaps.notes) || {};
+  const notesMap = getCI(templateForMaps, 'notes') || {};
   const notesByType = type ? lookupSlotList(type, notesMap) : null;
   if (notesByType) {
     return { kind: 'fieldList', list: notesByType, name: `templateFor.notes[${type}]`, refRoot: 'notes' };

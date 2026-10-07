@@ -2,6 +2,7 @@
 
 
 const { TYPES, STRING, NUMBER, BOOLEAN, ANY } = require('../schema');
+const { checkDispatchKeys, checkSectionKeys } = require('../keyIdentity');
 
 const SECTION_RENDER = {
   type: TYPES.MAP,
@@ -24,9 +25,10 @@ const SECTION_FROM = {
 
 const SECTION = {
   type: TYPES.MAP,
+  checkKeys: checkSectionKeys,
   keys: {
     slot: BOOLEAN,
-    text: { type: [TYPES.STRING, TYPES.RECORD], of: STRING },
+    text: { type: [TYPES.STRING, TYPES.RECORD], caseInsensitiveKeys: true, of: STRING },
 
     file: STRING,
     from: SECTION_FROM,
@@ -43,9 +45,9 @@ const SECTION = {
 const COMPONENT_SCHEMA = {
   type: TYPES.MAP,
   keys: {
-    sections: { type: TYPES.RECORD, of: SECTION },
+    sections: { type: TYPES.RECORD, caseInsensitiveKeys: true, of: SECTION },
 
-    branches: ANY,
+    branches: { ...ANY, checkKeys: checkDispatchKeys },
 
     metadata: ANY,
 

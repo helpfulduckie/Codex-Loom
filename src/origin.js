@@ -14,7 +14,7 @@ function createOriginIndex(entries = []) {
     const record = { file: entry.file || null, path: entry.path.map(String) };
     if (typeof entry.line === 'number') record.line = entry.line;
     if (typeof entry.col === 'number') record.col = entry.col;
-    index[pathKey(record.path)] = record;
+    index[pathKey(entry.keyPath || record.path)] = record;
   }
   return index;
 }

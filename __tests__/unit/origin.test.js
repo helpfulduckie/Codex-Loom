@@ -33,6 +33,16 @@ test('nearest lookup falls back through authored ancestors', () => {
   expect(nearestOrigin(item, 'missing')).toMatchObject({ path: [], line: 1 });
 });
 
+test('a runtime key path retains the overriding authored spelling', () => {
+  const table = attachOrigins({}, createOriginIndex([
+    { file: 'project.cl.yaml', path: ['fields', 'appearance'], keyPath: ['fields', 'Appearance'], line: 3, col: 3 },
+  ]));
+  expect(originAt(table, 'fields', 'Appearance')).toEqual({
+    file: 'project.cl.yaml', path: ['fields', 'appearance'], line: 3, col: 3,
+  });
+  expect(originAt(table, 'fields', 'appearance')).toBeNull();
+});
+
 test('copying preserves a private independent index', () => {
   const source = attachOrigins({}, index());
   const target = copyOrigins(source, { id: 'copy' });

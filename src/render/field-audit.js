@@ -3,16 +3,8 @@
 
 const { entryName } = require('./parse');
 const { CODES } = require('../diag');
-const { isPlainObject } = require('../util');
+const { isPlainObject, getCI } = require('../util');
 const { originLocation } = require('../origin');
-
-function lookupCI(map, name) {
-  if (!map || !name) return undefined;
-  if (Object.prototype.hasOwnProperty.call(map, name)) return map[name];
-  const lower = String(name).toLowerCase();
-  const key = Object.keys(map).find((k) => k.toLowerCase() === lower);
-  return key === undefined ? undefined : map[key];
-}
 
 function fromPaths(decl, name) {
   if (decl && decl.from !== undefined && decl.from !== null) {
@@ -81,12 +73,12 @@ function readablePathsFor(list, fieldTable, partials, refRoot = 'body') {
   const seenPartials = new Set();
   const walkEntry = (entry, allowGroup) => {
     if (typeof entry === 'string') {
-      const group = lookupCI(fieldTable.groups, entry);
+      const group = getCI(fieldTable.groups, entry);
       if (allowGroup && Array.isArray(group)) {
         for (const member of group) walkEntry(member, false);
         return;
       }
-      addField(entry, lookupCI(fieldTable.fields, entry) || {});
+      addField(entry, getCI(fieldTable.fields, entry) || {});
       return;
     }
     if (!isPlainObject(entry)) return;
@@ -105,7 +97,7 @@ function readablePathsFor(list, fieldTable, partials, refRoot = 'body') {
     if (entry.allowExtra !== undefined) { allowExtra = allowExtra || entry.allowExtra === true; return; }
     const name = entry.field || entry.name;
     if (name) {
-      const base = lookupCI(fieldTable.fields, name) || {};
+      const base = getCI(fieldTable.fields, name) || {};
       const { field: _f, name: _n, ...override } = entry;
       addField(name, { ...base, ...override });
     }
@@ -166,7 +158,7 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
   };
 
   const isDeclared = (name) => {
-    const v = lookupCI(fields, name);
+    const v = getCI(fields, name);
     return v !== undefined && v !== null;
   };
 
@@ -276,7 +268,7 @@ function buildFieldAudit({ fieldTable, partials, tierTemplates } = {}) {
     const named = new Set();
     const addName = (ref, allowGroup) => {
       if (!ref) return;
-      const group = lookupCI(groups, ref);
+      const group = getCI(groups, ref);
       if (allowGroup && Array.isArray(group)) {
         for (const m of group) addName(entryName(m), false);
         return;

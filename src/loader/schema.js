@@ -2,6 +2,7 @@
 
 
 const { TYPES, STRING, ANY } = require('../schema');
+const { checkItemKeys } = require('../keyIdentity');
 
 const AID = {
   type: TYPES.MAP,
@@ -51,6 +52,7 @@ const RENDER = {
 
 const ITEM_SCHEMA = {
   type: TYPES.MAP,
+  checkKeys: checkItemKeys,
   keys: {
     id: STRING,
     name: NAME,

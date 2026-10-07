@@ -1,5 +1,20 @@
 # compile.yaml Reference
 
+## Authored mapping key identity
+
+**Selected named mappings identify keys case-insensitively.** This applies to item
+`body`, `variables` and `notes` mappings; item/component variant and dispatch-selector
+maps; config `branches`, `variables`, `roles` and `structure.input.library` names;
+component section and named-text maps; and field-table `fields`, `groups` and `templates`
+maps. It also applies to `templateFor` role keys and the template names those selections
+produce. A case-only sibling duplicate in one mapping raises `CL0211`; identical
+spellings remain YAML parse errors. Overrides in separate layers may change capitalization,
+and output labels retain authored spelling. Field/group/template maps remain separate
+namespaces; fields and groups may share a name, with group expansion precedence.
+Declaration references, merges and unbinds match case-insensitively. Metadata and
+structural schema keys keep their existing rules; this does not make all YAML mappings
+case-insensitive.
+
 Entry point for every Codex Loom project. Controls paths, branches, protagonist, variables, roles, template selection, and components.
 
 **`version: 4` is required.** There is no compatibility mode — a v3 file fails validation rather than compiling with warnings.
