@@ -3,8 +3,7 @@
 Field, group and template names identify keys case-insensitively, as do `templateFor`
 roles and produced template names. Case-only sibling duplicates raise `CL0211`. The
 three declaration maps remain separate namespaces, and group expansion keeps precedence
-when a field and group share a name. Declaration references, merges and unbinds match
-case-insensitively. See
+when a field and group share a name. See
 [Authored mapping key identity](compile-yaml.md#authored-mapping-key-identity).
 
 **This is the primary way to render an item body.** A field is declared once in

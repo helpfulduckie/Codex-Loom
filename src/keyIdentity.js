@@ -1,6 +1,11 @@
 'use strict';
 
 const { CODES } = require('./diag');
+const { VAR_ALIASES, NOTES_ALIASES, ITEM_TOP_LEVEL_FIELDS } = require('./util');
+
+const CONTENT_FIELDS = new Set(['body', ...VAR_ALIASES, ...NOTES_ALIASES]);
+const STRUCTURAL_FIELDS = new Set([...ITEM_TOP_LEVEL_FIELDS, ...VAR_ALIASES, ...NOTES_ALIASES,
+  'body', 'variants', 'branches', 'importvariants', '_source']);
 
 const mapping = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -36,17 +41,14 @@ function checkDispatchKeys(value, context) {
 function checkItemKeys(value, context, delta = false) {
   if (!mapping(value)) return;
   if (delta) checkSiblingKeys(value, context);
-  const content = new Set(['body', 'v', 'var', 'vars', 'variable', 'variables', 'notes', 'description']);
   for (const [key, field] of Object.entries(value)) {
-    if (content.has(delta ? key.toLowerCase() : key)) {
+    if (CONTENT_FIELDS.has(delta ? key.toLowerCase() : key)) {
       checkSiblingKeys(field, { ...context, path: [...context.path, key] }, true);
     }
   }
   if (delta) {
-    const structural = new Set(['name', 'pronouns', 'aid', 'render', 'v', 'var', 'vars', 'variable', 'variables',
-      'notes', 'description', 'kind', 'meta', 'body', 'variants', 'branches', 'importvariants', '_source']);
     for (const [key, field] of Object.entries(value)) {
-      if (!structural.has(key.toLowerCase())) checkSiblingKeys(field, { ...context, path: [...context.path, key] }, true);
+      if (!STRUCTURAL_FIELDS.has(key.toLowerCase())) checkSiblingKeys(field, { ...context, path: [...context.path, key] }, true);
     }
   }
   checkDispatchKeys(value.branches, { ...context, path: [...context.path, 'branches'] });

@@ -240,8 +240,7 @@ function mergeUnbindable(table, local, { code, kind, onWarn = null, origin = nul
   if (!local || typeof local !== 'object') return merged;
 
   for (const [key, value] of Object.entries(local)) {
-    const ci = kind === 'variable' || kind === 'role';
-    const actual = ci ? findKey(merged, key) : (key in merged ? key : null);
+    const actual = findKey(merged, key);
     if (value === null || value === undefined) {
       if (actual === null && onWarn) {
         onWarn(
@@ -251,11 +250,9 @@ function mergeUnbindable(table, local, { code, kind, onWarn = null, origin = nul
           unbindLocation(origin, key),
         );
       }
-      if (ci) deleteCI(merged, key);
-      else delete merged[key];
+      deleteCI(merged, key);
     } else {
-      if (ci) setCI(merged, key, value);
-      else merged[key] = value;
+      setCI(merged, key, value);
     }
   }
   return merged;

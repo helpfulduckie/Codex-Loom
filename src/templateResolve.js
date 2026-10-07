@@ -102,7 +102,7 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
         continue;
       }
       if (doc && doc.templates && typeof doc.templates === 'object') {
-        if (diagnostics) checkSiblingKeys(doc.templates, { diagnostics, sourceMap, path: ['templates'] });
+        checkSiblingKeys(doc.templates, { diagnostics, sourceMap, path: ['templates'] });
         for (const [name, list] of Object.entries(doc.templates)) setCI(merged, name, list);
       }
     }
@@ -111,7 +111,7 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
   return roleMaps;
 }
 
-function gatherTierTemplates(config, configPath, diagnostics = null) {
+function gatherTierTemplates(config, configPath, diagnostics) {
   const variables = config._variables || config.variables || {};
   const rows = [];
   walkBranchTree(config, ({ node, path: nodePath, isRoot }) => {

@@ -4,16 +4,17 @@
 
 **Selected named mappings identify keys case-insensitively.** This applies to item
 `body`, `variables` and `notes` mappings; item/component variant and dispatch-selector
-maps; config `branches`, `variables`, `roles` and `structure.input.library` names;
+maps; config `branches`, `variables`, `roles`, `structure.input.library` and `lint.packs` names;
 component section and named-text maps; and field-table `fields`, `groups` and `templates`
 maps. It also applies to `templateFor` role keys and the template names those selections
 produce. A case-only sibling duplicate in one mapping raises `CL0211`; identical
 spellings remain YAML parse errors. Overrides in separate layers may change capitalization,
 and output labels retain authored spelling. Field/group/template maps remain separate
 namespaces; fields and groups may share a name, with group expansion precedence.
-Declaration references, merges and unbinds match case-insensitively. Metadata and
-structural schema keys keep their existing rules; this does not make all YAML mappings
-case-insensitive.
+Placeholders remain exact-match because Velvet Lattice matches their names exactly.
+Convention pack identities match case-insensitively, but a pack's `name:` must exactly
+match its `lint.packs` key or `CL0119` is raised. Metadata and structural schema keys
+keep their existing rules; this does not make all YAML mappings case-insensitive.
 
 Entry point for every Codex Loom project. Controls paths, branches, protagonist, variables, roles, template selection, and components.
 

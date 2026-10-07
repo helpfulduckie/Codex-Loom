@@ -2,25 +2,11 @@
 
 This document describes the internal architecture of Codex Loom for maintainers. It is meant to augment the inline JSDoc in source files, not duplicate it — focus here is on data flow, non-obvious design decisions, and algorithm structure.
 
-**Authored entity-key identity is case-insensitive only in selected mappings.** Body/item
-variable/notes mappings, item and component variant and dispatch maps, config branch,
-variable, role and library-name maps, component section and named-text maps, and field,
-group and template declaration maps share this identity rule. A case-only sibling
-duplicate is rejected as `CL0211`; same-spelling duplicates remain YAML parse errors.
-Separate layers may override across capitalization changes, and output labels retain
-authored spelling. Structural schema keys and metadata keep their existing rules.
-
 Section references of the form §N point at [`design-spec.md`](design-spec.md), the as-built design spec alongside this file.
 
 ---
 
 ## Module Map
-
-**Object-key matching uses `util.findKey`, `getCI`, `setCI`, and `deleteCI`.** `findKey` returns the first matching own enumerable key in object order, preserving its spelling, or `null` when absent. Selected authored mappings reject case-only duplicate keys before merging, so valid mappings have one spelling for each case-insensitive identity.
-
-**Field-path identity uses `util.pathId` and `pathStartsWith`.** Both fold case per segment and preserve segment boundaries. Preview uses them for field histories and removals; annotate uses the prefix comparison with its existing dot-separated report paths. Origin indexes remain case-sensitive: their keys identify runtime paths and their records preserve authored YAML paths, so folding the index would change source attribution and potentially diagnostic locations.
-
-**Authored key identity is validated before merging.** Schema descriptors opt selected maps into `caseInsensitiveKeys` and `checkKeys`; recursive checks are limited to those declared content surfaces and skip metadata mappings. Case-insensitive merges retain the first stored key spelling and replace its value from later layers, while provenance retains the overriding source spelling. `createOriginIndex` accepts an optional entry `keyPath` for that runtime address, separate from the authored `path` stored in its record; origin lookup remains case-sensitive.
 
 The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipeline; item loading, resolution, token expansion, rendering, emit, the per-leaf loop, the tree-level writes and the report dispatch are each their own module or directory.
 
@@ -85,6 +71,36 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/migrate/plot-essentials-apply.js` | Applies that decision — rewrites the component as `sections:`, adds render targets, moves inline blocks out into item files |
 
 `model/` is pure by contract (§3.3): no `fs`, no `console`. Warnings go to a caller-supplied `onWarn`, and failed lookups come back described rather than thrown, so the caller decides what reaches a terminal. A test enforces both the purity and the roster.
+
+## Key Identity and Path Semantics
+
+**Authored entity-key identity is case-insensitive only in selected mappings.** Body/item
+variable/notes mappings, item and component variant and dispatch maps, config branch,
+variable, role, library and `lint.packs` names, component section and named-text maps,
+and field, group and template declaration maps share this identity rule. A case-only
+sibling duplicate is rejected as `CL0211`; same-spelling duplicates remain YAML parse
+errors. Placeholders remain exact-match because Velvet Lattice matches them exactly.
+Structural schema keys and metadata keep their existing rules. Pack `name:` spelling must
+exactly match the authored `lint.packs` key (`CL0119`).
+
+**Object-key matching uses `util.findKey`, `getCI`, `setCI`, and `deleteCI`.** `findKey`
+returns the first matching own enumerable key in object order, preserving its spelling,
+or `null` when absent. Selected authored mappings reject case-only duplicate keys before
+merging, so valid mappings have one spelling for each case-insensitive identity.
+
+**Field-path identity uses `util.pathId` and `pathStartsWith`.** Both fold case per segment
+and preserve segment boundaries. Preview uses them for field histories and removals;
+annotate uses the prefix comparison with its existing dot-separated report paths. Origin
+indexes remain case-sensitive: their keys identify runtime paths and their records
+preserve authored YAML paths.
+
+**Authored key identity is validated before merging.** Schema descriptors opt selected
+maps into `caseInsensitiveKeys` and `checkKeys`; recursive checks are limited to those
+declared content surfaces and skip metadata mappings. Case-insensitive merges retain the
+first stored key spelling and replace its value from later layers, while provenance
+retains the overriding source spelling. `createOriginIndex` accepts an optional entry
+`keyPath` for that runtime address, separate from the authored `path` stored in its
+record; origin lookup remains case-sensitive.
 
 ---
 

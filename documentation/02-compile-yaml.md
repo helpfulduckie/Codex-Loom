@@ -10,16 +10,18 @@
 `variables` and `notes`, item and component `variants` maps and branch-dispatch selectors,
 config `branches`, `variables`, `roles` and `structure.input.library` names, component
 section maps and named-text maps, and the `fields`, `groups` and `templates` maps in a
-field table, and to `templateFor` role keys and the template names a selection file
-produces. Two sibling keys in one authored mapping that differ
+field table, `lint.packs` names, and `templateFor` role keys and the template names a
+selection file produces. Two sibling keys in one authored mapping that differ
 only by capitalization are an ERROR (`CL0211`); keep one or choose distinct names.
 
 YAML itself rejects identical duplicate spellings during parsing. Overrides in separate
 layers may change capitalization; the authored spelling is preserved in output labels.
 Field, group and template names remain separate namespaces, so a field and group may
-share a name; group expansion keeps its existing precedence. Declaration references,
-field merges and unbinds match case-insensitively. Metadata keys and structural schema
-keys retain their existing rules; this is not a rule for every YAML mapping.
+share a name; group expansion keeps its existing precedence. Metadata keys and structural
+schema keys retain their existing rules; this is not a rule for every YAML mapping.
+Placeholders are an exact-match exception because Velvet Lattice matches their names
+exactly. Convention pack names identify `lint.packs` entries case-insensitively, but a
+pack's `name:` must exactly match its authored config key or `CL0119` is raised.
 
 ## Minimal Example
 

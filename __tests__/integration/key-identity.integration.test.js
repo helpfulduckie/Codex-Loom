@@ -86,8 +86,23 @@ describe('case-insensitive key identity across YAML source layers', () => {
       ].join('\n'),
       'compile.yaml': config(['components:', '  aiInstructions: ./components/ai.cl.yaml']),
     });
-    expect(result.status).toBe('ok');
+    expect(result.status).toBe('blocked');
+    expect(result.files).toEqual([]);
     expect(diagnosticsWith(result, CODES.DUPLICATE_KEY_CASE)).toHaveLength(1);
+  });
+
+  test('branch variable overrides expand in the emitted Placeholders.yaml', () => {
+    const { result } = previewProject({
+      'compile.yaml': [
+        'version: 4', 'structure:', '  input:', '    items: [%TMP%/items]',
+        '    templates: [%TMP%/templates]', '  output: %TMP%/output',
+        'variables: {Mood: calm}', 'branches:', '  override:',
+        '    variables: {mood: bright}', '    placeholders: {ask: "What is {%Mood}?"}',
+      ].join('\n'),
+    });
+    const placeholderFiles = result.files.filter((file) => file.path.endsWith('Placeholders.yaml'));
+    expect(placeholderFiles.some((file) => file.path.includes('override')
+      && file.content.includes('What is bright?'))).toBe(true);
   });
 
   test('templateFor collisions include the earlier key location', () => {
@@ -240,6 +255,67 @@ describe('case-insensitive key identity across YAML source layers', () => {
     expect(mergeUnbindable({ Mood: 'calm' }, { mood: null }, {
       kind: 'variable', onWarn: null,
     })).toEqual({});
+  });
+
+  test('item v and vars aliases share one case-insensitive namespace', () => {
+    const { result } = previewProject({
+      'items/items.yaml': [
+        '- id: item', '  name: Item', '  aid: {type: Item}',
+        '  v: {Tone: one}', '  vars: {tone: two}',
+      ].join('\n'),
+      'templates/Item.template': '{$v.Tone}',
+      'compile.yaml': config(),
+    });
+    expect(result.status).toBe('ok');
+    expectNoErrors(result);
+    expect(result.files.some((file) => file.content.includes('two'))).toBe(true);
+  });
+
+  test('a case-changed inherited pack unbind produces no unknown-unbind diagnostic', () => {
+    const { diagnostics } = compileProject({
+      'templates/Card.template': '{$body.Text}',
+      'items/items.yaml': [
+        '- id: gate', '  name: Gate', '  aid: {type: Character}', '  render: {template: Card}',
+        '  body: {Text: "[e] /]"}',
+      ].join('\n'),
+      'compile.yaml': [
+        'version: 4', 'structure:', '  input:', '    items: [%TMP%/items]',
+        '    templates: [%TMP%/templates]', '  output: %TMP%/output',
+        'lint: {packs: {wtg: {}}}', 'branches:',
+        '  bound: {}', '  freed: {lint: {packs: {WTG: ~}}}',
+      ].join('\n'),
+    });
+    expect(diagnostics.all.some((d) => d.code === 'CL0118')).toBe(false);
+    const findings = diagnostics.all.filter((d) => d.code === 'CL-wtg/0001');
+    expect(findings).toHaveLength(1);
+    expect(findings[0].branches).toEqual(['bound']);
+  });
+
+  test('a case-changed pack level off disables the inherited pack on that branch', () => {
+    const { diagnostics } = compileProject({
+      'templates/Card.template': '{$body.Text}',
+      'items/items.yaml': [
+        '- id: gate', '  name: Gate', '  aid: {type: Character}', '  render: {template: Card}',
+        '  body: {Text: "[e] /]"}',
+      ].join('\n'),
+      'compile.yaml': [
+        'version: 4', 'structure:', '  input:', '    items: [%TMP%/items]',
+        '    templates: [%TMP%/templates]', '  output: %TMP%/output',
+        'lint: {packs: {wtg: {}}}', 'branches:',
+        '  active: {}', '  quiet: {lint: {packs: {WTG: {level: off}}}}',
+      ].join('\n'),
+    });
+    const findings = diagnostics.all.filter((d) => d.code === 'CL-wtg/0001');
+    expect(findings).toHaveLength(1);
+    expect(findings[0].branches).toEqual(['active']);
+  });
+
+  test('case-only sibling convention pack keys are a duplicate-key error', () => {
+    const { result } = previewProject({
+      'compile.yaml': config(['lint:', '  packs:', '    wtg: {}', '    WTG: {}']),
+    });
+    expect(result.status).toBe('blocked');
+    expect(diagnosticsWith(result, CODES.DUPLICATE_KEY_CASE)).toHaveLength(1);
   });
 
   test('case-distinct metadata keys are not treated as identities', () => {

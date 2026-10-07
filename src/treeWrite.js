@@ -60,9 +60,9 @@ function nodeConfigPath(nodePath) {
 
 function nodeVisitPrologue(name, node, isRoot, state) {
   const outputBase = isRoot ? state.outputBase : path.join(state.outputBase, 'Branches', name);
-  const variables = (node && node.variables)
-    ? Object.assign({}, state.variables, node.variables)
-    : state.variables;
+  const variables = mergeUnbindable(state.variables, node && node.variables, {
+    code: DIAG_CODES.VARIABLE_UNBIND_UNKNOWN, kind: 'variable', onWarn: null,
+  });
   const table = mergePlaceholders(state.table, node);
   const rolesDeclared = state.rolesDeclared || !!(node && node.roles);
   const roles = mergeUnbindable(state.roles, node && node.roles, {

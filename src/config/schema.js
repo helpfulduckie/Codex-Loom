@@ -68,6 +68,7 @@ const LINT_PACK_ENTRY = {
 };
 
 const LINT_PACKS = {
+  caseInsensitiveKeys: true,
   type: TYPES.RECORD,
   of: LINT_PACK_ENTRY,
 };

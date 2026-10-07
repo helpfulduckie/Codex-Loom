@@ -11,7 +11,7 @@ const { COMPONENT_SCHEMA } = require('./component-schema');
 const { normalizeComponent, mergeSectionRecords, applySectionSelector } = require('../model/component');
 const { resolveVariables } = require('../util');
 const { runExtractor } = require('../extract');
-const { CODES, busWarner } = require('../diag');
+const { CODES, Diagnostics, busWarner } = require('../diag');
 const {
   attachOrigins, createOriginIndex, copyOrigins, transferOrigins, originLocation,
 } = require('../origin');
@@ -22,7 +22,7 @@ function isMapping(value) {
 
 function loadComponentDocument(spec, options = {}) {
   const {
-    diagnostics, label = 'component', variables = null, base = null, stack = [],
+    diagnostics = new Diagnostics(), label = 'component', variables = null, base = null, stack = [],
     dependencyLedger = null, requestedAt = null, tolerant = false,
   } = options;
 
@@ -76,9 +76,17 @@ function loadComponentDocument(spec, options = {}) {
     return null;
   }
 
+  const findingsBeforeValidation = diagnostics.all.length;
   validate(doc, COMPONENT_SCHEMA, {
     diagnostics, sourceMap, context: `the ${label} component`, dropUnknown: !!tolerant,
   });
+  const collision = diagnostics.all.slice(findingsBeforeValidation)
+    .find((finding) => finding.code === CODES.DUPLICATE_KEY_CASE);
+  if (collision) {
+    const error = new Error(collision.message);
+    error.code = collision.code;
+    throw error;
+  }
 
   const onWarn = busWarner(diagnostics, { file: spec });
   const document = attachOrigins({}, sourceMap.exportOrigins());
