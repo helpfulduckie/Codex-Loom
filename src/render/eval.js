@@ -1,6 +1,6 @@
 'use strict';
 
-const { normalizeVarKey } = require('../util');
+const { normalizeVarKey, findKey } = require('../util');
 const { CODES } = require('../diag');
 const { FUNCTION_NAMES } = require('./parse');
 
@@ -17,8 +17,8 @@ function resolveField(ref, data) {
     if (typeof value !== 'object') return null;
 
     const lower = part.toLowerCase();
-    const actualKey = Object.keys(value).find(k => k.toLowerCase() === lower);
-    if (actualKey === undefined) {
+    const actualKey = findKey(value, lower);
+    if (actualKey === null) {
       if (value === data && data.itemMap) {
         const sourceItem = data.itemMap.get(lower);
         if (sourceItem) {

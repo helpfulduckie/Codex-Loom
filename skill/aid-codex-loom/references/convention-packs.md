@@ -37,6 +37,11 @@ branches:
 `~` — and unbinds. Unbinding something never inherited is a `CL0118` WARN, which usually
 means exactly this typo.
 
+**A branch's entry finds the inherited pack in any capitalization; the declaring key does
+not.** `WTG: ~` unbinds a root `wtg`, but the key that first binds a pack must equal the
+pack's `name:` exactly (`CL0119`). Two keys in one `packs:` mapping that differ only by
+capitalization are `CL0211`.
+
 **An absent `source:` means "bundled, by name."** A present `source:` is a path relative to
 the `compile.yaml` directory, with `{%token}` variables expanded. A library-hosted pack gets
 versioned and frozen alongside the library it depends on.
@@ -121,16 +126,26 @@ markdown cannot give back. An author who wants the full check runs a compile, no
 | `{ notes: { … } }` | scope the nested predicate to the notes mapping |
 | `{ all: […] }` / `{ any: […] }` / `{ not: <pred> }` | compose |
 
-`re` is a plain string compiled with `new RegExp(str)`.
+`re` is text compiled with `new RegExp(str)`.
+
+**Pack text operands accept unquoted numbers.** This covers `hasKey`, `equals.key`, regex predicates `notesMatch`/`bodyMatch`/`match`/`titleMatch`, descriptor `pattern`/`keyPattern`, rule `message`, and `mutexHint.fields` and `mutexHint.message`. A number is read as the text you typed: `hasKey: 2024` looks for `"2024"` and `hasKey: 007` for `"007"`. A numeric regex is still a regex: `1.50` is the pattern `1.50`, whose `.` matches any character. `equals.value` keeps its existing comparison after string conversion; numeric budgets and bounds remain numbers. A descriptor `type: string` still requires string data in the card being checked.
 
 ### The schema check
 
+`hasKey` and `equals.key` match Notes keys in any capitalization. `equals.value` still
+compares exactly after string conversion, and regexes keep their existing case rules.
+Budget roles also match in any capitalization, including the `standard` fallback; a
+finding preserves the budget name's authored spelling. These lookups do not rewrite card
+Notes or metadata.
+
 `schema:` is a descriptor tree evaluated over a mapping recovered from the card.
 
-- **`type`** — `map`, `record`, `seq`, `string`, `number`, `boolean`, `any`, or a list for
+- **`type`** — required: `map`, `record`, `seq`, `string`, `number`, `boolean`, `any`, or a nonempty list for
   a union.
 - **`keys`** — on `map`, the declared key set is the *whole* set and an undeclared key is an
-  ERROR with a typo suggestion. On `record`, the declared keys are validated and everything
+  ERROR with a typo suggestion. Declared `map` keys match in any capitalization; two
+  spellings of one key collide. Normalization affects only the schema check, so later
+  predicates see the original mapping. On `record`, the declared keys are validated and everything
   else passes. **Use `map` for "these keys and no others," `record` + `keys` for "these
   keys, plus anything."**
 - **`of`** — for `seq` / `record`: the descriptor every element or value must match. On a
@@ -143,7 +158,39 @@ markdown cannot give back. An author who wants the full check runs a compile, no
 - **`min`** / **`max`** — inclusive numeric bounds.
 - **`pattern`** — a regex the string must match, compiled case-insensitively.
 
-Every finding is re-coded to the rule's `CL-<pack>/NNNN`.
+Every finding is re-coded to the rule's `CL-<pack>/NNNN`. A schema finding states the
+specific failure and omits the rule's `message:`, except a failed `pattern`, which shows
+the regex and then the `message:` — so word that message as what the value must be.
+
+All compiler-defined pack keys, including descriptor properties (`type`, `keys`,
+`required`, and so on), accept any capitalization. Children of descriptor `keys:`, budget
+role names, and `count.fields` paths retain their authored spelling and reject sibling
+capitalization collisions. Key normalization does not change `values` or the
+case-sensitive `keyPattern` check on an open `record`. `over` accepts exactly `notes`,
+`body`, or `meta`; `over: Body` is `CL0206`. Descriptor type names accept any
+capitalization, including members of a type union.
+
+**An invalid rule is skipped whole while valid sibling rules run.** Pack files report
+unknown or misplaced keys (`CL0201` / `CL0210`), wrong types (`CL0202`), invalid values
+(`CL0206`), and capitalization collisions (`CL0211`) at their authored source positions.
+Every invalid regex in predicates, `keyPattern`, or `pattern` is reported as `CL0121`.
+Pack-level errors disable the entire pack, including unreadable YAML, a missing rules
+list, an unknown envelope key, or a name mismatch. A normal compile fails on these
+errors; offline lint uses the same recovery boundary. Preview returns cards and findings
+with invalid rules skipped, in either tolerant mode. Skipped rules do not count toward
+`droppedKeys`.
+
+**Rules require a check and a unique final code.** Declare at least one of `forbid`,
+`require`, `requireCard`, `schema`, `budget`, `count`, or `mutexHint`. `forbid: {}` is a
+valid predicate that matches every card. `CL0121` also reports a rule with no check or a
+duplicate padded code, including positional defaults and capitalization differences.
+The first rule to name a code holds it, in its authored spelling, even when that rule is
+skipped for another error; the later duplicate is skipped with the first definition's
+location.
+
+Even when an envelope error or name mismatch makes the pack unavailable, every rule in
+a readable `rules:` list is validated and its errors are reported with that pack-level
+context. None of the pack's rules run. `CL0117` remains a pack-loading failure.
 
 **A pack re-parses `notes:` itself**, since the compiler emits it as a flat string. A
 `notes:` block that is prose, or a bare marker like `[e]`, parses to `{}` — so a `hasKey`
@@ -151,7 +198,7 @@ rule correctly does not fire. A uniform `> ` blockquote prefix is stripped befor
 
 ### The `meta:` channel
 
-**`meta:` is an item key for tooling** — an unvalidated annotation channel parallel to `v:`,
+**`meta:` is an item key for tooling** — an annotation channel parallel to `v:`,
 which no template ever reads. The compiler writes it into the card's `~~~` fence when it is
 a non-empty mapping, and it reaches AID nowhere.
 
@@ -159,6 +206,12 @@ a non-empty mapping, and it reaches AID nowhere.
 `meta.duckieConv.role`; a `stat-tracker` pack would read `meta.statTracker.*`, and the two
 never collide. `over: meta` validates the pack's own sub-namespace automatically — a rule
 cannot assert about another pack's.
+Namespaces and `role` keys match in any capitalization without rewriting metadata.
+Base items and variant deltas reject recursive sibling capitalization collisions as
+`CL0211`; cross-layer updates use the existing folded merge and retain the stored key
+spelling. The exact match between the pack's declared name and config key still applies.
+`duckieConv` validates role values with the case-insensitive pattern
+`^(anchor|major|standard|minor)$`; an invalid role is a pattern-mismatch finding.
 
 **`meta:` is branch-addressable** — a variant may set `meta.<packName>.role` on one branch
 and leave it default on another.

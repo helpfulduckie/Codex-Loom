@@ -5,6 +5,14 @@
 `.partial` files remain as the escape hatch for what a field list cannot express — see
 `references/templates.md`.
 
+**Literal labels, separators, and `raw` fragments accept numbers as text.** `label`, `join`, each `labelWhen` value, and template or group `{ raw: ... }` entries keep a number as the text you typed, including inline declarations: `0` is `"0"`, `1.50` is `"1.50"`, and `007` is `"007"`. Field names, source references, and render-function selectors keep their existing type rules.
+
+**Field, group and template names match without regard to capitalization,** as do
+`templateFor` role keys: a group listing `name` finds the field declared `Name`. Two names
+in one map that differ only by capitalization are `CL0211`. The three maps are separate
+namespaces; where a field and a group share a name, a template listing it gets the group.
+See [Key Capitalization](compile-yaml.md#key-capitalization).
+
 A field list is not a second renderer. `src/render/field-list.js` *generates* the
 `.template` source each declaration is shorthand for, concatenates the stanzas, and hands
 the result to the same text engine. Anything true of template output is true of field-list

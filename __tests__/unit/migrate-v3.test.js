@@ -52,6 +52,15 @@ describe('the config transformations', () => {
     expect(migrated).toMatch(/^version: 4$/m);
   });
 
+  test.each(['version', 'Version', 'VERSION'])('an authored %s key is preserved without adding another version key', (key) => {
+    const output = migrateConfigFile(writeConfig(`${key}: 3\n${V3}`)).output;
+    const doc = YAML.parseDocument(output);
+    const versionPairs = doc.contents.items.filter((pair) => String(pair.key.value).toLowerCase() === 'version');
+    expect(versionPairs).toHaveLength(1);
+    expect(versionPairs[0].key.value).toBe(key);
+    expect(doc.toJS().structure.input.items).toEqual(['./Codex']);
+  });
+
   test('renames structure.input.cards to items', () => {
     expect(migrated).toMatch(/^ {4}items:$/m);
     expect(migrated).not.toMatch(/^ {4}cards:$/m);

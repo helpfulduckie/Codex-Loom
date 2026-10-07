@@ -136,6 +136,7 @@ arriving by any route is still worth flagging.
 | `CL0118` | WARN | `lint.packs.<name>: ~` targets a pack this branch never inherited, so nothing changes. Remove the entry or inherit the pack. |
 | `CL0119` | ERROR | The pack `name:` differs from its `lint.packs` key, so portable diagnostics/suppressions can break. Make them match. |
 | `CL0120` | WARN | A configured input path is missing, so content there is skipped. Create the path or correct the configuration. |
+| `CL0121` | ERROR | A convention rule has an invalid regex, a repeated diagnostic code, or no check, so the rule is skipped. Repair the expression or give the rule a unique id and at least one check. |
 | `CL0130` | WARN | An `include:` path is missing, or names a directory holding no YAML files, so included items are skipped. Create the file or correct the path. |
 | `CL0131` | ERROR | The same file is included more than once, so the repeated include is skipped. Keep one include. |
 | `CL0140` | ERROR | The item has no `id:` or `name:`, so it cannot enter the registry. Add one identity field. |
@@ -186,6 +187,12 @@ resting on nothing. Sync still runs and the entry's files are still frozen; only
 | `CL0208` | ERROR | A string value or record key does not match its descriptor's `pattern:` or `keyPattern:` regex, so the value or key is rejected; change it to match the pattern. Used by convention-pack schemas; no `compile.yaml` key declares a pattern. |
 | `CL0209` | ERROR | The project is not declared as v4, so configuration loading stops; set `version: 4` or run `--migrate` for a v3 project. A missing key or `version: 3` names `--migrate`; any other value is reported as unsupported. |
 | `CL0210` | ERROR | A valid key is at the wrong level, so it is ignored there; move it to the reported level. Relocation is suggested before edit-distance spelling. |
+| `CL0211` | ERROR | Sibling keys differ only by capitalization and identify the same key; keep one definition or give them distinct names. |
+
+`CL0211` is raised only in mappings whose keys are author-chosen names. It is a load error
+on every surface, component files included, so nothing is compiled or written. See
+[Key Capitalization](02-compile-yaml.md#key-capitalization) for the mappings covered and
+the three exceptions.
 
 ### CL0210 in detail
 
@@ -221,6 +228,7 @@ Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein 
 | `CL0326` | WARN | A selector aimed at multiple items matched none, so it changes nothing. |
 | `CL0327` | WARN | A branch spec maps `'*'` to `~`; use `'_': ~` to exclude the unnamed branches. |
 | `CL0328` | WARN | A field operation matches nothing, so it changes no value; check for drift or a typo. |
+| `CL0329` | WARN | An item variant uses a reserved `import`, `include` or `branches` key that cannot be applied there; it is ignored. Use `body:` to change a body field with that name. |
 | `CL0340` | ERROR | A reference is defined in more than one library set and needs a qualifier. |
 | `CL0341` | ERROR | A reference names an undeclared library set; use a set declared in `structure.input.library`. |
 | `CL0342` | ERROR | A reference names an id that the selected registry does not define. |

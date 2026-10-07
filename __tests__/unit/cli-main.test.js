@@ -83,5 +83,24 @@ describe('main(argv) — in-process', () => {
 
       expect(result).toBe(1);
     });
+
+    test('migration refuses a capitalized Version declaration on a v4 project without writing', () => {
+      const cfgPath = path.join(tmp, 'compile.yaml');
+      const source = MINIMAL_COMPILE_YAML.replace('version: 4', 'Version: 4');
+      write(cfgPath, source);
+      expect(main(['--migrate', cfgPath])).toBe(1);
+      expect(errorSpy.mock.calls.some((args) => /already declares version: 4/.test(args[0]))).toBe(true);
+      expect(fs.readFileSync(cfgPath, 'utf8')).toBe(source);
+      expect(fs.existsSync(path.join(tmp, 'migration-report.md'))).toBe(false);
+    });
+
+    test('standalone rename accepts a capitalized Version declaration on a v4 project', () => {
+      const cfgPath = path.join(tmp, 'compile.yaml');
+      const source = MINIMAL_COMPILE_YAML.replace('version: 4', 'Version: 4');
+      write(cfgPath, source);
+      expect(main(['--rename-cl', cfgPath])).toBe(0);
+      expect(fs.existsSync(cfgPath)).toBe(false);
+      expect(fs.readFileSync(path.join(tmp, 'compile.cl.yaml'), 'utf8')).toContain('Version: 4');
+    });
   });
 });

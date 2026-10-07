@@ -2,6 +2,11 @@
 
 Items are the atomic units of content in a Codex Loom project — a character, a location, a settings block, or any other story card. Each YAML item file is a sequence of item entries.
 
+The keys of `body`, `variables` and `notes`, and variant names, match without regard to
+capitalization: a variant that sets `hair` overrides a body field written `Hair`. Two keys
+in one mapping that differ only by capitalization are an ERROR (`CL0211`). See
+[Key Capitalization](02-compile-yaml.md#key-capitalization).
+
 ---
 
 ## Complete Example
@@ -69,7 +74,7 @@ id: Aness
 
 Display name used in rendered output. Two forms:
 
-**Scalar string** — the compiler normalizes it automatically: `display` is set to the first word, `full` is the complete string.
+**Scalar text** — the compiler normalizes it automatically: `display` is set to the first word, `full` is the complete string. An unquoted number is read as the text you typed; the same rule applies to explicit `display` and `full` values.
 
 ```yaml surface=item
 name: Aness Rozen
@@ -151,6 +156,10 @@ aid:
 `aid.type` and `render.template` default to each other — if one is set the other is filled in automatically. If neither is set, the item cannot be rendered and a warning is emitted.
 
 String values in `aid:` (e.g. `title`, `triggers`) support `{%variable}` expansion, the same as `body:`. **`aid.type` is validated after expansion** — since it becomes a folder and filename, an illegal path segment (`< > : " / \ | ? *`, control chars, `.`/`..`, or a trailing space/period) aborts the compile.
+
+**Names, `aid.title`, and trigger values accept numbers as text, including in variants.** The text is the number as you typed it: `1.50` stays `1.50`, `007` stays `007`, and a long integer keeps every digit.
+
+**Numbers in `body:`, `v:`, `notes:`, and `pronouns:` also render as typed.** `gpa: 3.30` renders `3.30` and `schoolId: 0107420` renders `0107420`, at any depth and in variants, with no quotes needed. `meta:` is the exception: it is data for tools and never card text, so its numbers stay parsed numbers that a convention pack can check with `type: number`, `min`, and `max`. A number reached through a YAML alias (`*name`) renders in its parsed form.
 
 Every semantic item string value expands, including nested values in `body:`, `v:`, `notes:`, `meta:`, and `pronouns:`; mapping keys and branch/variant selectors remain literal.
 
@@ -306,7 +315,7 @@ In templates, access as `{$v.affiliation}`, `{$v.role}`, etc.
 
 You can write any alias in your item YAML, in a variant delta, or in a template token — they all resolve to the same data. If multiple aliases appear as sibling top-level keys on the same item or within the same variant delta, a warning is emitted and their subfields are merged (last-writer-wins per subfield).
 
-> **Item variables vs. compile variables.** `{$v.key}` (this block) is *per-item* data resolved through the `{$…}` field-reference system. It is a different mechanism from the `{%key}` *compile variables* declared in `compile.yaml` `variables:`, which are branch-scoped string values. The `variable`/`variables` alias above applies only to the item `v:` block, not to `{%}`. See [07-templates.md](07-templates.md) "Token Systems at a Glance" for the full comparison.
+> **Item variables vs. compile variables.** `{$v.key}` (this block) is *per-item* structured data resolved through the `{$…}` field-reference system; nested mappings, lists, numbers, and booleans are supported. The `{%key}` *compile variables* declared in `compile.yaml` `variables:` are a flat branch-scoped table accepting strings and numbers, with null removing an inherited binding. A number in either place renders as typed, so `3.30` and `0107420` need no quotes. The `variable`/`variables` alias above applies only to the item `v:` block, not to `{%}`. See [07-templates.md](07-templates.md) "Token Systems at a Glance" for the full comparison.
 
 ---
 
@@ -347,6 +356,16 @@ variants:
 Variants can be nested to any depth. A slash-separated path like `sci-fi/near-future` applies the `sci-fi` delta first, then the `near-future` child.
 
 The `id` field is immutable and cannot be changed by any variant.
+
+A bare key matching a structural item field changes that field in any capitalization.
+`Name: Changed` changes the item's name; to change a body field called `Name`, write
+`body: {Name: Changed}`. The same distinction applies to fields such as `Notes`, `Render`
+and `Aid`.
+
+`import`, `include`, and `branches` are reserved keys that cannot be applied inside an
+item variant. A bare occurrence in any capitalization raises `CL0329` and is ignored;
+use `body: {Import: ...}`, `body: {Include: ...}`, or `body: {Branches: ...}` to change
+a body field with that name. These are checked even in a variant no branch selects.
 
 See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) and [Field Operations](06-field-operations.md) for how variants are applied and what operations are available.
 

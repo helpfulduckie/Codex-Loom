@@ -17,15 +17,18 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/compileState.js` | The mutable state of one `compileRun`, grouped into the clusters the decomposed stages pass around |
 | `src/config/load.js` | Loads and resolves `compile.cl.yaml`: variables, paths, library names |
 | `src/config/schema.js` | The `compile.cl.yaml` key surface, validated by `src/schema.js` |
+| `src/keyIdentity.js` | Selected authored mapping key validation, driven by schema descriptor flags |
 | `src/snapshot.js` | `--snapshot`: the library freeze (copy + hash + manifest write) and the compile-time drift notice (§11) |
 | `src/loader/preparse.js` | Rescues leading `{$…}`/`{%…}` tokens YAML would swallow (§4.1) |
 | `src/loader/yaml.js` | YAML parsing with a source map, so diagnostics carry positions |
 | `src/loader/registry.js` | Item loading, `ItemRegistry`, library merge, overlays, includes |
 | `src/loader/schema.js` | The item key surface (§4.3) |
 | `src/loader/component.js`, `src/loader/component-schema.js` | Component-document loading and its key surface (§7.2) |
+| `src/loader/dispatch-schema.js` | Shared normalization view for the recursive `branches` wrapper inside dispatch maps |
 | `src/loader/field-table.js` | Loads `fields.cl.yaml` — the field and template declarations (§13.2) |
 | `src/loader.js` | Template and partial loading; holds `loadNamedFiles`, `loadTemplates` and `loadFieldTable` |
 | `src/schema.js` | The shared validation engine both key surfaces run through |
+| `src/lint/pack-schema.js` | The convention-pack envelope, recursive predicates/descriptors, and per-item rule schemas |
 | `src/diag.js` | The diagnostic bus: codes, severities, source spans (§4.4) |
 | `src/log.js` | The progress log — `{ info, verbose }` — that narration goes to; exports only the silent default |
 | `src/model/item.js` | Item resolution through import/variant/branch chains |
@@ -70,6 +73,141 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/migrate/plot-essentials-apply.js` | Applies that decision — rewrites the component as `sections:`, adds render targets, moves inline blocks out into item files |
 
 `model/` is pure by contract (§3.3): no `fs`, no `console`. Warnings go to a caller-supplied `onWarn`, and failed lookups come back described rather than thrown, so the caller decides what reaches a terminal. A test enforces both the purity and the roster.
+
+## Key Matching
+
+§4.3.1 states the rule and its exceptions; this section says where the code enforces it.
+
+**Read, write and delete an author-chosen key through `util.findKey`, `getCI`, `setCI` and
+`deleteCI`, never by indexing.** `findKey` returns the stored spelling of the first key
+that matches when case is folded, or `null`. `setCI` writes to that stored spelling, so a
+merged table keeps the spelling of the layer that declared the name first. A plain
+`obj[key] = value` or `Object.assign` on one of these tables creates a second entry that
+every lookup then ignores.
+
+**`mergeUnbindable` in `model/branches.js` is the merge for tables that inherit down the
+branch tree** — variables, roles and `lint.packs`. It folds case for all of them. A walk
+that tracks variables per node (`nodeVisitPrologue` in `treeWrite.js`, for one) calls it
+rather than merging by hand, or that walk's output disagrees with the leaf compile.
+
+**Closed schema maps normalize declared keys to their documented spelling.** `validate`
+runs a normalization pass that matches `MAP.keys` without regard to capitalization and
+rewrites recognized keys before custom key checks and child validation. It reports
+`CL0211` for colliding spellings before rewriting them. Consumers that run after
+`validate` keep reading plain properties such as `item.render`; enum values
+are unaffected. Configuration normalizes its top-level keys before checking `version`,
+so that the version gate follows the same capitalization rule.
+
+**`TEXT` opts a string descriptor into accepting a number as the text the author typed.** `src/schema.js` exports `TEXT = { type: TYPES.STRING, numberAsText: true }`; ordinary `STRING` remains strict. `buildPositions` in `src/loader/yaml.js` stores each unquoted numeric scalar's source characters on its position record, and `SourceMap.spelling(path)` returns them. The schema normalization pass replaces a number in a `TEXT` field with that spelling and assigns it back to its parent before validation, so `1.50`, `007`, and `1e3` stay `"1.50"`, `"007"`, and `"1e3"`. Callers must use `validate`'s returned value when the validated root can itself be a scalar.
+
+**`AUTHORED` marks opaque author data whose numbers render as typed.** It is `ANY` plus `authoredSpelling: true`, set on item `body`, `v` and its aliases, `notes`, and `pronouns`. Normalization walks such a block at any depth and replaces only a number whose spelling differs from `String(number)`; other numbers keep their type. `meta` and component `metadata` stay plain `ANY`.
+
+**Both paths fall back to `String(number)` when no spelling applies.** That covers `validate` calls without a source map, numbers reached through a YAML alias, and a recorded spelling that does not parse back to the value. Numeric settings remain typed.
+
+**Reads before validation need their own boundary normalization or folded lookup.** Item
+discovery normalizes each entry's top-level keys before component detection, include
+identity checks, and diagnostic labels; `sections` detection uses a folded lookup because
+the item schema does not declare that key. `templateFor` files validate against the field
+table schema before their templates are read. Every `resolveTemplateForMaps` call reloads
+and validates its slot files, but only the load-time pass in `gatherTierTemplates` reports
+the findings; the per-leaf pass in `buildCompileContext` validates silently so a tolerated
+finding is not repeated for each leaf. Migration's version gates use folded lookup
+while the remaining v3 grammar stays exact.
+
+**An opaque delta can declare a normalization view without becoming a closed schema.**
+The internal `normalizeAs` descriptor supplies the recognized structural keys for item
+and section variants, and the `branches` wrapper inside dispatch maps. The normalization
+pass follows that view; validation still follows the original `ANY` descriptor, so field
+operations and undeclared bare body fields keep their open grammar. Normalize nested maps
+as well as the delta's top level: a newly introduced `Render.Template` otherwise keeps a
+capitalized property that downstream reads miss.
+
+The normalization view also applies `numberAsText` to designated item and section text values, including newly introduced nested variant values. It applies `authoredSpelling` to variant `body`, `v`, `notes`, and `pronouns` the same way, and leaves field-operation strings unchanged.
+
+**`util.ITEM_DELTA_KEYS` is the shared classification of reserved item delta names.**
+The item normalization view selects its declared keys from it, `keyIdentity` uses it to
+distinguish structural content, and `applyFieldsDelta` uses it to route or ignore writes.
+Reserved `import`, `include`, and `branches` warn with `CL0329` at load and never become
+bare body fields. The normalization view omits those three, so the warning quotes the
+authored spelling. Explicit `body:` content remains author-keyed. Both item and component
+schemas use the recursive dispatch view from `loader/dispatch-schema.js`.
+
+**A schema descriptor declares which author-keyed mappings the rule covers.** `caseInsensitiveKeys:
+true` on a `RECORD` descriptor makes `validate` raise `CL0211` for sibling keys that
+collide. `checkKeys` names a function from `src/keyIdentity.js` for the surfaces a flat
+flag cannot describe: item deltas, where any key that is not structural is a body field,
+and dispatch maps, which nest. A new author-keyed mapping needs one or the other.
+
+**Every `CL0211` is a load error, so `abortOnLoadErrors` stops the run before any output.**
+Config, items, field tables and `templateFor` files are validated during load already.
+Components are not: `ComponentLoader` reads one when the first leaf asks for it, and the
+description is read after the cards are written. `checkComponentKeyIdentity` in
+`compile.js` therefore walks the branch tree during load and passes each component file
+to `checkComponentKeys` (`loader/component.js`), which validates against
+`COMPONENT_SCHEMA`, keeps only the collisions, and follows `imports:`. Other component
+findings stay with the lazy load, which reports them against the leaf that asked.
+
+**A field path is compared with `util.pathId` and `pathStartsWith`.** Both fold case one
+segment at a time, so `['body', 'a.b']` and `['body', 'a', 'b']` stay distinct. Preview
+uses them to group a field's history; `diff.js` uses the prefix test to attribute a
+changed field to a variant delta.
+
+**The origin index is the one structure that stays exact.** Its keys are the paths of the
+merged object as stored, and a lookup uses those same stored spellings. Where a later
+layer overrides a name in a different spelling, the entry carries a `keyPath` (the stored
+spelling, used as the index key) beside its `path` (the spelling in the source file, kept
+in the record so the diagnostic points at what the author wrote).
+
+**Schema normalization remaps source-map paths while retaining authored paths.** Loaders
+attach origins after validation, so `SourceMap` must export each normalized runtime path
+as `keyPath` and its original source path as `path`. Nested rewrites carry the whole
+subtree, so a diagnostic on `render.template` still points at an authored `Render.Template`.
+Attached origin indexes are remapped through `origin.remapOrigins`, keeping path encoding
+inside the origin module.
+
+**Convention-pack `map` schemas use the same normalization on a copy of the checked data.**
+Later predicates and rules must see the original recovered card mapping. Open `record`
+keys retain their existing behavior. Pack descriptor property names normalize at load.
+`hasKey`, `equals.key`, and budget role lookup use `findKey` / `getCI` on the original
+mapping. Equality values remain exact after string conversion; budget fallback looks up
+`standard` with the same key identity and findings preserve the budget's authored spelling.
+
+**Pack validation separates the envelope from individual rules.** `loadPack` uses
+`loadYamlDocument` for source positions and validates against `PACK_SCHEMA`: the envelope
+is checked with an opaque rules value, then each rule with the schema's element descriptor.
+An envelope error disables the pack. A rule error skips that whole rule, retaining valid
+siblings and each rule's original positional default id. Null structural values are
+rejected because packs have no deletion operations. Regex and descriptor-type checks run
+after key normalization and collect every failure, including nested `pattern` and
+`keyPattern` expressions. Author-keyed records preserve spelling and check collisions.
+The supplemental walk uses schema-entry marks `packRegex` and `packType`, so author-keyed
+records cannot trigger checks merely by sharing a compiler property name. `packCheck`
+marks the seven properties that satisfy the rule's check requirement.
+
+**Envelope failures do not hide rule findings.** When `rules` is a list, `loadPack`
+validates every rule before returning null for an invalid envelope or name mismatch.
+Rule diagnostics then use the pack-unavailable context. `CL0117` is reserved for
+unloadable packs; `CL0121` covers invalid regexes, repeated final codes, and absent checks.
+An issued-code map compares padded codes without regard to capitalization, preserves
+their emitted spelling, and records the first rule's location for a later duplicate.
+A rule rejected by schema or value validation, or one with no check, still enters the map
+before it is skipped; only an `id` of the wrong type holds no code, because it names none.
+
+**Card-side pack metadata uses one folded namespace lookup.** `packMetadata` obtains the
+namespace for both `over: meta` and the budget check; budget then uses `getCI` for `role`.
+Schema checks clone the namespace before validation, so neither path rewrites card data.
+`checkItemKeys` recursively checks authored `meta` on base items and variant deltas for
+`CL0211` collisions. Across layers, field operations already fold namespace and nested
+keys, update the existing spelling, and do not create a second case variant. The bundled
+`duckieConv` role schema uses an anchored case-insensitive pattern to agree with budget
+role lookup.
+
+**Pack recovery is identical in compile, offline lint, and tolerant preview.** Dropping a
+broken selector or predicate would change a rule's meaning, so tolerance never deletes a
+pack key and runs the remainder. Pack-load diagnostics remain errors: normal compile
+writes its output and fails at the final error check; preview returns output and
+diagnostics without blocking. `runPackChecks` returns the set of pack-load findings so
+the preview's `droppedKeys` count excludes errors that skipped rules or disabled packs.
 
 ---
 

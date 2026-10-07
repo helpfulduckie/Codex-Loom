@@ -5,12 +5,12 @@ const fs = require('fs');
 const path = require('path');
 
 const { Diagnostics, CODES } = require('../diag');
-const { validate } = require('../schema');
+const { validate, normalizeMapKeys } = require('../schema');
 const { loadYamlDocument, YamlLoadError } = require('../loader/yaml');
 const { attachOrigins } = require('../origin');
 const { CONFIG_SCHEMA } = require('./schema');
 const { walkBranchTree } = require('../model/branches');
-const { resolveVariables } = require('../util');
+const { resolveVariables, findKey } = require('../util');
 
 function collectVariableNames(config) {
   const root = new Set(
@@ -145,6 +145,8 @@ function loadCompileConfig(configPath, options = {}) {
 
   const config = parsed;
 
+  normalizeMapKeys(config, CONFIG_SCHEMA, { diagnostics, sourceMap });
+
   const at = (...parts) => (sourceMap ? sourceMap.nearest(parts) : {});
 
   const { version } = config;
@@ -179,8 +181,8 @@ function loadCompileConfig(configPath, options = {}) {
 
   const variables = Object.assign({}, config.variables || {});
   for (const name of Object.keys(libraryRaw)) {
-    const clash = Object.keys(variables).find((k) => k.toLowerCase() === name.toLowerCase());
-    if (clash !== undefined) {
+    const clash = findKey(variables, name);
+    if (clash !== null) {
       diagnostics.error(
         CODES.LIBRARY_NAME_COLLIDES,
         `Library name "${name}" collides with the variable "${clash}".`,

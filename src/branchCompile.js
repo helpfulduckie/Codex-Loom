@@ -10,7 +10,7 @@ const { render, applyFieldInterpolation, applyVariableInterpolation } = require(
 const { renderFieldList } = require('./render/field-list');
 const {
   resolveVariables, checkUnexpandedVariables, checkUnresolvedFieldTokens,
-  checkMechanicalArtifacts, itemContext,
+  checkMechanicalArtifacts, itemContext, getCI, setCI,
 } = require('./util');
 const { validateCardType } = require('./cardType');
 const {
@@ -75,9 +75,12 @@ function buildCompileContext(config, branchPath, options = {}) {
       variables,
       options.diagnostics,
       options.configPath || null,
+      { reportSchema: false },
     );
     for (const [role, typeMap] of Object.entries(resolved)) {
-      templateFor[role] = Object.assign(templateFor[role] || {}, typeMap);
+      const merged = getCI(templateFor, role) || {};
+      for (const [name, list] of Object.entries(typeMap)) setCI(merged, name, list);
+      setCI(templateFor, role, merged);
     }
   }
 
@@ -198,7 +201,7 @@ function renderPlacementBody(item, target, templates, partials, variables, diagn
   const type = item.aid && item.aid.type;
   const hit = resolveRenderLadder(item, templates, fieldTable, {
     choice: target.template,
-    maps: [templateFor[target.component] || {}, templateFor.base || {}],
+    maps: [getCI(templateFor, target.component) || {}, getCI(templateFor, 'base') || {}],
     typeSlotName: `${target.component}:${type}`,
   });
 

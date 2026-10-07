@@ -1,7 +1,7 @@
 'use strict';
 
 
-const { deepClone, findKey } = require('../util');
+const { deepClone, findKey, setCI, deleteCI } = require('../util');
 const { CODES } = require('../diag');
 const { originLocation } = require('../origin');
 
@@ -31,7 +31,8 @@ function resolveBranchSpec(spec, branchPath, onWarn = null, origins = {}) {
     for (const { spec: currentSpec, path } of activeSpecs) {
       if (!currentSpec || typeof currentSpec !== 'object') continue;
 
-      const exactKey = Object.keys(currentSpec).find(k => k !== '*' && k !== '_' && k.toLowerCase() === branchLower);
+      const exactKey = branchLower === '*' || branchLower === '_'
+        ? undefined : findKey(currentSpec, branchLower) ?? undefined;
       if (exactKey !== undefined) {
         const exactVal = currentSpec[exactKey];
         if (exactVal === null || exactVal === undefined) {
@@ -239,8 +240,9 @@ function mergeUnbindable(table, local, { code, kind, onWarn = null, origin = nul
   if (!local || typeof local !== 'object') return merged;
 
   for (const [key, value] of Object.entries(local)) {
+    const actual = findKey(merged, key);
     if (value === null || value === undefined) {
-      if (!(key in merged) && onWarn) {
+      if (actual === null && onWarn) {
         onWarn(
           code,
           `${kind} "${key}" is unbound with ~ but was never inherited here — nothing was `
@@ -248,9 +250,9 @@ function mergeUnbindable(table, local, { code, kind, onWarn = null, origin = nul
           unbindLocation(origin, key),
         );
       }
-      delete merged[key];
+      deleteCI(merged, key);
     } else {
-      merged[key] = value;
+      setCI(merged, key, value);
     }
   }
   return merged;

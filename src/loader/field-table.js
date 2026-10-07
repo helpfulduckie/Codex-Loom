@@ -3,7 +3,7 @@
 
 const path = require('path');
 
-const { findFiles, isPlainObject } = require('../util');
+const { findFiles, isPlainObject, findKey, getCI, setCI } = require('../util');
 const { loadYamlDocument } = require('./yaml');
 const { entryName } = require('../render/parse');
 const { levenshtein, validate } = require('../schema');
@@ -72,38 +72,41 @@ function foldDocument(doc, file, sourceMap, acc, diagnostics, tolerant) {
   const fields = doc.fields;
   if (fields !== undefined && fields !== null && isPlainObject(fields)) {
     for (const [name, decl] of Object.entries(fields)) {
-      if (decl === null) { acc.fields[name] = null; continue; } // `~` unbinds an inherited field
+      if (decl === null) { setCI(acc.fields, name, null); continue; } // `~` unbinds an inherited field
       if (!isPlainObject(decl)) continue;
       checkSourceConflict(decl, `Field "${name}"`, ['fields', name], sourceMap, diagnostics);
-      acc.fields[name] = decl; // replace-per-entry (Decision 5), not deep
-      acc._origins.push({ ...sourceMap.nearest(['fields', name]), path: ['fields', name] });
+      const key = findKey(acc.fields, name) ?? name;
+      setCI(acc.fields, name, decl);
+      acc._origins.push({ ...sourceMap.nearest(['fields', name]), path: sourceMap.authoredPath(['fields', name]), keyPath: ['fields', key] });
     }
   }
 
   const groups = doc.groups;
   if (groups !== undefined && groups !== null && isPlainObject(groups)) {
     for (const [name, members] of Object.entries(groups)) {
-      if (members === null) { acc.groups[name] = null; continue; }
+      if (members === null) { setCI(acc.groups, name, null); continue; }
       if (!Array.isArray(members)) continue;
-      acc.groups[name] = members;
-      acc._origins.push({ ...sourceMap.nearest(['groups', name]), path: ['groups', name] });
+      const key = findKey(acc.groups, name) ?? name;
+      setCI(acc.groups, name, members);
+      acc._origins.push({ ...sourceMap.nearest(['groups', name]), path: sourceMap.authoredPath(['groups', name]), keyPath: ['groups', key] });
     }
   }
 
   const templates = doc.templates;
   if (templates !== undefined && templates !== null && isPlainObject(templates)) {
     for (const [name, list] of Object.entries(templates)) {
-      if (list === null) { acc.templates[name] = null; continue; }
+      if (list === null) { setCI(acc.templates, name, null); continue; }
       if (!Array.isArray(list)) continue;
-      acc.templates[name] = list;
-      acc._origins.push({ ...sourceMap.nearest(['templates', name]), path: ['templates', name] });
+      const key = findKey(acc.templates, name) ?? name;
+      setCI(acc.templates, name, list);
+      acc._origins.push({ ...sourceMap.nearest(['templates', name]), path: sourceMap.authoredPath(['templates', name]), keyPath: ['templates', key] });
     }
   }
 }
 
 function checkReferences(table, diagnostics) {
-  const knownField = (n) => Object.prototype.hasOwnProperty.call(table.fields, n) && table.fields[n] !== null;
-  const knownGroup = (n) => Object.prototype.hasOwnProperty.call(table.groups, n) && table.groups[n] !== null;
+  const knownField = (n) => getCI(table.fields, n) != null;
+  const knownGroup = (n) => getCI(table.groups, n) != null;
 
   for (const [name, members] of Object.entries(table.groups)) {
     if (members === null) continue;

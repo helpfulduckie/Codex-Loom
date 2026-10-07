@@ -27,6 +27,64 @@ function loadWithDiagnostics(dir = tmpDir) {
   return { items, diagnostics, codes: diagnostics.all.map((d) => d.code) };
 }
 
+test('capitalized Sections component documents are excluded from item discovery', () => {
+  write('components.cl.yaml', 'Sections: {intro: {Text: prose}}\n');
+  write('items.cl.yaml', '- Id: Hero\n  Name: Hero\n');
+  const { items, diagnostics } = loadWithDiagnostics();
+  expect(items.map((item) => item.id)).toEqual(['Hero']);
+  expect(diagnostics.all).toEqual([]);
+});
+
+test.each(['Id', 'Name'])('capitalized %s supplies the item label in validation diagnostics', (key) => {
+  write('items.cl.yaml', `- ${key}: Hero\n  Render: {Template: 42}\n`);
+  const { diagnostics } = loadWithDiagnostics();
+  const finding = diagnostics.all.find((d) => d.code === CODES.WRONG_TYPE);
+  expect(finding.message).toContain('in item "Hero"');
+  expect(finding).toMatchObject({ line: 2, col: 12 });
+});
+
+test('early item normalization reports a declared key collision only once with both authored positions', () => {
+  write('items.cl.yaml', '- Id: Hero\n  id: Other\n');
+  const { diagnostics } = loadWithDiagnostics();
+  const findings = diagnostics.all.filter((d) => d.code === CODES.DUPLICATE_KEY_CASE);
+  expect(findings).toHaveLength(1);
+  expect(findings[0]).toMatchObject({ line: 2, col: 3,
+    related: [{ label: 'first definition', line: 1, col: 3 }] });
+});
+
+test('an included capitalized Id is suppressed by an explicit item before validation', () => {
+  const shared = write('shared/items.cl.yaml', '- Id: Hero\n  Render: {Template: 42}\n');
+  const diagnostics = new Diagnostics();
+  const included = resolveIncludes([
+    { id: 'Hero', _source: path.join(tmpDir, 'project.yaml') },
+    { include: shared, _source: path.join(tmpDir, 'project.yaml') },
+  ], new Map(), { _base: tmpDir }, { diagnostics });
+  expect(included).toEqual([]);
+  expect(diagnostics.all).toEqual([]);
+});
+
+test('capitalized Sections component documents are excluded from included files', () => {
+  const shared = write('shared/items.cl.yaml', '- Sections: {intro: {Text: prose}}\n- Id: Hero\n');
+  const diagnostics = new Diagnostics();
+  const included = resolveIncludes([
+    { include: shared, _source: path.join(tmpDir, 'project.yaml') },
+  ], new Map(), { _base: tmpDir }, { diagnostics });
+  expect(included.map((item) => item.id)).toEqual(['Hero']);
+  expect(diagnostics.all).toEqual([]);
+  expect(originAt(included[0], ['id'])).toMatchObject({ path: ['Id'], line: 2 });
+});
+
+test('early included item normalization reports a key collision only once with both positions', () => {
+  const shared = write('shared/items.cl.yaml', '- Id: Hero\n  id: Other\n');
+  const diagnostics = new Diagnostics();
+  resolveIncludes([{ include: shared, _source: path.join(tmpDir, 'project.yaml') }],
+    new Map(), { _base: tmpDir }, { diagnostics });
+  const findings = diagnostics.all.filter((d) => d.code === CODES.DUPLICATE_KEY_CASE);
+  expect(findings).toHaveLength(1);
+  expect(findings[0]).toMatchObject({ file: shared, line: 2, col: 3,
+    related: [{ label: 'first definition', file: shared, line: 1, col: 3 }] });
+});
+
 describe('a file that will not load is one coded ERROR, and the walk goes on (CL0101)', () => {
   test('a malformed item file is CL0101 naming the file, and its sibling still loads', () => {
     const bad = write('Codex/bad.cl.yaml', 'id: Bad\nname: [unclosed\n');

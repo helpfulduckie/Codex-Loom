@@ -1,6 +1,6 @@
 'use strict';
 
-const { walkItemTextFields } = require('../util');
+const { walkItemTextFields, findKey } = require('../util');
 const { CODES } = require('../diag');
 
 
@@ -134,8 +134,8 @@ function getEffectivePronounSet(itemOrPronouns, itemId, branchProtagonist) {
 function resolveRole(leading, { roles, registry, resolvedById, onWarn, onRoleUsed }) {
   if (!roles || Object.keys(roles).length === 0) return null;
   const leadingLower = leading.toLowerCase();
-  const roleKey = Object.keys(roles).find((k) => k.toLowerCase() === leadingLower);
-  if (roleKey === undefined) return null;
+  const roleKey = findKey(roles, leadingLower);
+  if (roleKey === null) return null;
 
   if (registry.has(leadingLower)) {
     if (onWarn) {
@@ -150,7 +150,7 @@ function resolveRole(leading, { roles, registry, resolvedById, onWarn, onRoleUse
 
   const boundId = roles[roleKey];
   const boundLower = boundId === null || boundId === undefined ? '' : String(boundId).toLowerCase();
-  const targetIsRole = Object.keys(roles).some((k) => k.toLowerCase() === boundLower);
+  const targetIsRole = findKey(roles, boundLower) !== null;
   if (targetIsRole) {
     if (onWarn) {
       onWarn(
@@ -323,8 +323,8 @@ function applyCrossItemRefs(resolvedItems, { registry, onWarn, resolvedById }) {
     let val = sourceItem.body || {};
     for (const part of parts) {
       if (val === null || typeof val !== 'object') return null;
-      const actualKey = Object.keys(val).find(k => k.toLowerCase() === part.toLowerCase());
-      if (actualKey === undefined) return null;
+      const actualKey = findKey(val, part);
+      if (actualKey === null) return null;
       val = val[actualKey];
     }
     if (val === null || val === undefined) return null;

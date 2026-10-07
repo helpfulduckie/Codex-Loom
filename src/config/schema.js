@@ -1,10 +1,12 @@
 'use strict';
 
 
-const { TYPES, STRING } = require('../schema');
+const { TYPES, STRING, TEXT } = require('../schema');
 
 const STRING_SEQ = { type: TYPES.SEQ, of: STRING };
-const STRING_RECORD = { type: TYPES.RECORD, of: STRING };
+const CI_STRING_RECORD = { type: TYPES.RECORD, of: STRING, caseInsensitiveKeys: true };
+const TEXT_RECORD = { type: TYPES.RECORD, of: TEXT };
+const VARIABLES = { ...TEXT_RECORD, caseInsensitiveKeys: true };
 
 const SCRIPTS = {
   type: [TYPES.STRING, TYPES.MAP],
@@ -24,8 +26,8 @@ const COMPONENTS = {
     description: STRING,
     adventureDescription: STRING,
     plotEssential: STRING,
-    opening: STRING,
-    branchFraming: STRING,
+    opening: TEXT,
+    branchFraming: TEXT,
     summary: STRING,
 
   },
@@ -52,6 +54,7 @@ const STORY_CARD_TYPE = {
 
 const TEMPLATE_FOR = {
   type: TYPES.RECORD,
+  caseInsensitiveKeys: true,
   of: { type: [TYPES.STRING, TYPES.SEQ], of: STRING },
 };
 
@@ -66,6 +69,7 @@ const LINT_PACK_ENTRY = {
 };
 
 const LINT_PACKS = {
+  caseInsensitiveKeys: true,
   type: TYPES.RECORD,
   of: LINT_PACK_ENTRY,
 };
@@ -88,10 +92,10 @@ const ROOT_LINT = {
 const BRANCH_NODE = {
   type: TYPES.MAP,
   keys: {
-    title: STRING,
-    variables: STRING_RECORD,
-    roles: { type: TYPES.RECORD, of: STRING },
-    placeholders: STRING_RECORD,
+    title: TEXT,
+    variables: VARIABLES,
+    roles: CI_STRING_RECORD,
+    placeholders: TEXT_RECORD,
     scripts: SCRIPTS,
     lint: LINT,
     components: COMPONENTS,
@@ -101,7 +105,7 @@ const BRANCH_NODE = {
   },
 };
 
-const BRANCHES = { type: TYPES.RECORD, of: BRANCH_NODE };
+const BRANCHES = { type: TYPES.RECORD, caseInsensitiveKeys: true, of: BRANCH_NODE };
 BRANCH_NODE.keys.branches = BRANCHES;
 
 
@@ -109,7 +113,7 @@ const CONFIG_SCHEMA = {
   type: TYPES.MAP,
   keys: {
     version: { type: TYPES.NUMBER },
-    title: STRING,
+    title: TEXT,
 
     structure: {
       type: TYPES.MAP,
@@ -120,7 +124,7 @@ const CONFIG_SCHEMA = {
           keys: {
             items: STRING_SEQ,
             templates: STRING_SEQ,
-            library: STRING_RECORD,
+            library: CI_STRING_RECORD,
             snapshot: STRING,
 
           },
@@ -130,9 +134,9 @@ const CONFIG_SCHEMA = {
       },
     },
 
-    variables: STRING_RECORD,
-    roles: { type: TYPES.RECORD, of: STRING },
-    placeholders: STRING_RECORD,
+    variables: VARIABLES,
+    roles: CI_STRING_RECORD,
+    placeholders: TEXT_RECORD,
     scripts: SCRIPTS,
     lint: ROOT_LINT,
     components: COMPONENTS,

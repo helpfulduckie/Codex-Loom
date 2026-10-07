@@ -32,6 +32,7 @@ const REGISTRY = Object.freeze({
   PACK_UNBIND_UNKNOWN:          { id: 'CL0118', severity: WARN,  summary: 'This branch unbinds a convention pack it never inherited, so nothing changes; remove the ~ entry or inherit the pack first.' },
   PACK_NAME_MISMATCH:           { id: 'CL0119', severity: ERROR, summary: 'The convention pack name differs from its lint.packs key, so portable diagnostics and suppressions can break; make the key and name match.' },
   PATH_NOT_FOUND:               { id: 'CL0120', severity: WARN,  summary: 'A configured input path is missing, so content at that path is skipped; create the path or correct the configuration.' },
+  PACK_RULE_INVALID:           { id: 'CL0121', severity: ERROR, summary: 'A convention rule has an invalid regex, a repeated diagnostic code, or no check, so the rule is skipped; repair the expression or give the rule a unique id and at least one check.' },
   INCLUDE_NOT_FOUND:            { id: 'CL0130', severity: WARN,  summary: 'An include path is missing or is a directory holding no YAML files, so included items are skipped; create the file or correct the include path.' },
   DOUBLE_INCLUDE:               { id: 'CL0131', severity: ERROR, summary: 'The same file is included more than once, so the repeated items are skipped; keep one include of the file.' },
   ITEM_WITHOUT_IDENTITY:        { id: 'CL0140', severity: ERROR, summary: 'This item has no id or name, so it cannot enter the registry; add one identity field and loading continues for other items.' },
@@ -49,6 +50,7 @@ const REGISTRY = Object.freeze({
   PATTERN_MISMATCH:             { id: 'CL0208', severity: ERROR, summary: "A string value or record key does not match its descriptor's pattern, so the value or key is rejected; change it to match the required regex." },
   UNSUPPORTED_VERSION:          { id: 'CL0209', severity: ERROR, summary: 'The project is not declared as v4, so configuration loading stops; set version: 4 or run --migrate for a v3 project.' },
   MISPLACED_KEY:                { id: 'CL0210', severity: ERROR, summary: 'A valid key is at the wrong level, so it is ignored there; move it to the reported level.' },
+  DUPLICATE_KEY_CASE:           { id: 'CL0211', severity: ERROR, summary: 'Sibling keys differ only by capitalization and identify the same key; keep one definition or give them distinct names.' },
 
   VARIANT_DELTA_VAR_ALIASES:    { id: 'CL0320', severity: WARN,  summary: 'A variant delta declares multiple variable-block aliases; they merge with later fields winning.' },
   VARIANT_NOT_FOUND:            { id: 'CL0321', severity: WARN,  summary: 'A variant dispatch names no variant in the selected item tree, so that dispatch has no effect.' },
@@ -59,6 +61,7 @@ const REGISTRY = Object.freeze({
   SELECTOR_MATCHED_NOTHING:     { id: 'CL0326', severity: WARN,  summary: 'A selector aimed at multiple items matched none, so it changes nothing.' },
   BRANCH_WILDCARD_UNBIND:       { id: 'CL0327', severity: WARN,  summary: "A branch spec maps '*' to ~; use '_: ~' to exclude the unnamed branches." },
   FIELD_OP_NOOP:                { id: 'CL0328', severity: WARN,  summary: "A field operation matches nothing, so it changes no value; check for drift or a typo." },
+  VARIANT_RESERVED_KEY:         { id: 'CL0329', severity: WARN,  summary: 'An item variant uses a reserved import, include or branches key that cannot be applied there; it is ignored. Use body: to change a body field with that name.' },
   CROSS_ITEM_REF_MISSING:       { id: 'CL0330', severity: WARN,  summary: 'A cross-item reference names no resolved item, so the token remains unresolved.' },
   AMBIGUOUS_REF:                { id: 'CL0340', severity: ERROR, summary: 'A reference is defined in more than one library set and needs a qualifier.' },
   UNKNOWN_CANON_SOURCE:          { id: 'CL0341', severity: ERROR, summary: 'A reference names a library set not declared in structure.input.library; use a declared set.' },

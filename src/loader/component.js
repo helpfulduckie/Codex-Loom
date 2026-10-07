@@ -11,7 +11,7 @@ const { COMPONENT_SCHEMA } = require('./component-schema');
 const { normalizeComponent, mergeSectionRecords, applySectionSelector } = require('../model/component');
 const { resolveVariables } = require('../util');
 const { runExtractor } = require('../extract');
-const { CODES, busWarner } = require('../diag');
+const { CODES, Diagnostics, busWarner } = require('../diag');
 const {
   attachOrigins, createOriginIndex, copyOrigins, transferOrigins, originLocation,
 } = require('../origin');
@@ -99,6 +99,43 @@ function loadComponentDocument(spec, options = {}) {
     { ...component, rawSections: sourced, source: spec },
     sourceMap.exportOrigins(),
   );
+}
+
+// Components load lazily, after the compile phase has begun writing, so a key collision
+// found there could not stop the run cleanly. This reads a component and its imports for
+// collisions alone, early enough to stop the load; every other finding stays with
+// `loadComponentDocument`, which reports it against the leaf that asked for the file.
+function checkComponentKeys(spec, options) {
+  const { diagnostics, variables = null, base = null, seen = new Set() } = options;
+  if (typeof spec !== 'string' || !fs.existsSync(spec)) return;
+  const resolved = path.resolve(spec);
+  if (seen.has(resolved)) return;
+  seen.add(resolved);
+
+  let doc; let sourceMap;
+  try {
+    ({ value: doc, sourceMap } = loadYamlDocument(spec));
+  } catch (err) {
+    return;
+  }
+  if (!isMapping(doc)) return;
+
+  const collisionsOnly = {
+    error: (code, ...rest) => {
+      if (code === CODES.DUPLICATE_KEY_CASE) diagnostics.error(code, ...rest);
+    },
+    warn: () => {},
+  };
+  validate(doc, COMPONENT_SCHEMA, { diagnostics: collisionsOnly, sourceMap });
+
+  for (const entry of Array.isArray(doc.imports) ? doc.imports : []) {
+    if (!isMapping(entry) || !entry.from) continue;
+    const expanded = resolveVariables(String(entry.from), variables, { diagnostics: new Diagnostics() });
+    const from = path.isAbsolute(expanded)
+      ? path.normalize(expanded)
+      : path.resolve(base || path.dirname(spec), expanded);
+    checkComponentKeys(from, { diagnostics, variables, base, seen });
+  }
 }
 
 // Each section record carries its own origins, keyed relative to the section, so they
@@ -308,4 +345,4 @@ function report(diagnostics, severity, code, message, loc) {
   diagnostics[severity](code, message, loc);
 }
 
-module.exports = { loadComponentDocument };
+module.exports = { loadComponentDocument, checkComponentKeys };

@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const YAML = require('yaml');
 
-const { YAML_SUFFIXES, hasSuffix } = require('../util');
+const { YAML_SUFFIXES, hasSuffix, findKey } = require('../util');
 
 const V3_COMPONENT_TYPES = [
   'aiInstructions', 'opening', 'openingChoice', 'plotEssential',
@@ -147,7 +147,7 @@ function migrateConfigDocument(doc) {
   };
   walkBranches(['branches']);
 
-  if (!doc.has('version')) {
+  if (findKey(config, 'version') === null) {
     doc.contents.items.unshift(doc.createPair('version', 4));
     changes.push('added version: 4');
   }

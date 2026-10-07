@@ -130,6 +130,16 @@ function getCI(obj, key) {
   return actual !== null ? obj[actual] : undefined;
 }
 
+// Segment boundaries are part of identity, even when a key contains punctuation.
+function pathId(parts) {
+  return JSON.stringify(parts.map((part) => String(part).toLowerCase()));
+}
+
+function pathStartsWith(parts, prefix) {
+  return prefix.length <= parts.length
+    && pathId(prefix) === pathId(parts.slice(0, prefix.length));
+}
+
 function setCI(obj, key, value) {
   const actual = findKey(obj, key);
   if (actual !== null) {
@@ -149,6 +159,19 @@ const VAR_ALIASES = new Set(['v', 'var', 'vars', 'variable', 'variables']);
 const ITEM_TOP_LEVEL_FIELDS = Object.freeze(['name', 'pronouns', 'aid', 'render', 'v', 'notes', 'kind', 'meta']);
 
 const NOTES_ALIASES = new Set(['notes', 'description']);
+
+const ITEM_DELTA_KEYS = Object.freeze({
+  ...Object.fromEntries(ITEM_TOP_LEVEL_FIELDS.map(key => [key, 'field'])),
+  ...Object.fromEntries([...VAR_ALIASES, ...NOTES_ALIASES].map(key => [key, 'field'])),
+  body: 'body',
+  id: 'control',
+  variants: 'control',
+  importVariants: 'control',
+  _source: 'control',
+  import: 'unsupported',
+  include: 'unsupported',
+  branches: 'unsupported',
+});
 
 function normalizeNotesKey(key) {
   return NOTES_ALIASES.has(String(key).toLowerCase()) ? 'notes' : key;
@@ -176,8 +199,8 @@ function resolveVariables(text, variables, sink = {}) {
       return match;
     }
 
-    const actualKey = Object.keys(declared).find((k) => k.toLowerCase() === lower);
-    if (actualKey === undefined || declared[actualKey] === null || declared[actualKey] === undefined) {
+    const actualKey = findKey(declared, key);
+    if (actualKey === null || declared[actualKey] === null || declared[actualKey] === undefined) {
       if (branchOnly && branchOnly.has(lower)) {
         diagnostics.error(
           DIAG_CODES.VARIABLE_PRE_BRANCH,
@@ -295,8 +318,9 @@ function checkMechanicalArtifacts(text, label, sink) {
 
 module.exports = {
   damerauLevenshtein,
+  pathId, pathStartsWith,
   findFiles, readFileTrim, listFilesRelative, loadYaml, deepClone, transformStringValues, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
-  ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
+  ITEM_TOP_LEVEL_FIELDS, ITEM_DELTA_KEYS, NOTES_ALIASES, normalizeNotesKey,
   YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix, PATH_UNSAFE_CHARS, PLACEHOLDER_RE, isPlainObject,
   resolveVariables, checkUnexpandedVariables, walkItemTextFields, walkTextRecursive, itemContext, ITEM_CONTEXT_KEYS, checkUnresolvedFieldTokens,
   checkMechanicalArtifacts, maskFencedRegions,

@@ -2,11 +2,18 @@
 
 Components are the non-story-card output files written to each branch leaf's `Components/` folder. All optional.
 
+Section names, named-text keys, variant names and dispatch selectors match without regard
+to capitalization. Two sections named `premise` and `Premise` in one file are `CL0211`,
+which stops the compile before anything is written. See
+[Key Capitalization](compile-yaml.md#key-capitalization).
+
 **Four of them share one grammar.** Plot Essentials, Summary, AI Instructions and Author's Note are all *sectioned components*: a record of named `sections:`, where a section either carries `text:` or is marked `slot: true` for items to route into. They differ only in the file they write and in what a bare `heading:` means. Opening, branch framing, description and scripts each have their own shape.
 
 ---
 
 ## The sectioned grammar
+
+**Section text, headings, and story-card titles accept numbers as text.** This covers scalar `text:`, values in named text mappings, `heading:`, and `render.storyCards.title`, including section variants. The text is the number as you typed it: `1.50` is `"1.50"`, `007` is `"007"`, and `0` is `"0"`, with no quotes needed. Component `metadata:` retains parsed types, and `headingLevel`/`render.position` remain numeric settings.
 
 **A component describes shape and never names an item.** Membership lives on the item: an item declares `render.<component>` naming a slot, and the component never learns who filled it. This is the inversion — the component says where content *can* go, the item says where it goes.
 
@@ -49,7 +56,7 @@ An item with no `render:` block emits a story card and nothing else. An item may
 | Field | Default | Effect |
 |---|---|---|
 | `slot` | `false` | `true` marks a section items route into. A slot takes no `text:`. |
-| `text` | — | A string, or a mapping of named lines. With a mapping only the values render; the names exist so a variant can edit one line without restating the block. |
+| `text` | — | A string or number, or a mapping of named text lines. With a mapping only the values render; the names exist so a variant can edit one line without restating the block. |
 | `heading` | — | Placed before the content, inside the wrapper. Omit to suppress. |
 | `headingLevel` | see below | `1`–`6` adds a Markdown `#` prefix; `0` renders plain text. |
 | `render.position` | `5` | Sort key among sections; lower is earlier. |

@@ -13,11 +13,15 @@ const TYPES = Object.freeze({
 
 const { CODES } = require('./diag');
 const { isPlainObject, damerauLevenshtein } = require('./util');
+const { checkSiblingKeys } = require('./keyIdentity');
+const { remapOrigins } = require('./origin');
 
 const STRING = { type: TYPES.STRING };
+const TEXT = { ...STRING, numberAsText: true };
 const NUMBER = { type: TYPES.NUMBER };
 const BOOLEAN = { type: TYPES.BOOLEAN };
 const ANY = { type: TYPES.ANY };
+const AUTHORED = { ...ANY, authoredSpelling: true };
 
 
 function buildKeyIndex(schema) {
@@ -60,13 +64,27 @@ const REMOVED = Object.freeze({
   },
 });
 
-function suggestFor(key, ownPath, declaredHere, keyIndex) {
-  const removed = REMOVED[key];
+// How many leading segments of an indexed path the authored position already sits inside.
+function sharedDepth(indexedPath, relativePath) {
+  const segments = indexedPath.split('.');
+  let depth = 0;
+  while (depth < relativePath.length && depth < segments.length - 1) {
+    const segment = segments[depth];
+    if (segment !== '*' && segment !== '[]' && segment.toLowerCase() !== relativePath[depth].toLowerCase()) break;
+    depth += 1;
+  }
+  return depth;
+}
+
+function suggestFor(key, ownPath, declaredHere, keyIndex, { v3Keys = true, rootLabel = 'the top level', relativePath = [] } = {}) {
+  const lower = key.toLowerCase();
+  const removed = v3Keys ? REMOVED[lower] : undefined;
   if (removed !== undefined) {
     return { code: CODES.UNKNOWN_KEY, hint: removed.hint };
   }
 
-  const renamedTo = RENAMED[key];
+  const renamedKey = Object.keys(RENAMED).find((candidate) => candidate.toLowerCase() === lower);
+  const renamedTo = v3Keys ? RENAMED[renamedKey] : undefined;
   if (renamedTo !== undefined) {
     return {
       code: CODES.UNKNOWN_KEY,
@@ -75,14 +93,23 @@ function suggestFor(key, ownPath, declaredHere, keyIndex) {
     };
   }
 
-  const elsewhere = (keyIndex.get(key) || []).filter((p) => p !== [...ownPath, key].join('.'));
+  const indexedKey = [...keyIndex.keys()].find((candidate) => candidate.toLowerCase() === lower);
+  const elsewhere = (keyIndex.get(indexedKey) || []).filter((p) => p.toLowerCase() !== [...ownPath, key].join('.').toLowerCase());
   if (elsewhere.length > 0) {
-    const owner = elsewhere[0].split('.').slice(0, -1).join('.');
+    // A key valid in several places is most likely meant for the one nearest where it was
+    // written. A tie goes to the shortest path, then to the first indexed.
+    const segmentCount = (indexedPath) => indexedPath.split('.').length;
+    let nearest = elsewhere[0];
+    for (const candidate of elsewhere) {
+      const gain = sharedDepth(candidate, relativePath) - sharedDepth(nearest, relativePath);
+      if (gain > 0 || (gain === 0 && segmentCount(candidate) < segmentCount(nearest))) nearest = candidate;
+    }
+    const owner = nearest.split('.').slice(0, -1).join('.');
     return {
       code: CODES.MISPLACED_KEY,
       hint: owner
         ? `"${key}" is valid under "${owner}:" — move it there so the compiler reads it; until then, it is ignored here.`
-        : `"${key}" is valid at the top level — move it there so the compiler reads it; until then, it is ignored here.`,
+        : `"${key}" is valid at ${rootLabel} — move it there so the compiler reads it; until then, it is ignored here.`,
     };
   }
 
@@ -152,12 +179,112 @@ function normalizeEmpty(value, types) {
   return value;
 }
 
+function normalizeMapKeys(node, descriptor, { diagnostics, sourceMap, path = [], originRoot = node, originPath = path } = {}) {
+  const types = Array.isArray(descriptor.type) ? descriptor.type : [descriptor.type];
+  if (!types.includes(TYPES.MAP) || !descriptor.keys || !isPlainObject(node)) return;
+  const declared = new Map(Object.keys(descriptor.keys).map((key) => [key.toLowerCase(), key]));
+  const groups = new Map();
+  const entries = Object.entries(node);
+  for (const [key] of entries) {
+    if (key.startsWith('_')) continue;
+    const canonical = declared.get(key.toLowerCase());
+    if (canonical === undefined) continue;
+    if (!groups.has(canonical)) groups.set(canonical, []);
+    groups.get(canonical).push(key);
+  }
+  for (const [canonical, keys] of groups) {
+    const first = keys[0];
+    for (const key of keys.slice(1)) {
+      diagnostics.error(CODES.DUPLICATE_KEY_CASE,
+        `Keys "${first}" and "${key}" under "${path.join('.') || '<root>'}" differ only by capitalization and identify the same key; keep one definition or give them distinct names.`,
+        sourceMap ? sourceMap.nearest([...path, key]) : {},
+        { related: [{ label: 'first definition', ...(sourceMap ? sourceMap.nearest([...path, first]) : {}) }] });
+    }
+    if (first !== canonical) {
+      if (sourceMap && sourceMap.remapPath) sourceMap.remapPath([...path, first], [...path, canonical]);
+      remapOrigins(originRoot, [...originPath, first], [...originPath, canonical]);
+      if (node !== originRoot) remapOrigins(node, [first], [canonical]);
+    }
+  }
+  if ([...groups].some(([canonical, keys]) => keys.length > 1 || keys[0] !== canonical)) {
+    // Alias overlays consume insertion order, so folding must retain authored precedence.
+    for (const [key] of entries) delete node[key];
+    for (const [key, field] of entries) {
+      const canonical = key.startsWith('_') ? undefined : declared.get(key.toLowerCase());
+      if (canonical !== undefined && groups.get(canonical)[0] !== key) continue;
+      Object.defineProperty(node, canonical === undefined ? key : canonical, {
+        value: field, enumerable: true, configurable: true, writable: true,
+      });
+    }
+  }
+}
+
+// A recorded spelling that does not parse back to the value belongs to some other scalar
+// (a path reused after key folding), so the parsed number is the only safe text.
+function authoredNumber(node, { sourceMap, path }) {
+  const spelling = sourceMap && sourceMap.spelling ? sourceMap.spelling(path) : undefined;
+  if (typeof spelling !== 'string') return String(node);
+  return Number.isFinite(node) && Number(spelling) !== node ? String(node) : spelling;
+}
+
+// Author data keeps its numbers, except one whose typed form the number cannot reproduce.
+function keepAuthoredSpelling(node, context) {
+  if (typeof node === 'number') {
+    const text = authoredNumber(node, context);
+    return text === String(node) ? node : text;
+  }
+  if (Array.isArray(node)) {
+    node.forEach((child, index) => {
+      node[index] = keepAuthoredSpelling(child, { ...context, path: [...context.path, String(index)] });
+    });
+  } else if (isPlainObject(node)) {
+    for (const [key, child] of Object.entries(node)) {
+      node[key] = keepAuthoredSpelling(child, { ...context, path: [...context.path, key] });
+    }
+  }
+  return node;
+}
+
+function normalizeSchemaKeys(node, descriptor, context) {
+  if (!descriptor) return node;
+  const view = descriptor.normalizeAs || descriptor;
+  const types = Array.isArray(view.type) ? view.type : [view.type];
+  if (view.numberAsText && typeof node === 'number') return authoredNumber(node, context);
+  if (view.authoredSpelling) return keepAuthoredSpelling(node, context);
+  if (types.includes(TYPES.ANY)) return node;
+  normalizeMapKeys(node, view, context);
+  const descend = (child, childDescriptor, key) => normalizeSchemaKeys(child, childDescriptor, {
+    ...context, path: [...context.path, String(key)], originPath: [...context.originPath, String(key)],
+  });
+  if (types.includes(TYPES.SEQ) && Array.isArray(node) && view.of) {
+    node.forEach((child, index) => { node[index] = descend(child, view.of, index); });
+  } else if (isPlainObject(node)) {
+    if (types.includes(TYPES.MAP) && view.keys) {
+      for (const [key, child] of Object.entries(node)) {
+        if (!key.startsWith('_') && Object.prototype.hasOwnProperty.call(view.keys, key)) {
+          node[key] = descend(child, view.keys[key], key);
+        }
+      }
+    } else if (types.includes(TYPES.RECORD)) {
+      for (const [key, child] of Object.entries(node)) {
+        const childDescriptor = view.keys && Object.prototype.hasOwnProperty.call(view.keys, key)
+          ? view.keys[key] : view.of;
+        node[key] = descend(child, childDescriptor, key);
+      }
+    }
+  }
+  return node;
+}
+
 
 function validate(value, schema, options = {}) {
   const {
     diagnostics, sourceMap, path = [], keyIndex = buildKeyIndex(schema),
     displayOffset = 0, context = null, dropUnknown = false,
+    v3Keys = true, rootLabel = 'the top level',
   } = options;
+
+  value = normalizeSchemaKeys(value, schema, { diagnostics, sourceMap, path, originRoot: value, originPath: [] });
 
   const locate = (at) => (sourceMap ? sourceMap.nearest(at) : {});
   const display = (at) => at.slice(displayOffset).join('.');
@@ -165,6 +292,9 @@ function validate(value, schema, options = {}) {
 
   const walk = (node, descriptor, currentPath) => {
     if (!descriptor) return node;
+    const keyContext = { diagnostics, sourceMap, path: currentPath };
+    if (descriptor.caseInsensitiveKeys) checkSiblingKeys(node, keyContext);
+    if (descriptor.checkKeys) descriptor.checkKeys(node, keyContext);
     const types = Array.isArray(descriptor.type) ? descriptor.type : [descriptor.type];
 
     if (types.includes(TYPES.ANY)) return node;
@@ -176,7 +306,7 @@ function validate(value, schema, options = {}) {
     if (!types.some((t) => matchesType(normalized, t))) {
       diagnostics.error(
         CODES.WRONG_TYPE,
-        `"${display(currentPath) || '<root>'}" must be ${typeName(types)}, but is ${describeType(normalized)}${inContext}; replace it with the required type or the value is ignored.`,
+        `"${display(currentPath) || '<root>'}" must be ${typeName(descriptor.numberAsText ? [...types, TYPES.NUMBER] : types)}, but is ${describeType(normalized)}${inContext}; replace it with the required type or the value is ignored.`,
         locate(currentPath)
       );
       return normalized;
@@ -260,7 +390,9 @@ function validate(value, schema, options = {}) {
 
           const child = descriptor.keys[key];
           if (!child) {
-            const { code, hint } = suggestFor(key, currentPath.slice(displayOffset), declared, keyIndex);
+            // The index is built from `schema`, whose root sits at `path` in the document.
+            const { code, hint } = suggestFor(key, currentPath.slice(displayOffset), declared, keyIndex,
+              { v3Keys, rootLabel, relativePath: currentPath.slice(path.length) });
             const shown = display(currentPath);
             const where = shown ? `under "${shown}"` : 'at the top level';
             diagnostics.error(code, `Unknown key "${key}" ${where}${inContext}; remove it or rename/move it to a supported location, or it is ignored.`, locate([...currentPath, key]), { hint });
@@ -335,4 +467,4 @@ function validate(value, schema, options = {}) {
   return walk(value, schema, path);
 }
 
-module.exports = { TYPES, STRING, NUMBER, BOOLEAN, ANY, validate, buildKeyIndex, levenshtein: damerauLevenshtein };
+module.exports = { TYPES, STRING, TEXT, NUMBER, BOOLEAN, ANY, AUTHORED, validate, normalizeMapKeys, buildKeyIndex, levenshtein: damerauLevenshtein };

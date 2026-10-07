@@ -9,6 +9,7 @@ const { resolveBranchSpec } = require('./model/branches');
 const { resolveItemRef } = require('./model/refs');
 const { SLOTTED_COMPONENTS } = require('./emit/components');
 const { sanitizeFilename, shiftHeadings, reportIdentity } = require('./report');
+const { findKey, pathStartsWith } = require('./util');
 
 
 const COMPONENT_FAMILIES = SLOTTED_COMPONENTS.map((d) => [d.key, d.label]);
@@ -143,11 +144,6 @@ function runDiffMode(leafData, outputDir) {
 
 const DIFF_ROOTS = ['name', 'pronouns', 'aid', 'body'];
 
-function hasKeyCI(obj, name) {
-  return obj && typeof obj === 'object' &&
-    Object.keys(obj).some(k => k.toLowerCase() === name.toLowerCase());
-}
-
 function flattenItem(item) {
   const out = {};
   const walk = (val, prefix) => {
@@ -200,8 +196,10 @@ function collectDeltaKeyPaths(delta) {
 }
 
 function pathExplained(changedPath, deltaPaths) {
+  const changed = changedPath.split('.');
   for (const dp of deltaPaths) {
-    if (changedPath === dp || changedPath.startsWith(dp + '.') || dp.startsWith(changedPath + '.')) {
+    const delta = dp.split('.');
+    if (pathStartsWith(changed, delta) || pathStartsWith(delta, changed)) {
       return true;
     }
   }
@@ -213,7 +211,7 @@ function attributeChanges(itemDef, registry, branchVariantNames, changes) {
 
   const variantKeyPaths = new Map(); // variantName -> Set<dotpath>
   for (const name of branchVariantNames) {
-    const source = (itemDef.import && !hasKeyCI(itemDef.variants, name.split('/')[0]))
+    const source = (itemDef.import && findKey(itemDef.variants, name.split('/')[0]) === null)
       ? canonItem
       : itemDef;
     const deltas = collectVariantDeltas(source, name) || [];

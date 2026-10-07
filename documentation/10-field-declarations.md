@@ -4,6 +4,13 @@
 
 The three namespaces — `fields:`, `groups:` and `templates:` — live in one `fields.cl.yaml` per templates directory.
 
+Field, group and template names match without regard to capitalization, and so do
+`templateFor` role keys: a group that lists `name` finds the field declared `Name`, and a
+project table's `name:` replaces a shared table's `Name:`. Two names in one map that
+differ only by capitalization are an ERROR (`CL0211`). The three maps are separate
+namespaces, so a field and a group may share a name; where a template lists that name,
+the group is expanded. See [Key Capitalization](02-compile-yaml.md#key-capitalization).
+
 ---
 
 ## The Problem This Replaces
@@ -49,6 +56,8 @@ fields:
 | `labelWhen` | A conditional label — `{ originalAppearance: Current Appearance }` |
 
 **`labelWhen` exists for the before-and-after case.** When the named body key is present, the alternate label replaces `label`. A project that relabels `appearance` to `Current Appearance` whenever `originalAppearance` is also set cannot express that with a static label.
+
+**Literal labels, separators, and `raw` fragments accept numbers as text.** This applies to `label`, `join`, every `labelWhen` value, and template or group `{ raw: ... }` entries, including inline declarations. The text is the number as you typed it: `0` is `"0"`, `1.50` is `"1.50"`, and `007` is `"007"`. Field names, source references, and render-function selectors retain their existing type rules.
 
 **The seven render functions are `inline`, `join`, `list`, `and`, `prose`, `block`, `keys`** — identical to their template-syntax counterparts, documented in [Templates & Partials](07-templates.md#render-functions). `render: bare` applies no function.
 

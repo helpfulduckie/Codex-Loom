@@ -33,6 +33,21 @@ exports[`pathological fixture a hand-edited snapshot file aborts the load 1`] = 
   Library "main": snapshot/main/thing.yaml does not match its manifest hash, so the snapshot is corrupted and compilation stops; restore the file or regenerate the snapshot."
 `;
 
+exports[`pathological fixture case-only authored keys report both source declarations 1`] = `
+"ERROR CL0211 compile.cl.yaml:6:3
+  Keys "Theme" and "theme" under "variables" differ only by capitalization and identify the same key; keep one definition or give them distinct names.
+  related (first definition): compile.cl.yaml:5:3
+ERROR CL0211 compile.cl.yaml:9:3
+  Keys "Ally" and "ally" under "roles" differ only by capitalization and identify the same key; keep one definition or give them distinct names.
+  related (first definition): compile.cl.yaml:8:3
+ERROR CL0211 compile.cl.yaml:12:3
+  Keys "Base" and "base" under "templateFor" differ only by capitalization and identify the same key; keep one definition or give them distinct names.
+  related (first definition): compile.cl.yaml:11:3
+ERROR CL0211 compile.cl.yaml:15:3
+  Keys "Road" and "road" under "branches" differ only by capitalization and identify the same key; keep one definition or give them distinct names.
+  related (first definition): compile.cl.yaml:14:3"
+`;
+
 exports[`pathological fixture config schema violations abort the load 1`] = `
 "ERROR CL0201 compile.cl.yaml:25:3
   Unknown key "report" under "structure"; remove it or rename/move it to a supported location, or it is ignored.

@@ -3,11 +3,11 @@
 
 const path = require('path');
 
-const YAML = require('yaml');
 const { applyLintLevel, Diagnostics, CODES } = require('../diag');
-const { resolveVariables } = require('../util');
-const { readSource } = require('../sources');
+const { resolveVariables, findKey, getCI } = require('../util');
+const { loadYamlDocument } = require('../loader/yaml');
 const { validate, TYPES } = require('../schema');
+const { PACK_SCHEMA } = require('./pack-schema');
 const { parseNotesBlock, parseSettingsBlock } = require('../emit/vl');
 const { resolveField } = require('../render/eval');
 
@@ -25,11 +25,11 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
     filePath = path.join(BUNDLED_DIR, `${name}.cl.yaml`);
   }
 
-  const fail = (why) => {
+  const fail = (why, at = { file: filePath }) => {
     diagnostics.error(
       CODES.PACK_MALFORMED,
       `Convention pack "${name}" ${why}, so its rules are unavailable; provide a readable pack with the required shape.`,
-      { ...loc, file: filePath },
+      at,
       {
         hint: source
           ? `Declared as lint.packs.${name} with source: ${source}`
@@ -39,66 +39,84 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
     return null;
   };
 
-  let raw;
+  let doc, sourceMap;
   try {
-    raw = readSource(filePath, 'utf8');
+    ({ value: doc, sourceMap } = loadYamlDocument(filePath));
   } catch (err) {
-    return fail(source ? `could not be read at ${filePath}` : 'is not a bundled pack');
-  }
-
-  let doc;
-  try {
-    doc = YAML.parse(raw);
-  } catch (err) {
-    return fail(`is not valid YAML — ${err.message.split('\n')[0]}`);
+    return fail(err.kind === 'read'
+      ? (source ? `could not be read at ${filePath}` : 'is not a bundled pack')
+      : `is not valid YAML — ${err.cause.message.split('\n')[0]}`, err.location());
   }
 
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
     return fail('is not a mapping of pack keys');
   }
-  if (doc.name !== undefined && String(doc.name) !== name) {
+
+  // Validate the envelope separately so one rule's errors cannot disable its siblings.
+  const envelope = new Diagnostics();
+  const envelopeSchema = { ...PACK_SCHEMA, keys: { ...PACK_SCHEMA.keys, rules: { type: TYPES.ANY } } };
+  validate(doc, envelopeSchema,
+    { diagnostics: envelope, sourceMap, context: `convention pack "${name}" (pack unavailable)`, v3Keys: false });
+  checkRuleValues(doc, envelopeSchema,
+    [], sourceMap, envelope, `convention pack "${name}" (pack unavailable)`);
+  diagnostics.merge(envelope);
+  let unavailable = envelope.hasErrors();
+  if (typeof doc.name === 'string' && doc.name !== name) {
     diagnostics.error(
       CODES.PACK_NAME_MISMATCH,
       `Convention pack loaded as "${name}" declares name: "${doc.name}". `
       + 'The pack is unavailable until the config key and name match; this keeps diagnostic codes and suppressions portable.',
-      { ...loc, file: filePath },
+      sourceMap.nearest('name'),
     );
-    return null;
+    unavailable = true;
   }
-  const rules = Array.isArray(doc.rules) ? doc.rules : null;
-  if (!rules) return fail('declares no rules: list');
+  if (!Array.isArray(doc.rules)) return fail('declares no rules: list', sourceMap.nearest('rules'));
+  const rules = doc.rules;
 
   const normalized = [];
+  const issuedCodes = new Map();
+  const ruleSchema = PACK_SCHEMA.keys.rules.of;
   for (let i = 0; i < rules.length; i += 1) {
-    const rule = rules[i];
-    if (!rule || typeof rule !== 'object') return fail(`rule ${i + 1} is not a mapping`);
-    const id = rule.id !== undefined ? String(rule.id) : String(i + 1);
-
-    for (const predicate of [rule.appliesTo, rule.forbid, rule.require, rule.requireCard]) {
-      const bad = findInvalidPredicateRegex(predicate);
-      if (bad) {
-        return fail(
-          `rule ${id} has an invalid ${bad.keyword} regex "${bad.spec}" — `
-          + `${bad.error.message.split('\n')[0]}`,
-        );
-      }
+    let rule = rules[i];
+    const bus = new Diagnostics();
+    const rulePath = ['rules', String(i)];
+    const context = `convention pack "${name}" rule ${i + 1} (${unavailable ? 'pack unavailable' : 'rule skipped'})`;
+    rule = validate(rule, ruleSchema, {
+      diagnostics: bus, sourceMap, path: rulePath, context, v3Keys: false, rootLabel: 'the rule level',
+    });
+    checkRuleValues(rule, ruleSchema, rulePath, sourceMap, bus, context);
+    diagnostics.merge(bus);
+    let usable = !bus.hasErrors();
+    if (usable && !Object.entries(ruleSchema.keys).some(([key, schema]) => schema.packCheck && Object.hasOwn(rule, key))) {
+      diagnostics.error(CODES.PACK_RULE_INVALID,
+        `No check is declared in ${context}; add forbid, require, requireCard, schema, budget, count, or mutexHint.`,
+        sourceMap.nearest(rulePath));
+      usable = false;
     }
-    const badSchema = findInvalidKeyPattern(rule.schema);
-    if (badSchema) {
-      return fail(`rule ${id} has an invalid ${badSchema.keyword} regex "${badSchema.spec}" — `
-        + `${badSchema.error.message.split('\n')[0]}`);
+    // A skipped rule still holds its code, so a later rule repeating it is reported in the
+    // same pass and not only after the first rule is repaired. An id of the wrong type
+    // names no code to hold.
+    const authoredId = rule && typeof rule === 'object' ? rule.id : undefined;
+    if (authoredId !== undefined && typeof authoredId !== 'string' && typeof authoredId !== 'number') continue;
+    const id = authoredId !== undefined ? String(authoredId) : String(i + 1);
+    const code = `CL-${name}/${id.padStart(4, '0')}`;
+    const foldedCode = code.toLowerCase();
+    const ruleLoc = sourceMap.nearest(authoredId !== undefined ? [...rulePath, 'id'] : rulePath);
+    const first = issuedCodes.get(foldedCode);
+    if (first) {
+      diagnostics.error(CODES.PACK_RULE_INVALID,
+        code === first.code
+          ? `Diagnostic code "${code}" in ${context} is already used by rule ${first.rule}; give this rule a unique id.`
+          : `Diagnostic code "${code}" in ${context} differs only by capitalization from "${first.code}", used by rule ${first.rule}; give this rule a distinct id.`,
+        ruleLoc, { related: [{ label: 'first definition', ...first.loc }] });
+      continue;
     }
-
-    if (rule.severity !== undefined && rule.severity !== 'warn' && rule.severity !== 'error') {
-      return fail(
-        `rule ${id} has an unrecognized severity: "${rule.severity}" — expected `
-        + '"warn" or "error"',
-      );
-    }
+    issuedCodes.set(foldedCode, { code, loc: ruleLoc, rule: i + 1 });
+    if (!usable) continue;
     const severity = rule.severity === 'warn' ? 'warn' : 'error';
     normalized.push({
       id,
-      code: `CL-${name}/${id.padStart(4, '0')}`,
+      code,
       severity,
       appliesTo: rule.appliesTo || null,
       forbid: rule.forbid || null,
@@ -110,32 +128,62 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
       count: rule.count || null,
       mutexHint: rule.mutexHint || null,
       message: rule.message || `pack "${name}" rule ${id}`,
+      authoredMessage: rule.message || null,
     });
   }
 
-  return { name, rules: normalized };
+  return unavailable ? null : { name, rules: normalized };
 }
 
-function findInvalidKeyPattern(node) {
-  if (!node || typeof node !== 'object') return null;
-  if (node.keyPattern !== undefined) {
-    if (typeof node.keyPattern !== 'string') {
-      return { keyword: 'keyPattern', spec: node.keyPattern, error: new TypeError('expected a string') };
-    }
-    try {
-      new RegExp(node.keyPattern);
-    } catch (error) {
-      return { keyword: 'keyPattern', spec: node.keyPattern, error };
-    }
+function checkRuleValues(node, descriptor, at, sourceMap, diagnostics, context) {
+  if (!descriptor || descriptor.type === TYPES.ANY) return;
+  // Shared schemas allow null for deletion; packs have no deletion operations.
+  if (node === null || node === undefined) {
+    const expectsDescriptor = !!(descriptor.keys && descriptor.keys.type && descriptor.keys.type.required);
+    diagnostics.error(CODES.WRONG_TYPE, expectsDescriptor
+      ? `"${at.join('.')}" has no descriptor in ${context}; write {type: any} to accept any value, or give it the type it must have.`
+      : `"${at.join('.')}" has no value in ${context}; give it a value or remove it.`,
+    sourceMap.nearest(at));
+    return;
   }
-  if (node.keys && typeof node.keys === 'object') {
-    for (const child of Object.values(node.keys)) {
-      const bad = findInvalidKeyPattern(child);
-      if (bad) return bad;
-    }
+  if (Array.isArray(node)) {
+    node.forEach((child, i) => checkRuleValues(child, descriptor.of, [...at, String(i)], sourceMap, diagnostics, context));
+    return;
   }
-  if (node.of && typeof node.of === 'object') return findInvalidKeyPattern(node.of);
-  return null;
+  if (typeof node !== 'object') return;
+  for (const [key, child] of Object.entries(node)) {
+    const childDescriptor = descriptor.keys && descriptor.keys[key]
+      || (descriptor.type === TYPES.RECORD ? descriptor.of : null);
+    const childPath = [...at, key];
+    if (!childDescriptor) {
+      if (descriptor.type === TYPES.MAP && key.startsWith('_')) {
+        diagnostics.error(CODES.UNKNOWN_KEY, `Unknown key "${key}" in ${context}; remove it or rename it.`,
+          sourceMap.nearest(childPath));
+      }
+      continue;
+    }
+    if (childDescriptor.packRegex && typeof child === 'string') {
+      try { new RegExp(child); } catch (error) {
+        diagnostics.error(CODES.PACK_RULE_INVALID,
+          `Invalid ${key} regex ${JSON.stringify(child)} in ${context} — ${error.message.split('\n')[0]}.`,
+          sourceMap.nearest(childPath));
+      }
+    }
+    if (childDescriptor.packType) {
+      if (Array.isArray(child) && child.length === 0) {
+        diagnostics.error(CODES.VALUE_NOT_ALLOWED, `Descriptor type union must not be empty in ${context}.`,
+          sourceMap.nearest(childPath));
+      }
+      for (const [i, value] of (Array.isArray(child) ? child : [child]).entries()) {
+        if (typeof value === 'string' && !Object.values(TYPES).includes(value.toLowerCase())) {
+          diagnostics.error(CODES.VALUE_NOT_ALLOWED,
+            `Unknown descriptor type ${JSON.stringify(value)} in ${context}; use ${Object.values(TYPES).join(', ')}.`,
+            sourceMap.nearest(Array.isArray(child) ? [...childPath, String(i)] : childPath));
+        }
+      }
+    }
+    checkRuleValues(child, childDescriptor, childPath, sourceMap, diagnostics, context);
+  }
 }
 
 
@@ -144,45 +192,12 @@ function toRegExp(spec) {
   return new RegExp(String(spec));
 }
 
-function findInvalidPredicateRegex(pred) {
-  if (!pred || typeof pred !== 'object') return null;
-
-  for (const keyword of ['notesMatch', 'bodyMatch', 'match', 'titleMatch']) {
-    if (pred[keyword] !== undefined) {
-      try {
-        new RegExp(String(pred[keyword]));
-      } catch (error) {
-        return { keyword, spec: pred[keyword], error };
-      }
-    }
-  }
-
-  if (Array.isArray(pred.all)) {
-    for (const p of pred.all) {
-      const bad = findInvalidPredicateRegex(p);
-      if (bad) return bad;
-    }
-  }
-  if (Array.isArray(pred.any)) {
-    for (const p of pred.any) {
-      const bad = findInvalidPredicateRegex(p);
-      if (bad) return bad;
-    }
-  }
-  if (pred.not !== undefined) {
-    const bad = findInvalidPredicateRegex(pred.not);
-    if (bad) return bad;
-  }
-  if (pred.notes && typeof pred.notes === 'object') {
-    const bad = findInvalidPredicateRegex(pred.notes);
-    if (bad) return bad;
-  }
-
-  return null;
-}
-
 function plainObjOrEmpty(value) {
   return (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
+}
+
+function packMetadata(view, name) {
+  return getCI(view.meta, name) || {};
 }
 
 function evalPredicate(pred, view) {
@@ -204,11 +219,11 @@ function evalPredicate(pred, view) {
   }
 
   if (pred.hasKey !== undefined) {
-    if (!Object.prototype.hasOwnProperty.call(view.notes, String(pred.hasKey))) return false;
+    if (findKey(view.notes, String(pred.hasKey)) === null) return false;
   }
   if (pred.equals && typeof pred.equals === 'object') {
     const { key, value } = pred.equals;
-    if (String(view.notes[key]) !== String(value)) return false;
+    if (String(getCI(view.notes, String(key))) !== String(value)) return false;
   }
   if (pred.notesMatch !== undefined) {
     if (!toRegExp(pred.notesMatch).test(view.notesText)) return false;
@@ -230,12 +245,15 @@ function evalPredicate(pred, view) {
 
 function runSchemaCheck(rule, notes, view, emit) {
   const bus = new Diagnostics();
-  validate(notes, buildDescriptor(rule.schema), { diagnostics: bus, context: `card "${view.title}"` });
+  validate(structuredClone(notes), buildDescriptor(rule.schema),
+    { diagnostics: bus, context: `card "${view.title}"`, v3Keys: false });
   for (const d of bus.all) {
+    // A failed pattern shows the author a regex; the rule's own message says what it means.
+    const meaning = d.code === CODES.PATTERN_MISMATCH && rule.authoredMessage ? ` ${rule.authoredMessage}` : '';
     emit({
       severity: d.severity === 'error' ? rule.severity : 'warn',
       code: rule.code,
-      message: `${d.message}${d.hint ? ` ${d.hint}` : ''}`,
+      message: `${d.message}${d.hint ? ` ${d.hint}` : ''}${meaning}`,
     });
   }
 }
@@ -243,10 +261,8 @@ function runSchemaCheck(rule, notes, view, emit) {
 function buildDescriptor(node) {
   if (!node || typeof node !== 'object') return { type: TYPES.ANY };
   const out = { ...node };
-  if (typeof node.type === 'string') {
-    const key = node.type.toUpperCase();
-    out.type = TYPES[key] || node.type;
-  }
+  const normalizeType = (type) => typeof type === 'string' ? (TYPES[type.toUpperCase()] || type) : type;
+  out.type = Array.isArray(node.type) ? node.type.map(normalizeType) : normalizeType(node.type);
   if (node.keys && typeof node.keys === 'object') {
     out.keys = {};
     for (const [k, child] of Object.entries(node.keys)) out.keys[k] = buildDescriptor(child);
@@ -270,6 +286,7 @@ function evaluatePack(pack, cards) {
       notes,
       meta: plainObjOrEmpty(card.meta && card.meta.meta),
     };
+    const metadata = packMetadata(view, pack.name);
 
     for (const rule of pack.rules) {
       if (!evalPredicate(rule.appliesTo, view)) continue;
@@ -292,14 +309,13 @@ function evaluatePack(pack, cards) {
       }
       if (rule.schema) {
         const input = rule.over === 'meta'
-          ? ((view.meta && view.meta[pack.name]) || {})
+          ? metadata
           : rule.over === 'body' ? parseSettingsBlock(card.body) : notes;
         runSchemaCheck(rule, input, view, emit);
       }
       if (rule.budget) {
-        const rawRole = String((view.meta[pack.name] || {}).role || 'standard');
-        const role = Object.prototype.hasOwnProperty.call(rule.budget, rawRole)
-          ? rawRole : 'standard';
+        const rawRole = String(getCI(metadata, 'role') || 'standard');
+        const role = findKey(rule.budget, rawRole) ?? findKey(rule.budget, 'standard') ?? 'standard';
         const cap = rule.budget[role];
         if (typeof cap === 'number' && view.body.length > cap) {
           emit({

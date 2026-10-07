@@ -197,6 +197,77 @@ and produce a `CL0204` "recognized but not read" WARN rather than an unknown-key
 Writing the schema once beats editing it every phase, and an author writing ahead of the
 tool gets told so plainly.
 
+### §4.3.1 Author-chosen keys match without regard to capitalization
+
+**Two spellings of a name that differ only by capitalization are one key.** The rule holds
+in every mapping whose keys an author makes up: config `variables`, `roles`, `branches`,
+library names and `lint.packs`; `templateFor` roles and the template names they select; an
+item's `body`, `variables` and `notes` at any depth; variant names and dispatch selectors;
+component section names and named-text keys; and a field table's `fields`, `groups` and
+`templates`.
+
+**The rule exists because a lookup that folds case over a merge that does not loses
+writes silently.** With a root `Mood` and a branch `mood`, an exact-spelling merge keeps
+both entries and a case-folding lookup returns whichever was stored first, so the branch's
+override never takes effect and nothing reports it. Folding at both ends leaves one entry
+per name.
+
+**Two such keys in one mapping are a load error (`CL0211`), not a silent last-write-wins.**
+Neither spelling is more likely to be the intended one, and YAML already treats an
+identical duplicate as a parse error. Across layers the same pair is an ordinary override
+or unbind.
+
+**A collision in a component file is caught at load, although components are read during
+the compile phase.** A component is loaded when the first leaf asks for it, and the
+scenario description is loaded after the story cards are written, so an error raised
+there could leave a half-written tree. The load phase therefore reads each component the
+branch tree names, and its `imports:`, for key collisions alone.
+
+**Compiler-defined keys match in any capitalization and normalize to their declared
+spelling during validation.** Normalization is silent, so consumers that run after
+`validate` can read the documented property. A read that precedes validation must
+normalize the relevant keys first or use a folded lookup. A mapping containing two spellings of one declared key
+raises `CL0211` before normalization can discard either definition. Source locations
+retain the authored spelling. This changes key matching only; enumerated values remain
+exact.
+
+**A number written where text is used keeps the spelling the author typed.** Shared `TEXT` descriptors opt string fields into accepting an unquoted number, and schema normalization replaces it with its source characters: `6` and `0` are `"6"` and `"0"`; `1.50`, `007`, and `1e3` are `"1.50"`, `"007"`, and `"1e3"`; an integer past 2^53 keeps every digit. Text is the lossless form: a later feature can parse `"06"` to 6, but 6 cannot be turned back into `06`. Strings retain their authored text, and booleans and null retain each field's existing rules.
+
+The allowance covers root and branch config variables, titles, placeholder questions, and inline `components.opening`/`components.branchFraming` values; item names and `aid.title`/`triggers`; component section text and named text lines, headings, and `render.storyCards.title`; field `label`, `join`, `labelWhen` values, and template `raw`; and pack `hasKey`, `equals.key`, regex predicates, descriptor `pattern`/`keyPattern`, `mutexHint.fields`, and messages. Item and section variants normalize these same declared text fields through their opaque normalization views without validating field-operation syntax as ordinary values.
+
+Config variables remain a flat table of strings and numbers, with null unbinding an inherited entry. Item `v:` remains structured data.
+
+**Item data that templates can render follows the same rule, so `{%key}` and `{$…}` agree.** In `body:`, `v:`, `notes:`, and `pronouns:`, a number whose typed form differs from its parsed form (`3.30`, `0107420`, a long integer) is stored as the typed text; a number that already round-trips (`12`, `3.5`) stays a number, so only output that did not match the source changes. Item `meta:` and component `metadata:` are never in the template context and stay parsed, because convention packs read them as typed data; pack `equals.value` also stays parsed. Pack checks over notes and body re-parse the rendered card text and are unaffected. A number with no recorded spelling (reached through a YAML alias, or validated without a source map) uses its parsed form. Paths, references, selectors, enums, and numeric settings do not accept numbers as text.
+
+Item and component-section deltas normalize recognized structural keys through the same
+declared key sets without adopting closed-map validation. Deltas retain their field
+operations and open body-field grammar. Normalization must cover newly introduced
+properties as well as overrides, including recognized keys inside nested structural maps.
+
+The item delta's reserved key set is shared by normalization, collision checks, and
+application. `import`, `include`, and `branches` are reserved but cannot be applied in
+an item delta: their presence raises `CL0329` during loading and their values are ignored.
+To address body fields with those names, write them inside `body:`. Other bare body fields
+keep their authored spelling.
+
+**Two kinds of key stay exact:**
+
+- **Placeholder names**, because Velvet Lattice substitutes `%name%` by exact match and
+  the compiler must not accept a reference the platform will leave unfilled.
+- **A convention pack's spelling.** Pack entries merge down the branch tree by folded
+  name, but the declaring key must equal the pack's `name:` exactly (`CL0119`): that
+  spelling becomes the `CL-<name>/NNNN` codes and, for a bundled pack, a file name.
+
+**Item `meta:` follows key identity; component `metadata:` does not.** The two are
+separate channels with separate readers. Item `meta:` is consumed by Codex Loom's own
+tooling, and a variant's `meta:` merges into the base key by key, so its keys are
+identities like any other authored name: lookups and merges match in any capitalization,
+sibling collisions are `CL0211` at any depth, and the first authored spelling is what is
+written. Its values and shape are not validated. Component `metadata:` is frontmatter
+consumed by Velvet Lattice, whose key spellings the compiler does not own. It is taken
+whole from the one document that declares it, never merged, and written exactly as
+authored, so no matching, normalization or collision check applies inside it.
+
 ### §4.4 Diagnostics carry source positions
 
 **A diagnostic renders as `SEVERITY CLNNNN file:line:col` then an indented message.** The
@@ -298,7 +369,7 @@ card.
 ## §5. Token families
 
 **There are two compile-time token families and they do not overlap.** `{%key}` is the
-*path / value* family — a string value declared in `compile.cl.yaml` `variables:` (plus
+*path / value* family — a string or number converted to text in `compile.cl.yaml` `variables:` (plus
 every `structure.input.library` name, auto-exposed). `{$…}` is the *field-reference*
 family — `{$body.X}`, `{$v.X}`, `{$Id.body.Field}`, the pronoun tokens, the role tokens.
 The comparison table is in `documentation/07-templates.md`; the rule that matters here is
@@ -670,6 +741,29 @@ compiler makes the Codex Loom maintainer a bottleneck for every mod anyone uses.
 ships alongside the shared library it depends on, is opt-in via `lint.packs`, and
 consuming it is not a trust decision. The mechanism and the two bundled packs (`wtg`,
 `duckieConv`) are documented in `documentation/14-convention-packs.md`.
+
+Pack files validate compiler-defined keys in any capitalization, including recursive
+predicates and descriptors. Author-keyed records retain spelling and reject capitalization
+collisions. Pack-level errors disable the pack; a rule-level error skips that whole rule
+while retaining valid siblings. Compile, offline lint, and tolerant preview share this
+boundary, because removing a broken condition would change a rule's meaning. Pack errors
+still fail a normal compile; preview returns cards and diagnostics, and skipped rules do
+not contribute to its dropped-key count.
+Names in `hasKey`, `equals.key`, and budget role lookup match in any capitalization;
+equality values remain exact after string conversion. These lookups preserve card data.
+Every rule must declare a check, and its final padded code must be unique within the
+pack without regard to capitalization. The first rule to name a code holds it, even
+when that rule is skipped for another error, so every duplicate is reported in one pass;
+later duplicates are skipped with the first definition as a related location.
+`CL0121` reports duplicate codes, absent checks, and invalid regexes; `CL0117` reports
+pack-loading failures. When the rules list is readable, validation reports its errors
+even if the envelope or declared name disables the entire pack.
+Card-side pack namespaces and role keys also match in any capitalization without
+rewriting the card data. Authored item `meta` mappings reject sibling capitalization
+collisions recursively on base items and variant deltas. Across layers, the existing
+field-operation merge updates the stored spelling rather than creating a second key.
+The bundled `duckieConv` role check accepts its known roles through a case-insensitive
+pattern, so its value validation agrees with budget lookup.
 
 ### §8.4 `encapsulate` and `wrapper` are the same operation
 

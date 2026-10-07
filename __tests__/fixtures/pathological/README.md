@@ -1,6 +1,6 @@
 # The pathological fixture
 
-These six projects are intentionally invalid. Their committed snapshot freezes the diagnostic code, severity, file, message, and order that each produces.
+These seven projects are intentionally invalid. Their committed snapshot freezes the diagnostic code, severity, file, message, and order that each produces.
 
 - `card-collision/` checks duplicate card names and conflicting card types.
 - `placement/` checks placement, placeholder, component, and limit diagnostics after loading succeeds.
@@ -8,6 +8,7 @@ These six projects are intentionally invalid. Their committed snapshot freezes t
 - `snapshot-mismatch/` checks manifest/configuration and manifest/disk disagreement.
 - `snapshot-corrupt/` checks a frozen file changed after its manifest was written; this error aborts before compilation.
 - `unread-fields/` checks body fields no template reads, including per-item deduplication across branches and the branch list each deduplicated finding carries.
+- `duplicate-keys/` checks case-only sibling collisions in configuration mappings, with the later key as the primary location and the earlier definition as a related location.
 
 ## Execution boundaries
 

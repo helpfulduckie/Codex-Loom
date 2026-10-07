@@ -128,6 +128,8 @@ Global default protagonist ID, overridable per branch. Matched case-insensitivel
 ### `variables`
 Key-value pairs available in templates and field values as `{%key}`. Variables resolve against other variables, so `shared: '{%loom}/Library'` works. Branch variables merge on top of parent variables. `{%}` expands semantic string values; mapping keys and selectors remain literal.
 
+**Config variables accept strings and numbers; null unbinds an inherited variable.** An unquoted number is kept as the text you typed: `6` is `"6"`, `1.50` is `"1.50"`, `007` is `"007"`, and a long integer keeps every digit, so quotes are not needed. Config variables are flat substitutions, so booleans, lists, and mappings remain invalid; item `v:` supports structured data instead. Root and branch titles, placeholder questions, and inline `components.opening`/`components.branchFraming` values keep a typed number the same way. Paths, references, selectors, enums, and numeric settings keep their existing rules.
+
 ### `roles`
 Name-to-item-id bindings, referenced in prose as `{$LI}`. Binding values accept `{%variable}` from the active branch scope; role names remain literal structural keys. Merges down the branch chain key by key; `~` unbinds. `protagonist` is an ordinary entry here rather than a separate mechanism. Full semantics in `references/roles.md`.
 
@@ -151,7 +153,7 @@ Key-question pairs. The key is referenced in authored text as `%key%`; the quest
 Questions may contain `{%variables}` and may reference other placeholders as `%key%`. Full semantics, the destination rules, and what gets written are in **Player Placeholders** below.
 
 ### `components`
-Each value is either inline text, or a path to a file. There are seven keys:
+`opening` and `branchFraming` accept inline text or a file path; other entries name files. The component keys are:
 
 | Key | Written to | Inherits down the tree? |
 |---|---|---|
@@ -194,6 +196,45 @@ Nested branch tree. Leaf = no `branches:` sub-key, and produces one output folde
 **`storyCardType:` is root-only** and has no per-branch counterpart.
 
 Its values expand `{%variables}` from the completed root table, while component-name keys remain literal. A `render.storyCards` entry's `title:` and `type:` instead expand at its leaf before empty, collision, and type checks; `variant:` and `sections:` selectors remain literal.
+
+---
+
+## Key Capitalization
+
+**A name the author chooses matches without regard to capitalization.** `Mood`, `mood` and
+`MOOD` are one variable. The rule covers:
+
+- `variables`, `roles`, `branches`, `structure.input.library` and `lint.packs`
+- `templateFor` role keys, and the template names in the files they point to
+- an item's `body`, `variables` and `notes` keys, at any depth
+- variant names and branch-dispatch selectors, on items and on component sections
+- component section names, and the keys of a named `text:` map
+- `fields`, `groups` and `templates` in a field table
+
+**Two keys in one mapping that differ only by capitalization are `CL0211`,** an ERROR that
+stops the compile before anything is written. Pick one spelling.
+
+**Across layers a different spelling is an ordinary override.** A branch's `mood: bright`
+replaces a root `Mood`, and `mood: ~` unbinds it.
+
+**Keys the compiler defines accept any capitalization, silently.** `Render:` is the
+render block, `aid: {Type: Character}` uses `aid.type`, and
+`components: {AIInstructions: ...}` uses `components.aiInstructions`. Two spellings of
+one key in the same mapping are still `CL0211`. Values are separate: an enumerated value
+such as `lint.level: warn` still uses its documented spelling.
+
+**Two kinds of key are exact:**
+
+- **Placeholder names.** Velvet Lattice substitutes `%name%` by exact match, so `%Feel%`
+  does not reach a placeholder declared `feel`.
+- **A convention pack's declaring key,** which must equal the pack's `name:` exactly
+  (`CL0119`). A branch may still override or unbind it in any capitalization.
+
+Item `meta:` and component `metadata:` are different channels. Item `meta:` keys match in
+any capitalization (variant merges, pack lookups) and sibling keys differing only by
+capitalization are `CL0211` at any depth; values and shape are unchecked. Component
+`metadata:` is Velvet Lattice frontmatter: taken whole from its one document, never
+merged or imported, keys written exactly as authored (`Tags` and `tags` are two keys).
 
 ---
 

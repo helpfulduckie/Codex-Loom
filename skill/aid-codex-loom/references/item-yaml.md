@@ -2,6 +2,11 @@
 
 Item files are YAML sequences. A single file can mix local item definitions, `import:`, and `include:` entries in any order.
 
+**`body`, `variables` and `notes` keys, variant names and dispatch selectors match without
+regard to capitalization.** A variant that sets `hair` overrides a body field written
+`Hair`; two keys in one mapping that differ only by capitalization are `CL0211`. See
+[Key Capitalization](compile-yaml.md#key-capitalization).
+
 **"Item", not "card".** The item is the definition; a story card is one of the things it can render into. An item may render into a story card, into component slots, into both, or — with `storyCard: false` and a component target — into components only.
 
 ---
@@ -66,7 +71,7 @@ Item files are YAML sequences. A single file can mix local item definitions, `im
 | Field | Required | Notes |
 |---|---|---|
 | `id` | recommended | Compiler key; defaults to `name`; globally unique; immutable across variants |
-| `name` | yes | Scalar string or `{display, full}` object |
+| `name` | yes | Scalar text or `{display, full}` object; a number is read as typed |
 | `pronouns` | recommended | Controls `{$she}` etc.; `female` / `male` / `nonbinary` / `they` |
 | `aid` | only with a story-card target | AID story-card metadata |
 | `render` | optional | Template, wrapper, and placement targets |
@@ -80,9 +85,13 @@ Item files are YAML sequences. A single file can mix local item definitions, `im
 
 Every semantic item string value expands `{%variable}`, including nested values in `body`, `v`, `notes`, `meta`, and `pronouns`; mapping keys and branch/variant selectors remain literal.
 
+**Names, `aid.title`, and trigger values accept numbers as text, including in variants.** Scalar names and explicit `display`/`full` values keep a number as the text you typed: `1.50` stays `1.50`, `007` stays `007`, and a long integer keeps every digit.
+
+**Numbers in `body:`, `v:` and its aliases, `notes:`, and `pronouns:` also render as typed.** `gpa: 3.30` renders `3.30` and `schoolId: 0107420` renders `0107420`, with no quotes needed. `meta:` is the exception: it is data for tools and never card text, so its numbers stay parsed numbers a convention pack can check. A number reached through a YAML alias renders in its parsed form. Item `v:` supports nested mappings, lists, numbers, and booleans; config `variables:` is a flat table of strings and numbers used as replacement text, with null unbinding inherited entries.
+
 **`kind: reference`** marks an item that exists to be read by a script or by a human in the story-card editor rather than by the AI. It exempts the item from the prose heuristics and from nothing else. It reaches AID nowhere — Velvet Lattice forwards only title, type, keys, value and description.
 
-**`meta:` is for convention packs, not for content.** Never validated by the loader, never proposed as a relocation target for a typo'd key. A pack reads `meta.<packName>.<key>`, so `meta.duckieConv.role` and a `stat-tracker` pack's keys never collide. The compiler writes it into the card's `~~~` fence so the offline `--lint` arm can read it back, and it is branch-addressable like any other whole-value field. See `references/convention-packs.md`.
+**`meta:` is for convention packs, not for content.** Its values and shape are never validated, and it is never proposed as a relocation target for a typo'd key; its keys match in any capitalization, so two sibling keys differing only by capitalization are `CL0211`. A pack reads `meta.<packName>.<key>`, so `meta.duckieConv.role` and a `stat-tracker` pack's keys never collide. The compiler writes it into the card's `~~~` fence so the offline `--lint` arm can read it back, and it is branch-addressable: a variant's `meta:` merges into the base item's key by key. See `references/convention-packs.md`.
 
 ---
 
@@ -183,6 +192,15 @@ Named deltas layered on top of the item. Can modify `name`, `pronouns`, `aid`, `
 Variants nest: `sci-fi/near-future` applies the `sci-fi` delta first, then `sci-fi.variants.near-future`.
 
 **`id` is immutable** — no variant can change it.
+
+A bare key matching a structural item field changes that field in any capitalization.
+`Name: Changed` changes the item's name; reach a body field called `Name` through
+`body: {Name: Changed}`. The same distinction applies to `Notes`, `Render` and `Aid`.
+
+`import`, `include`, and `branches` are reserved but cannot be applied inside an item
+variant. A bare occurrence in any capitalization raises `CL0329` and is ignored, even
+in an unused variant. Reach body fields with those names through `body: {Import: ...}`,
+`body: {Include: ...}`, or `body: {Branches: ...}`.
 
 A variant is the natural place for a placement change:
 

@@ -7,7 +7,7 @@ const {
   localRoleKeysOf, mergeUnbindable,
 } = require('./model/branches');
 const { buildFieldAudit } = require('./render/field-audit');
-const { resolveVariables } = require('./util');
+const { resolveVariables, getCI } = require('./util');
 const { buildCardTypeAudit } = require('./cardType');
 const {
   checkConfigNotesTemplates, gatherTierTemplates,
@@ -29,7 +29,9 @@ const { checkDrift } = require('./snapshot');
 const { loadCompileConfig } = require('./config/load');
 const { placeInheritedFiles } = require('./inherit');
 const { runLeafLoop } = require('./leafLoop');
-const { writeTreeFiles, writeScenarioBlurb } = require('./treeWrite');
+const { writeTreeFiles, writeScenarioBlurb, resolveComponentSpec } = require('./treeWrite');
+const { checkComponentKeys } = require('./loader/component');
+const { isPassthrough } = require('./emit/components');
 const { finalizeDiagnostics } = require('./reportDispatch');
 const {
   PlaceholderTracker, RoleTracker, GapList, ComponentLoader,
@@ -55,8 +57,9 @@ function resolveRoles(config, configPath, diagnostics) {
         key, resolveVariables(value, variables, { diagnostics, file: configPath }),
       ]))
       : state.resolved;
-    const protagonist = resolved.protagonist
-      ? String(resolved.protagonist).toLowerCase()
+    const protagonistId = getCI(resolved, 'protagonist');
+    const protagonist = protagonistId
+      ? String(protagonistId).toLowerCase()
       : null;
     const roleInfo = { raw, resolved, declared, protagonist };
     byPath.set(nodePath.join('/'), roleInfo);
@@ -70,13 +73,34 @@ function resolveRoles(config, configPath, diagnostics) {
   return byPath;
 }
 
+// A component path may hold a variable, and a branch that changes the variable changes the
+// file an inherited spec names. So every node re-resolves every spec in scope, inherited
+// ones included, against its own variables.
+function checkComponentKeyIdentity(config, diagnostics) {
+  const seen = new Set();
+  const rootVariables = config._variables || config.variables || {};
+  walkBranchTree(config, ({ node, isRoot, state }) => {
+    const variables = isRoot ? state.variables : mergeUnbindable(state.variables, node && node.variables, {
+      code: DIAG_CODES.VARIABLE_UNBIND_UNKNOWN, kind: 'variable', onWarn: null,
+    });
+    const components = { ...state.components, ...((node && node.components) || {}) };
+    for (const spec of Object.values(components)) {
+      const file = resolveComponentSpec(spec, config._base, variables, { diagnostics: new Diagnostics() });
+      if (isPassthrough(file)) continue;
+      checkComponentKeys(file, { diagnostics, variables: rootVariables, base: config._base, seen });
+    }
+    return { variables, components };
+  }, { variables: rootVariables, components: {} });
+}
+
 function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
+  const packLoadFindings = new Set();
   const rootPacks = (config.lint && config.lint.packs) || {};
   const anyBranchPacks = branchTreeDeclares(
     config.branches, (node) => node.lint && node.lint.packs
       && Object.keys(node.lint.packs).length > 0,
   );
-  if (Object.keys(rootPacks).length === 0 && !anyBranchPacks) return;
+  if (Object.keys(rootPacks).length === 0 && !anyBranchPacks) return packLoadFindings;
 
   const baseDir = config._base || '.';
   const loaded = new Map(); // pack name -> normalized pack | null (failed, already reported)
@@ -98,9 +122,11 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
       if (packLevel === 'off') continue;
 
       if (!loaded.has(name)) {
+        const before = diagnostics.length;
         loaded.set(name, loadPack(name, entry, {
           baseDir, variables: leaf.variables || {}, diagnostics, loc,
         }));
+        for (const finding of diagnostics.all.slice(before)) packLoadFindings.add(finding);
       }
       const pack = loaded.get(name);
       if (!pack) continue;
@@ -137,6 +163,7 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
       file, branches, allBranches: branches.length === deferredCardLeaves.length,
     });
   }
+  return packLoadFindings;
 }
 
 // A tolerant compile drops unknown keys and keeps going, so those two errors are reported
@@ -202,7 +229,8 @@ function compileRun(configPath, options, buses) {
   abortOnLoadErrors(loadDiagnostics, { tolerant: options.tolerant });
   log.info(`Loaded ${templates.size} template(s)${partials.size ? `, ${partials.size} partial(s)` : ''}.`);
 
-  const tierTemplates = config ? gatherTierTemplates(config, configPath) : [];
+  const tierTemplates = config ? gatherTierTemplates(config, configPath, loadDiagnostics) : [];
+  abortOnLoadErrors(loadDiagnostics, { tolerant: options.tolerant });
   const fieldAudit = buildFieldAudit({ fieldTable, partials, tierTemplates });
   const cardTypeAudit = buildCardTypeAudit();
 
@@ -223,6 +251,8 @@ function compileRun(configPath, options, buses) {
   if (includedItems.length > 0) {
     log.info(`Loaded ${includedItems.length} included library item(s).`);
   }
+
+  checkComponentKeyIdentity(config, loadDiagnostics);
 
   abortOnLoadErrors(loadDiagnostics, { tolerant: options.tolerant });
 
@@ -296,7 +326,7 @@ function compileRun(configPath, options, buses) {
     leafData, inventoryData, componentDetails, leafSummaries, allItemIds,
   });
 
-  runPackChecks(config, deferredCardLeaves, configPath, compileDiagnostics);
+  const packLoadFindings = runPackChecks(config, deferredCardLeaves, configPath, compileDiagnostics);
 
   totalFiles += placeInheritedFiles({
     deferredComponents, deferredScripts, deferredCardLeaves,
@@ -336,7 +366,8 @@ function compileRun(configPath, options, buses) {
     // Components and field tables are read on both buses, so a drop is counted on either.
     const droppedKeys = options.tolerant
       ? [...loadDiagnostics.all, ...compileDiagnostics.all]
-        .filter((d) => TOLERATED_CODES.has(d.code)).length
+        // Invalid pack rules are skipped whole; none of their keys are dropped individually.
+        .filter((d) => TOLERATED_CODES.has(d.code) && !packLoadFindings.has(d)).length
       : 0;
     return {
       config, leaves, leafData, inventoryData, deferredCardLeaves, captured, droppedKeys,

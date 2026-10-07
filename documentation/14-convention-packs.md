@@ -63,6 +63,10 @@ branches:
 WARN — it usually means a bare `pack-name:` (which parses as null, i.e. `~`) was meant to
 be `pack-name: {}`.
 
+A branch's entry finds the inherited pack without regard to capitalization, so `WTG: ~`
+unbinds a root `wtg` and `WTG: {level: off}` silences it. Two keys in one `packs:` mapping
+that differ only by capitalization are an ERROR (`CL0211`).
+
 **`source:` forms.** An absent `source:` means "bundled, by name" — the loader looks for
 `packs/<name>.cl.yaml` in Codex Loom's own `packs/` directory. A present `source:` is a
 path, resolved relative to the `compile.yaml` directory, with `{%token}` variables expanded. A library-hosted pack gets
@@ -70,7 +74,8 @@ versioned and frozen alongside the shared library that depends on it (see The Li
 
 **The config key must match the pack's declared `name:`.** Diagnostic codes are namespaced
 from the pack's own name, so a mismatch would make a hosted pack yield different codes in
-every project that loads it. A disagreement is a `CL0119` ERROR naming both.
+every project that loads it. A disagreement is a `CL0119` ERROR naming both. This match is
+exact, capitalization included: `Wtg: {}` does not load the `wtg` pack.
 
 ---
 
@@ -115,6 +120,38 @@ prefix.
 The loader's own two codes are core, in the loading band: `CL0117` for a malformed pack
 (missing file, bad YAML, no `rules:` list), `CL0119` for the name mismatch above. Neither
 is ever a crash or a silent skip.
+
+**`CL0121` identifies an invalid rule definition.** An invalid predicate or descriptor
+regex, a repeated final diagnostic code, or a rule with no check raises this error and
+skips that rule. A rule must declare at least one of `forbid`, `require`, `requireCard`,
+`schema`, `budget`, `count`, or `mutexHint`. An empty predicate such as `forbid: {}` is a
+valid check that matches every card.
+
+**Final rule codes must be unique within a pack, ignoring capitalization.** Padding and
+positional defaults are included: `id: 2`, `id: "0002"`, and a second rule with no `id`
+all produce `CL-<pack>/0002`. The first rule to name a code keeps it; a later duplicate is
+skipped with both definition locations. Code spelling is preserved, so this comparison
+does not rewrite emitted codes. A rule skipped for another error still holds its code, so
+a later rule repeating it is reported in the same compile, not after the first is fixed.
+
+**Pack files validate their compiler-defined keys in any capitalization.** This includes
+the pack envelope, rules, recursive predicates, recursive schema descriptors, and per-item
+bounds. Unknown or misplaced keys (`CL0201` / `CL0210`), wrong types (`CL0202`), invalid
+enumerated values (`CL0206`), and capitalization collisions (`CL0211`) are errors at their
+authored source positions. A collision also shows the first definition's position.
+
+**An invalid rule is skipped whole; valid sibling rules still run.** A broken selector or
+predicate is never removed from a rule and then evaluated with a changed meaning. Every
+finding is reported, including each invalid predicate or descriptor regex. A pack-level
+error, such as an unknown envelope key, missing rules list, unreadable YAML, or name
+mismatch, makes the whole pack unavailable. These errors fail a normal compile even when
+the remaining rules produce useful findings. Offline lint uses the same recovery boundary.
+Preview returns cards and diagnostics with the same rule skips, whether tolerant mode is
+on or off; skipped rules do not count toward `droppedKeys`.
+
+When `rules:` is a list, every rule is validated even if an envelope error or name
+mismatch disables the pack. The diagnostics identify that pack-level unavailability;
+the author sees all definition errors in one pass, and none of the pack's rules run.
 
 ---
 
@@ -170,9 +207,17 @@ The inline compile pass is branch-merge-aware and authoritative.
 | `{ notes: { … } }` | scope the nested predicate to the notes mapping |
 | `{ all: [...] }` / `{ any: [...] }` / `{ not: <pred> }` | compose |
 
-`re` is a plain string, compiled with `new RegExp(str)`. `match` is the shape a
+`re` is text, compiled with `new RegExp(str)`. `match` is the shape a
 two-surface rule needs — WTG accepts a marker in a card's Notes *or* its Entry and
 normalizes the position itself, so `wtg`'s marker rule scans both.
+
+`hasKey` and `equals.key` match recovered Notes keys in any capitalization. The value
+compared by `equals.value` stays exact after string conversion, and regexes keep their
+existing case rules. Budget role lookup also ignores capitalization, including the
+fallback to `standard`, while preserving the authored budget name in findings. This
+lookup does not rewrite the card's Notes or metadata.
+
+**Pack text operands accept unquoted numbers.** `hasKey`, `equals.key`, the four regex predicates (`notesMatch`, `bodyMatch`, `match`, `titleMatch`), descriptor `pattern` and `keyPattern`, rule `message`, and `mutexHint.fields` and `mutexHint.message` read a number as the text you typed. For example, `hasKey: 2024` looks for the key `"2024"` and `hasKey: 007` for `"007"`. A numeric regex is still a regex: `1.50` is the pattern `1.50`, whose `.` matches any character. `equals.value` keeps its existing comparison after string conversion; numeric budgets and bounds remain numbers. A descriptor `type: string` still requires string data in the card being checked: this allowance applies to the pack's designated text operands.
 
 ### The schema check
 
@@ -184,10 +229,13 @@ lines (an optional `>` prefix stripped, first colon splits, first occurrence of 
 wins) — the shape a mod reads a settings card in. The descriptor keys the engine
 understands:
 
-- **`type`** — `map`, `record`, `seq`, `string`, `number`, `boolean`, `any` (or a list of
+- **`type`** — required: `map`, `record`, `seq`, `string`, `number`, `boolean`, `any` (or a nonempty list of
   them for a union).
 - **`keys`** — for `map`: the declared key set is the whole set; an undeclared key is a
-  `CL0201` ERROR with a Damerau-Levenshtein typo suggestion. Also honored on `record`,
+  `CL0201` ERROR with a Damerau-Levenshtein typo suggestion. Declared `map` keys match in
+  any capitalization; two spellings of one key in the checked mapping are a collision.
+  Normalization is confined to the schema check, so later predicates see the original
+  mapping. Also honored on `record`,
   where declared keys use their own descriptors and other keys remain allowed. Use `map`
   for "these keys and no others," `record` + `keys` for "these keys, plus anything."
 - **`of`** — for `seq` / `record`: the descriptor every element or value must match. On a
@@ -204,6 +252,20 @@ understands:
 Every finding the check raises is re-coded to the rule's `CL-<pack>/NNNN`, so a pack's
 findings suppress as one unit and show their origin.
 
+**A schema finding states the specific failure, not the rule's `message:`.** A missing
+key, a stray key or a wrong type is already plain. The one exception is a failed
+`pattern`: that finding shows the regex, so the rule's `message:` is added after it to
+say what the pattern means. Write the `message:` of a rule that uses `pattern` as the
+plain-language version of what the value must be.
+
+The descriptor's own property names (`type`, `keys`, `required`, and so on) accept any
+capitalization. Children of `keys:`, budget role names, and `count.fields` paths remain
+author-chosen names, retain their spelling, and reject sibling capitalization collisions.
+Key normalization does not change `values` or the case-sensitive `keyPattern` check on an
+open `record`. `over` accepts exactly `notes`, `body`, or `meta`; `over: Body` is `CL0206`.
+Descriptor type names retain their existing capitalization-insensitive matching, including
+members of type unions.
+
 **A pack re-parses `notes:` itself.** The compiler emits `notes:` as a flat string by
 design, so the pack layer runs a YAML parse over the block to recover its mapping form. A
 `notes:` block that is prose, or a bare marker like `[e]`, parses to `{}` — which the
@@ -213,8 +275,9 @@ uses) is stripped before the parse.
 
 ### The `meta:` channel and `over: meta`
 
-**`meta:` is an item key for tooling — an unvalidated annotation channel, parallel to
-`v:`.** The loader accepts any shape under it and never proposes it as a relocation target;
+**`meta:` is an item key for tooling — an annotation channel, parallel to
+`v:`.** The loader accepts any value shape under it, checks sibling capitalization
+collisions recursively on base items and variant deltas, and never proposes it as a relocation target;
 it is distinct from `v:` in that no template ever reads it. The compiler writes it into the
 card's `~~~` fence when it is a non-empty mapping, so a pack sees it in both the inline
 compile pass and the offline `--lint` arm — and, like `kind: reference`, it reaches AID
@@ -224,14 +287,22 @@ nowhere: Velvet Lattice forwards only title / type / keys / value / description.
 pack's declared `name:` — the same binding that ties the `lint.packs` key and the
 `CL-<name>/NNNN` code prefix. `duckieConv` reads `meta.duckieConv.role`; a `stat-tracker`
 pack would read `meta.statTracker.*`, and the two never collide.
+The card-side namespace and its `role` key match in any capitalization without rewriting
+the metadata. This lookup leaves the exact pack-declaration name rule unchanged.
+
+**A variant's `meta:` merges into the base item's key by key, in any capitalization.** A
+base of `duckieConv: {role: minor, note: keep}` and a variant of
+`DuckieConv: {Role: Major}` compile to `duckieConv: {role: Major, note: keep}`: the
+variant changes the one key it names, and the base's spelling is what is written.
 
 **`over: meta` is the third schema route.** `over: notes` (default) validates the parsed
 `notes:` mapping; `over: body` validates the card entry; `over: meta` validates
 `meta[<thisPack>]` — the pack's own sub-namespace, reached automatically. A rule cannot
 assert about another pack's `meta` sub-namespace through the bare route. `duckieConv`'s role
-rule is `{ over: meta, schema: { type: map, keys: { role: { values: [anchor, major,
-standard, minor] } } } }` — a closed `map`, so a typo'd sub-key is a stray-key finding and a bad
-`role` value is an out-of-set finding, both re-coded to `CL-duckieConv/NNNN`.
+rule is `{ over: meta, schema: { type: map, keys: { role: { type: string,
+pattern: '^(anchor|major|standard|minor)$' } } } }` — a closed `map`, so a typo'd sub-key
+is a stray-key finding and a bad `role` value is a case-insensitive pattern-mismatch
+finding, both re-coded to `CL-duckieConv/NNNN`.
 
 ### Per-item rules — `budget`, `count`, `mutexHint`
 
@@ -327,6 +398,7 @@ expected to drift as those conventions do. All four rules are WARN — a convent
   is to audit for redundancy and merge down. A `mutexHint:` rule — inline only. Unscoped,
   which is safe: no non-faction template exposes all four.
 - **`CL-duckieConv/0004` — the role annotation is a known value.** `meta.duckieConv.role`,
-  if set, must be `anchor` / `major` / `standard` / `minor`. An `over: meta` closed-`map` schema.
+  if set, must match `anchor` / `major` / `standard` / `minor` in any capitalization.
+  An invalid value is a pattern-mismatch finding from an `over: meta` closed-`map` schema.
 
 Enable it with `lint: { packs: { duckieConv: {} } }`.

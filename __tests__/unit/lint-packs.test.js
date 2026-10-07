@@ -22,6 +22,27 @@ const { withTmpDir, writeTree } = require('../helpers/project');
 let TMP;
 beforeAll(() => { TMP = withTmpDir(); });
 
+test('map schemas preserve recovered key spelling for later record checks', () => {
+  const pack = { name: 'case', rules: [
+    { code: 'CL-case/0001', severity: 'error', schema: {
+      type: 'map', keys: { Rank: { type: 'string', required: true } },
+    } },
+    { code: 'CL-case/0002', severity: 'error', require: { hasKey: 'Rank' }, message: 'key must remain available' },
+    { code: 'CL-case/0003', severity: 'error', require: { equals: { key: 'rank', value: 'low' } }, message: 'value must remain available' },
+    { code: 'CL-case/0004', severity: 'error', schema: { type: 'record', keyPattern: '^rank$' } },
+  ] };
+  expect(evaluatePack(pack, [{ title: 'Card', notes: 'rank: low', body: '' }])).toEqual([]);
+});
+
+test('map schemas fold nested metadata in an isolated validation copy', () => {
+  const meta = { meta: { case: { Rank: { Score: 4 } } } };
+  const pack = { name: 'case', rules: [{ code: 'CL-case/0001', severity: 'error', over: 'meta', schema: {
+    type: 'map', keys: { rank: { type: 'map', keys: { score: { type: 'number', required: true } } } },
+  } }] };
+  expect(evaluatePack(pack, [{ title: 'Card', body: '', meta }])).toEqual([]);
+  expect(meta).toEqual({ meta: { case: { Rank: { Score: 4 } } } });
+});
+
 function writePack(name, body) {
   writeTree(TMP, { [`${name}.cl.yaml`]: body });
 }
@@ -39,7 +60,7 @@ describe('loadPack', () => {
   });
 
   test('a source: path is resolved relative to baseDir and loaded', () => {
-    writePack('local', 'name: local\nrules:\n  - id: 1\n    message: hi\n');
+    writePack('local', 'name: local\nrules:\n  - id: 1\n    message: hi\n    forbid: {}\n');
     const diag = new Diagnostics();
     const pack = loadPack('local', { source: './local.cl.yaml' }, { baseDir: TMP, diagnostics: diag });
     expect(diag.errors).toHaveLength(0);
@@ -67,24 +88,24 @@ describe('loadPack', () => {
   });
 
   test.each([
-    ['at root', 'keyPattern: "["'],
-    ['under keys', 'keys: { child: { type: record, keyPattern: "[" } }'],
-    ['under of', 'of: { type: record, keys: { child: { type: record, keyPattern: "[" } } }'],
-  ])('a malformed keyPattern nested %s rejects the pack as CL0117', (_where, schemaPart) => {
-    writePack('bad-key-pattern', `name: bad-key-pattern\nrules:\n  - schema:\n      type: record\n      ${schemaPart}\n`);
+    ['at root', 'type: record\n      keyPattern: "["'],
+    ['under keys', 'type: map\n      keys: { child: { type: record, keyPattern: "[" } }'],
+    ['under of', 'type: record\n      of: { type: record, keys: { child: { type: record, keyPattern: "[" } } }'],
+  ])('a malformed keyPattern nested %s skips the rule as CL0121', (_where, schemaPart) => {
+    writePack('bad-key-pattern', `name: bad-key-pattern\nrules:\n  - schema:\n      ${schemaPart}\n`);
     const diag = new Diagnostics();
     expect(loadPack('bad-key-pattern', { source: './bad-key-pattern.cl.yaml' },
-      { baseDir: TMP, diagnostics: diag })).toBeNull();
-    expect(diag.errors[0].code).toBe(CODES.PACK_MALFORMED);
-    expect(diag.errors[0].message).toContain('invalid keyPattern regex');
+      { baseDir: TMP, diagnostics: diag }).rules).toEqual([]);
+    expect(diag.errors[0].code).toBe(CODES.PACK_RULE_INVALID);
+    expect(diag.errors[0].message).toContain('Invalid keyPattern regex');
   });
 
-  test('a non-string keyPattern rejects the pack as CL0117', () => {
-    writePack('bad-key-pattern-type', 'name: bad-key-pattern-type\nrules:\n  - schema: { type: record, keyPattern: 12 }\n');
+  test('a boolean keyPattern skips the rule with a type error', () => {
+    writePack('bad-key-pattern-type', 'name: bad-key-pattern-type\nrules:\n  - schema: { type: record, keyPattern: true }\n');
     const diag = new Diagnostics();
     expect(loadPack('bad-key-pattern-type', { source: './bad-key-pattern-type.cl.yaml' },
-      { baseDir: TMP, diagnostics: diag })).toBeNull();
-    expect(diag.errors[0].code).toBe(CODES.PACK_MALFORMED);
+      { baseDir: TMP, diagnostics: diag }).rules).toEqual([]);
+    expect(diag.errors[0].code).toBe(CODES.WRONG_TYPE);
   });
 
   test('a name: that disagrees with the config key is a CL0119 ERROR', () => {
@@ -116,7 +137,7 @@ describe('loadPack', () => {
   });
 
   test('rule id and severity default sanely', () => {
-    writePack('defaults', 'name: defaults\nrules:\n  - message: a\n  - id: 7\n    severity: warn\n    message: b\n');
+    writePack('defaults', 'name: defaults\nrules:\n  - message: a\n    forbid: {}\n  - id: 7\n    severity: warn\n    message: b\n    forbid: {}\n');
     const pack = loadPack('defaults', { source: './defaults.cl.yaml' }, { baseDir: TMP, diagnostics: new Diagnostics() });
     expect(pack.rules[0].code).toBe('CL-defaults/0001');
     expect(pack.rules[0].severity).toBe('error');

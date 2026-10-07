@@ -8,7 +8,7 @@ const { Diagnostics, LINT_LEVELS, SEVERITY } = require('./diag');
 const { loadCompileConfig } = require('./config/load');
 const { syncLibrary } = require('./snapshot');
 const { findConfigEntry } = require('./loader/registry');
-const { CONFIG_BASENAMES } = require('./util');
+const { CONFIG_BASENAMES, getCI } = require('./util');
 const { compile } = require('./compile');
 
 function printDiagnostics(bus) {
@@ -78,7 +78,8 @@ function resolveMigrateConfigPath(positional) {
 
 function migrateVersion(configPath) {
   const config = YAML.parse(fs.readFileSync(configPath, 'utf8'));
-  return typeof config?.version === 'number' ? config.version : null;
+  const version = getCI(config, 'version');
+  return typeof version === 'number' ? version : null;
 }
 
 function renderMigrationReport(result) {

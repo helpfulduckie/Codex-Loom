@@ -1,7 +1,9 @@
 'use strict';
 
 
-const { TYPES, STRING, NUMBER, BOOLEAN, ANY } = require('../schema');
+const { TYPES, STRING, TEXT, NUMBER, BOOLEAN, ANY } = require('../schema');
+const { checkDispatchKeys, checkSectionKeys } = require('../keyIdentity');
+const { DISPATCH } = require('./dispatch-schema');
 
 const SECTION_RENDER = {
   type: TYPES.MAP,
@@ -24,14 +26,15 @@ const SECTION_FROM = {
 
 const SECTION = {
   type: TYPES.MAP,
+  checkKeys: checkSectionKeys,
   keys: {
     slot: BOOLEAN,
-    text: { type: [TYPES.STRING, TYPES.RECORD], of: STRING },
+    text: { type: [TYPES.STRING, TYPES.RECORD], numberAsText: true, caseInsensitiveKeys: true, of: TEXT },
 
     file: STRING,
     from: SECTION_FROM,
 
-    heading: STRING,
+    heading: TEXT,
     headingLevel: NUMBER,
     render: SECTION_RENDER,
 
@@ -40,12 +43,15 @@ const SECTION = {
   },
 };
 
+SECTION.keys.branches = { ...ANY, normalizeAs: DISPATCH };
+SECTION.keys.variants = { ...ANY, normalizeAs: { type: TYPES.RECORD, of: SECTION } };
+
 const COMPONENT_SCHEMA = {
   type: TYPES.MAP,
   keys: {
-    sections: { type: TYPES.RECORD, of: SECTION },
+    sections: { type: TYPES.RECORD, caseInsensitiveKeys: true, of: SECTION },
 
-    branches: ANY,
+    branches: { ...ANY, checkKeys: checkDispatchKeys, normalizeAs: DISPATCH },
 
     metadata: ANY,
 
@@ -64,7 +70,7 @@ const COMPONENT_SCHEMA = {
           of: {
             type: TYPES.MAP,
             keys: {
-              title: STRING,
+              title: TEXT,
               variant: STRING,
               sections: { type: TYPES.SEQ, of: STRING },
               type: STRING,

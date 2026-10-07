@@ -1,7 +1,7 @@
 'use strict';
 
 
-const { TYPES, STRING, BOOLEAN } = require('../schema');
+const { TYPES, STRING, TEXT, BOOLEAN } = require('../schema');
 const { FUNCTION_NAMES } = require('../render/parse');
 
 const RENDER_FUNCTIONS = Object.freeze([...FUNCTION_NAMES, 'bare']);
@@ -9,15 +9,15 @@ const RENDER_FUNCTIONS = Object.freeze([...FUNCTION_NAMES, 'bare']);
 const FIELD_DECL = {
   type: TYPES.MAP,
   keys: {
-    label: STRING,
+    label: TEXT,
     render: { type: TYPES.STRING, values: RENDER_FUNCTIONS },
-    join: STRING,
+    join: TEXT,
     wrap: STRING,
     wrapLabel: BOOLEAN,
     block: BOOLEAN,
     from: { type: [TYPES.STRING, TYPES.SEQ], of: STRING },
     always: BOOLEAN,
-    labelWhen: { type: TYPES.RECORD, of: STRING },
+    labelWhen: { type: TYPES.RECORD, of: TEXT },
   },
 };
 
@@ -35,7 +35,7 @@ const TEMPLATE_ENTRY = {
     field: STRING,
     name: STRING,
     include: STRING,
-    raw: STRING,
+    raw: TEXT,
     allowExtra: BOOLEAN,
   },
 };
@@ -47,9 +47,9 @@ const TEMPLATE_LIST = { type: TYPES.SEQ, of: TEMPLATE_ENTRY };
 const FIELD_TABLE_SCHEMA = {
   type: TYPES.MAP,
   keys: {
-    fields: { type: TYPES.RECORD, of: FIELD_DECL },
-    groups: { type: TYPES.RECORD, of: GROUP_LIST },
-    templates: { type: TYPES.RECORD, of: TEMPLATE_LIST },
+    fields: { type: TYPES.RECORD, caseInsensitiveKeys: true, of: FIELD_DECL },
+    groups: { type: TYPES.RECORD, caseInsensitiveKeys: true, of: GROUP_LIST },
+    templates: { type: TYPES.RECORD, caseInsensitiveKeys: true, of: TEMPLATE_LIST },
   },
 };
 

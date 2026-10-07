@@ -4,6 +4,11 @@ Components are non-story-card files written to each branch leaf's `Components/` 
 
 Components are declared in `compile.yaml` under the root-level `components:` key and/or per-branch `components:` overrides.
 
+Section names, the keys of a named `text:` map, variant names and dispatch selectors match
+without regard to capitalization. Two sections named `premise` and `Premise` in one file
+are an ERROR (`CL0211`) that stops the compile before anything is written, whichever
+component the file belongs to. See [Key Capitalization](02-compile-yaml.md#key-capitalization).
+
 ---
 
 ## Opening
@@ -197,7 +202,7 @@ An item may name several targets: `storyCard: true` alongside a `plotEssential:`
 | Field | Default | Effect |
 |---|---|---|
 | `slot` | `false` | `true` marks a section items can route into. A slot section takes no `text:`. |
-| `text` | — | A string, or a mapping of named lines. With a mapping only the values render; the names exist so a variant can edit one line without restating the block. |
+| `text` | — | A string or number, or a mapping of named text lines. With a mapping only the values render; the names exist so a variant can edit one line without restating the block. |
 | `file` | — | A path whose contents become the section's text, included verbatim. |
 | `from` | — | `{script:, extract:}` — a path read through a named transform. `extract: scriptBanner` reads a JavaScript file's leading comment block. |
 | `heading` | — | Placed before the content, inside the wrapper. Omit to suppress entirely. |
@@ -432,7 +437,7 @@ The `rules` section — a mapping `text:` under a level-2 heading, `bullet: true
 - Clinical observation punctuated by visceral sensation.
 ```
 
-**Text may be a string or a mapping of named lines.** With a mapping, the keys are internal identifiers and only the values are rendered — the names exist so a variant can replace or delete one rule without restating the block.
+**Text may be a string, a number, or a mapping of named text lines.** With a mapping, the keys are internal identifiers and only the values are rendered — the names exist so a variant can replace or delete one rule without restating the block. Numbers in `text:`, its named lines, `heading:`, and `render.storyCards.title` are kept as the text you typed, including in section variants. Thus `1.50` renders as `1.50` and `007` as `007`, with no quotes needed. `metadata:` keeps parsed YAML types, while numeric settings such as `headingLevel` and `render.position` remain numbers.
 
 | Field | Default | Effect |
 |---|---|---|
@@ -713,6 +718,10 @@ tags:
 ```
 
 The key is declared on every component, but only the two description components emit it — nothing else writes a file with a place to put frontmatter. Declaring it elsewhere is `CL0620` and the metadata is ignored.
+
+**`metadata:` is taken whole from the document that declares it.** It is never merged: `imports:` brings in sections only, so an imported document's `metadata:` is not carried over, even when the importing document declares none. A branch that names a different description document gets that document's `metadata:` and nothing from its parent's.
+
+**Its keys are written exactly as authored.** They are Velvet Lattice's keys, so the compiler does not match them by capitalization or check them for collisions: `Tags` and `tags` are two keys, and both are written. `{%variables}` expand in the values, never in the keys. This is the opposite of an item's `meta:`, whose keys match in any capitalization because Codex Loom's own tooling reads them.
 
 ### Prose descriptions still work
 
