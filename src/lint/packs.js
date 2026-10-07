@@ -86,25 +86,33 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
     });
     checkRuleValues(rule, ruleSchema, rulePath, sourceMap, bus, context);
     diagnostics.merge(bus);
-    if (bus.hasErrors()) continue;
-    if (!Object.entries(ruleSchema.keys).some(([key, schema]) => schema.packCheck && Object.hasOwn(rule, key))) {
+    let usable = !bus.hasErrors();
+    if (usable && !Object.entries(ruleSchema.keys).some(([key, schema]) => schema.packCheck && Object.hasOwn(rule, key))) {
       diagnostics.error(CODES.PACK_RULE_INVALID,
         `No check is declared in ${context}; add forbid, require, requireCard, schema, budget, count, or mutexHint.`,
         sourceMap.nearest(rulePath));
-      continue;
+      usable = false;
     }
-    const id = rule.id !== undefined ? String(rule.id) : String(i + 1);
+    // A skipped rule still holds its code, so a later rule repeating it is reported in the
+    // same pass and not only after the first rule is repaired. An id of the wrong type
+    // names no code to hold.
+    const authoredId = rule && typeof rule === 'object' ? rule.id : undefined;
+    if (authoredId !== undefined && typeof authoredId !== 'string' && typeof authoredId !== 'number') continue;
+    const id = authoredId !== undefined ? String(authoredId) : String(i + 1);
     const code = `CL-${name}/${id.padStart(4, '0')}`;
     const foldedCode = code.toLowerCase();
-    const ruleLoc = sourceMap.nearest(rule.id !== undefined ? [...rulePath, 'id'] : rulePath);
+    const ruleLoc = sourceMap.nearest(authoredId !== undefined ? [...rulePath, 'id'] : rulePath);
     const first = issuedCodes.get(foldedCode);
     if (first) {
       diagnostics.error(CODES.PACK_RULE_INVALID,
-        `Diagnostic code "${code}" is already defined as "${first.code}" in ${context}; give this rule a unique id.`,
+        code === first.code
+          ? `Diagnostic code "${code}" in ${context} is already used by rule ${first.rule}; give this rule a unique id.`
+          : `Diagnostic code "${code}" in ${context} differs only by capitalization from "${first.code}", used by rule ${first.rule}; give this rule a distinct id.`,
         ruleLoc, { related: [{ label: 'first definition', ...first.loc }] });
       continue;
     }
-    issuedCodes.set(foldedCode, { code, loc: ruleLoc });
+    issuedCodes.set(foldedCode, { code, loc: ruleLoc, rule: i + 1 });
+    if (!usable) continue;
     const severity = rule.severity === 'warn' ? 'warn' : 'error';
     normalized.push({
       id,
@@ -120,6 +128,7 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
       count: rule.count || null,
       mutexHint: rule.mutexHint || null,
       message: rule.message || `pack "${name}" rule ${id}`,
+      authoredMessage: rule.message || null,
     });
   }
 
@@ -239,10 +248,12 @@ function runSchemaCheck(rule, notes, view, emit) {
   validate(structuredClone(notes), buildDescriptor(rule.schema),
     { diagnostics: bus, context: `card "${view.title}"`, v3Keys: false });
   for (const d of bus.all) {
+    // A failed pattern shows the author a regex; the rule's own message says what it means.
+    const meaning = d.code === CODES.PATTERN_MISMATCH && rule.authoredMessage ? ` ${rule.authoredMessage}` : '';
     emit({
       severity: d.severity === 'error' ? rule.severity : 'warn',
       code: rule.code,
-      message: `${d.message}${d.hint ? ` ${d.hint}` : ''}`,
+      message: `${d.message}${d.hint ? ` ${d.hint}` : ''}${meaning}`,
     });
   }
 }

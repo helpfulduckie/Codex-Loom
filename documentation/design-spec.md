@@ -250,8 +250,15 @@ keep their authored spelling.
   name, but the declaring key must equal the pack's `name:` exactly (`CL0119`): that
   spelling becomes the `CL-<name>/NNNN` codes and, for a bundled pack, a file name.
 
-The contents of `meta:` and `metadata:` pass through without interpretation. No schema
-key matching or normalization applies inside them.
+**Item `meta:` follows key identity; component `metadata:` does not.** The two are
+separate channels with separate readers. Item `meta:` is consumed by Codex Loom's own
+tooling, and a variant's `meta:` merges into the base key by key, so its keys are
+identities like any other authored name: lookups and merges match in any capitalization,
+sibling collisions are `CL0211` at any depth, and the first authored spelling is what is
+written. Its values and shape are not validated. Component `metadata:` is frontmatter
+consumed by Velvet Lattice, whose key spellings the compiler does not own. It is taken
+whole from the one document that declares it, never merged, and written exactly as
+authored, so no matching, normalization or collision check applies inside it.
 
 ### §4.4 Diagnostics carry source positions
 
@@ -737,8 +744,9 @@ not contribute to its dropped-key count.
 Names in `hasKey`, `equals.key`, and budget role lookup match in any capitalization;
 equality values remain exact after string conversion. These lookups preserve card data.
 Every rule must declare a check, and its final padded code must be unique within the
-pack without regard to capitalization. The first valid rule retains its emitted code
-spelling; later duplicates are skipped with the first definition as a related location.
+pack without regard to capitalization. The first rule to name a code holds it, even
+when that rule is skipped for another error, so every duplicate is reported in one pass;
+later duplicates are skipped with the first definition as a related location.
 `CL0121` reports duplicate codes, absent checks, and invalid regexes; `CL0117` reports
 pack-loading failures. When the rules list is readable, validation reports its errors
 even if the envelope or declared name disables the entire pack.

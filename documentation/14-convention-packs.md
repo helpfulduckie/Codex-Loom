@@ -129,9 +129,10 @@ valid check that matches every card.
 
 **Final rule codes must be unique within a pack, ignoring capitalization.** Padding and
 positional defaults are included: `id: 2`, `id: "0002"`, and a second rule with no `id`
-all produce `CL-<pack>/0002`. The first valid rule keeps the code; a later duplicate is
+all produce `CL-<pack>/0002`. The first rule to name a code keeps it; a later duplicate is
 skipped with both definition locations. Code spelling is preserved, so this comparison
-does not rewrite emitted codes. Invalid rules do not reserve codes.
+does not rewrite emitted codes. A rule skipped for another error still holds its code, so
+a later rule repeating it is reported in the same compile, not after the first is fixed.
 
 **Pack files validate their compiler-defined keys in any capitalization.** This includes
 the pack envelope, rules, recursive predicates, recursive schema descriptors, and per-item
@@ -249,6 +250,12 @@ understands:
 Every finding the check raises is re-coded to the rule's `CL-<pack>/NNNN`, so a pack's
 findings suppress as one unit and show their origin.
 
+**A schema finding states the specific failure, not the rule's `message:`.** A missing
+key, a stray key or a wrong type is already plain. The one exception is a failed
+`pattern`: that finding shows the regex, so the rule's `message:` is added after it to
+say what the pattern means. Write the `message:` of a rule that uses `pattern` as the
+plain-language version of what the value must be.
+
 The descriptor's own property names (`type`, `keys`, `required`, and so on) accept any
 capitalization. Children of `keys:`, budget role names, and `count.fields` paths remain
 author-chosen names, retain their spelling, and reject sibling capitalization collisions.
@@ -280,6 +287,11 @@ pack's declared `name:` — the same binding that ties the `lint.packs` key and 
 pack would read `meta.statTracker.*`, and the two never collide.
 The card-side namespace and its `role` key match in any capitalization without rewriting
 the metadata. This lookup leaves the exact pack-declaration name rule unchanged.
+
+**A variant's `meta:` merges into the base item's key by key, in any capitalization.** A
+base of `duckieConv: {role: minor, note: keep}` and a variant of
+`DuckieConv: {Role: Major}` compile to `duckieConv: {role: Major, note: keep}`: the
+variant changes the one key it names, and the base's spelling is what is written.
 
 **`over: meta` is the third schema route.** `over: notes` (default) validates the parsed
 `notes:` mapping; `over: body` validates the card entry; `over: meta` validates

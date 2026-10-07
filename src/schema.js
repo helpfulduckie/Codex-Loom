@@ -95,10 +95,12 @@ function suggestFor(key, ownPath, declaredHere, keyIndex, { v3Keys = true, rootL
   const elsewhere = (keyIndex.get(indexedKey) || []).filter((p) => p.toLowerCase() !== [...ownPath, key].join('.').toLowerCase());
   if (elsewhere.length > 0) {
     // A key valid in several places is most likely meant for the one nearest where it was
-    // written; the first indexed path wins a tie.
+    // written. A tie goes to the shortest path, then to the first indexed.
+    const segmentCount = (indexedPath) => indexedPath.split('.').length;
     let nearest = elsewhere[0];
     for (const candidate of elsewhere) {
-      if (sharedDepth(candidate, relativePath) > sharedDepth(nearest, relativePath)) nearest = candidate;
+      const gain = sharedDepth(candidate, relativePath) - sharedDepth(nearest, relativePath);
+      if (gain > 0 || (gain === 0 && segmentCount(candidate) < segmentCount(nearest))) nearest = candidate;
     }
     const owner = nearest.split('.').slice(0, -1).join('.');
     return {

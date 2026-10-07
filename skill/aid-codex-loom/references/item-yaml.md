@@ -87,7 +87,7 @@ Every semantic item string value expands `{%variable}`, including nested values 
 
 **`kind: reference`** marks an item that exists to be read by a script or by a human in the story-card editor rather than by the AI. It exempts the item from the prose heuristics and from nothing else. It reaches AID nowhere — Velvet Lattice forwards only title, type, keys, value and description.
 
-**`meta:` is for convention packs, not for content.** Never validated by the loader, never proposed as a relocation target for a typo'd key. A pack reads `meta.<packName>.<key>`, so `meta.duckieConv.role` and a `stat-tracker` pack's keys never collide. The compiler writes it into the card's `~~~` fence so the offline `--lint` arm can read it back, and it is branch-addressable like any other whole-value field. See `references/convention-packs.md`.
+**`meta:` is for convention packs, not for content.** Its values and shape are never validated, and it is never proposed as a relocation target for a typo'd key; its keys match in any capitalization, so two sibling keys differing only by capitalization are `CL0211`. A pack reads `meta.<packName>.<key>`, so `meta.duckieConv.role` and a `stat-tracker` pack's keys never collide. The compiler writes it into the card's `~~~` fence so the offline `--lint` arm can read it back, and it is branch-addressable: a variant's `meta:` merges into the base item's key by key. See `references/convention-packs.md`.
 
 ---
 

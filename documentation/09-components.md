@@ -719,6 +719,10 @@ tags:
 
 The key is declared on every component, but only the two description components emit it — nothing else writes a file with a place to put frontmatter. Declaring it elsewhere is `CL0620` and the metadata is ignored.
 
+**`metadata:` is taken whole from the document that declares it.** It is never merged: `imports:` brings in sections only, so an imported document's `metadata:` is not carried over, even when the importing document declares none. A branch that names a different description document gets that document's `metadata:` and nothing from its parent's.
+
+**Its keys are written exactly as authored.** They are Velvet Lattice's keys, so the compiler does not match them by capitalization or check them for collisions: `Tags` and `tags` are two keys, and both are written. `{%variables}` expand in the values, never in the keys. This is the opposite of an item's `meta:`, whose keys match in any capitalization because Codex Loom's own tooling reads them.
+
 ### Prose descriptions still work
 
 A `.md` or `.txt` path uses the same prose passthrough as every other component, including `{%variable}` expansion at its render scope:

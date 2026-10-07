@@ -189,16 +189,24 @@ test.each([
   expect(evaluatePack(pack, [card]).map(f => f.code)).toEqual([emittedCode, 'CL-test/sibling']);
 });
 
-test('invalid rules do not reserve codes and checkless rules have located errors', () => {
+test('a skipped rule holds its code, so a later repeat is reported in the same pass', () => {
   const { pack, diagnostics, file } = load([
     'rules:', '  - id: same', '    forbid: {notesMatch: "["}',
     '  - id: same', '    forbid: {}',
     '  - id: noCheck', '    severity: warn', '    message: absent check', '    appliesTo: {titleMatch: Card}',
+    '  - id: NOCHECK', '    forbid: {}',
     '  - id: sibling', '    require: {titleMatch: Missing}',
   ].join('\n'));
   expect(diagnostics.errors.map(d => [d.code, d.file, d.line]))
-    .toEqual([['CL0121', file, 3], ['CL0121', file, 6]]);
-  expect(evaluatePack(pack, [card]).map(f => f.code)).toEqual(['CL-test/same', 'CL-test/sibling']);
+    .toEqual([['CL0121', file, 3], ['CL0121', file, 4], ['CL0121', file, 6], ['CL0121', file, 10]]);
+  expect(diagnostics.errors[1].related[0]).toMatchObject({ label: 'first definition', file, line: 2 });
+  expect(evaluatePack(pack, [card]).map(f => f.code)).toEqual(['CL-test/sibling']);
+});
+
+test('a rule that is not a mapping holds its positional code, and an unreadable id holds none', () => {
+  const { pack, diagnostics } = load('rules:\n  - nonsense\n  - {id: 1, forbid: {}}\n  - {id: true, forbid: {}}\n  - {id: 3, forbid: {}}\n');
+  expect(diagnostics.errors.map(d => [d.code, d.line])).toEqual([['CL0202', 2], ['CL0121', 3], ['CL0202', 4]]);
+  expect(evaluatePack(pack, [card]).map(f => f.code)).toEqual(['CL-test/0003']);
 });
 
 test.each(['type', 'pattern', 'match', 'keyPattern'])('budget name %s is not interpreted as a descriptor property', key => {
@@ -243,4 +251,27 @@ test('a bad role in a differently capitalized metadata namespace produces a patt
   expect(findings).toHaveLength(1);
   expect(findings[0]).toMatchObject({ code: 'CL-duckieConv/0004', severity: 'warn' });
   expect(findings[0].detail).toContain('must match');
+  expect(findings[0].detail).toContain('must be one of anchor / major / standard / minor');
+});
+
+test('only a pattern finding carries the rule message, after the specific failure', () => {
+  const { pack } = load(YAML.stringify({ rules: [{ message: 'Rank is a tier name.', schema: {
+    type: 'map', keys: { rank: { type: 'string', pattern: '^(high|mid)$' } },
+  } }] }));
+  const details = notes => evaluatePack(pack, [{ ...card, notes }]).map(f => f.detail);
+  expect(details('rank: low')).toEqual([expect.stringMatching(/^"rank" is "low", but must match .* Rank is a tier name\.$/)]);
+  expect(details('rnk: high')).toEqual([expect.not.stringContaining('Rank is a tier name.')]);
+});
+
+test('a repeated rule code names the rule that already holds it', () => {
+  const { diagnostics } = load('rules:\n  - {id: A, forbid: {}}\n  - {id: A, forbid: {}}\n  - {id: a, forbid: {}}\n');
+  expect(diagnostics.errors.map(d => d.message)).toEqual([
+    expect.stringContaining('"CL-test/000A" in convention pack "test" rule 2 (rule skipped) is already used by rule 1'),
+    expect.stringContaining('"CL-test/000a" in convention pack "test" rule 3 (rule skipped) differs only by capitalization from "CL-test/000A", used by rule 1'),
+  ]);
+});
+
+test('a key valid at several depths is pointed at the shallowest equally near one', () => {
+  const { diagnostics } = load('rules:\n  - forbid: {min: 1}\n');
+  expect(diagnostics.errors[0].hint).toContain('"min" is valid under "schema:"');
 });

@@ -479,8 +479,15 @@ an enumerated value such as `lint.level: warn` still uses its documented spellin
   any capitalization, but the key that first declares a pack must equal the pack's `name:`
   exactly (`CL0119`), because that spelling becomes the pack's diagnostic codes.
 
-The contents of `meta:` and `metadata:` are passed through without interpretation; the
-compiler does not normalize their keys.
+**An item's `meta:` and a component's `metadata:` are different channels, and only the
+first follows the capitalization rule.**
+
+- **Item `meta:`** keys match in any capitalization, and two sibling keys that differ only
+  by capitalization are `CL0211` at any depth. See
+  [The `meta:` channel](14-convention-packs.md#the-meta-channel-and-over-meta).
+- **Component `metadata:`** keys are written exactly as authored, with no matching and no
+  collision check. See
+  [`metadata:` becomes frontmatter](09-components.md#metadata-becomes-frontmatter).
 
 ---
 

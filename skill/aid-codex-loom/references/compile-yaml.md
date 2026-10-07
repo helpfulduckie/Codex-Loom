@@ -228,8 +228,11 @@ such as `lint.level: warn` still uses its documented spelling.
 - **A convention pack's declaring key,** which must equal the pack's `name:` exactly
   (`CL0119`). A branch may still override or unbind it in any capitalization.
 
-The contents of `meta:` and `metadata:` pass through without interpretation; the compiler
-does not normalize their keys.
+Item `meta:` and component `metadata:` are different channels. Item `meta:` keys match in
+any capitalization (variant merges, pack lookups) and sibling keys differing only by
+capitalization are `CL0211` at any depth; values and shape are unchecked. Component
+`metadata:` is Velvet Lattice frontmatter: taken whole from its one document, never
+merged or imported, keys written exactly as authored (`Tags` and `tags` are two keys).
 
 ---
 

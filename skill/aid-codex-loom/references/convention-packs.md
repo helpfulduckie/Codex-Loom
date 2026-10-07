@@ -156,7 +156,9 @@ Notes or metadata.
 - **`min`** / **`max`** — inclusive numeric bounds.
 - **`pattern`** — a regex the string must match, compiled case-insensitively.
 
-Every finding is re-coded to the rule's `CL-<pack>/NNNN`.
+Every finding is re-coded to the rule's `CL-<pack>/NNNN`. A schema finding states the
+specific failure and omits the rule's `message:`, except a failed `pattern`, which shows
+the regex and then the `message:` — so word that message as what the value must be.
 
 All compiler-defined pack keys, including descriptor properties (`type`, `keys`,
 `required`, and so on), accept any capitalization. Children of descriptor `keys:`, budget
@@ -180,8 +182,9 @@ with invalid rules skipped, in either tolerant mode. Skipped rules do not count 
 `require`, `requireCard`, `schema`, `budget`, `count`, or `mutexHint`. `forbid: {}` is a
 valid predicate that matches every card. `CL0121` also reports a rule with no check or a
 duplicate padded code, including positional defaults and capitalization differences.
-The first valid rule retains the code's authored spelling; the later duplicate is skipped
-with the first definition's location. An invalid rule does not reserve a code.
+The first rule to name a code holds it, in its authored spelling, even when that rule is
+skipped for another error; the later duplicate is skipped with the first definition's
+location.
 
 Even when an envelope error or name mismatch makes the pack unavailable, every rule in
 a readable `rules:` list is validated and its errors are reported with that pack-level

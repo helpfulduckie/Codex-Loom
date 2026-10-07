@@ -181,8 +181,9 @@ validates every rule before returning null for an invalid envelope or name misma
 Rule diagnostics then use the pack-unavailable context. `CL0117` is reserved for
 unloadable packs; `CL0121` covers invalid regexes, repeated final codes, and absent checks.
 An issued-code map compares padded codes without regard to capitalization, preserves
-their emitted spelling, and records the first valid rule's location for a later duplicate.
-Rules rejected by schema or value validation do not reserve a code.
+their emitted spelling, and records the first rule's location for a later duplicate.
+A rule rejected by schema or value validation, or one with no check, still enters the map
+before it is skipped; only an `id` of the wrong type holds no code, because it names none.
 
 **Card-side pack metadata uses one folded namespace lookup.** `packMetadata` obtains the
 namespace for both `over: meta` and the budget check; budget then uses `getCI` for `role`.
