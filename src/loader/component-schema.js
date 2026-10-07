@@ -42,12 +42,17 @@ const SECTION = {
   },
 };
 
+const DISPATCH = { type: TYPES.RECORD, of: { type: TYPES.MAP, keys: {} } };
+DISPATCH.of.keys.branches = DISPATCH;
+SECTION.keys.branches = { ...ANY, normalizeAs: DISPATCH };
+SECTION.keys.variants = { ...ANY, normalizeAs: { type: TYPES.RECORD, of: SECTION } };
+
 const COMPONENT_SCHEMA = {
   type: TYPES.MAP,
   keys: {
     sections: { type: TYPES.RECORD, caseInsensitiveKeys: true, of: SECTION },
 
-    branches: { ...ANY, checkKeys: checkDispatchKeys },
+    branches: { ...ANY, checkKeys: checkDispatchKeys, normalizeAs: DISPATCH },
 
     metadata: ANY,
 

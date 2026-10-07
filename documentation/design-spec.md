@@ -230,6 +230,11 @@ raises `CL0211` before normalization can discard either definition. Source locat
 retain the authored spelling. This changes key matching only; enumerated values remain
 exact.
 
+Item and component-section deltas normalize recognized structural keys through the same
+declared key sets without adopting closed-map validation. Deltas retain their field
+operations and open body-field grammar. Normalization must cover newly introduced
+properties as well as overrides, including recognized keys inside nested structural maps.
+
 **Two kinds of key stay exact:**
 
 - **Placeholder names**, because Velvet Lattice substitutes `%name%` by exact match and

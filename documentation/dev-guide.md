@@ -89,11 +89,20 @@ that tracks variables per node (`nodeVisitPrologue` in `treeWrite.js`, for one) 
 rather than merging by hand, or that walk's output disagrees with the leaf compile.
 
 **Closed schema maps normalize declared keys to their documented spelling.** `validate`
-matches `MAP.keys` without regard to capitalization and rewrites recognized keys before
-custom key checks and child validation. It reports `CL0211` for colliding spellings before
+runs a normalization pass that matches `MAP.keys` without regard to capitalization and
+rewrites recognized keys before custom key checks and child validation. It reports
+`CL0211` for colliding spellings before
 rewriting them. Consumers keep reading plain properties such as `item.render`; enum values
 are unaffected. Configuration normalizes its top-level keys before checking `version`,
 so that the version gate follows the same capitalization rule.
+
+**An opaque delta can declare a normalization view without becoming a closed schema.**
+The internal `normalizeAs` descriptor supplies the recognized structural keys for item
+and section variants, and the `branches` wrapper inside dispatch maps. The normalization
+pass follows that view; validation still follows the original `ANY` descriptor, so field
+operations and undeclared bare body fields keep their open grammar. Normalize nested maps
+as well as the delta's top level: a newly introduced `Render.Template` otherwise keeps a
+capitalized property that downstream reads miss.
 
 **A schema descriptor declares which author-keyed mappings the rule covers.** `caseInsensitiveKeys:
 true` on a `RECORD` descriptor makes `validate` raise `CL0211` for sibling keys that

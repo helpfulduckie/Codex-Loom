@@ -211,6 +211,34 @@ function normalizeMapKeys(node, descriptor, { diagnostics, sourceMap, path = [],
   }
 }
 
+function normalizeSchemaKeys(node, descriptor, context) {
+  if (!descriptor) return;
+  const view = descriptor.normalizeAs || descriptor;
+  const types = Array.isArray(view.type) ? view.type : [view.type];
+  if (types.includes(TYPES.ANY)) return;
+  normalizeMapKeys(node, view, context);
+  const descend = (child, childDescriptor, key) => normalizeSchemaKeys(child, childDescriptor, {
+    ...context, path: [...context.path, String(key)], originPath: [...context.originPath, String(key)],
+  });
+  if (types.includes(TYPES.SEQ) && Array.isArray(node) && view.of) {
+    node.forEach((child, index) => descend(child, view.of, index));
+  } else if (isPlainObject(node)) {
+    if (types.includes(TYPES.MAP) && view.keys) {
+      for (const [key, child] of Object.entries(node)) {
+        if (!key.startsWith('_') && Object.prototype.hasOwnProperty.call(view.keys, key)) {
+          descend(child, view.keys[key], key);
+        }
+      }
+    } else if (types.includes(TYPES.RECORD)) {
+      for (const [key, child] of Object.entries(node)) {
+        const childDescriptor = view.keys && Object.prototype.hasOwnProperty.call(view.keys, key)
+          ? view.keys[key] : view.of;
+        descend(child, childDescriptor, key);
+      }
+    }
+  }
+}
+
 
 function validate(value, schema, options = {}) {
   const {
@@ -218,14 +246,14 @@ function validate(value, schema, options = {}) {
     displayOffset = 0, context = null, dropUnknown = false,
   } = options;
 
+  normalizeSchemaKeys(value, schema, { diagnostics, sourceMap, path, originRoot: value, originPath: [] });
+
   const locate = (at) => (sourceMap ? sourceMap.nearest(at) : {});
   const display = (at) => at.slice(displayOffset).join('.');
   const inContext = context ? ` in ${context}` : '';
 
   const walk = (node, descriptor, currentPath) => {
     if (!descriptor) return node;
-    normalizeMapKeys(node, descriptor, { diagnostics, sourceMap, path: currentPath,
-      originRoot: value, originPath: currentPath.slice(path.length) });
     const keyContext = { diagnostics, sourceMap, path: currentPath };
     if (descriptor.caseInsensitiveKeys) checkSiblingKeys(node, keyContext);
     if (descriptor.checkKeys) descriptor.checkKeys(node, keyContext);

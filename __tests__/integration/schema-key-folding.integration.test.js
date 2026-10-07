@@ -104,3 +104,96 @@ test('field table declarations keep original source spelling after map normaliza
   expect(table.fields.Hair.from).toBe('Traits.Hair');
   expect(originAt(table, ['fields', 'Hair'])).toMatchObject({ path: ['Fields', 'Hair'], line: 2 });
 });
+
+test.each(['', '  render: {wrapper: square}\n'])('capitalized variant rendering keys introduce missing render fields', (baseRender) => {
+  const { result } = project({
+    'compile.yaml': config(['branches: {selected: {}}']),
+    'items/items.yaml': '- id: hero\n  name: Hero\n  aid: {type: Item}\n'
+      + baseRender + '  body: {Text: hello}\n  Variants: {alt: {Render: {Template: Alt}}}\n  Branches: {selected: alt}',
+    'templates/Item.template': 'BASE {$body.Text}',
+    'templates/Alt.template': 'ALT {$body.Text}',
+  });
+  expect(result.status).toBe('ok');
+  expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+  expect(result.cards[0].rendered).toContain('ALT hello');
+  expect(result.items[0].fields.find((field) => field.path.join('.') === 'render.template'))
+    .toMatchObject({ value: 'Alt', origin: { authoredPath: ['Variants', 'alt', 'Render', 'Template'] } });
+});
+
+test('capitalized variant aid type introduces a missing type', () => {
+  const { result } = project({
+    'compile.yaml': config(['branches: {selected: {}}']),
+    'items/items.yaml': '- id: hero\n  name: Hero\n  body: {Text: hello}\n'
+      + '  Variants: {alt: {Aid: {Type: Alt}}}\n  Branches: {selected: alt}',
+    'templates/Alt.template': 'ALT {$body.Text}',
+  });
+  expect(result.status).toBe('ok');
+  expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+  expect(result.cards[0]).toMatchObject({ type: 'Alt' });
+  expect(result.cards[0].rendered).toContain('ALT hello');
+});
+
+test('capitalized nested variants and dispatch branch maps apply body operations and new render keys', () => {
+  const { result } = project({
+    'compile.yaml': config(['Branches: {selected: {Branches: {inner: {}}}}']),
+    'items/items.yaml': [
+      '- id: hero', '  name: Hero', '  aid: {type: Item}', '  body: {Text: hello}',
+      '  Variants:', '    major:', '      Variants:', '        minor:',
+      '          Render: {Template: Alt}', '          Text: "+{ world}"',
+      '  Branches:', '    selected:', '      Branches: {inner: major/minor}',
+    ].join('\n'),
+    'templates/Item.template': 'BASE {$body.Text}',
+    'templates/Alt.template': 'ALT {$body.Text}',
+  });
+  expect(result.status).toBe('ok');
+  expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+  expect(result.cards[0].rendered).toContain('ALT\n- hello\n- world');
+  expect(result.items[0].fields.find((field) => field.path.join('.') === 'render.template'))
+    .toMatchObject({ origin: { authoredPath: ['Variants', 'major', 'Variants', 'minor', 'Render', 'Template'] } });
+});
+
+test('capitalized importVariants on a project delta selects an imported variant', () => {
+  const { result } = project({
+    'compile.yaml': [
+      'version: 4', 'structure:', '  input:', '    items: [%TMP%/items]',
+      '    templates: [%TMP%/templates]', '    library: {canon: "%TMP%/canon"}',
+      '  output: %TMP%/output', 'branches: {selected: {}}',
+    ].join('\n'),
+    'canon/items.yaml': '- id: hero\n  name: Hero\n  aid: {type: Item}\n  body: {Text: hello}\n'
+      + '  variants: {alt: {Render: {Template: Alt}}}',
+    'items/items.yaml': '- import: hero\n  Variants: {local: {ImportVariants: [alt]}}\n  Branches: {selected: local}',
+    'templates/Item.template': 'BASE {$body.Text}',
+    'templates/Alt.template': 'ALT {$body.Text}',
+  });
+  expect(result.status).toBe('ok');
+  expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+  expect(result.cards[0].rendered).toContain('ALT hello');
+});
+
+test('capitalized section variant text and new rendering fields reach component output', () => {
+  const { result } = project({
+    'compile.yaml': config(['components: {aiInstructions: "%TMP%/components/ai.cl.yaml"}', 'branches: {selected: {}}']),
+    'components/ai.cl.yaml': [
+      'Sections:', '  Intro:', '    Text: BASE',
+      '    Variants: {alt: {Text: ALT, Render: {Wrapper: square}}}', '    Branches: {selected: alt}',
+    ].join('\n'),
+  });
+  expect(result.status).toBe('ok');
+  expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+  expect(result.leaves[0].components.aiInstructions.text).toContain('[\nALT\n]');
+});
+
+test('declared rendering collisions inside deltas report both positions once', () => {
+  const { result } = project({
+    'items/items.yaml': [
+      '- id: hero', '  name: Hero', '  aid: {type: Item}', '  Variants:',
+      '    alt:', '      Render:', '        Template: Item', '        template: Alt',
+    ].join('\n'),
+    'templates/Item.template': 'BASE',
+  });
+  expect(result.status).toBe('blocked');
+  const findings = result.diagnostics.filter((d) => d.code === CODES.DUPLICATE_KEY_CASE);
+  expect(findings).toHaveLength(1);
+  expect(findings[0]).toMatchObject({ line: 8, col: 9,
+    related: [{ label: 'first definition', line: 7, col: 9 }] });
+});

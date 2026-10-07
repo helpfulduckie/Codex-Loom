@@ -81,4 +81,9 @@ for (const alias of ['var', 'vars', 'variable', 'variables']) {
   ITEM_SCHEMA.keys[alias] = ANY;
 }
 
+const DISPATCH = { type: TYPES.RECORD, of: { type: TYPES.MAP, keys: {} } };
+DISPATCH.of.keys.branches = DISPATCH;
+ITEM_SCHEMA.keys.branches = { ...ANY, normalizeAs: DISPATCH };
+ITEM_SCHEMA.keys.variants = { ...ANY, normalizeAs: { type: TYPES.RECORD, of: ITEM_SCHEMA } };
+
 module.exports = { ITEM_SCHEMA };

@@ -128,3 +128,14 @@ test.each(['Parts', 'Try'])('nested %s field declarations preserve authored orig
   expect(originAt(value, ['fields', 'Hair', key.toLowerCase(), '0', 'from']))
     .toMatchObject({ path: ['Fields', 'Hair', key, '0', 'From'], line: 4 });
 });
+
+test('normalization-only delta traversal preserves open payloads and skips type and unknown-key checks', () => {
+  const { value, diagnostics } = check('Variants:\n  alt:\n    Render: {Template: 42, Unknown: keep}\n'
+    + '    Body: {Render: keep, Template: keep}\n    NewField: "+{ more}"\n    Meta: {Type: keep}\n'
+    + '    Notes: {Render: keep}\n    V: {Template: keep}', ITEM_SCHEMA, { dropUnknown: true });
+  expect(diagnostics.all).toEqual([]);
+  expect(value.variants.alt).toEqual({
+    render: { template: 42, Unknown: 'keep' }, body: { Render: 'keep', Template: 'keep' },
+    NewField: '+{ more}', meta: { Type: 'keep' }, notes: { Render: 'keep' }, v: { Template: 'keep' },
+  });
+});
