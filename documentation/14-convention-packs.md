@@ -192,7 +192,10 @@ understands:
 - **`type`** — `map`, `record`, `seq`, `string`, `number`, `boolean`, `any` (or a list of
   them for a union).
 - **`keys`** — for `map`: the declared key set is the whole set; an undeclared key is a
-  `CL0201` ERROR with a Damerau-Levenshtein typo suggestion. Also honored on `record`,
+  `CL0201` ERROR with a Damerau-Levenshtein typo suggestion. Declared `map` keys match in
+  any capitalization; two spellings of one key in the checked mapping are a collision.
+  Normalization is confined to the schema check, so later predicates see the original
+  mapping. Also honored on `record`,
   where declared keys use their own descriptors and other keys remain allowed. Use `map`
   for "these keys and no others," `record` + `keys` for "these keys, plus anything."
 - **`of`** — for `seq` / `record`: the descriptor every element or value must match. On a
@@ -208,6 +211,10 @@ understands:
 
 Every finding the check raises is re-coded to the rule's `CL-<pack>/NNNN`, so a pack's
 findings suppress as one unit and show their origin.
+
+The descriptor's own property names (`type`, `keys`, `required`, and so on) retain their
+documented spellings. Key normalization does not change `values` or the case-sensitive
+`keyPattern` check on an open `record`.
 
 **A pack re-parses `notes:` itself.** The compiler emits `notes:` as a flat string by
 design, so the pack layer runs a YAML parse over the block to recover its mapping form. A

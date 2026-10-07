@@ -135,7 +135,9 @@ markdown cannot give back. An author who wants the full check runs a compile, no
 - **`type`** — `map`, `record`, `seq`, `string`, `number`, `boolean`, `any`, or a list for
   a union.
 - **`keys`** — on `map`, the declared key set is the *whole* set and an undeclared key is an
-  ERROR with a typo suggestion. On `record`, the declared keys are validated and everything
+  ERROR with a typo suggestion. Declared `map` keys match in any capitalization; two
+  spellings of one key collide. Normalization affects only the schema check, so later
+  predicates see the original mapping. On `record`, the declared keys are validated and everything
   else passes. **Use `map` for "these keys and no others," `record` + `keys` for "these
   keys, plus anything."**
 - **`of`** — for `seq` / `record`: the descriptor every element or value must match. On a
@@ -149,6 +151,10 @@ markdown cannot give back. An author who wants the full check runs a compile, no
 - **`pattern`** — a regex the string must match, compiled case-insensitively.
 
 Every finding is re-coded to the rule's `CL-<pack>/NNNN`.
+
+Descriptor property names (`type`, `keys`, `required`, and so on) retain their documented
+spellings. Key normalization does not change `values` or the case-sensitive `keyPattern`
+check on an open `record`.
 
 **A pack re-parses `notes:` itself**, since the compiler emits it as a flat string. A
 `notes:` block that is prose, or a bare marker like `[e]`, parses to `{}` — so a `hasKey`

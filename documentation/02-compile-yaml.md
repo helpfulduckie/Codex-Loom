@@ -465,19 +465,22 @@ declares `mood: bright` replaces a root `Mood`, and `mood: ~` unbinds it. The sa
 for a variant delta over an item's body, a project field table over a shared one, and a
 branch's `templateFor` over the root's.
 
-**Three kinds of key keep their exact capitalization:**
+**Keys the compiler defines also accept any capitalization, silently.** `Render:` and
+`render:` both name the render block; `aid: {Type: Character}` and
+`components: {AIInstructions: ...}` work like their documented spellings. Two spellings
+of one key in the same mapping are still `CL0211`. This rule concerns keys, not values:
+an enumerated value such as `lint.level: warn` still uses its documented spelling.
+
+**Two kinds of key keep their exact capitalization:**
 
 - **Placeholder names.** Velvet Lattice substitutes `%name%` by exact match, so `Feel` and
   `feel` are two placeholders and a reference must match its declaration exactly.
 - **A convention pack's spelling.** A branch may override or unbind an inherited pack in
   any capitalization, but the key that first declares a pack must equal the pack's `name:`
   exactly (`CL0119`), because that spelling becomes the pack's diagnostic codes.
-- **Keys the compiler defines.** `aid`, `render`, `sections` and the rest are written as
-  documented; a top-level `Render:` on an item is an unknown key (`CL0201`). The one place
-  they are recognized in any capitalization is inside a variant delta, where every other
-  key is a body field: there `Render:` is the render block and `Name:` is the item's name,
-  not a body field called `Name`. The contents of `meta:` and `metadata:` are passed
-  through untouched, so their keys stay distinct too.
+
+The contents of `meta:` and `metadata:` are passed through without interpretation; the
+compiler does not normalize their keys.
 
 ---
 

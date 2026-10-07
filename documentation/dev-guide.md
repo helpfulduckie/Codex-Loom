@@ -88,7 +88,14 @@ branch tree** — variables, roles and `lint.packs`. It folds case for all of th
 that tracks variables per node (`nodeVisitPrologue` in `treeWrite.js`, for one) calls it
 rather than merging by hand, or that walk's output disagrees with the leaf compile.
 
-**A schema descriptor declares which mappings the rule covers.** `caseInsensitiveKeys:
+**Closed schema maps normalize declared keys to their documented spelling.** `validate`
+matches `MAP.keys` without regard to capitalization and rewrites recognized keys before
+custom key checks and child validation. It reports `CL0211` for colliding spellings before
+rewriting them. Consumers keep reading plain properties such as `item.render`; enum values
+are unaffected. Configuration normalizes its top-level keys before checking `version`,
+so that the version gate follows the same capitalization rule.
+
+**A schema descriptor declares which author-keyed mappings the rule covers.** `caseInsensitiveKeys:
 true` on a `RECORD` descriptor makes `validate` raise `CL0211` for sibling keys that
 collide. `checkKeys` names a function from `src/keyIdentity.js` for the surfaces a flat
 flag cannot describe: item deltas, where any key that is not structural is a body field,
@@ -113,6 +120,15 @@ merged object as stored, and a lookup uses those same stored spellings. Where a 
 layer overrides a name in a different spelling, the entry carries a `keyPath` (the stored
 spelling, used as the index key) beside its `path` (the spelling in the source file, kept
 in the record so the diagnostic points at what the author wrote).
+
+**Schema normalization remaps source-map paths while retaining authored paths.** Loaders
+attach origins after validation, so `SourceMap` must export each normalized runtime path
+as `keyPath` and its original source path as `path`. Nested rewrites carry the whole
+subtree, so a diagnostic on `render.template` still points at an authored `Render.Template`.
+
+**Convention-pack `map` schemas use the same normalization on a copy of the checked data.**
+Later predicates and rules must see the original recovered card mapping. Open `record`
+keys and pack descriptor property names retain their existing behavior.
 
 ---
 

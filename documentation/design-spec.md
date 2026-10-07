@@ -223,19 +223,23 @@ scenario description is loaded after the story cards are written, so an error ra
 there could leave a half-written tree. The load phase therefore reads each component the
 branch tree names, and its `imports:`, for key collisions alone.
 
-**Three kinds of key stay exact:**
+**Compiler-defined keys match in any capitalization and normalize to their declared
+spelling during validation.** Normalization is silent, so every downstream consumer can
+read the documented property. A mapping containing two spellings of one declared key
+raises `CL0211` before normalization can discard either definition. Source locations
+retain the authored spelling. This changes key matching only; enumerated values remain
+exact.
+
+**Two kinds of key stay exact:**
 
 - **Placeholder names**, because Velvet Lattice substitutes `%name%` by exact match and
   the compiler must not accept a reference the platform will leave unfilled.
 - **A convention pack's spelling.** Pack entries merge down the branch tree by folded
   name, but the declaring key must equal the pack's `name:` exactly (`CL0119`): that
   spelling becomes the `CL-<name>/NNNN` codes and, for a bundled pack, a file name.
-- **Keys the schema defines, and the contents of `meta:` and `metadata:`.** A schema key
-  has one documented spelling, and a different capitalization is reported as an unknown
-  key (`CL0201`) rather than accepted. Metadata is passed through without interpretation.
-  A variant delta is the exception: it has no closed key set, since any key that is not
-  structural is a body field, so it recognizes the structural keys with case folded.
-  `Name:` in a delta is the item's name, never a body field of that spelling.
+
+The contents of `meta:` and `metadata:` pass through without interpretation. No schema
+key matching or normalization applies inside them.
 
 ### §4.4 Diagnostics carry source positions
 

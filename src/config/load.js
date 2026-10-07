@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { Diagnostics, CODES } = require('../diag');
-const { validate } = require('../schema');
+const { validate, normalizeMapKeys } = require('../schema');
 const { loadYamlDocument, YamlLoadError } = require('../loader/yaml');
 const { attachOrigins } = require('../origin');
 const { CONFIG_SCHEMA } = require('./schema');
@@ -144,6 +144,8 @@ function loadCompileConfig(configPath, options = {}) {
   }
 
   const config = parsed;
+
+  normalizeMapKeys(config, CONFIG_SCHEMA, { diagnostics, sourceMap });
 
   const at = (...parts) => (sourceMap ? sourceMap.nearest(parts) : {});
 

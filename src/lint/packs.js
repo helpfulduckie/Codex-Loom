@@ -230,7 +230,7 @@ function evalPredicate(pred, view) {
 
 function runSchemaCheck(rule, notes, view, emit) {
   const bus = new Diagnostics();
-  validate(notes, buildDescriptor(rule.schema), { diagnostics: bus, context: `card "${view.title}"` });
+  validate(structuredClone(notes), buildDescriptor(rule.schema), { diagnostics: bus, context: `card "${view.title}"` });
   for (const d of bus.all) {
     emit({
       severity: d.severity === 'error' ? rule.severity : 'warn',

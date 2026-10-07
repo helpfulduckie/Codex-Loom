@@ -1,7 +1,7 @@
 'use strict';
 
 const { CODES } = require('./diag');
-const { VAR_ALIASES, NOTES_ALIASES, ITEM_TOP_LEVEL_FIELDS } = require('./util');
+const { VAR_ALIASES, NOTES_ALIASES, ITEM_TOP_LEVEL_FIELDS, findKey } = require('./util');
 
 const CONTENT_FIELDS = new Set(['body', ...VAR_ALIASES, ...NOTES_ALIASES]);
 const STRUCTURAL_FIELDS = new Set([...ITEM_TOP_LEVEL_FIELDS, ...VAR_ALIASES, ...NOTES_ALIASES,
@@ -32,8 +32,9 @@ function checkSiblingKeys(value, { diagnostics, sourceMap, path = [] }, recursiv
 function checkDispatchKeys(value, context) {
   checkSiblingKeys(value, context);
   for (const [key, selection] of Object.entries(mapping(value) ? value : {})) {
-    if (mapping(selection) && selection.branches) {
-      checkDispatchKeys(selection.branches, { ...context, path: [...context.path, key, 'branches'] });
+    const branches = mapping(selection) ? findKey(selection, 'branches') : null;
+    if (branches !== null) {
+      checkDispatchKeys(selection[branches], { ...context, path: [...context.path, key, branches] });
     }
   }
 }
@@ -51,20 +52,27 @@ function checkItemKeys(value, context, delta = false) {
       if (!STRUCTURAL_FIELDS.has(key.toLowerCase())) checkSiblingKeys(field, { ...context, path: [...context.path, key] }, true);
     }
   }
-  checkDispatchKeys(value.branches, { ...context, path: [...context.path, 'branches'] });
-  checkSiblingKeys(value.variants, { ...context, path: [...context.path, 'variants'] });
-  for (const [name, variant] of Object.entries(mapping(value.variants) ? value.variants : {})) {
-    checkItemKeys(variant, { ...context, path: [...context.path, 'variants', name] }, true);
+  const branches = findKey(value, 'branches');
+  if (branches !== null) checkDispatchKeys(value[branches], { ...context, path: [...context.path, branches] });
+  const variants = findKey(value, 'variants');
+  if (variants === null) return;
+  checkSiblingKeys(value[variants], { ...context, path: [...context.path, variants] });
+  for (const [name, variant] of Object.entries(mapping(value[variants]) ? value[variants] : {})) {
+    checkItemKeys(variant, { ...context, path: [...context.path, variants, name] }, true);
   }
 }
 
 function checkSectionKeys(value, context) {
   if (!mapping(value)) return;
-  checkDispatchKeys(value.branches, { ...context, path: [...context.path, 'branches'] });
-  checkSiblingKeys(value.variants, { ...context, path: [...context.path, 'variants'] });
-  for (const [name, delta] of Object.entries(mapping(value.variants) ? value.variants : {})) {
-    const child = { ...context, path: [...context.path, 'variants', name] };
-    if (mapping(delta)) checkSiblingKeys(delta.text, { ...child, path: [...child.path, 'text'] });
+  const branches = findKey(value, 'branches');
+  if (branches !== null) checkDispatchKeys(value[branches], { ...context, path: [...context.path, branches] });
+  const variants = findKey(value, 'variants');
+  if (variants === null) return;
+  checkSiblingKeys(value[variants], { ...context, path: [...context.path, variants] });
+  for (const [name, delta] of Object.entries(mapping(value[variants]) ? value[variants] : {})) {
+    const child = { ...context, path: [...context.path, variants, name] };
+    const text = mapping(delta) ? findKey(delta, 'text') : null;
+    if (text !== null) checkSiblingKeys(delta[text], { ...child, path: [...child.path, text] });
     checkSectionKeys(delta, child);
   }
 }

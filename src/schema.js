@@ -14,6 +14,7 @@ const TYPES = Object.freeze({
 const { CODES } = require('./diag');
 const { isPlainObject, damerauLevenshtein } = require('./util');
 const { checkSiblingKeys } = require('./keyIdentity');
+const { getOrigins } = require('./origin');
 
 const STRING = { type: TYPES.STRING };
 const NUMBER = { type: TYPES.NUMBER };
@@ -62,12 +63,14 @@ const REMOVED = Object.freeze({
 });
 
 function suggestFor(key, ownPath, declaredHere, keyIndex) {
-  const removed = REMOVED[key];
+  const lower = key.toLowerCase();
+  const removed = REMOVED[lower];
   if (removed !== undefined) {
     return { code: CODES.UNKNOWN_KEY, hint: removed.hint };
   }
 
-  const renamedTo = RENAMED[key];
+  const renamedKey = Object.keys(RENAMED).find((candidate) => candidate.toLowerCase() === lower);
+  const renamedTo = RENAMED[renamedKey];
   if (renamedTo !== undefined) {
     return {
       code: CODES.UNKNOWN_KEY,
@@ -76,7 +79,8 @@ function suggestFor(key, ownPath, declaredHere, keyIndex) {
     };
   }
 
-  const elsewhere = (keyIndex.get(key) || []).filter((p) => p !== [...ownPath, key].join('.'));
+  const indexedKey = [...keyIndex.keys()].find((candidate) => candidate.toLowerCase() === lower);
+  const elsewhere = (keyIndex.get(indexedKey) || []).filter((p) => p.toLowerCase() !== [...ownPath, key].join('.').toLowerCase());
   if (elsewhere.length > 0) {
     const owner = elsewhere[0].split('.').slice(0, -1).join('.');
     return {
@@ -153,6 +157,60 @@ function normalizeEmpty(value, types) {
   return value;
 }
 
+function remapOrigins(value, fromParts, toParts) {
+  const index = getOrigins(value);
+  if (!index) return;
+  const from = fromParts.map(String).join('\u0000');
+  const to = toParts.map(String).join('\u0000');
+  const moved = [];
+  for (const key of Object.keys(index)) {
+    if (key !== from && !key.startsWith(from + '\u0000')) continue;
+    moved.push([to + key.slice(from.length), index[key]]);
+    delete index[key];
+  }
+  for (const [key, record] of moved) index[key] = record;
+}
+
+function normalizeMapKeys(node, descriptor, { diagnostics, sourceMap, path = [], originRoot = node, originPath = path } = {}) {
+  const types = Array.isArray(descriptor.type) ? descriptor.type : [descriptor.type];
+  if (!types.includes(TYPES.MAP) || !descriptor.keys || !isPlainObject(node)) return;
+  const declared = new Map(Object.keys(descriptor.keys).map((key) => [key.toLowerCase(), key]));
+  const groups = new Map();
+  const entries = Object.entries(node);
+  for (const [key] of entries) {
+    if (key.startsWith('_')) continue;
+    const canonical = declared.get(key.toLowerCase());
+    if (canonical === undefined) continue;
+    if (!groups.has(canonical)) groups.set(canonical, []);
+    groups.get(canonical).push(key);
+  }
+  for (const [canonical, keys] of groups) {
+    const first = keys[0];
+    for (const key of keys.slice(1)) {
+      diagnostics.error(CODES.DUPLICATE_KEY_CASE,
+        `Keys "${first}" and "${key}" under "${path.join('.') || '<root>'}" differ only by capitalization and identify the same key; keep one definition or give them distinct names.`,
+        sourceMap ? sourceMap.nearest([...path, key]) : {},
+        { related: [{ label: 'first definition', ...(sourceMap ? sourceMap.nearest([...path, first]) : {}) }] });
+    }
+    if (first !== canonical) {
+      if (sourceMap && sourceMap.remapPath) sourceMap.remapPath([...path, first], [...path, canonical]);
+      remapOrigins(originRoot, [...originPath, first], [...originPath, canonical]);
+      if (node !== originRoot) remapOrigins(node, [first], [canonical]);
+    }
+  }
+  if ([...groups].some(([canonical, keys]) => keys.length > 1 || keys[0] !== canonical)) {
+    // Alias overlays consume insertion order, so folding must retain authored precedence.
+    for (const [key] of entries) delete node[key];
+    for (const [key, field] of entries) {
+      const canonical = key.startsWith('_') ? undefined : declared.get(key.toLowerCase());
+      if (canonical !== undefined && groups.get(canonical)[0] !== key) continue;
+      Object.defineProperty(node, canonical === undefined ? key : canonical, {
+        value: field, enumerable: true, configurable: true, writable: true,
+      });
+    }
+  }
+}
+
 
 function validate(value, schema, options = {}) {
   const {
@@ -166,6 +224,8 @@ function validate(value, schema, options = {}) {
 
   const walk = (node, descriptor, currentPath) => {
     if (!descriptor) return node;
+    normalizeMapKeys(node, descriptor, { diagnostics, sourceMap, path: currentPath,
+      originRoot: value, originPath: currentPath.slice(path.length) });
     const keyContext = { diagnostics, sourceMap, path: currentPath };
     if (descriptor.caseInsensitiveKeys) checkSiblingKeys(node, keyContext);
     if (descriptor.checkKeys) descriptor.checkKeys(node, keyContext);
@@ -339,4 +399,4 @@ function validate(value, schema, options = {}) {
   return walk(value, schema, path);
 }
 
-module.exports = { TYPES, STRING, NUMBER, BOOLEAN, ANY, validate, buildKeyIndex, levenshtein: damerauLevenshtein };
+module.exports = { TYPES, STRING, NUMBER, BOOLEAN, ANY, validate, normalizeMapKeys, buildKeyIndex, levenshtein: damerauLevenshtein };

@@ -77,7 +77,7 @@ function foldDocument(doc, file, sourceMap, acc, diagnostics, tolerant) {
       checkSourceConflict(decl, `Field "${name}"`, ['fields', name], sourceMap, diagnostics);
       const key = findKey(acc.fields, name) ?? name;
       setCI(acc.fields, name, decl);
-      acc._origins.push({ ...sourceMap.nearest(['fields', name]), path: ['fields', name], keyPath: ['fields', key] });
+      acc._origins.push({ ...sourceMap.nearest(['fields', name]), path: sourceMap.authoredPath(['fields', name]), keyPath: ['fields', key] });
     }
   }
 
@@ -88,7 +88,7 @@ function foldDocument(doc, file, sourceMap, acc, diagnostics, tolerant) {
       if (!Array.isArray(members)) continue;
       const key = findKey(acc.groups, name) ?? name;
       setCI(acc.groups, name, members);
-      acc._origins.push({ ...sourceMap.nearest(['groups', name]), path: ['groups', name], keyPath: ['groups', key] });
+      acc._origins.push({ ...sourceMap.nearest(['groups', name]), path: sourceMap.authoredPath(['groups', name]), keyPath: ['groups', key] });
     }
   }
 
@@ -99,7 +99,7 @@ function foldDocument(doc, file, sourceMap, acc, diagnostics, tolerant) {
       if (!Array.isArray(list)) continue;
       const key = findKey(acc.templates, name) ?? name;
       setCI(acc.templates, name, list);
-      acc._origins.push({ ...sourceMap.nearest(['templates', name]), path: ['templates', name], keyPath: ['templates', key] });
+      acc._origins.push({ ...sourceMap.nearest(['templates', name]), path: sourceMap.authoredPath(['templates', name]), keyPath: ['templates', key] });
     }
   }
 }

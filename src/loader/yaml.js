@@ -32,13 +32,34 @@ class SourceMap {
     return { file: this.file };
   }
 
+  remapPath(fromParts, toParts) {
+    const from = fromParts.map(String).join(PATH_SEP);
+    const to = toParts.map(String).join(PATH_SEP);
+    const moved = [];
+    for (const [key, hit] of this._positions) {
+      if (key !== from && !key.startsWith(from + PATH_SEP)) continue;
+      moved.push([to + key.slice(from.length), {
+        ...hit, authoredPath: hit.authoredPath || key.split(PATH_SEP),
+      }]);
+      this._positions.delete(key);
+    }
+    for (const [key, hit] of moved) this._positions.set(key, hit);
+  }
+
+  authoredPath(...parts) {
+    const path = (parts.length === 1 && Array.isArray(parts[0]) ? parts[0] : parts).map(String);
+    const hit = this._positions.get(path.join(PATH_SEP));
+    return (hit && hit.authoredPath ? hit.authoredPath : path).slice();
+  }
+
   exportOrigins(...parts) {
     const root = (parts.length === 1 && Array.isArray(parts[0]) ? parts[0] : parts).map(String);
     const entries = [];
     for (const [key, hit] of this._positions) {
       const path = key === '' ? [] : key.split(PATH_SEP);
       if (root.some((part, index) => path[index] !== part)) continue;
-      entries.push({ file: this.file, path: path.slice(root.length), line: hit.line, col: hit.col });
+      entries.push({ file: this.file, keyPath: path.slice(root.length),
+        path: (hit.authoredPath || path).slice(root.length), line: hit.line, col: hit.col });
     }
     return createOriginIndex(entries);
   }

@@ -22,6 +22,26 @@ const { withTmpDir, writeTree } = require('../helpers/project');
 let TMP;
 beforeAll(() => { TMP = withTmpDir(); });
 
+test('map schemas accept declared key casing without changing later predicate inputs', () => {
+  const pack = { name: 'case', rules: [
+    { code: 'CL-case/0001', severity: 'error', schema: {
+      type: 'map', keys: { Rank: { type: 'string', required: true } },
+    } },
+    { code: 'CL-case/0002', severity: 'error', forbid: { hasKey: 'Rank' }, message: 'must retain authored casing' },
+    { code: 'CL-case/0003', severity: 'error', require: { hasKey: 'rank' }, message: 'must retain original key' },
+  ] };
+  expect(evaluatePack(pack, [{ title: 'Card', notes: 'rank: low', body: '' }])).toEqual([]);
+});
+
+test('map schemas fold nested metadata in an isolated validation copy', () => {
+  const meta = { meta: { case: { Rank: { Score: 4 } } } };
+  const pack = { name: 'case', rules: [{ code: 'CL-case/0001', severity: 'error', over: 'meta', schema: {
+    type: 'map', keys: { rank: { type: 'map', keys: { score: { type: 'number', required: true } } } },
+  } }] };
+  expect(evaluatePack(pack, [{ title: 'Card', body: '', meta }])).toEqual([]);
+  expect(meta).toEqual({ meta: { case: { Rank: { Score: 4 } } } });
+});
+
 function writePack(name, body) {
   writeTree(TMP, { [`${name}.cl.yaml`]: body });
 }

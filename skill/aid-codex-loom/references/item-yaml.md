@@ -189,6 +189,10 @@ Variants nest: `sci-fi/near-future` applies the `sci-fi` delta first, then `sci-
 
 **`id` is immutable** — no variant can change it.
 
+A bare key matching a structural item field changes that field in any capitalization.
+`Name: Changed` changes the item's name; reach a body field called `Name` through
+`body: {Name: Changed}`. The same distinction applies to `Notes`, `Render` and `Aid`.
+
 A variant is the natural place for a placement change:
 
 ```yaml

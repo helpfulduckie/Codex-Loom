@@ -215,16 +215,21 @@ stops the compile before anything is written. Pick one spelling.
 **Across layers a different spelling is an ordinary override.** A branch's `mood: bright`
 replaces a root `Mood`, and `mood: ~` unbinds it.
 
-**Three kinds of key are exact:**
+**Keys the compiler defines accept any capitalization, silently.** `Render:` is the
+render block, `aid: {Type: Character}` uses `aid.type`, and
+`components: {AIInstructions: ...}` uses `components.aiInstructions`. Two spellings of
+one key in the same mapping are still `CL0211`. Values are separate: an enumerated value
+such as `lint.level: warn` still uses its documented spelling.
+
+**Two kinds of key are exact:**
 
 - **Placeholder names.** Velvet Lattice substitutes `%name%` by exact match, so `%Feel%`
   does not reach a placeholder declared `feel`.
 - **A convention pack's declaring key,** which must equal the pack's `name:` exactly
   (`CL0119`). A branch may still override or unbind it in any capitalization.
-- **Keys the compiler defines** (`aid`, `render`, `sections`, …), and the contents of
-  `meta:` and `metadata:`. A top-level `Render:` is an unknown key (`CL0201`). Inside a
-  variant delta these keys are recognized in any capitalization, so `Name:` there sets the
-  item's name; reach a body field called `Name` through `body: {Name: …}`.
+
+The contents of `meta:` and `metadata:` pass through without interpretation; the compiler
+does not normalize their keys.
 
 ---
 

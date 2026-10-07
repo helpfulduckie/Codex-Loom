@@ -353,6 +353,11 @@ Variants can be nested to any depth. A slash-separated path like `sci-fi/near-fu
 
 The `id` field is immutable and cannot be changed by any variant.
 
+A bare key matching a structural item field changes that field in any capitalization.
+`Name: Changed` changes the item's name; to change a body field called `Name`, write
+`body: {Name: Changed}`. The same distinction applies to fields such as `Notes`, `Render`
+and `Aid`.
+
 See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) and [Field Operations](06-field-operations.md) for how variants are applied and what operations are available.
 
 ---
