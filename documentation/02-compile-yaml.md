@@ -208,10 +208,14 @@ title: The Royal Academy
 
 Key-value pairs available in templates and field values as `{%key}`. Variables at the branch level override root-level variables for that branch's subtree. `{%key}` expands in semantic string values; mapping keys, branch names, and selectors remain literal.
 
+**Variables accept strings and numbers, with null removing an inherited binding.** An unquoted number is kept as the text you typed: `6` is `"6"`, `1.50` is `"1.50"`, `007` is `"007"`, and a long integer keeps every digit. Quotes are not needed to preserve a number's spelling. Booleans, lists, and mappings are not variable values: `{%key}` supplies one replacement string, unlike the structured data in item `v:`.
+
+**Literal config text also accepts numbers.** Root and branch titles, placeholder questions, and inline `components.opening` and `components.branchFraming` values keep a typed number the same way. Other component entries are file paths. Paths, references, selectors, enums, and numeric settings keep their existing type rules.
+
 ```yaml surface=config
 variables:
   setting: "The Royal Academy"
-  year: "1315"
+  year: 1315
 ```
 
 Used in a template as: `The year is {%year}.`
@@ -224,7 +228,7 @@ A `placeholders:` question's text resolves role and pronoun tokens too, after it
 
 ### `components`
 
-Specifies what content to write for root-level component files. Each value is an inline string, a relative file path, or a `{%variable}` / `{%libraryName}` token that expands to one (component specs go through the same single `{%…}` expander as every other path — there is no separate component namespace).
+Specifies what content to write for root-level component files. `opening` and `branchFraming` accept inline text or a file path; other entries name files. `{%variable}` / `{%libraryName}` tokens expand through the same single `{%…}` expander as every other path — there is no separate component namespace.
 
 ```yaml surface=config
 components:

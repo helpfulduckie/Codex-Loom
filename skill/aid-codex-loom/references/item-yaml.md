@@ -71,7 +71,7 @@ regard to capitalization.** A variant that sets `hair` overrides a body field wr
 | Field | Required | Notes |
 |---|---|---|
 | `id` | recommended | Compiler key; defaults to `name`; globally unique; immutable across variants |
-| `name` | yes | Scalar string or `{display, full}` object |
+| `name` | yes | Scalar text or `{display, full}` object; a number is read as typed |
 | `pronouns` | recommended | Controls `{$she}` etc.; `female` / `male` / `nonbinary` / `they` |
 | `aid` | only with a story-card target | AID story-card metadata |
 | `render` | optional | Template, wrapper, and placement targets |
@@ -84,6 +84,10 @@ regard to capitalization.** A variant that sets `hair` overrides a body field wr
 | `kind` | optional | `story` (default) or `reference` |
 
 Every semantic item string value expands `{%variable}`, including nested values in `body`, `v`, `notes`, `meta`, and `pronouns`; mapping keys and branch/variant selectors remain literal.
+
+**Names, `aid.title`, and trigger values accept numbers as text, including in variants.** Scalar names and explicit `display`/`full` values keep a number as the text you typed: `1.50` stays `1.50`, `007` stays `007`, and a long integer keeps every digit.
+
+**Numbers in `body:`, `v:` and its aliases, `notes:`, and `pronouns:` also render as typed.** `gpa: 3.30` renders `3.30` and `schoolId: 0107420` renders `0107420`, with no quotes needed. `meta:` is the exception: it is data for tools and never card text, so its numbers stay parsed numbers a convention pack can check. A number reached through a YAML alias renders in its parsed form. Item `v:` supports nested mappings, lists, numbers, and booleans; config `variables:` is a flat table of strings and numbers used as replacement text, with null unbinding inherited entries.
 
 **`kind: reference`** marks an item that exists to be read by a script or by a human in the story-card editor rather than by the AI. It exempts the item from the prose heuristics and from nothing else. It reaches AID nowhere — Velvet Lattice forwards only title, type, keys, value and description.
 

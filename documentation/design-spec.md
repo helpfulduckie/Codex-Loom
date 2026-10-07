@@ -231,6 +231,14 @@ raises `CL0211` before normalization can discard either definition. Source locat
 retain the authored spelling. This changes key matching only; enumerated values remain
 exact.
 
+**A number written where text is used keeps the spelling the author typed.** Shared `TEXT` descriptors opt string fields into accepting an unquoted number, and schema normalization replaces it with its source characters: `6` and `0` are `"6"` and `"0"`; `1.50`, `007`, and `1e3` are `"1.50"`, `"007"`, and `"1e3"`; an integer past 2^53 keeps every digit. Text is the lossless form: a later feature can parse `"06"` to 6, but 6 cannot be turned back into `06`. Strings retain their authored text, and booleans and null retain each field's existing rules.
+
+The allowance covers root and branch config variables, titles, placeholder questions, and inline `components.opening`/`components.branchFraming` values; item names and `aid.title`/`triggers`; component section text and named text lines, headings, and `render.storyCards.title`; field `label`, `join`, `labelWhen` values, and template `raw`; and pack `hasKey`, `equals.key`, regex predicates, descriptor `pattern`/`keyPattern`, `mutexHint.fields`, and messages. Item and section variants normalize these same declared text fields through their opaque normalization views without validating field-operation syntax as ordinary values.
+
+Config variables remain a flat table of strings and numbers, with null unbinding an inherited entry. Item `v:` remains structured data.
+
+**Item data that templates can render follows the same rule, so `{%key}` and `{$…}` agree.** In `body:`, `v:`, `notes:`, and `pronouns:`, a number whose typed form differs from its parsed form (`3.30`, `0107420`, a long integer) is stored as the typed text; a number that already round-trips (`12`, `3.5`) stays a number, so only output that did not match the source changes. Item `meta:` and component `metadata:` are never in the template context and stay parsed, because convention packs read them as typed data; pack `equals.value` also stays parsed. Pack checks over notes and body re-parse the rendered card text and are unaffected. A number with no recorded spelling (reached through a YAML alias, or validated without a source map) uses its parsed form. Paths, references, selectors, enums, and numeric settings do not accept numbers as text.
+
 Item and component-section deltas normalize recognized structural keys through the same
 declared key sets without adopting closed-map validation. Deltas retain their field
 operations and open body-field grammar. Normalization must cover newly introduced
@@ -361,7 +369,7 @@ card.
 ## §5. Token families
 
 **There are two compile-time token families and they do not overlap.** `{%key}` is the
-*path / value* family — a string value declared in `compile.cl.yaml` `variables:` (plus
+*path / value* family — a string or number converted to text in `compile.cl.yaml` `variables:` (plus
 every `structure.input.library` name, auto-exposed). `{$…}` is the *field-reference*
 family — `{$body.X}`, `{$v.X}`, `{$Id.body.Field}`, the pronoun tokens, the role tokens.
 The comparison table is in `documentation/07-templates.md`; the rule that matters here is

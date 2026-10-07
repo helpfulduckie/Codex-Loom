@@ -17,9 +17,11 @@ const { checkSiblingKeys } = require('./keyIdentity');
 const { remapOrigins } = require('./origin');
 
 const STRING = { type: TYPES.STRING };
+const TEXT = { ...STRING, numberAsText: true };
 const NUMBER = { type: TYPES.NUMBER };
 const BOOLEAN = { type: TYPES.BOOLEAN };
 const ANY = { type: TYPES.ANY };
+const AUTHORED = { ...ANY, authoredSpelling: true };
 
 
 function buildKeyIndex(schema) {
@@ -217,32 +219,61 @@ function normalizeMapKeys(node, descriptor, { diagnostics, sourceMap, path = [],
   }
 }
 
+// A recorded spelling that does not parse back to the value belongs to some other scalar
+// (a path reused after key folding), so the parsed number is the only safe text.
+function authoredNumber(node, { sourceMap, path }) {
+  const spelling = sourceMap && sourceMap.spelling ? sourceMap.spelling(path) : undefined;
+  if (typeof spelling !== 'string') return String(node);
+  return Number.isFinite(node) && Number(spelling) !== node ? String(node) : spelling;
+}
+
+// Author data keeps its numbers, except one whose typed form the number cannot reproduce.
+function keepAuthoredSpelling(node, context) {
+  if (typeof node === 'number') {
+    const text = authoredNumber(node, context);
+    return text === String(node) ? node : text;
+  }
+  if (Array.isArray(node)) {
+    node.forEach((child, index) => {
+      node[index] = keepAuthoredSpelling(child, { ...context, path: [...context.path, String(index)] });
+    });
+  } else if (isPlainObject(node)) {
+    for (const [key, child] of Object.entries(node)) {
+      node[key] = keepAuthoredSpelling(child, { ...context, path: [...context.path, key] });
+    }
+  }
+  return node;
+}
+
 function normalizeSchemaKeys(node, descriptor, context) {
-  if (!descriptor) return;
+  if (!descriptor) return node;
   const view = descriptor.normalizeAs || descriptor;
   const types = Array.isArray(view.type) ? view.type : [view.type];
-  if (types.includes(TYPES.ANY)) return;
+  if (view.numberAsText && typeof node === 'number') return authoredNumber(node, context);
+  if (view.authoredSpelling) return keepAuthoredSpelling(node, context);
+  if (types.includes(TYPES.ANY)) return node;
   normalizeMapKeys(node, view, context);
   const descend = (child, childDescriptor, key) => normalizeSchemaKeys(child, childDescriptor, {
     ...context, path: [...context.path, String(key)], originPath: [...context.originPath, String(key)],
   });
   if (types.includes(TYPES.SEQ) && Array.isArray(node) && view.of) {
-    node.forEach((child, index) => descend(child, view.of, index));
+    node.forEach((child, index) => { node[index] = descend(child, view.of, index); });
   } else if (isPlainObject(node)) {
     if (types.includes(TYPES.MAP) && view.keys) {
       for (const [key, child] of Object.entries(node)) {
         if (!key.startsWith('_') && Object.prototype.hasOwnProperty.call(view.keys, key)) {
-          descend(child, view.keys[key], key);
+          node[key] = descend(child, view.keys[key], key);
         }
       }
     } else if (types.includes(TYPES.RECORD)) {
       for (const [key, child] of Object.entries(node)) {
         const childDescriptor = view.keys && Object.prototype.hasOwnProperty.call(view.keys, key)
           ? view.keys[key] : view.of;
-        descend(child, childDescriptor, key);
+        node[key] = descend(child, childDescriptor, key);
       }
     }
   }
+  return node;
 }
 
 
@@ -253,7 +284,7 @@ function validate(value, schema, options = {}) {
     v3Keys = true, rootLabel = 'the top level',
   } = options;
 
-  normalizeSchemaKeys(value, schema, { diagnostics, sourceMap, path, originRoot: value, originPath: [] });
+  value = normalizeSchemaKeys(value, schema, { diagnostics, sourceMap, path, originRoot: value, originPath: [] });
 
   const locate = (at) => (sourceMap ? sourceMap.nearest(at) : {});
   const display = (at) => at.slice(displayOffset).join('.');
@@ -275,7 +306,7 @@ function validate(value, schema, options = {}) {
     if (!types.some((t) => matchesType(normalized, t))) {
       diagnostics.error(
         CODES.WRONG_TYPE,
-        `"${display(currentPath) || '<root>'}" must be ${typeName(types)}, but is ${describeType(normalized)}${inContext}; replace it with the required type or the value is ignored.`,
+        `"${display(currentPath) || '<root>'}" must be ${typeName(descriptor.numberAsText ? [...types, TYPES.NUMBER] : types)}, but is ${describeType(normalized)}${inContext}; replace it with the required type or the value is ignored.`,
         locate(currentPath)
       );
       return normalized;
@@ -436,4 +467,4 @@ function validate(value, schema, options = {}) {
   return walk(value, schema, path);
 }
 
-module.exports = { TYPES, STRING, NUMBER, BOOLEAN, ANY, validate, normalizeMapKeys, buildKeyIndex, levenshtein: damerauLevenshtein };
+module.exports = { TYPES, STRING, TEXT, NUMBER, BOOLEAN, ANY, AUTHORED, validate, normalizeMapKeys, buildKeyIndex, levenshtein: damerauLevenshtein };

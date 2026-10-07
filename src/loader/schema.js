@@ -1,7 +1,7 @@
 'use strict';
 
 
-const { TYPES, STRING, ANY } = require('../schema');
+const { TYPES, STRING, TEXT, ANY, AUTHORED } = require('../schema');
 const { checkItemKeys } = require('../keyIdentity');
 const { ITEM_DELTA_KEYS } = require('../util');
 const { DISPATCH } = require('./dispatch-schema');
@@ -10,17 +10,18 @@ const AID = {
   type: TYPES.MAP,
   keys: {
     type: STRING,
-    title: STRING,
-    triggers: { type: [TYPES.SEQ, TYPES.STRING], of: STRING },
+    title: TEXT,
+    triggers: { type: [TYPES.SEQ, TYPES.STRING], numberAsText: true, of: TEXT },
 
   },
 };
 
 const NAME = {
   type: [TYPES.STRING, TYPES.MAP],
+  numberAsText: true,
   keys: {
-    display: STRING,
-    full: STRING,
+    display: TEXT,
+    full: TEXT,
   },
 };
 
@@ -61,10 +62,10 @@ const ITEM_SCHEMA = {
     aid: AID,
     render: RENDER,
 
-    body: ANY,
-    v: ANY,
-    pronouns: ANY,
-    notes: ANY,
+    body: AUTHORED,
+    v: AUTHORED,
+    pronouns: AUTHORED,
+    notes: AUTHORED,
     description: ANY,
 
     meta: ANY,
@@ -80,7 +81,7 @@ const ITEM_SCHEMA = {
 };
 
 for (const alias of ['var', 'vars', 'variable', 'variables']) {
-  ITEM_SCHEMA.keys[alias] = ANY;
+  ITEM_SCHEMA.keys[alias] = AUTHORED;
 }
 
 ITEM_SCHEMA.keys.branches = { ...ANY, normalizeAs: DISPATCH };

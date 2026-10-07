@@ -139,6 +139,26 @@ describe('SourceMap positions', () => {
   });
 });
 
+describe('SourceMap number spellings', () => {
+  const { sourceMap } = parseYaml('a: 007\nb: "007"\nc: seven\nd: [1.50, x]\ne: &n 0x1F\nf: *n\n', 'c.yaml');
+
+  test('an unquoted number records the characters it was written with', () => {
+    expect(sourceMap.spelling('a')).toBe('007');
+    expect(sourceMap.spelling(['d', '0'])).toBe('1.50');
+    expect(sourceMap.spelling('e')).toBe('0x1F');
+  });
+
+  test('strings and aliases record no spelling', () => {
+    for (const key of ['b', 'c', 'f', 'missing']) expect(sourceMap.spelling(key)).toBeUndefined();
+    expect(sourceMap.spelling(['d', '1'])).toBeUndefined();
+  });
+
+  test('a remapped key carries its spelling', () => {
+    sourceMap.remapPath(['a'], ['A']);
+    expect(sourceMap.spelling('A')).toBe('007');
+  });
+});
+
 describe('SourceMap origin export', () => {
   test('exports plain records relative to a selected domain root', () => {
     const { sourceMap } = parseYaml('- id: A\n  body:\n    text: hello\n', 'items.cl.yaml');

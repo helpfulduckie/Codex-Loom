@@ -126,7 +126,9 @@ markdown cannot give back. An author who wants the full check runs a compile, no
 | `{ notes: { … } }` | scope the nested predicate to the notes mapping |
 | `{ all: […] }` / `{ any: […] }` / `{ not: <pred> }` | compose |
 
-`re` is a plain string compiled with `new RegExp(str)`.
+`re` is text compiled with `new RegExp(str)`.
+
+**Pack text operands accept unquoted numbers.** This covers `hasKey`, `equals.key`, regex predicates `notesMatch`/`bodyMatch`/`match`/`titleMatch`, descriptor `pattern`/`keyPattern`, rule `message`, and `mutexHint.fields` and `mutexHint.message`. A number is read as the text you typed: `hasKey: 2024` looks for `"2024"` and `hasKey: 007` for `"007"`. A numeric regex is still a regex: `1.50` is the pattern `1.50`, whose `.` matches any character. `equals.value` keeps its existing comparison after string conversion; numeric budgets and bounds remain numbers. A descriptor `type: string` still requires string data in the card being checked.
 
 ### The schema check
 

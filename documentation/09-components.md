@@ -202,7 +202,7 @@ An item may name several targets: `storyCard: true` alongside a `plotEssential:`
 | Field | Default | Effect |
 |---|---|---|
 | `slot` | `false` | `true` marks a section items can route into. A slot section takes no `text:`. |
-| `text` | — | A string, or a mapping of named lines. With a mapping only the values render; the names exist so a variant can edit one line without restating the block. |
+| `text` | — | A string or number, or a mapping of named text lines. With a mapping only the values render; the names exist so a variant can edit one line without restating the block. |
 | `file` | — | A path whose contents become the section's text, included verbatim. |
 | `from` | — | `{script:, extract:}` — a path read through a named transform. `extract: scriptBanner` reads a JavaScript file's leading comment block. |
 | `heading` | — | Placed before the content, inside the wrapper. Omit to suppress entirely. |
@@ -437,7 +437,7 @@ The `rules` section — a mapping `text:` under a level-2 heading, `bullet: true
 - Clinical observation punctuated by visceral sensation.
 ```
 
-**Text may be a string or a mapping of named lines.** With a mapping, the keys are internal identifiers and only the values are rendered — the names exist so a variant can replace or delete one rule without restating the block.
+**Text may be a string, a number, or a mapping of named text lines.** With a mapping, the keys are internal identifiers and only the values are rendered — the names exist so a variant can replace or delete one rule without restating the block. Numbers in `text:`, its named lines, `heading:`, and `render.storyCards.title` are kept as the text you typed, including in section variants. Thus `1.50` renders as `1.50` and `007` as `007`, with no quotes needed. `metadata:` keeps parsed YAML types, while numeric settings such as `headingLevel` and `render.position` remain numbers.
 
 | Field | Default | Effect |
 |---|---|---|

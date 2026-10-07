@@ -32,6 +32,14 @@ class SourceMap {
     return { file: this.file };
   }
 
+  // The characters an unquoted number was written with, so text can keep them where the
+  // parsed number would not (`007`, `1.50`, integers past 2^53).
+  spelling(...parts) {
+    const pathParts = (parts.length === 1 && Array.isArray(parts[0]) ? parts[0] : parts).map(String);
+    const hit = this._positions.get(pathParts.join(PATH_SEP));
+    return hit ? hit.spelling : undefined;
+  }
+
   remapPath(fromParts, toParts) {
     const from = fromParts.map(String).join(PATH_SEP);
     const to = toParts.map(String).join(PATH_SEP);
@@ -68,10 +76,14 @@ class SourceMap {
 function buildPositions(doc, lineCounter) {
   const positions = new Map();
 
-  const record = (parts, offset) => {
+  const record = (parts, offset, node) => {
     if (typeof offset !== 'number') return;
     const { line, col } = lineCounter.linePos(offset);
-    positions.set(parts.join(PATH_SEP), { line, col, offset });
+    const hit = { line, col, offset };
+    if (YAML.isScalar(node) && typeof node.value === 'number' && typeof node.source === 'string') {
+      hit.spelling = node.source;
+    }
+    positions.set(parts.join(PATH_SEP), hit);
   };
 
   const walk = (node, parts) => {
@@ -81,13 +93,13 @@ function buildPositions(doc, lineCounter) {
         if (!pair || pair.key === undefined || pair.key === null) continue;
         const key = String(pair.key.value !== undefined ? pair.key.value : pair.key);
         const childParts = [...parts, key];
-        record(childParts, pair.key.range && pair.key.range[0]);
+        record(childParts, pair.key.range && pair.key.range[0], pair.value);
         walk(pair.value, childParts);
       }
     } else if (YAML.isSeq(node)) {
       node.items.forEach((item, index) => {
         const childParts = [...parts, String(index)];
-        if (item && item.range) record(childParts, item.range[0]);
+        if (item && item.range) record(childParts, item.range[0], item);
         walk(item, childParts);
       });
     }

@@ -207,7 +207,7 @@ The inline compile pass is branch-merge-aware and authoritative.
 | `{ notes: { … } }` | scope the nested predicate to the notes mapping |
 | `{ all: [...] }` / `{ any: [...] }` / `{ not: <pred> }` | compose |
 
-`re` is a plain string, compiled with `new RegExp(str)`. `match` is the shape a
+`re` is text, compiled with `new RegExp(str)`. `match` is the shape a
 two-surface rule needs — WTG accepts a marker in a card's Notes *or* its Entry and
 normalizes the position itself, so `wtg`'s marker rule scans both.
 
@@ -216,6 +216,8 @@ compared by `equals.value` stays exact after string conversion, and regexes keep
 existing case rules. Budget role lookup also ignores capitalization, including the
 fallback to `standard`, while preserving the authored budget name in findings. This
 lookup does not rewrite the card's Notes or metadata.
+
+**Pack text operands accept unquoted numbers.** `hasKey`, `equals.key`, the four regex predicates (`notesMatch`, `bodyMatch`, `match`, `titleMatch`), descriptor `pattern` and `keyPattern`, rule `message`, and `mutexHint.fields` and `mutexHint.message` read a number as the text you typed. For example, `hasKey: 2024` looks for the key `"2024"` and `hasKey: 007` for `"007"`. A numeric regex is still a regex: `1.50` is the pattern `1.50`, whose `.` matches any character. `equals.value` keeps its existing comparison after string conversion; numeric budgets and bounds remain numbers. A descriptor `type: string` still requires string data in the card being checked: this allowance applies to the pack's designated text operands.
 
 ### The schema check
 

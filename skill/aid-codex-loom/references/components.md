@@ -13,6 +13,8 @@ which stops the compile before anything is written. See
 
 ## The sectioned grammar
 
+**Section text, headings, and story-card titles accept numbers as text.** This covers scalar `text:`, values in named text mappings, `heading:`, and `render.storyCards.title`, including section variants. The text is the number as you typed it: `1.50` is `"1.50"`, `007` is `"007"`, and `0` is `"0"`, with no quotes needed. Component `metadata:` retains parsed types, and `headingLevel`/`render.position` remain numeric settings.
+
 **A component describes shape and never names an item.** Membership lives on the item: an item declares `render.<component>` naming a slot, and the component never learns who filled it. This is the inversion — the component says where content *can* go, the item says where it goes.
 
 ```yaml
@@ -54,7 +56,7 @@ An item with no `render:` block emits a story card and nothing else. An item may
 | Field | Default | Effect |
 |---|---|---|
 | `slot` | `false` | `true` marks a section items route into. A slot takes no `text:`. |
-| `text` | — | A string, or a mapping of named lines. With a mapping only the values render; the names exist so a variant can edit one line without restating the block. |
+| `text` | — | A string or number, or a mapping of named text lines. With a mapping only the values render; the names exist so a variant can edit one line without restating the block. |
 | `heading` | — | Placed before the content, inside the wrapper. Omit to suppress. |
 | `headingLevel` | see below | `1`–`6` adds a Markdown `#` prefix; `0` renders plain text. |
 | `render.position` | `5` | Sort key among sections; lower is earlier. |

@@ -57,6 +57,8 @@ fields:
 
 **`labelWhen` exists for the before-and-after case.** When the named body key is present, the alternate label replaces `label`. A project that relabels `appearance` to `Current Appearance` whenever `originalAppearance` is also set cannot express that with a static label.
 
+**Literal labels, separators, and `raw` fragments accept numbers as text.** This applies to `label`, `join`, every `labelWhen` value, and template or group `{ raw: ... }` entries, including inline declarations. The text is the number as you typed it: `0` is `"0"`, `1.50` is `"1.50"`, and `007` is `"007"`. Field names, source references, and render-function selectors retain their existing type rules.
+
 **The seven render functions are `inline`, `join`, `list`, `and`, `prose`, `block`, `keys`** — identical to their template-syntax counterparts, documented in [Templates & Partials](07-templates.md#render-functions). `render: bare` applies no function.
 
 Note that `block` is both a render function and a declaration key, and they are unrelated: `render: block` puts each array element on its own line, while `block: true` puts the value on a line beneath its label.

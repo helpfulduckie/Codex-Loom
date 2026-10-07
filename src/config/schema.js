@@ -1,11 +1,12 @@
 'use strict';
 
 
-const { TYPES, STRING } = require('../schema');
+const { TYPES, STRING, TEXT } = require('../schema');
 
 const STRING_SEQ = { type: TYPES.SEQ, of: STRING };
-const STRING_RECORD = { type: TYPES.RECORD, of: STRING };
-const CI_STRING_RECORD = { ...STRING_RECORD, caseInsensitiveKeys: true };
+const CI_STRING_RECORD = { type: TYPES.RECORD, of: STRING, caseInsensitiveKeys: true };
+const TEXT_RECORD = { type: TYPES.RECORD, of: TEXT };
+const VARIABLES = { ...TEXT_RECORD, caseInsensitiveKeys: true };
 
 const SCRIPTS = {
   type: [TYPES.STRING, TYPES.MAP],
@@ -25,8 +26,8 @@ const COMPONENTS = {
     description: STRING,
     adventureDescription: STRING,
     plotEssential: STRING,
-    opening: STRING,
-    branchFraming: STRING,
+    opening: TEXT,
+    branchFraming: TEXT,
     summary: STRING,
 
   },
@@ -91,10 +92,10 @@ const ROOT_LINT = {
 const BRANCH_NODE = {
   type: TYPES.MAP,
   keys: {
-    title: STRING,
-    variables: CI_STRING_RECORD,
+    title: TEXT,
+    variables: VARIABLES,
     roles: CI_STRING_RECORD,
-    placeholders: STRING_RECORD,
+    placeholders: TEXT_RECORD,
     scripts: SCRIPTS,
     lint: LINT,
     components: COMPONENTS,
@@ -112,7 +113,7 @@ const CONFIG_SCHEMA = {
   type: TYPES.MAP,
   keys: {
     version: { type: TYPES.NUMBER },
-    title: STRING,
+    title: TEXT,
 
     structure: {
       type: TYPES.MAP,
@@ -133,9 +134,9 @@ const CONFIG_SCHEMA = {
       },
     },
 
-    variables: CI_STRING_RECORD,
+    variables: VARIABLES,
     roles: CI_STRING_RECORD,
-    placeholders: STRING_RECORD,
+    placeholders: TEXT_RECORD,
     scripts: SCRIPTS,
     lint: ROOT_LINT,
     components: COMPONENTS,

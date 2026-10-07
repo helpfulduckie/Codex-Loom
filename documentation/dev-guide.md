@@ -98,6 +98,12 @@ rewrites recognized keys before custom key checks and child validation. It repor
 are unaffected. Configuration normalizes its top-level keys before checking `version`,
 so that the version gate follows the same capitalization rule.
 
+**`TEXT` opts a string descriptor into accepting a number as the text the author typed.** `src/schema.js` exports `TEXT = { type: TYPES.STRING, numberAsText: true }`; ordinary `STRING` remains strict. `buildPositions` in `src/loader/yaml.js` stores each unquoted numeric scalar's source characters on its position record, and `SourceMap.spelling(path)` returns them. The schema normalization pass replaces a number in a `TEXT` field with that spelling and assigns it back to its parent before validation, so `1.50`, `007`, and `1e3` stay `"1.50"`, `"007"`, and `"1e3"`. Callers must use `validate`'s returned value when the validated root can itself be a scalar.
+
+**`AUTHORED` marks opaque author data whose numbers render as typed.** It is `ANY` plus `authoredSpelling: true`, set on item `body`, `v` and its aliases, `notes`, and `pronouns`. Normalization walks such a block at any depth and replaces only a number whose spelling differs from `String(number)`; other numbers keep their type. `meta` and component `metadata` stay plain `ANY`.
+
+**Both paths fall back to `String(number)` when no spelling applies.** That covers `validate` calls without a source map, numbers reached through a YAML alias, and a recorded spelling that does not parse back to the value. Numeric settings remain typed.
+
 **Reads before validation need their own boundary normalization or folded lookup.** Item
 discovery normalizes each entry's top-level keys before component detection, include
 identity checks, and diagnostic labels; `sections` detection uses a folded lookup because
@@ -115,6 +121,8 @@ pass follows that view; validation still follows the original `ANY` descriptor, 
 operations and undeclared bare body fields keep their open grammar. Normalize nested maps
 as well as the delta's top level: a newly introduced `Render.Template` otherwise keeps a
 capitalized property that downstream reads miss.
+
+The normalization view also applies `numberAsText` to designated item and section text values, including newly introduced nested variant values. It applies `authoredSpelling` to variant `body`, `v`, `notes`, and `pronouns` the same way, and leaves field-operation strings unchanged.
 
 **`util.ITEM_DELTA_KEYS` is the shared classification of reserved item delta names.**
 The item normalization view selects its declared keys from it, `keyIdentity` uses it to

@@ -100,8 +100,8 @@ describe('loadPack', () => {
     expect(diag.errors[0].message).toContain('Invalid keyPattern regex');
   });
 
-  test('a non-string keyPattern skips the rule with a type error', () => {
-    writePack('bad-key-pattern-type', 'name: bad-key-pattern-type\nrules:\n  - schema: { type: record, keyPattern: 12 }\n');
+  test('a boolean keyPattern skips the rule with a type error', () => {
+    writePack('bad-key-pattern-type', 'name: bad-key-pattern-type\nrules:\n  - schema: { type: record, keyPattern: true }\n');
     const diag = new Diagnostics();
     expect(loadPack('bad-key-pattern-type', { source: './bad-key-pattern-type.cl.yaml' },
       { baseDir: TMP, diagnostics: diag }).rules).toEqual([]);

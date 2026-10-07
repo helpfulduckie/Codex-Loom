@@ -1,11 +1,10 @@
 'use strict';
 
-const { TYPES } = require('../schema');
+const { TYPES, TEXT } = require('../schema');
 
 const string = { type: TYPES.STRING };
-const regex = { ...string, packRegex: true };
+const regex = { ...TEXT, packRegex: true };
 const number = { type: TYPES.NUMBER };
-const strings = { type: TYPES.SEQ, of: string };
 const bounds = { type: TYPES.MAP, keys: { min: number, max: number } };
 const fieldBounds = { type: TYPES.MAP, keys: { ...bounds.keys, words: bounds } };
 
@@ -15,9 +14,9 @@ Object.assign(predicate.keys, {
   any: { type: TYPES.SEQ, of: predicate },
   not: predicate,
   notes: predicate,
-  hasKey: string,
+  hasKey: TEXT,
   equals: { type: TYPES.MAP, keys: {
-    key: { ...string, required: true },
+    key: { ...TEXT, required: true },
     value: { type: TYPES.ANY, required: true },
   } },
   notesMatch: regex, bodyMatch: regex, match: regex, titleMatch: regex,
@@ -38,7 +37,7 @@ Object.assign(descriptor.keys, {
 const RULE_SCHEMA = { type: TYPES.MAP, keys: {
   id: { type: [TYPES.STRING, TYPES.NUMBER] },
   severity: { ...string, values: ['warn', 'error'] },
-  message: string,
+  message: TEXT,
   appliesTo: predicate,
   forbid: { ...predicate, packCheck: true },
   require: { ...predicate, packCheck: true },
@@ -50,7 +49,7 @@ const RULE_SCHEMA = { type: TYPES.MAP, keys: {
     fields: { type: TYPES.RECORD, of: fieldBounds, caseInsensitiveKeys: true },
     default: fieldBounds,
   } },
-  mutexHint: { type: TYPES.MAP, packCheck: true, keys: { fields: strings, max: number, message: string } },
+  mutexHint: { type: TYPES.MAP, packCheck: true, keys: { fields: { type: TYPES.SEQ, of: TEXT }, max: number, message: TEXT } },
 } };
 
 const PACK_SCHEMA = { type: TYPES.MAP, keys: {

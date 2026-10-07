@@ -34,7 +34,7 @@ test('templateFor validation reports nested canonical paths at authored key loca
     'compile.yaml': CONFIG,
     'items/items.cl.yaml': '- id: Hero\n  name: Hero\n  aid: {type: Item}\n  body: {Name: hero}\n',
     'templates/fields.cl.yaml': 'fields: {name: {from: Name}}\ntemplates: {Item: [name]}\n',
-    'templates/tier.cl.yaml': 'Templates:\n  Item:\n    - Field: name\n      Label: 42\n',
+    'templates/tier.cl.yaml': 'Templates:\n  Item:\n    - Field: name\n      Label: true\n',
   });
   const result = preview(path.join(dir, 'compile.yaml'));
   const finding = result.diagnostics.find((d) => d.code === CODES.WRONG_TYPE);

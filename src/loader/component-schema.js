@@ -1,7 +1,7 @@
 'use strict';
 
 
-const { TYPES, STRING, NUMBER, BOOLEAN, ANY } = require('../schema');
+const { TYPES, STRING, TEXT, NUMBER, BOOLEAN, ANY } = require('../schema');
 const { checkDispatchKeys, checkSectionKeys } = require('../keyIdentity');
 const { DISPATCH } = require('./dispatch-schema');
 
@@ -29,12 +29,12 @@ const SECTION = {
   checkKeys: checkSectionKeys,
   keys: {
     slot: BOOLEAN,
-    text: { type: [TYPES.STRING, TYPES.RECORD], caseInsensitiveKeys: true, of: STRING },
+    text: { type: [TYPES.STRING, TYPES.RECORD], numberAsText: true, caseInsensitiveKeys: true, of: TEXT },
 
     file: STRING,
     from: SECTION_FROM,
 
-    heading: STRING,
+    heading: TEXT,
     headingLevel: NUMBER,
     render: SECTION_RENDER,
 
@@ -70,7 +70,7 @@ const COMPONENT_SCHEMA = {
           of: {
             type: TYPES.MAP,
             keys: {
-              title: STRING,
+              title: TEXT,
               variant: STRING,
               sections: { type: TYPES.SEQ, of: STRING },
               type: STRING,
