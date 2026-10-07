@@ -358,6 +358,11 @@ A bare key matching a structural item field changes that field in any capitaliza
 `body: {Name: Changed}`. The same distinction applies to fields such as `Notes`, `Render`
 and `Aid`.
 
+`import`, `include`, and `branches` are reserved keys that cannot be applied inside an
+item variant. A bare occurrence in any capitalization raises `CL0329` and is ignored;
+use `body: {Import: ...}`, `body: {Include: ...}`, or `body: {Branches: ...}` to change
+a body field with that name. These are checked even in a variant no branch selects.
+
 See [Branch Tree & Variant Dispatch](05-branches-and-variants.md) and [Field Operations](06-field-operations.md) for how variants are applied and what operations are available.
 
 ---

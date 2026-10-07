@@ -160,6 +160,19 @@ const ITEM_TOP_LEVEL_FIELDS = Object.freeze(['name', 'pronouns', 'aid', 'render'
 
 const NOTES_ALIASES = new Set(['notes', 'description']);
 
+const ITEM_DELTA_KEYS = Object.freeze({
+  ...Object.fromEntries(ITEM_TOP_LEVEL_FIELDS.map(key => [key, 'field'])),
+  ...Object.fromEntries([...VAR_ALIASES, ...NOTES_ALIASES].map(key => [key, 'field'])),
+  body: 'body',
+  id: 'control',
+  variants: 'control',
+  importVariants: 'control',
+  _source: 'control',
+  import: 'unsupported',
+  include: 'unsupported',
+  branches: 'unsupported',
+});
+
 function normalizeNotesKey(key) {
   return NOTES_ALIASES.has(String(key).toLowerCase()) ? 'notes' : key;
 }
@@ -307,7 +320,7 @@ module.exports = {
   damerauLevenshtein,
   pathId, pathStartsWith,
   findFiles, readFileTrim, listFilesRelative, loadYaml, deepClone, transformStringValues, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
-  ITEM_TOP_LEVEL_FIELDS, NOTES_ALIASES, normalizeNotesKey,
+  ITEM_TOP_LEVEL_FIELDS, ITEM_DELTA_KEYS, NOTES_ALIASES, normalizeNotesKey,
   YAML_SUFFIXES, CONFIG_BASENAMES, RESERVED_LIBRARY_BASENAMES, hasSuffix, PATH_UNSAFE_CHARS, PLACEHOLDER_RE, isPlainObject,
   resolveVariables, checkUnexpandedVariables, walkItemTextFields, walkTextRecursive, itemContext, ITEM_CONTEXT_KEYS, checkUnresolvedFieldTokens,
   checkMechanicalArtifacts, maskFencedRegions,

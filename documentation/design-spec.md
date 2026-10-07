@@ -224,8 +224,9 @@ there could leave a half-written tree. The load phase therefore reads each compo
 branch tree names, and its `imports:`, for key collisions alone.
 
 **Compiler-defined keys match in any capitalization and normalize to their declared
-spelling during validation.** Normalization is silent, so every downstream consumer can
-read the documented property. A mapping containing two spellings of one declared key
+spelling during validation.** Normalization is silent, so consumers that run after
+`validate` can read the documented property. A read that precedes validation must
+normalize the relevant keys first or use a folded lookup. A mapping containing two spellings of one declared key
 raises `CL0211` before normalization can discard either definition. Source locations
 retain the authored spelling. This changes key matching only; enumerated values remain
 exact.
@@ -234,6 +235,12 @@ Item and component-section deltas normalize recognized structural keys through t
 declared key sets without adopting closed-map validation. Deltas retain their field
 operations and open body-field grammar. Normalization must cover newly introduced
 properties as well as overrides, including recognized keys inside nested structural maps.
+
+The item delta's reserved key set is shared by normalization, collision checks, and
+application. `import`, `include`, and `branches` are reserved but cannot be applied in
+an item delta: their presence raises `CL0329` during loading and their values are ignored.
+To address body fields with those names, write them inside `body:`. Other bare body fields
+keep their authored spelling.
 
 **Two kinds of key stay exact:**
 

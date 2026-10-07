@@ -3,7 +3,7 @@
 
 const {
   deepClone, findKey, getCI, setCI, deleteCI, VAR_ALIASES, normalizeVarKey,
-  ITEM_TOP_LEVEL_FIELDS, normalizeNotesKey,
+  ITEM_DELTA_KEYS, normalizeNotesKey,
 } = require('../util');
 const { CODES } = require('../diag');
 const { transferOrigins, copyOrigins, originLocation, nearestOrigin } = require('../origin');
@@ -206,7 +206,6 @@ function chainNoopMessage(label, ops) {
 function applyFieldsDelta(item, delta, onWarn, trace) {
   if (!delta || typeof delta !== 'object') return;
 
-  const topLevelFields = ITEM_TOP_LEVEL_FIELDS;
   const labelBase = item.id
     || (typeof item.name === 'string' ? item.name : (item.name && item.name.full))
     || '(unknown)';
@@ -227,14 +226,11 @@ function applyFieldsDelta(item, delta, onWarn, trace) {
   }
 
   for (const [key, op] of Object.entries(delta)) {
-    const keyLower = key.toLowerCase();
-    if (keyLower === 'id') continue; // id is immutable
-
     const normalizedKey = normalizeNotesKey(normalizeVarKey(key));
-    const normalizedLower = normalizedKey.toLowerCase();
-    const isTopLevel = topLevelFields.some(f => f === normalizedLower);
+    const kind = getCI(ITEM_DELTA_KEYS, normalizedKey);
+    if (kind === 'control' || kind === 'unsupported') continue;
 
-    if (isTopLevel) {
+    if (kind === 'field') {
       const currentVal = getCI(item, normalizedKey);
       const newVal = applyFieldOp(currentVal, op, opCtx(normalizedKey, key, [findKey(item, normalizedKey) || normalizedKey]));
       if (newVal === '__DELETE__') {
@@ -242,7 +238,7 @@ function applyFieldsDelta(item, delta, onWarn, trace) {
       } else {
         setCI(item, normalizedKey, newVal);
       }
-    } else if (keyLower === 'body') {
+    } else if (kind === 'body') {
       if (!item.body) item.body = {};
       const newVal = applyFieldOp(item.body, op, opCtx('', key, ['body']));
       if (newVal !== '__DELETE__') item.body = newVal;
@@ -262,8 +258,6 @@ function applyFieldsDelta(item, delta, onWarn, trace) {
 function applyDelta(item, delta, onWarn, trace) {
   if (!delta) return;
   for (const [key, value] of Object.entries(delta)) {
-    const keyLower = key.toLowerCase();
-    if (['variants', 'importvariants', '_source'].includes(keyLower)) continue;
     applyFieldsDelta(item, copyOrigins(delta, { [key]: value }), onWarn, trace);
   }
 }

@@ -24,6 +24,7 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/loader/registry.js` | Item loading, `ItemRegistry`, library merge, overlays, includes |
 | `src/loader/schema.js` | The item key surface (§4.3) |
 | `src/loader/component.js`, `src/loader/component-schema.js` | Component-document loading and its key surface (§7.2) |
+| `src/loader/dispatch-schema.js` | Shared normalization view for the recursive `branches` wrapper inside dispatch maps |
 | `src/loader/field-table.js` | Loads `fields.cl.yaml` — the field and template declarations (§13.2) |
 | `src/loader.js` | Template and partial loading; holds `loadNamedFiles`, `loadTemplates` and `loadFieldTable` |
 | `src/schema.js` | The shared validation engine both key surfaces run through |
@@ -91,10 +92,17 @@ rather than merging by hand, or that walk's output disagrees with the leaf compi
 **Closed schema maps normalize declared keys to their documented spelling.** `validate`
 runs a normalization pass that matches `MAP.keys` without regard to capitalization and
 rewrites recognized keys before custom key checks and child validation. It reports
-`CL0211` for colliding spellings before
-rewriting them. Consumers keep reading plain properties such as `item.render`; enum values
+`CL0211` for colliding spellings before rewriting them. Consumers that run after
+`validate` keep reading plain properties such as `item.render`; enum values
 are unaffected. Configuration normalizes its top-level keys before checking `version`,
 so that the version gate follows the same capitalization rule.
+
+**Reads before validation need their own boundary normalization or folded lookup.** Item
+discovery normalizes each entry's top-level keys before component detection, include
+identity checks, and diagnostic labels; `sections` detection uses a folded lookup because
+the item schema does not declare that key. `templateFor` files validate against the field
+table schema before their templates are read. Migration's version gates use folded lookup
+while the remaining v3 grammar stays exact.
 
 **An opaque delta can declare a normalization view without becoming a closed schema.**
 The internal `normalizeAs` descriptor supplies the recognized structural keys for item
@@ -103,6 +111,13 @@ pass follows that view; validation still follows the original `ANY` descriptor, 
 operations and undeclared bare body fields keep their open grammar. Normalize nested maps
 as well as the delta's top level: a newly introduced `Render.Template` otherwise keeps a
 capitalized property that downstream reads miss.
+
+**`util.ITEM_DELTA_KEYS` is the shared classification of reserved item delta names.**
+The item normalization view selects its declared keys from it, `keyIdentity` uses it to
+distinguish structural content, and `applyFieldsDelta` uses it to route or ignore writes.
+Reserved `import`, `include`, and `branches` warn with `CL0329` at load and never become
+bare body fields. Explicit `body:` content remains author-keyed. Both item and component
+schemas use the recursive dispatch view from `loader/dispatch-schema.js`.
 
 **A schema descriptor declares which author-keyed mappings the rule covers.** `caseInsensitiveKeys:
 true` on a `RECORD` descriptor makes `validate` raise `CL0211` for sibling keys that
@@ -134,6 +149,8 @@ in the record so the diagnostic points at what the author wrote).
 attach origins after validation, so `SourceMap` must export each normalized runtime path
 as `keyPath` and its original source path as `path`. Nested rewrites carry the whole
 subtree, so a diagnostic on `render.template` still points at an authored `Render.Template`.
+Attached origin indexes are remapped through `origin.remapOrigins`, keeping path encoding
+inside the origin module.
 
 **Convention-pack `map` schemas use the same normalization on a copy of the checked data.**
 Later predicates and rules must see the original recovered card mapping. Open `record`

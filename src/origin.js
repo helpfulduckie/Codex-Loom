@@ -31,6 +31,20 @@ function getOrigins(value) {
   return value && typeof value === 'object' ? value[ORIGINS] || null : null;
 }
 
+function remapOrigins(value, fromParts, toParts) {
+  const index = getOrigins(value);
+  if (!index) return;
+  const from = pathKey(fromParts);
+  const to = pathKey(toParts);
+  const moved = [];
+  for (const key of Object.keys(index)) {
+    if (key !== from && !key.startsWith(from + PATH_SEP)) continue;
+    moved.push([to + key.slice(from.length), index[key]]);
+    delete index[key];
+  }
+  for (const [key, record] of moved) index[key] = record;
+}
+
 function lookup(index, parts, nearest) {
   if (!index) return null;
   const path = (Array.isArray(parts) ? parts : [parts]).map(String);
@@ -95,5 +109,5 @@ function originLocation(value, parts = [], fallback = {}) {
 
 module.exports = {
   createOriginIndex, attachOrigins, getOrigins, originAt, nearestOrigin,
-  copyOrigins, overlayOriginIndexes, transferOrigins, originLocation,
+  copyOrigins, overlayOriginIndexes, transferOrigins, remapOrigins, originLocation,
 };

@@ -2,7 +2,7 @@
 
 const {
   createOriginIndex, attachOrigins, getOrigins, originAt, nearestOrigin,
-  copyOrigins, overlayOriginIndexes,
+  copyOrigins, overlayOriginIndexes, remapOrigins,
 } = require('../../src/origin');
 
 const index = () => createOriginIndex([
@@ -49,6 +49,22 @@ test('copying preserves a private independent index', () => {
   expect(originAt(target, 'body')).toEqual(originAt(source, 'body'));
   expect(Object.keys(target)).toEqual(['id']);
   expect(getOrigins(target)).not.toBe(getOrigins(source));
+});
+
+test('remapping an origin subtree changes runtime keys and retains authored paths', () => {
+  const item = attachOrigins({}, createOriginIndex([
+    { file: 'item.yaml', path: ['Render'], line: 2 },
+    { file: 'item.yaml', path: ['Render', 'Template'], line: 3 },
+    { file: 'item.yaml', path: ['Render.extra'], line: 4 },
+  ]));
+  remapOrigins(item, ['Render'], ['render']);
+  remapOrigins(item, ['render', 'Template'], ['render', 'template']);
+  expect(originAt(item, ['render', 'template'])).toMatchObject({
+    path: ['Render', 'Template'], file: 'item.yaml', line: 3,
+  });
+  expect(originAt(item, ['render'])).toMatchObject({ path: ['Render'], line: 2 });
+  expect(originAt(item, ['Render'])).toBeNull();
+  expect(originAt(item, ['Render.extra'])).toMatchObject({ path: ['Render.extra'], line: 4 });
 });
 
 test('overlay replaces matching paths and retains untouched paths', () => {

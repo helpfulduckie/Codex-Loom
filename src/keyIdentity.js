@@ -1,11 +1,10 @@
 'use strict';
 
 const { CODES } = require('./diag');
-const { VAR_ALIASES, NOTES_ALIASES, ITEM_TOP_LEVEL_FIELDS, findKey } = require('./util');
+const { VAR_ALIASES, NOTES_ALIASES, ITEM_DELTA_KEYS, findKey, getCI } = require('./util');
 
 const CONTENT_FIELDS = new Set(['body', ...VAR_ALIASES, ...NOTES_ALIASES]);
-const STRUCTURAL_FIELDS = new Set([...ITEM_TOP_LEVEL_FIELDS, ...VAR_ALIASES, ...NOTES_ALIASES,
-  'body', 'variants', 'branches', 'importvariants', '_source']);
+const STRUCTURAL_FIELDS = new Set(Object.keys(ITEM_DELTA_KEYS).map(key => key.toLowerCase()));
 
 const mapping = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -49,6 +48,11 @@ function checkItemKeys(value, context, delta = false) {
   }
   if (delta) {
     for (const [key, field] of Object.entries(value)) {
+      if (getCI(ITEM_DELTA_KEYS, key) === 'unsupported') {
+        context.diagnostics.warn(CODES.VARIANT_RESERVED_KEY,
+          `Key "${key}" is reserved but cannot be applied inside an item variant; it is ignored. To change a body field with this name, write body: {${key}: ...}.`,
+          context.sourceMap ? context.sourceMap.nearest([...context.path, key]) : {});
+      }
       if (!STRUCTURAL_FIELDS.has(key.toLowerCase())) checkSiblingKeys(field, { ...context, path: [...context.path, key] }, true);
     }
   }

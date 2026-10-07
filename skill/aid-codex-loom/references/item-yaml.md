@@ -193,6 +193,11 @@ A bare key matching a structural item field changes that field in any capitaliza
 `Name: Changed` changes the item's name; reach a body field called `Name` through
 `body: {Name: Changed}`. The same distinction applies to `Notes`, `Render` and `Aid`.
 
+`import`, `include`, and `branches` are reserved but cannot be applied inside an item
+variant. A bare occurrence in any capitalization raises `CL0329` and is ignored, even
+in an unused variant. Reach body fields with those names through `body: {Import: ...}`,
+`body: {Include: ...}`, or `body: {Branches: ...}`.
+
 A variant is the natural place for a placement change:
 
 ```yaml

@@ -4,7 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const { resolveVariables, findKey, getCI, setCI } = require('./util');
 const { loadYamlDocument } = require('./loader/yaml');
-const { checkSiblingKeys } = require('./keyIdentity');
+const { validate } = require('./schema');
+const { FIELD_TABLE_SCHEMA } = require('./loader/field-table-schema');
 const { walkBranchTree } = require('./model/branches');
 const { render } = require('./template');
 const { renderFieldList } = require('./render/field-list');
@@ -101,8 +102,8 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
           { hint: `YAML error: ${err.cause ? err.cause.message : err.message}` });
         continue;
       }
+      validate(doc, FIELD_TABLE_SCHEMA, { diagnostics, sourceMap, context: path.basename(abs) });
       if (doc && doc.templates && typeof doc.templates === 'object') {
-        checkSiblingKeys(doc.templates, { diagnostics, sourceMap, path: ['templates'] });
         for (const [name, list] of Object.entries(doc.templates)) setCI(merged, name, list);
       }
     }

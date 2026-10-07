@@ -60,6 +60,7 @@ const REGISTRY = Object.freeze({
   SELECTOR_MATCHED_NOTHING:     { id: 'CL0326', severity: WARN,  summary: 'A selector aimed at multiple items matched none, so it changes nothing.' },
   BRANCH_WILDCARD_UNBIND:       { id: 'CL0327', severity: WARN,  summary: "A branch spec maps '*' to ~; use '_: ~' to exclude the unnamed branches." },
   FIELD_OP_NOOP:                { id: 'CL0328', severity: WARN,  summary: "A field operation matches nothing, so it changes no value; check for drift or a typo." },
+  VARIANT_RESERVED_KEY:         { id: 'CL0329', severity: WARN,  summary: 'An item variant uses a reserved import, include or branches key that cannot be applied there; it is ignored. Use body: to change a body field with that name.' },
   CROSS_ITEM_REF_MISSING:       { id: 'CL0330', severity: WARN,  summary: 'A cross-item reference names no resolved item, so the token remains unresolved.' },
   AMBIGUOUS_REF:                { id: 'CL0340', severity: ERROR, summary: 'A reference is defined in more than one library set and needs a qualifier.' },
   UNKNOWN_CANON_SOURCE:          { id: 'CL0341', severity: ERROR, summary: 'A reference names a library set not declared in structure.input.library; use a declared set.' },

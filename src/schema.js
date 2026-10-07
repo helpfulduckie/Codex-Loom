@@ -14,7 +14,7 @@ const TYPES = Object.freeze({
 const { CODES } = require('./diag');
 const { isPlainObject, damerauLevenshtein } = require('./util');
 const { checkSiblingKeys } = require('./keyIdentity');
-const { getOrigins } = require('./origin');
+const { remapOrigins } = require('./origin');
 
 const STRING = { type: TYPES.STRING };
 const NUMBER = { type: TYPES.NUMBER };
@@ -155,20 +155,6 @@ function normalizeEmpty(value, types) {
     return [];
   }
   return value;
-}
-
-function remapOrigins(value, fromParts, toParts) {
-  const index = getOrigins(value);
-  if (!index) return;
-  const from = fromParts.map(String).join('\u0000');
-  const to = toParts.map(String).join('\u0000');
-  const moved = [];
-  for (const key of Object.keys(index)) {
-    if (key !== from && !key.startsWith(from + '\u0000')) continue;
-    moved.push([to + key.slice(from.length), index[key]]);
-    delete index[key];
-  }
-  for (const [key, record] of moved) index[key] = record;
 }
 
 function normalizeMapKeys(node, descriptor, { diagnostics, sourceMap, path = [], originRoot = node, originPath = path } = {}) {

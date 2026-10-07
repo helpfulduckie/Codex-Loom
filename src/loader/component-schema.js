@@ -3,6 +3,7 @@
 
 const { TYPES, STRING, NUMBER, BOOLEAN, ANY } = require('../schema');
 const { checkDispatchKeys, checkSectionKeys } = require('../keyIdentity');
+const { DISPATCH } = require('./dispatch-schema');
 
 const SECTION_RENDER = {
   type: TYPES.MAP,
@@ -42,8 +43,6 @@ const SECTION = {
   },
 };
 
-const DISPATCH = { type: TYPES.RECORD, of: { type: TYPES.MAP, keys: {} } };
-DISPATCH.of.keys.branches = DISPATCH;
 SECTION.keys.branches = { ...ANY, normalizeAs: DISPATCH };
 SECTION.keys.variants = { ...ANY, normalizeAs: { type: TYPES.RECORD, of: SECTION } };
 

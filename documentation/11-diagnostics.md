@@ -227,6 +227,7 @@ Under a tolerance tight enough to avoid nonsense suggestions, plain Levenshtein 
 | `CL0326` | WARN | A selector aimed at multiple items matched none, so it changes nothing. |
 | `CL0327` | WARN | A branch spec maps `'*'` to `~`; use `'_': ~` to exclude the unnamed branches. |
 | `CL0328` | WARN | A field operation matches nothing, so it changes no value; check for drift or a typo. |
+| `CL0329` | WARN | An item variant uses a reserved `import`, `include` or `branches` key that cannot be applied there; it is ignored. Use `body:` to change a body field with that name. |
 | `CL0340` | ERROR | A reference is defined in more than one library set and needs a qualifier. |
 | `CL0341` | ERROR | A reference names an undeclared library set; use a set declared in `structure.input.library`. |
 | `CL0342` | ERROR | A reference names an id that the selected registry does not define. |

@@ -4,10 +4,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const { findFiles, deepClone, findKey, setCI, resolveVariables, isPlainObject, VAR_ALIASES, YAML_SUFFIXES, RESERVED_LIBRARY_BASENAMES } = require('../util');
+const { findFiles, deepClone, findKey, getCI, setCI, resolveVariables, isPlainObject, VAR_ALIASES, YAML_SUFFIXES, RESERVED_LIBRARY_BASENAMES } = require('../util');
 const { loadYamlDocument, YamlLoadError } = require('./yaml');
 const { attachOrigins, copyOrigins, transferOrigins, originLocation } = require('../origin');
-const { validate } = require('../schema');
+const { validate, normalizeMapKeys } = require('../schema');
 const { ITEM_SCHEMA } = require('./schema');
 const { CODES } = require('../diag');
 const { splitRef } = require('../model/refs');
@@ -66,8 +66,9 @@ function normalizeItemVarField(entry, onWarn) {
 
 /** A component document shares item directories and is loaded by the component loader. */
 function isComponentDocument(entry) {
-  return !Array.isArray(entry) && typeof entry === 'object'
-    && entry.sections && typeof entry.sections === 'object'
+  const sections = entry && getCI(entry, 'sections');
+  return entry && !Array.isArray(entry) && typeof entry === 'object'
+    && sections && typeof sections === 'object'
     && entry.id === undefined
     && (entry.name === undefined || typeof entry.name !== 'string');
 }
@@ -126,9 +127,10 @@ function loadItemsFromDir(dirs, options = {}) {
           return;
         }
 
+        const entryPath = Array.isArray(data) ? [String(index)] : [];
+        normalizeMapKeys(entry, ITEM_SCHEMA, { diagnostics, sourceMap, path: entryPath });
         if (isComponentDocument(entry)) return;
 
-        const entryPath = Array.isArray(data) ? [String(index)] : [];
         const loaded = prepareItem(entry, {
           file, index, path: entryPath, sourceMap, diagnostics, tolerant: options.tolerant,
         });
@@ -311,12 +313,13 @@ function includeFile(file, def, includeKey, { seenFiles, explicitIds, diagnostic
       diagnostics.warn(CODES.YAML_NULL_DOCUMENT, `Null document in "${file}" — it contributes no items; add content or remove the empty document.`, { file });
       continue;
     }
+    const entryPath = Array.isArray(raw) ? [String(index)] : [];
+    normalizeMapKeys(item, ITEM_SCHEMA, { diagnostics, sourceMap, path: entryPath });
     if (isComponentDocument(item)) continue;
     const id = typeof item.id === 'string' && item.id ? item.id.toLowerCase()
       : (typeof item.name === 'string' ? item.name.toLowerCase() : '');
     if (explicitIds.has(id)) continue; // an explicit import wins
 
-    const entryPath = Array.isArray(raw) ? [String(index)] : [];
     const prepared = prepareItem(item, {
       file, index, path: entryPath, sourceMap, diagnostics, tolerant,
     });
