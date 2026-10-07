@@ -4,11 +4,12 @@
 
 The three namespaces — `fields:`, `groups:` and `templates:` — live in one `fields.cl.yaml` per templates directory.
 
-Names in each of these maps identify keys case-insensitively, as do `templateFor` role
-keys and the template names a selection file produces. Case-only sibling duplicates are
-`CL0211`. The three maps remain separate namespaces, so a field and group may share a
-name; group expansion keeps its existing precedence. Declaration references, merges and
-unbinds match case-insensitively. See [Authored mapping key identity](02-compile-yaml.md#authored-mapping-key-identity).
+Field, group and template names match without regard to capitalization, and so do
+`templateFor` role keys: a group that lists `name` finds the field declared `Name`, and a
+project table's `name:` replaces a shared table's `Name:`. Two names in one map that
+differ only by capitalization are an ERROR (`CL0211`). The three maps are separate
+namespaces, so a field and a group may share a name; where a template lists that name,
+the group is expanded. See [Key Capitalization](02-compile-yaml.md#key-capitalization).
 
 ---
 

@@ -63,6 +63,10 @@ branches:
 WARN — it usually means a bare `pack-name:` (which parses as null, i.e. `~`) was meant to
 be `pack-name: {}`.
 
+A branch's entry finds the inherited pack without regard to capitalization, so `WTG: ~`
+unbinds a root `wtg` and `WTG: {level: off}` silences it. Two keys in one `packs:` mapping
+that differ only by capitalization are an ERROR (`CL0211`).
+
 **`source:` forms.** An absent `source:` means "bundled, by name" — the loader looks for
 `packs/<name>.cl.yaml` in Codex Loom's own `packs/` directory. A present `source:` is a
 path, resolved relative to the `compile.yaml` directory, with `{%token}` variables expanded. A library-hosted pack gets
@@ -70,7 +74,8 @@ versioned and frozen alongside the shared library that depends on it (see The Li
 
 **The config key must match the pack's declared `name:`.** Diagnostic codes are namespaced
 from the pack's own name, so a mismatch would make a hosted pack yield different codes in
-every project that loads it. A disagreement is a `CL0119` ERROR naming both.
+every project that loads it. A disagreement is a `CL0119` ERROR naming both. This match is
+exact, capitalization included: `Wtg: {}` does not load the `wtg` pack.
 
 ---
 

@@ -79,12 +79,76 @@ describe('case-insensitive key identity across YAML source layers', () => {
     expect(diagnosticsWith(result, CODES.DUPLICATE_KEY_CASE).length).toBeGreaterThanOrEqual(4);
   });
 
-  test('a component section collision is reported during preview', () => {
+  const collidingSections = [
+    'sections:', '  premise:', '    text: First', '  Premise:', '    text: Second',
+  ].join('\n');
+
+  test('a component section collision blocks the load', () => {
     const { result } = previewProject({
-      'components/ai.cl.yaml': [
-        'sections:', '  premise:', '    text: First', '  Premise:', '    text: Second',
-      ].join('\n'),
+      'components/ai.cl.yaml': collidingSections,
       'compile.yaml': config(['components:', '  aiInstructions: ./components/ai.cl.yaml']),
+    });
+    expect(result.status).toBe('blocked');
+    expect(result.files).toEqual([]);
+    expect(diagnosticsWith(result, CODES.DUPLICATE_KEY_CASE)).toHaveLength(1);
+  });
+
+  test('every colliding component is reported in one run, the description included', () => {
+    const { result } = previewProject({
+      'components/ai.cl.yaml': collidingSections,
+      'components/description.cl.yaml': collidingSections,
+      'compile.yaml': config([
+        'components:', '  aiInstructions: ./components/ai.cl.yaml',
+        '  description: ./components/description.cl.yaml',
+      ]),
+    });
+    expect(result.status).toBe('blocked');
+    expect(result.files).toEqual([]);
+    const files = diagnosticsWith(result, CODES.DUPLICATE_KEY_CASE).map((d) => path.basename(d.file));
+    expect(files.sort()).toEqual(['ai.cl.yaml', 'description.cl.yaml']);
+  });
+
+  test('a collision in an imported component blocks the load once', () => {
+    const { result } = previewProject({
+      'components/shared.cl.yaml': collidingSections,
+      'components/ai.cl.yaml': ['imports:', '  - from: ./components/shared.cl.yaml'].join('\n'),
+      'components/note.cl.yaml': ['imports:', '  - from: ./components/shared.cl.yaml'].join('\n'),
+      'compile.yaml': config([
+        'components:', '  aiInstructions: ./components/ai.cl.yaml',
+        '  authorsNote: ./components/note.cl.yaml',
+      ]),
+    });
+    expect(result.status).toBe('blocked');
+    const found = diagnosticsWith(result, CODES.DUPLICATE_KEY_CASE);
+    expect(found).toHaveLength(1);
+    expect(path.basename(found[0].file)).toBe('shared.cl.yaml');
+  });
+
+  test('a collision in a component a branch names through its own variable blocks the load', () => {
+    const { result } = previewProject({
+      'components/loud.cl.yaml': collidingSections,
+      'components/quiet.cl.yaml': ['sections:', '  premise:', '    text: Fine'].join('\n'),
+      'compile.yaml': config([
+        'variables: {Tone: quiet}',
+        'components:', "  aiInstructions: './components/{%Tone}.cl.yaml'",
+        'branches:', '  plain: {}', '  other:', '    variables: {tone: loud}',
+        "    components: {aiInstructions: './components/{%Tone}.cl.yaml'}",
+      ]),
+    });
+    expect(result.status).toBe('blocked');
+    expect(diagnosticsWith(result, CODES.DUPLICATE_KEY_CASE)).toHaveLength(1);
+  });
+
+  test('a collision in an inherited component path a branch variable redirects blocks the load', () => {
+    const { result } = previewProject({
+      'components/loud.cl.yaml': collidingSections,
+      'components/quiet.cl.yaml': ['sections:', '  premise:', '    text: Fine'].join('\n'),
+      'compile.yaml': config([
+        'variables: {Tone: quiet}',
+        'components:', "  aiInstructions: './components/{%Tone}.cl.yaml'",
+        'branches:', '  plain: {}', '  group:', '    variables: {tone: loud}',
+        '    branches:', '      deep: {}',
+      ]),
     });
     expect(result.status).toBe('blocked');
     expect(result.files).toEqual([]);

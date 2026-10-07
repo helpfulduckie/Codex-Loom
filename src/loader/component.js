@@ -22,7 +22,7 @@ function isMapping(value) {
 
 function loadComponentDocument(spec, options = {}) {
   const {
-    diagnostics = new Diagnostics(), label = 'component', variables = null, base = null, stack = [],
+    diagnostics, label = 'component', variables = null, base = null, stack = [],
     dependencyLedger = null, requestedAt = null, tolerant = false,
   } = options;
 
@@ -76,17 +76,9 @@ function loadComponentDocument(spec, options = {}) {
     return null;
   }
 
-  const findingsBeforeValidation = diagnostics.all.length;
   validate(doc, COMPONENT_SCHEMA, {
     diagnostics, sourceMap, context: `the ${label} component`, dropUnknown: !!tolerant,
   });
-  const collision = diagnostics.all.slice(findingsBeforeValidation)
-    .find((finding) => finding.code === CODES.DUPLICATE_KEY_CASE);
-  if (collision) {
-    const error = new Error(collision.message);
-    error.code = collision.code;
-    throw error;
-  }
 
   const onWarn = busWarner(diagnostics, { file: spec });
   const document = attachOrigins({}, sourceMap.exportOrigins());
@@ -107,6 +99,43 @@ function loadComponentDocument(spec, options = {}) {
     { ...component, rawSections: sourced, source: spec },
     sourceMap.exportOrigins(),
   );
+}
+
+// Components load lazily, after the compile phase has begun writing, so a key collision
+// found there could not stop the run cleanly. This reads a component and its imports for
+// collisions alone, early enough to stop the load; every other finding stays with
+// `loadComponentDocument`, which reports it against the leaf that asked for the file.
+function checkComponentKeys(spec, options) {
+  const { diagnostics, variables = null, base = null, seen = new Set() } = options;
+  if (typeof spec !== 'string' || !fs.existsSync(spec)) return;
+  const resolved = path.resolve(spec);
+  if (seen.has(resolved)) return;
+  seen.add(resolved);
+
+  let doc; let sourceMap;
+  try {
+    ({ value: doc, sourceMap } = loadYamlDocument(spec));
+  } catch (err) {
+    return;
+  }
+  if (!isMapping(doc)) return;
+
+  const collisionsOnly = {
+    error: (code, ...rest) => {
+      if (code === CODES.DUPLICATE_KEY_CASE) diagnostics.error(code, ...rest);
+    },
+    warn: () => {},
+  };
+  validate(doc, COMPONENT_SCHEMA, { diagnostics: collisionsOnly, sourceMap });
+
+  for (const entry of Array.isArray(doc.imports) ? doc.imports : []) {
+    if (!isMapping(entry) || !entry.from) continue;
+    const expanded = resolveVariables(String(entry.from), variables, { diagnostics: new Diagnostics() });
+    const from = path.isAbsolute(expanded)
+      ? path.normalize(expanded)
+      : path.resolve(base || path.dirname(spec), expanded);
+    checkComponentKeys(from, { diagnostics, variables, base, seen });
+  }
 }
 
 // Each section record carries its own origins, keyed relative to the section, so they
@@ -316,4 +345,4 @@ function report(diagnostics, severity, code, message, loc) {
   diagnostics[severity](code, message, loc);
 }
 
-module.exports = { loadComponentDocument };
+module.exports = { loadComponentDocument, checkComponentKeys };

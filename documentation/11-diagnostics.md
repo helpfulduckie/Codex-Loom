@@ -188,8 +188,10 @@ resting on nothing. Sync still runs and the entry's files are still frozen; only
 | `CL0210` | ERROR | A valid key is at the wrong level, so it is ignored there; move it to the reported level. Relocation is suggested before edit-distance spelling. |
 | `CL0211` | ERROR | Sibling keys differ only by capitalization and identify the same key; keep one definition or give them distinct names. |
 
-`CL0211` applies only to selected authored mappings whose keys identify named entities;
-it does not make every YAML mapping case-insensitive. See [Authored mapping key identity](02-compile-yaml.md#authored-mapping-key-identity).
+`CL0211` is raised only in mappings whose keys are author-chosen names. It is a load error
+on every surface, component files included, so nothing is compiled or written. See
+[Key Capitalization](02-compile-yaml.md#key-capitalization) for the mappings covered and
+the three exceptions.
 
 ### CL0210 in detail
 

@@ -2,9 +2,10 @@
 
 Items are the atomic units of content in a Codex Loom project — a character, a location, a settings block, or any other story card. Each YAML item file is a sequence of item entries.
 
-Item body, variables and notes mapping keys, along with item variant names, identify keys
-case-insensitively. A case-only duplicate within one mapping is `CL0211`; separate layers
-may override with different capitalization. See [Authored mapping key identity](02-compile-yaml.md#authored-mapping-key-identity).
+The keys of `body`, `variables` and `notes`, and variant names, match without regard to
+capitalization: a variant that sets `hair` overrides a body field written `Hair`. Two keys
+in one mapping that differ only by capitalization are an ERROR (`CL0211`). See
+[Key Capitalization](02-compile-yaml.md#key-capitalization).
 
 ---
 

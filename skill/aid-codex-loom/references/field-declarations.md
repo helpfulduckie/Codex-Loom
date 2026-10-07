@@ -1,15 +1,15 @@
 # Field Declarations Reference
 
-Field, group and template names identify keys case-insensitively, as do `templateFor`
-roles and produced template names. Case-only sibling duplicates raise `CL0211`. The
-three declaration maps remain separate namespaces, and group expansion keeps precedence
-when a field and group share a name. See
-[Authored mapping key identity](compile-yaml.md#authored-mapping-key-identity).
-
 **This is the primary way to render an item body.** A field is declared once in
 `fields.cl.yaml`; a template is an ordered list of field and group names. `.template` and
 `.partial` files remain as the escape hatch for what a field list cannot express — see
 `references/templates.md`.
+
+**Field, group and template names match without regard to capitalization,** as do
+`templateFor` role keys: a group listing `name` finds the field declared `Name`. Two names
+in one map that differ only by capitalization are `CL0211`. The three maps are separate
+namespaces; where a field and a group share a name, a template listing it gets the group.
+See [Key Capitalization](compile-yaml.md#key-capitalization).
 
 A field list is not a second renderer. `src/render/field-list.js` *generates* the
 `.template` source each declaration is shorthand for, concatenates the stanzas, and hands

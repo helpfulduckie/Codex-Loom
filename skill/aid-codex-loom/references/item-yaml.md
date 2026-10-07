@@ -1,11 +1,11 @@
 # Item YAML Reference
 
-Body, variables and notes mapping keys, plus item variant names and dispatch selectors,
-identify keys case-insensitively. Case-only sibling duplicates in one mapping raise
-`CL0211`; output labels preserve authored spelling. See
-[Authored mapping key identity](compile-yaml.md#authored-mapping-key-identity).
-
 Item files are YAML sequences. A single file can mix local item definitions, `import:`, and `include:` entries in any order.
+
+**`body`, `variables` and `notes` keys, variant names and dispatch selectors match without
+regard to capitalization.** A variant that sets `hair` overrides a body field written
+`Hair`; two keys in one mapping that differ only by capitalization are `CL0211`. See
+[Key Capitalization](compile-yaml.md#key-capitalization).
 
 **"Item", not "card".** The item is the definition; a story card is one of the things it can render into. An item may render into a story card, into component slots, into both, or — with `storyCard: false` and a component target — into components only.
 

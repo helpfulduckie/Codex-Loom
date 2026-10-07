@@ -4,25 +4,6 @@
 
 ---
 
-## Authored mapping key identity
-
-**Selected named mappings identify keys case-insensitively.** This applies to `body`, item
-`variables` and `notes`, item and component `variants` maps and branch-dispatch selectors,
-config `branches`, `variables`, `roles` and `structure.input.library` names, component
-section maps and named-text maps, and the `fields`, `groups` and `templates` maps in a
-field table, `lint.packs` names, and `templateFor` role keys and the template names a
-selection file produces. Two sibling keys in one authored mapping that differ
-only by capitalization are an ERROR (`CL0211`); keep one or choose distinct names.
-
-YAML itself rejects identical duplicate spellings during parsing. Overrides in separate
-layers may change capitalization; the authored spelling is preserved in output labels.
-Field, group and template names remain separate namespaces, so a field and group may
-share a name; group expansion keeps its existing precedence. Metadata keys and structural
-schema keys retain their existing rules; this is not a rule for every YAML mapping.
-Placeholders are an exact-match exception because Velvet Lattice matches their names
-exactly. Convention pack names identify `lint.packs` entries case-insensitively, but a
-pack's `name:` must exactly match its authored config key or `CL0119` is raised.
-
 ## Minimal Example
 
 ```yaml surface=config
@@ -458,6 +439,45 @@ branches:
 | `components` | Component specs for this branch (same keys as root `components:`) |
 | `variables` | Variables for this branch subtree (merged on top of parent variables) |
 | `branches` | Child branches (makes this node a non-leaf) |
+
+---
+
+## Key Capitalization
+
+**A name you choose matches without regard to capitalization.** `Mood`, `mood` and `MOOD`
+are one variable, wherever each is written. The rule covers every mapping whose keys are
+names an author makes up:
+
+- `variables`, `roles`, `branches`, `structure.input.library` and `lint.packs` in
+  `compile.yaml`
+- `templateFor` role keys, and the template names in the files they point to
+- an item's `body`, `variables` and `notes` keys, at any depth
+- variant names and branch-dispatch selectors, on items and on component sections
+- component section names, and the keys of a section's named `text:` map
+- `fields`, `groups` and `templates` in a field table
+
+**Two keys in one mapping that differ only by capitalization are an ERROR (`CL0211`).**
+The diagnostic gives both positions, and the compiler stops before compiling anything.
+Two keys spelled identically never get this far; YAML rejects them when the file is parsed.
+
+**A layer may spell a name differently from the layer it overrides.** A branch that
+declares `mood: bright` replaces a root `Mood`, and `mood: ~` unbinds it. The same holds
+for a variant delta over an item's body, a project field table over a shared one, and a
+branch's `templateFor` over the root's.
+
+**Three kinds of key keep their exact capitalization:**
+
+- **Placeholder names.** Velvet Lattice substitutes `%name%` by exact match, so `Feel` and
+  `feel` are two placeholders and a reference must match its declaration exactly.
+- **A convention pack's spelling.** A branch may override or unbind an inherited pack in
+  any capitalization, but the key that first declares a pack must equal the pack's `name:`
+  exactly (`CL0119`), because that spelling becomes the pack's diagnostic codes.
+- **Keys the compiler defines.** `aid`, `render`, `sections` and the rest are written as
+  documented; a top-level `Render:` on an item is an unknown key (`CL0201`). The one place
+  they are recognized in any capitalization is inside a variant delta, where every other
+  key is a body field: there `Render:` is the render block and `Name:` is the item's name,
+  not a body field called `Name`. The contents of `meta:` and `metadata:` are passed
+  through untouched, so their keys stay distinct too.
 
 ---
 

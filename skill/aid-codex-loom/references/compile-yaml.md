@@ -1,21 +1,5 @@
 # compile.yaml Reference
 
-## Authored mapping key identity
-
-**Selected named mappings identify keys case-insensitively.** This applies to item
-`body`, `variables` and `notes` mappings; item/component variant and dispatch-selector
-maps; config `branches`, `variables`, `roles`, `structure.input.library` and `lint.packs` names;
-component section and named-text maps; and field-table `fields`, `groups` and `templates`
-maps. It also applies to `templateFor` role keys and the template names those selections
-produce. A case-only sibling duplicate in one mapping raises `CL0211`; identical
-spellings remain YAML parse errors. Overrides in separate layers may change capitalization,
-and output labels retain authored spelling. Field/group/template maps remain separate
-namespaces; fields and groups may share a name, with group expansion precedence.
-Placeholders remain exact-match because Velvet Lattice matches their names exactly.
-Convention pack identities match case-insensitively, but a pack's `name:` must exactly
-match its `lint.packs` key or `CL0119` is raised. Metadata and structural schema keys
-keep their existing rules; this does not make all YAML mappings case-insensitive.
-
 Entry point for every Codex Loom project. Controls paths, branches, protagonist, variables, roles, template selection, and components.
 
 **`version: 4` is required.** There is no compatibility mode — a v3 file fails validation rather than compiling with warnings.
@@ -210,6 +194,37 @@ Nested branch tree. Leaf = no `branches:` sub-key, and produces one output folde
 **`storyCardType:` is root-only** and has no per-branch counterpart.
 
 Its values expand `{%variables}` from the completed root table, while component-name keys remain literal. A `render.storyCards` entry's `title:` and `type:` instead expand at its leaf before empty, collision, and type checks; `variant:` and `sections:` selectors remain literal.
+
+---
+
+## Key Capitalization
+
+**A name the author chooses matches without regard to capitalization.** `Mood`, `mood` and
+`MOOD` are one variable. The rule covers:
+
+- `variables`, `roles`, `branches`, `structure.input.library` and `lint.packs`
+- `templateFor` role keys, and the template names in the files they point to
+- an item's `body`, `variables` and `notes` keys, at any depth
+- variant names and branch-dispatch selectors, on items and on component sections
+- component section names, and the keys of a named `text:` map
+- `fields`, `groups` and `templates` in a field table
+
+**Two keys in one mapping that differ only by capitalization are `CL0211`,** an ERROR that
+stops the compile before anything is written. Pick one spelling.
+
+**Across layers a different spelling is an ordinary override.** A branch's `mood: bright`
+replaces a root `Mood`, and `mood: ~` unbinds it.
+
+**Three kinds of key are exact:**
+
+- **Placeholder names.** Velvet Lattice substitutes `%name%` by exact match, so `%Feel%`
+  does not reach a placeholder declared `feel`.
+- **A convention pack's declaring key,** which must equal the pack's `name:` exactly
+  (`CL0119`). A branch may still override or unbind it in any capitalization.
+- **Keys the compiler defines** (`aid`, `render`, `sections`, …), and the contents of
+  `meta:` and `metadata:`. A top-level `Render:` is an unknown key (`CL0201`). Inside a
+  variant delta these keys are recognized in any capitalization, so `Name:` there sets the
+  item's name; reach a body field called `Name` through `body: {Name: …}`.
 
 ---
 

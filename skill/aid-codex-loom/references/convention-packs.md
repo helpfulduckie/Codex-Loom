@@ -37,6 +37,11 @@ branches:
 `~` — and unbinds. Unbinding something never inherited is a `CL0118` WARN, which usually
 means exactly this typo.
 
+**A branch's entry finds the inherited pack in any capitalization; the declaring key does
+not.** `WTG: ~` unbinds a root `wtg`, but the key that first binds a pack must equal the
+pack's `name:` exactly (`CL0119`). Two keys in one `packs:` mapping that differ only by
+capitalization are `CL0211`.
+
 **An absent `source:` means "bundled, by name."** A present `source:` is a path relative to
 the `compile.yaml` directory, with `{%token}` variables expanded. A library-hosted pack gets
 versioned and frozen alongside the library it depends on.

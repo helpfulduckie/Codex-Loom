@@ -192,22 +192,50 @@ The relocation search considers only closed, schema-validated levels. Open names
 (`body:`, `notes:`, `v:`) accept arbitrary keys by design, so indexing them would make
 every key valid somewhere.
 
-### Authored mapping key identity
-
-**Selected authored mappings identify named keys case-insensitively.** This includes item
-body/variables/notes, variant and dispatch maps, config branches/variables/roles/library
-and `lint.packs` names, component sections/named-text maps, field/group/template names,
-and `templateFor` role keys and produced template names. A case-only sibling duplicate is
-`CL0211`; identical duplicates remain YAML parse errors. Separate layers may override
-with changed capitalization, retaining authored spelling. The field, group and template
-maps remain separate namespaces, and structural schema keys and metadata retain their
-existing rules. Placeholders remain exact-match because Velvet Lattice matches their
-names exactly; a pack's `name:` must exactly match the config key (`CL0119`).
-
 **Keys whose behavior lands in a later phase are declared from the start**, carry a note,
 and produce a `CL0204` "recognized but not read" WARN rather than an unknown-key ERROR.
 Writing the schema once beats editing it every phase, and an author writing ahead of the
 tool gets told so plainly.
+
+### §4.3.1 Author-chosen keys match without regard to capitalization
+
+**Two spellings of a name that differ only by capitalization are one key.** The rule holds
+in every mapping whose keys an author makes up: config `variables`, `roles`, `branches`,
+library names and `lint.packs`; `templateFor` roles and the template names they select; an
+item's `body`, `variables` and `notes` at any depth; variant names and dispatch selectors;
+component section names and named-text keys; and a field table's `fields`, `groups` and
+`templates`.
+
+**The rule exists because a lookup that folds case over a merge that does not loses
+writes silently.** With a root `Mood` and a branch `mood`, an exact-spelling merge keeps
+both entries and a case-folding lookup returns whichever was stored first, so the branch's
+override never takes effect and nothing reports it. Folding at both ends leaves one entry
+per name.
+
+**Two such keys in one mapping are a load error (`CL0211`), not a silent last-write-wins.**
+Neither spelling is more likely to be the intended one, and YAML already treats an
+identical duplicate as a parse error. Across layers the same pair is an ordinary override
+or unbind.
+
+**A collision in a component file is caught at load, although components are read during
+the compile phase.** A component is loaded when the first leaf asks for it, and the
+scenario description is loaded after the story cards are written, so an error raised
+there could leave a half-written tree. The load phase therefore reads each component the
+branch tree names, and its `imports:`, for key collisions alone.
+
+**Three kinds of key stay exact:**
+
+- **Placeholder names**, because Velvet Lattice substitutes `%name%` by exact match and
+  the compiler must not accept a reference the platform will leave unfilled.
+- **A convention pack's spelling.** Pack entries merge down the branch tree by folded
+  name, but the declaring key must equal the pack's `name:` exactly (`CL0119`): that
+  spelling becomes the `CL-<name>/NNNN` codes and, for a bundled pack, a file name.
+- **Keys the schema defines, and the contents of `meta:` and `metadata:`.** A schema key
+  has one documented spelling, and a different capitalization is reported as an unknown
+  key (`CL0201`) rather than accepted. Metadata is passed through without interpretation.
+  A variant delta is the exception: it has no closed key set, since any key that is not
+  structural is a body field, so it recognizes the structural keys with case folded.
+  `Name:` in a delta is the item's name, never a body field of that spelling.
 
 ### §4.4 Diagnostics carry source positions
 

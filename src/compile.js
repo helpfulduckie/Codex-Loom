@@ -29,7 +29,9 @@ const { checkDrift } = require('./snapshot');
 const { loadCompileConfig } = require('./config/load');
 const { placeInheritedFiles } = require('./inherit');
 const { runLeafLoop } = require('./leafLoop');
-const { writeTreeFiles, writeScenarioBlurb } = require('./treeWrite');
+const { writeTreeFiles, writeScenarioBlurb, resolveComponentSpec } = require('./treeWrite');
+const { checkComponentKeys } = require('./loader/component');
+const { isPassthrough } = require('./emit/components');
 const { finalizeDiagnostics } = require('./reportDispatch');
 const {
   PlaceholderTracker, RoleTracker, GapList, ComponentLoader,
@@ -69,6 +71,26 @@ function resolveRoles(config, configPath, diagnostics) {
     declared: false,
   });
   return byPath;
+}
+
+// A component path may hold a variable, and a branch that changes the variable changes the
+// file an inherited spec names. So every node re-resolves every spec in scope, inherited
+// ones included, against its own variables.
+function checkComponentKeyIdentity(config, diagnostics) {
+  const seen = new Set();
+  const rootVariables = config._variables || config.variables || {};
+  walkBranchTree(config, ({ node, isRoot, state }) => {
+    const variables = isRoot ? state.variables : mergeUnbindable(state.variables, node && node.variables, {
+      code: DIAG_CODES.VARIABLE_UNBIND_UNKNOWN, kind: 'variable', onWarn: null,
+    });
+    const components = { ...state.components, ...((node && node.components) || {}) };
+    for (const spec of Object.values(components)) {
+      const file = resolveComponentSpec(spec, config._base, variables, { diagnostics: new Diagnostics() });
+      if (isPassthrough(file)) continue;
+      checkComponentKeys(file, { diagnostics, variables: rootVariables, base: config._base, seen });
+    }
+    return { variables, components };
+  }, { variables: rootVariables, components: {} });
 }
 
 function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
@@ -225,6 +247,8 @@ function compileRun(configPath, options, buses) {
   if (includedItems.length > 0) {
     log.info(`Loaded ${includedItems.length} included library item(s).`);
   }
+
+  checkComponentKeyIdentity(config, loadDiagnostics);
 
   abortOnLoadErrors(loadDiagnostics, { tolerant: options.tolerant });
 

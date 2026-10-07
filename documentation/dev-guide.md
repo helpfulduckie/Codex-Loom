@@ -72,35 +72,47 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 
 `model/` is pure by contract (§3.3): no `fs`, no `console`. Warnings go to a caller-supplied `onWarn`, and failed lookups come back described rather than thrown, so the caller decides what reaches a terminal. A test enforces both the purity and the roster.
 
-## Key Identity and Path Semantics
+## Key Matching
 
-**Authored entity-key identity is case-insensitive only in selected mappings.** Body/item
-variable/notes mappings, item and component variant and dispatch maps, config branch,
-variable, role, library and `lint.packs` names, component section and named-text maps,
-and field, group and template declaration maps share this identity rule. A case-only
-sibling duplicate is rejected as `CL0211`; same-spelling duplicates remain YAML parse
-errors. Placeholders remain exact-match because Velvet Lattice matches them exactly.
-Structural schema keys and metadata keep their existing rules. Pack `name:` spelling must
-exactly match the authored `lint.packs` key (`CL0119`).
+§4.3.1 states the rule and its exceptions; this section says where the code enforces it.
 
-**Object-key matching uses `util.findKey`, `getCI`, `setCI`, and `deleteCI`.** `findKey`
-returns the first matching own enumerable key in object order, preserving its spelling,
-or `null` when absent. Selected authored mappings reject case-only duplicate keys before
-merging, so valid mappings have one spelling for each case-insensitive identity.
+**Read, write and delete an author-chosen key through `util.findKey`, `getCI`, `setCI` and
+`deleteCI`, never by indexing.** `findKey` returns the stored spelling of the first key
+that matches when case is folded, or `null`. `setCI` writes to that stored spelling, so a
+merged table keeps the spelling of the layer that declared the name first. A plain
+`obj[key] = value` or `Object.assign` on one of these tables creates a second entry that
+every lookup then ignores.
 
-**Field-path identity uses `util.pathId` and `pathStartsWith`.** Both fold case per segment
-and preserve segment boundaries. Preview uses them for field histories and removals;
-annotate uses the prefix comparison with its existing dot-separated report paths. Origin
-indexes remain case-sensitive: their keys identify runtime paths and their records
-preserve authored YAML paths.
+**`mergeUnbindable` in `model/branches.js` is the merge for tables that inherit down the
+branch tree** — variables, roles and `lint.packs`. It folds case for all of them. A walk
+that tracks variables per node (`nodeVisitPrologue` in `treeWrite.js`, for one) calls it
+rather than merging by hand, or that walk's output disagrees with the leaf compile.
 
-**Authored key identity is validated before merging.** Schema descriptors opt selected
-maps into `caseInsensitiveKeys` and `checkKeys`; recursive checks are limited to those
-declared content surfaces and skip metadata mappings. Case-insensitive merges retain the
-first stored key spelling and replace its value from later layers, while provenance
-retains the overriding source spelling. `createOriginIndex` accepts an optional entry
-`keyPath` for that runtime address, separate from the authored `path` stored in its
-record; origin lookup remains case-sensitive.
+**A schema descriptor declares which mappings the rule covers.** `caseInsensitiveKeys:
+true` on a `RECORD` descriptor makes `validate` raise `CL0211` for sibling keys that
+collide. `checkKeys` names a function from `src/keyIdentity.js` for the surfaces a flat
+flag cannot describe: item deltas, where any key that is not structural is a body field,
+and dispatch maps, which nest. A new author-keyed mapping needs one or the other.
+
+**Every `CL0211` is a load error, so `abortOnLoadErrors` stops the run before any output.**
+Config, items, field tables and `templateFor` files are validated during load already.
+Components are not: `ComponentLoader` reads one when the first leaf asks for it, and the
+description is read after the cards are written. `checkComponentKeyIdentity` in
+`compile.js` therefore walks the branch tree during load and passes each component file
+to `checkComponentKeys` (`loader/component.js`), which validates against
+`COMPONENT_SCHEMA`, keeps only the collisions, and follows `imports:`. Other component
+findings stay with the lazy load, which reports them against the leaf that asked.
+
+**A field path is compared with `util.pathId` and `pathStartsWith`.** Both fold case one
+segment at a time, so `['body', 'a.b']` and `['body', 'a', 'b']` stay distinct. Preview
+uses them to group a field's history; `diff.js` uses the prefix test to attribute a
+changed field to a variant delta.
+
+**The origin index is the one structure that stays exact.** Its keys are the paths of the
+merged object as stored, and a lookup uses those same stored spellings. Where a later
+layer overrides a name in a different spelling, the entry carries a `keyPath` (the stored
+spelling, used as the index key) beside its `path` (the spelling in the source file, kept
+in the record so the diagnostic points at what the author wrote).
 
 ---
 

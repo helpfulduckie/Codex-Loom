@@ -1,10 +1,11 @@
 # Components Reference
 
-Section names, named-text keys, variant names and dispatch selectors identify keys
-case-insensitively. Case-only sibling duplicates in one mapping raise `CL0211`. See
-[Authored mapping key identity](compile-yaml.md#authored-mapping-key-identity).
-
 Components are the non-story-card output files written to each branch leaf's `Components/` folder. All optional.
+
+Section names, named-text keys, variant names and dispatch selectors match without regard
+to capitalization. Two sections named `premise` and `Premise` in one file are `CL0211`,
+which stops the compile before anything is written. See
+[Key Capitalization](compile-yaml.md#key-capitalization).
 
 **Four of them share one grammar.** Plot Essentials, Summary, AI Instructions and Author's Note are all *sectioned components*: a record of named `sections:`, where a section either carries `text:` or is marked `slot: true` for items to route into. They differ only in the file they write and in what a bare `heading:` means. Opening, branch framing, description and scripts each have their own shape.
 
