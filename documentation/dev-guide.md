@@ -28,6 +28,7 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/loader/field-table.js` | Loads `fields.cl.yaml` — the field and template declarations (§13.2) |
 | `src/loader.js` | Template and partial loading; holds `loadNamedFiles`, `loadTemplates` and `loadFieldTable` |
 | `src/schema.js` | The shared validation engine both key surfaces run through |
+| `src/lint/pack-schema.js` | The convention-pack envelope, recursive predicates/descriptors, and per-item rule schemas |
 | `src/diag.js` | The diagnostic bus: codes, severities, source spans (§4.4) |
 | `src/log.js` | The progress log — `{ info, verbose }` — that narration goes to; exports only the silent default |
 | `src/model/item.js` | Item resolution through import/variant/branch chains |
@@ -158,7 +159,23 @@ inside the origin module.
 
 **Convention-pack `map` schemas use the same normalization on a copy of the checked data.**
 Later predicates and rules must see the original recovered card mapping. Open `record`
-keys and pack descriptor property names retain their existing behavior.
+keys retain their existing behavior. Pack descriptor property names normalize at load.
+
+**Pack validation separates the envelope from individual rules.** `loadPack` uses
+`loadYamlDocument` for source positions and validates against `PACK_SCHEMA`: the envelope
+is checked with an opaque rules value, then each rule with the schema's element descriptor.
+An envelope error disables the pack. A rule error skips that whole rule, retaining valid
+siblings and each rule's original positional default id. Null structural values are
+rejected because packs have no deletion operations. Regex and descriptor-type checks run
+after key normalization and collect every failure, including nested `pattern` and
+`keyPattern` expressions. Author-keyed records preserve spelling and check collisions.
+
+**Pack recovery is identical in compile, offline lint, and tolerant preview.** Dropping a
+broken selector or predicate would change a rule's meaning, so tolerance never deletes a
+pack key and runs the remainder. Pack-load diagnostics remain errors: normal compile
+writes its output and fails at the final error check; preview returns output and
+diagnostics without blocking. `runPackChecks` returns the set of pack-load findings so
+the preview's `droppedKeys` count excludes errors that skipped rules or disabled packs.
 
 ---
 

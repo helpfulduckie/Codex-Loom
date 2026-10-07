@@ -3,11 +3,11 @@
 
 const path = require('path');
 
-const YAML = require('yaml');
 const { applyLintLevel, Diagnostics, CODES } = require('../diag');
 const { resolveVariables } = require('../util');
-const { readSource } = require('../sources');
+const { loadYamlDocument } = require('../loader/yaml');
 const { validate, TYPES } = require('../schema');
+const { PACK_SCHEMA } = require('./pack-schema');
 const { parseNotesBlock, parseSettingsBlock } = require('../emit/vl');
 const { resolveField } = require('../render/eval');
 
@@ -25,11 +25,11 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
     filePath = path.join(BUNDLED_DIR, `${name}.cl.yaml`);
   }
 
-  const fail = (why) => {
+  const fail = (why, at = { file: filePath }) => {
     diagnostics.error(
       CODES.PACK_MALFORMED,
       `Convention pack "${name}" ${why}, so its rules are unavailable; provide a readable pack with the required shape.`,
-      { ...loc, file: filePath },
+      at,
       {
         hint: source
           ? `Declared as lint.packs.${name} with source: ${source}`
@@ -39,62 +39,50 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
     return null;
   };
 
-  let raw;
+  let doc, sourceMap;
   try {
-    raw = readSource(filePath, 'utf8');
+    ({ value: doc, sourceMap } = loadYamlDocument(filePath));
   } catch (err) {
-    return fail(source ? `could not be read at ${filePath}` : 'is not a bundled pack');
-  }
-
-  let doc;
-  try {
-    doc = YAML.parse(raw);
-  } catch (err) {
-    return fail(`is not valid YAML — ${err.message.split('\n')[0]}`);
+    return fail(err.kind === 'read'
+      ? (source ? `could not be read at ${filePath}` : 'is not a bundled pack')
+      : `is not valid YAML — ${err.cause.message.split('\n')[0]}`, err.location());
   }
 
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
     return fail('is not a mapping of pack keys');
   }
+
+  // Validate the envelope separately so one rule's errors cannot disable its siblings.
+  const envelope = new Diagnostics();
+  validate(doc, { ...PACK_SCHEMA, keys: { ...PACK_SCHEMA.keys, rules: { type: TYPES.ANY } } },
+    { diagnostics: envelope, sourceMap, context: `convention pack "${name}" (pack unavailable)` });
+  checkRuleValues(doc, { ...PACK_SCHEMA, keys: { ...PACK_SCHEMA.keys, rules: { type: TYPES.ANY } } },
+    [], sourceMap, envelope, `convention pack "${name}" (pack unavailable)`);
+  diagnostics.merge(envelope);
+  if (!Array.isArray(doc.rules)) return fail('declares no rules: list', sourceMap.nearest('rules'));
+  if (envelope.hasErrors()) return null;
   if (doc.name !== undefined && String(doc.name) !== name) {
     diagnostics.error(
       CODES.PACK_NAME_MISMATCH,
       `Convention pack loaded as "${name}" declares name: "${doc.name}". `
       + 'The pack is unavailable until the config key and name match; this keeps diagnostic codes and suppressions portable.',
-      { ...loc, file: filePath },
+      sourceMap.nearest('name'),
     );
     return null;
   }
-  const rules = Array.isArray(doc.rules) ? doc.rules : null;
-  if (!rules) return fail('declares no rules: list');
+  const rules = doc.rules;
 
   const normalized = [];
   for (let i = 0; i < rules.length; i += 1) {
-    const rule = rules[i];
-    if (!rule || typeof rule !== 'object') return fail(`rule ${i + 1} is not a mapping`);
+    let rule = rules[i];
+    const bus = new Diagnostics();
+    const rulePath = ['rules', String(i)];
+    const context = `convention pack "${name}" rule ${i + 1} (rule skipped)`;
+    rule = validate(rule, PACK_SCHEMA.keys.rules.of, { diagnostics: bus, sourceMap, path: rulePath, context });
+    checkRuleValues(rule, PACK_SCHEMA.keys.rules.of, rulePath, sourceMap, bus, context);
+    diagnostics.merge(bus);
+    if (bus.hasErrors()) continue;
     const id = rule.id !== undefined ? String(rule.id) : String(i + 1);
-
-    for (const predicate of [rule.appliesTo, rule.forbid, rule.require, rule.requireCard]) {
-      const bad = findInvalidPredicateRegex(predicate);
-      if (bad) {
-        return fail(
-          `rule ${id} has an invalid ${bad.keyword} regex "${bad.spec}" — `
-          + `${bad.error.message.split('\n')[0]}`,
-        );
-      }
-    }
-    const badSchema = findInvalidKeyPattern(rule.schema);
-    if (badSchema) {
-      return fail(`rule ${id} has an invalid ${badSchema.keyword} regex "${badSchema.spec}" — `
-        + `${badSchema.error.message.split('\n')[0]}`);
-    }
-
-    if (rule.severity !== undefined && rule.severity !== 'warn' && rule.severity !== 'error') {
-      return fail(
-        `rule ${id} has an unrecognized severity: "${rule.severity}" — expected `
-        + '"warn" or "error"',
-      );
-    }
     const severity = rule.severity === 'warn' ? 'warn' : 'error';
     normalized.push({
       id,
@@ -116,69 +104,54 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
   return { name, rules: normalized };
 }
 
-function findInvalidKeyPattern(node) {
-  if (!node || typeof node !== 'object') return null;
-  if (node.keyPattern !== undefined) {
-    if (typeof node.keyPattern !== 'string') {
-      return { keyword: 'keyPattern', spec: node.keyPattern, error: new TypeError('expected a string') };
-    }
-    try {
-      new RegExp(node.keyPattern);
-    } catch (error) {
-      return { keyword: 'keyPattern', spec: node.keyPattern, error };
-    }
+function checkRuleValues(node, descriptor, at, sourceMap, diagnostics, context) {
+  if (!descriptor || descriptor.type === TYPES.ANY) return;
+  // Shared schemas allow null for deletion; packs have no deletion operations.
+  if (node === null || node === undefined) {
+    diagnostics.error(CODES.WRONG_TYPE, `"${at.join('.')}" must not be null in ${context}.`, sourceMap.nearest(at));
+    return;
   }
-  if (node.keys && typeof node.keys === 'object') {
-    for (const child of Object.values(node.keys)) {
-      const bad = findInvalidKeyPattern(child);
-      if (bad) return bad;
-    }
+  if (Array.isArray(node)) {
+    node.forEach((child, i) => checkRuleValues(child, descriptor.of, [...at, String(i)], sourceMap, diagnostics, context));
+    return;
   }
-  if (node.of && typeof node.of === 'object') return findInvalidKeyPattern(node.of);
-  return null;
+  if (typeof node !== 'object') return;
+  for (const [key, child] of Object.entries(node)) {
+    const childDescriptor = descriptor.keys && descriptor.keys[key]
+      || (descriptor.type === TYPES.RECORD ? descriptor.of : null);
+    const childPath = [...at, key];
+    if (!childDescriptor) {
+      if (descriptor.type === TYPES.MAP && key.startsWith('_')) {
+        diagnostics.error(CODES.UNKNOWN_KEY, `Unknown key "${key}" in ${context}; remove it or rename it.`,
+          sourceMap.nearest(childPath));
+      }
+      continue;
+    }
+    if (['notesMatch', 'bodyMatch', 'match', 'titleMatch', 'keyPattern', 'pattern'].includes(key)
+      && typeof child === 'string') {
+      try { new RegExp(child); } catch (error) {
+        diagnostics.error(CODES.PACK_MALFORMED,
+          `Invalid ${key} regex ${JSON.stringify(child)} in ${context} — ${error.message.split('\n')[0]}.`,
+          sourceMap.nearest(childPath));
+      }
+    }
+    if (key === 'type') {
+      for (const [i, value] of (Array.isArray(child) ? child : [child]).entries()) {
+        if (typeof value === 'string' && !Object.values(TYPES).includes(value.toLowerCase())) {
+          diagnostics.error(CODES.VALUE_NOT_ALLOWED,
+            `Unknown descriptor type ${JSON.stringify(value)} in ${context}; use ${Object.values(TYPES).join(', ')}.`,
+            sourceMap.nearest(Array.isArray(child) ? [...childPath, String(i)] : childPath));
+        }
+      }
+    }
+    checkRuleValues(child, childDescriptor, childPath, sourceMap, diagnostics, context);
+  }
 }
 
 
 function toRegExp(spec) {
   if (spec instanceof RegExp) return spec;
   return new RegExp(String(spec));
-}
-
-function findInvalidPredicateRegex(pred) {
-  if (!pred || typeof pred !== 'object') return null;
-
-  for (const keyword of ['notesMatch', 'bodyMatch', 'match', 'titleMatch']) {
-    if (pred[keyword] !== undefined) {
-      try {
-        new RegExp(String(pred[keyword]));
-      } catch (error) {
-        return { keyword, spec: pred[keyword], error };
-      }
-    }
-  }
-
-  if (Array.isArray(pred.all)) {
-    for (const p of pred.all) {
-      const bad = findInvalidPredicateRegex(p);
-      if (bad) return bad;
-    }
-  }
-  if (Array.isArray(pred.any)) {
-    for (const p of pred.any) {
-      const bad = findInvalidPredicateRegex(p);
-      if (bad) return bad;
-    }
-  }
-  if (pred.not !== undefined) {
-    const bad = findInvalidPredicateRegex(pred.not);
-    if (bad) return bad;
-  }
-  if (pred.notes && typeof pred.notes === 'object') {
-    const bad = findInvalidPredicateRegex(pred.notes);
-    if (bad) return bad;
-  }
-
-  return null;
 }
 
 function plainObjOrEmpty(value) {
@@ -243,10 +216,8 @@ function runSchemaCheck(rule, notes, view, emit) {
 function buildDescriptor(node) {
   if (!node || typeof node !== 'object') return { type: TYPES.ANY };
   const out = { ...node };
-  if (typeof node.type === 'string') {
-    const key = node.type.toUpperCase();
-    out.type = TYPES[key] || node.type;
-  }
+  const normalizeType = (type) => typeof type === 'string' ? (TYPES[type.toUpperCase()] || type) : type;
+  out.type = Array.isArray(node.type) ? node.type.map(normalizeType) : normalizeType(node.type);
   if (node.keys && typeof node.keys === 'object') {
     out.keys = {};
     for (const [k, child] of Object.entries(node.keys)) out.keys[k] = buildDescriptor(child);

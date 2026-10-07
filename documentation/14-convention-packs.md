@@ -118,8 +118,23 @@ any `CL-` code, and every report renders it as free text; nothing groups or sort
 prefix.
 
 The loader's own two codes are core, in the loading band: `CL0117` for a malformed pack
-(missing file, bad YAML, no `rules:` list), `CL0119` for the name mismatch above. Neither
+(missing file, bad YAML, no `rules:` list, or an invalid rule regex), `CL0119` for the name mismatch above. Neither
 is ever a crash or a silent skip.
+
+**Pack files validate their compiler-defined keys in any capitalization.** This includes
+the pack envelope, rules, recursive predicates, recursive schema descriptors, and per-item
+bounds. Unknown or misplaced keys (`CL0201` / `CL0210`), wrong types (`CL0202`), invalid
+enumerated values (`CL0206`), and capitalization collisions (`CL0211`) are errors at their
+authored source positions. A collision also shows the first definition's position.
+
+**An invalid rule is skipped whole; valid sibling rules still run.** A broken selector or
+predicate is never removed from a rule and then evaluated with a changed meaning. Every
+finding is reported, including each invalid predicate or descriptor regex. A pack-level
+error, such as an unknown envelope key, missing rules list, unreadable YAML, or name
+mismatch, makes the whole pack unavailable. These errors fail a normal compile even when
+the remaining rules produce useful findings. Offline lint uses the same recovery boundary.
+Preview returns cards and diagnostics with the same rule skips, whether tolerant mode is
+on or off; skipped rules do not count toward `droppedKeys`.
 
 ---
 
@@ -212,9 +227,13 @@ understands:
 Every finding the check raises is re-coded to the rule's `CL-<pack>/NNNN`, so a pack's
 findings suppress as one unit and show their origin.
 
-The descriptor's own property names (`type`, `keys`, `required`, and so on) retain their
-documented spellings. Key normalization does not change `values` or the case-sensitive
-`keyPattern` check on an open `record`.
+The descriptor's own property names (`type`, `keys`, `required`, and so on) accept any
+capitalization. Children of `keys:`, budget role names, and `count.fields` paths remain
+author-chosen names, retain their spelling, and reject sibling capitalization collisions.
+Key normalization does not change `values` or the case-sensitive `keyPattern` check on an
+open `record`. `over` accepts exactly `notes`, `body`, or `meta`; `over: Body` is `CL0206`.
+Descriptor type names retain their existing capitalization-insensitive matching, including
+members of type unions.
 
 **A pack re-parses `notes:` itself.** The compiler emits `notes:` as a flat string by
 design, so the pack layer runs a YAML parse over the block to recover its mapping form. A

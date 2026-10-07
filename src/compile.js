@@ -94,12 +94,13 @@ function checkComponentKeyIdentity(config, diagnostics) {
 }
 
 function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
+  const packLoadFindings = new Set();
   const rootPacks = (config.lint && config.lint.packs) || {};
   const anyBranchPacks = branchTreeDeclares(
     config.branches, (node) => node.lint && node.lint.packs
       && Object.keys(node.lint.packs).length > 0,
   );
-  if (Object.keys(rootPacks).length === 0 && !anyBranchPacks) return;
+  if (Object.keys(rootPacks).length === 0 && !anyBranchPacks) return packLoadFindings;
 
   const baseDir = config._base || '.';
   const loaded = new Map(); // pack name -> normalized pack | null (failed, already reported)
@@ -121,9 +122,11 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
       if (packLevel === 'off') continue;
 
       if (!loaded.has(name)) {
+        const before = diagnostics.length;
         loaded.set(name, loadPack(name, entry, {
           baseDir, variables: leaf.variables || {}, diagnostics, loc,
         }));
+        for (const finding of diagnostics.all.slice(before)) packLoadFindings.add(finding);
       }
       const pack = loaded.get(name);
       if (!pack) continue;
@@ -160,6 +163,7 @@ function runPackChecks(config, deferredCardLeaves, configPath, diagnostics) {
       file, branches, allBranches: branches.length === deferredCardLeaves.length,
     });
   }
+  return packLoadFindings;
 }
 
 // A tolerant compile drops unknown keys and keeps going, so those two errors are reported
@@ -322,7 +326,7 @@ function compileRun(configPath, options, buses) {
     leafData, inventoryData, componentDetails, leafSummaries, allItemIds,
   });
 
-  runPackChecks(config, deferredCardLeaves, configPath, compileDiagnostics);
+  const packLoadFindings = runPackChecks(config, deferredCardLeaves, configPath, compileDiagnostics);
 
   totalFiles += placeInheritedFiles({
     deferredComponents, deferredScripts, deferredCardLeaves,
@@ -362,7 +366,8 @@ function compileRun(configPath, options, buses) {
     // Components and field tables are read on both buses, so a drop is counted on either.
     const droppedKeys = options.tolerant
       ? [...loadDiagnostics.all, ...compileDiagnostics.all]
-        .filter((d) => TOLERATED_CODES.has(d.code)).length
+        // Invalid pack rules are skipped whole; none of their keys are dropped individually.
+        .filter((d) => TOLERATED_CODES.has(d.code) && !packLoadFindings.has(d)).length
       : 0;
     return {
       config, leaves, leafData, inventoryData, deferredCardLeaves, captured, droppedKeys,

@@ -55,6 +55,60 @@ function smallProject(files = {}) {
   return { dir, config: path.join(dir, 'compile.yaml') };
 }
 
+describe('preview with invalid convention rules', () => {
+  const { preview, compile } = require('../../src/compile');
+  const { Diagnostics } = require('../../src/diag');
+  const { runLintMode } = require('../../src/lint');
+
+  test.each([true, false])('retains valid siblings without counting skipped keys when tolerant is %s', tolerant => {
+    const project = smallProject({
+      'compile.yaml': `${BASE_PROJECT['compile.yaml']}\nlint:\n  packs:\n    test: {source: ./pack.yaml}\n`,
+      'pack.yaml': [
+        'rules:', '  - appliesTo: {titelMatch: Missing}', '    forbid: {}',
+        '  - id: 2', '    severity: warn', '    forbid: {}',
+      ].join('\n'),
+    });
+    const result = preview(project.config, { tolerant });
+    expect(result.status).toBe('ok');
+    expect(result.cards.length).toBeGreaterThan(0);
+    expect(result.droppedKeys).toBe(0);
+    expect(result.diagnostics.filter(d => d.code === 'CL0201')).toEqual([
+      expect.objectContaining({ file: path.join(project.dir, 'pack.yaml'), line: 2 }),
+    ]);
+    expect(result.diagnostics.some(d => d.code === 'CL-test/0001')).toBe(false);
+    expect(result.diagnostics.some(d => d.code === 'CL-test/0002')).toBe(true);
+
+    const diagnostics = new Diagnostics();
+    expect(() => compile(project.config, { diagnostics, tolerant })).toThrow('error');
+    expect(diagnostics.all.some(d => d.code === 'CL-test/0002')).toBe(true);
+    expect(fs.existsSync(path.join(project.dir, 'output'))).toBe(true);
+
+    const offlineBus = new Diagnostics();
+    const lint = runLintMode(path.join(project.dir, 'output'), path.join(project.dir, 'reports'), {
+      config: { _base: project.dir, lint: { packs: { test: { source: './pack.yaml' } } } },
+      configPath: project.config, diagnostics: offlineBus,
+    });
+    expect(lint.errorCount).toBeGreaterThan(0);
+    expect(offlineBus.all.filter(d => d.code === 'CL0201')).toEqual([
+      expect.objectContaining({ file: path.join(project.dir, 'pack.yaml'), line: 2 }),
+    ]);
+    expect(offlineBus.all.some(d => d.code === 'CL-test/0001')).toBe(false);
+    expect(offlineBus.all.some(d => d.code === 'CL-test/0002')).toBe(true);
+  });
+
+  test('counts an actually dropped item key separately from skipped pack rules', () => {
+    const project = smallProject({
+      'compile.yaml': `${BASE_PROJECT['compile.yaml']}\nlint:\n  packs:\n    test: {source: ./pack.yaml}\n`,
+      'items/items.yaml': `${widget()}\n  unknownWidgetKey: ignored\n`,
+      'pack.yaml': 'rules: [{unknownRuleKey: true, forbid: {}}]\n',
+    });
+    const result = preview(project.config);
+    expect(result.status).toBe('ok');
+    expect(result.diagnostics.filter(d => d.code === 'CL0201')).toHaveLength(2);
+    expect(result.droppedKeys).toBe(1);
+  });
+});
+
 describe('preview of the example projects', () => {
   const { preview } = require('../../src/compile');
 

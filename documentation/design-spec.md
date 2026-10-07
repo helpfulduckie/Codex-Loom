@@ -727,6 +727,14 @@ ships alongside the shared library it depends on, is opt-in via `lint.packs`, an
 consuming it is not a trust decision. The mechanism and the two bundled packs (`wtg`,
 `duckieConv`) are documented in `documentation/14-convention-packs.md`.
 
+Pack files validate compiler-defined keys in any capitalization, including recursive
+predicates and descriptors. Author-keyed records retain spelling and reject capitalization
+collisions. Pack-level errors disable the pack; a rule-level error skips that whole rule
+while retaining valid siblings. Compile, offline lint, and tolerant preview share this
+boundary, because removing a broken condition would change a rule's meaning. Pack errors
+still fail a normal compile; preview returns cards and diagnostics, and skipped rules do
+not contribute to its dropped-key count.
+
 ### §8.4 `encapsulate` and `wrapper` are the same operation
 
 **`encapsulate: false` is written on every card unconditionally.** It was never a real

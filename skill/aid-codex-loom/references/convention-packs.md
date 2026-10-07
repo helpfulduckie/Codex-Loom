@@ -152,9 +152,23 @@ markdown cannot give back. An author who wants the full check runs a compile, no
 
 Every finding is re-coded to the rule's `CL-<pack>/NNNN`.
 
-Descriptor property names (`type`, `keys`, `required`, and so on) retain their documented
-spellings. Key normalization does not change `values` or the case-sensitive `keyPattern`
-check on an open `record`.
+All compiler-defined pack keys, including descriptor properties (`type`, `keys`,
+`required`, and so on), accept any capitalization. Children of descriptor `keys:`, budget
+role names, and `count.fields` paths retain their authored spelling and reject sibling
+capitalization collisions. Key normalization does not change `values` or the
+case-sensitive `keyPattern` check on an open `record`. `over` accepts exactly `notes`,
+`body`, or `meta`; `over: Body` is `CL0206`. Descriptor type names accept any
+capitalization, including members of a type union.
+
+**An invalid rule is skipped whole while valid sibling rules run.** Pack files report
+unknown or misplaced keys (`CL0201` / `CL0210`), wrong types (`CL0202`), invalid values
+(`CL0206`), and capitalization collisions (`CL0211`) at their authored source positions.
+Every invalid regex in predicates, `keyPattern`, or `pattern` is reported as `CL0117`.
+Pack-level errors disable the entire pack, including unreadable YAML, a missing rules
+list, an unknown envelope key, or a name mismatch. A normal compile fails on these
+errors; offline lint uses the same recovery boundary. Preview returns cards and findings
+with invalid rules skipped, in either tolerant mode. Skipped rules do not count toward
+`droppedKeys`.
 
 **A pack re-parses `notes:` itself**, since the compiler emits it as a flat string. A
 `notes:` block that is prose, or a bare marker like `[e]`, parses to `{}` — so a `hasKey`

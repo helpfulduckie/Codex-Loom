@@ -90,21 +90,21 @@ describe('loadPack', () => {
     ['at root', 'keyPattern: "["'],
     ['under keys', 'keys: { child: { type: record, keyPattern: "[" } }'],
     ['under of', 'of: { type: record, keys: { child: { type: record, keyPattern: "[" } } }'],
-  ])('a malformed keyPattern nested %s rejects the pack as CL0117', (_where, schemaPart) => {
+  ])('a malformed keyPattern nested %s skips the rule as CL0117', (_where, schemaPart) => {
     writePack('bad-key-pattern', `name: bad-key-pattern\nrules:\n  - schema:\n      type: record\n      ${schemaPart}\n`);
     const diag = new Diagnostics();
     expect(loadPack('bad-key-pattern', { source: './bad-key-pattern.cl.yaml' },
-      { baseDir: TMP, diagnostics: diag })).toBeNull();
+      { baseDir: TMP, diagnostics: diag }).rules).toEqual([]);
     expect(diag.errors[0].code).toBe(CODES.PACK_MALFORMED);
-    expect(diag.errors[0].message).toContain('invalid keyPattern regex');
+    expect(diag.errors[0].message).toContain('Invalid keyPattern regex');
   });
 
-  test('a non-string keyPattern rejects the pack as CL0117', () => {
+  test('a non-string keyPattern skips the rule with a type error', () => {
     writePack('bad-key-pattern-type', 'name: bad-key-pattern-type\nrules:\n  - schema: { type: record, keyPattern: 12 }\n');
     const diag = new Diagnostics();
     expect(loadPack('bad-key-pattern-type', { source: './bad-key-pattern-type.cl.yaml' },
-      { baseDir: TMP, diagnostics: diag })).toBeNull();
-    expect(diag.errors[0].code).toBe(CODES.PACK_MALFORMED);
+      { baseDir: TMP, diagnostics: diag }).rules).toEqual([]);
+    expect(diag.errors[0].code).toBe(CODES.WRONG_TYPE);
   });
 
   test('a name: that disagrees with the config key is a CL0119 ERROR', () => {
