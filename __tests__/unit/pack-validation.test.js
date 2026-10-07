@@ -77,7 +77,7 @@ test('all malformed regexes are reported after key normalization', () => {
     '  - id: 2', '    forbid: {}',
   ].join('\n'));
   expect(diagnostics.errors.map(d => [d.code, d.file, d.line])).toEqual([
-    ['CL0117', file, 4], ['CL0117', file, 5], ['CL0117', file, 8], ['CL0117', file, 9],
+    ['CL0121', file, 4], ['CL0121', file, 5], ['CL0121', file, 8], ['CL0121', file, 9],
   ]);
   expect(evaluatePack(pack, [card]).map(f => f.code)).toEqual(['CL-test/0002']);
 });
@@ -147,4 +147,72 @@ test.each(['major', 'MAJOR', 'Major'])('budget role %s matches preserved authore
   expect(findings[0].message).toContain('role "Major" targets 1');
   expect(evaluatePack(pack, [{ ...card, body: 'xx', meta: { meta: { test: { role: 'other' } } } }])).toEqual([]);
   expect(evaluatePack(pack, [{ ...card, body: 'xxx', meta: {} }])[0].message).toContain('role "STANDARD" targets 2');
+});
+
+test.each([
+  ['extra: stray', 'CL0201'],
+  ['name: other', 'CL0119'],
+  ['extra: stray\nname: other', 'CL0201'],
+])('an unavailable pack still reports all rule errors: %s', (envelope, firstCode) => {
+  const { pack, diagnostics, file } = load([
+    envelope, 'rules:', '  - forbid: {titelMatch: Card}',
+    '  - forbid: {notesMatch: "["}', '  - id: empty',
+    '  - id: live', '    forbid: {}',
+  ].join('\n'));
+  expect(pack).toBeNull();
+  expect(diagnostics.errors[0].code).toBe(firstCode);
+  expect(diagnostics.errors.map(d => d.code)).toEqual([
+    ...(envelope.includes('extra') ? ['CL0201'] : []),
+    ...(envelope.includes('name') ? ['CL0119'] : []), 'CL0201', 'CL0121', 'CL0121',
+  ]);
+  const offset = envelope.split('\n').length;
+  expect(diagnostics.errors.slice(-3).map(d => [d.file, d.line]))
+    .toEqual([[file, offset + 2], [file, offset + 3], [file, offset + 4]]);
+  expect(diagnostics.errors.every(d => !d.message.includes('rule skipped'))).toBe(true);
+});
+
+test.each([
+  ['2', null, 'CL-test/0002'],
+  ['2', '"0002"', 'CL-test/0002'],
+  ['Check', 'check', 'CL-test/Check'],
+])('later repeated final codes are skipped: %s and %s', (firstId, secondId, emittedCode) => {
+  const { pack, diagnostics, file } = load([
+    'rules:', `  - id: ${firstId}`, '    forbid: {}',
+    secondId === null ? '  - forbid: {}' : `  - id: ${secondId}\n    forbid: {}`,
+    '  - id: sibling', '    forbid: {}',
+  ].join('\n'));
+  expect(diagnostics.errors).toEqual([
+    expect.objectContaining({ code: 'CL0121', file, line: 4,
+      related: [expect.objectContaining({ label: 'first definition', file, line: 2 })] }),
+  ]);
+  expect(diagnostics.errors[0].message).toContain(emittedCode);
+  expect(evaluatePack(pack, [card]).map(f => f.code)).toEqual([emittedCode, 'CL-test/sibling']);
+});
+
+test('invalid rules do not reserve codes and checkless rules have located errors', () => {
+  const { pack, diagnostics, file } = load([
+    'rules:', '  - id: same', '    forbid: {notesMatch: "["}',
+    '  - id: same', '    forbid: {}',
+    '  - id: noCheck', '    severity: warn', '    message: absent check', '    appliesTo: {titleMatch: Card}',
+    '  - id: sibling', '    require: {titleMatch: Missing}',
+  ].join('\n'));
+  expect(diagnostics.errors.map(d => [d.code, d.file, d.line]))
+    .toEqual([['CL0121', file, 3], ['CL0121', file, 6]]);
+  expect(evaluatePack(pack, [card]).map(f => f.code)).toEqual(['CL-test/same', 'CL-test/sibling']);
+});
+
+test.each(['type', 'pattern', 'match', 'keyPattern'])('budget name %s is not interpreted as a descriptor property', key => {
+  const { pack, diagnostics, file } = load(`rules:\n  - budget: {${key}: big}\n  - forbid: {}\n`);
+  expect(diagnostics.errors).toEqual([expect.objectContaining({ code: 'CL0202', file, line: 2 })]);
+  expect(evaluatePack(pack, [card]).map(f => f.code)).toEqual(['CL-test/0002']);
+});
+
+test('author-chosen card keys named type, pattern and match remain ordinary descriptors', () => {
+  const { pack, diagnostics } = load(YAML.stringify({ rules: [{ schema: { type: 'map', keys: {
+    type: { type: 'string', required: true },
+    pattern: { type: 'string', required: true },
+    match: { type: 'string', required: true },
+  } } }] }));
+  expect(diagnostics.all).toEqual([]);
+  expect(evaluatePack(pack, [{ ...card, notes: 'type: big\npattern: "["\nmatch: "("' }])).toEqual([]);
 });

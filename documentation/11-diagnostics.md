@@ -132,10 +132,11 @@ arriving by any route is still worth flagging.
 | `CL0114` | WARN | A snapshot file is not tracked by the manifest, so it is outside the freeze. Remove it or regenerate the snapshot. |
 | `CL0115` | ERROR | A frozen file differs from its recorded hash, so the snapshot is corrupted and compilation stops. Restore or regenerate it. |
 | `CL0116` | ERROR | `--snapshot` cannot compute `requiresRoles` because the library items are invalid; fix them and rerun `--snapshot`. |
-| `CL0117` | ERROR | The convention pack cannot be loaded or a rule has an invalid regex. Repair the pack structure or expression. Pack-level failures disable the pack; rule-level failures skip only that rule. |
+| `CL0117` | ERROR | The convention pack cannot be loaded, so its rules are unavailable. Provide a readable, correctly shaped pack. |
 | `CL0118` | WARN | `lint.packs.<name>: ~` targets a pack this branch never inherited, so nothing changes. Remove the entry or inherit the pack. |
 | `CL0119` | ERROR | The pack `name:` differs from its `lint.packs` key, so portable diagnostics/suppressions can break. Make them match. |
 | `CL0120` | WARN | A configured input path is missing, so content there is skipped. Create the path or correct the configuration. |
+| `CL0121` | ERROR | A convention rule has an invalid regex, a repeated diagnostic code, or no check, so the rule is skipped. Repair the expression or give the rule a unique id and at least one check. |
 | `CL0130` | WARN | An `include:` path is missing, or names a directory holding no YAML files, so included items are skipped. Create the file or correct the path. |
 | `CL0131` | ERROR | The same file is included more than once, so the repeated include is skipped. Keep one include. |
 | `CL0140` | ERROR | The item has no `id:` or `name:`, so it cannot enter the registry. Add one identity field. |

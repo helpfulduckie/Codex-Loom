@@ -60,36 +60,55 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
   checkRuleValues(doc, envelopeSchema,
     [], sourceMap, envelope, `convention pack "${name}" (pack unavailable)`);
   diagnostics.merge(envelope);
-  if (!Array.isArray(doc.rules)) return fail('declares no rules: list', sourceMap.nearest('rules'));
-  if (envelope.hasErrors()) return null;
-  if (doc.name !== undefined && String(doc.name) !== name) {
+  let unavailable = envelope.hasErrors();
+  if (typeof doc.name === 'string' && doc.name !== name) {
     diagnostics.error(
       CODES.PACK_NAME_MISMATCH,
       `Convention pack loaded as "${name}" declares name: "${doc.name}". `
       + 'The pack is unavailable until the config key and name match; this keeps diagnostic codes and suppressions portable.',
       sourceMap.nearest('name'),
     );
-    return null;
+    unavailable = true;
   }
+  if (!Array.isArray(doc.rules)) return fail('declares no rules: list', sourceMap.nearest('rules'));
   const rules = doc.rules;
 
   const normalized = [];
+  const issuedCodes = new Map();
+  const ruleSchema = PACK_SCHEMA.keys.rules.of;
   for (let i = 0; i < rules.length; i += 1) {
     let rule = rules[i];
     const bus = new Diagnostics();
     const rulePath = ['rules', String(i)];
-    const context = `convention pack "${name}" rule ${i + 1} (rule skipped)`;
-    rule = validate(rule, PACK_SCHEMA.keys.rules.of, {
+    const context = `convention pack "${name}" rule ${i + 1} (${unavailable ? 'pack unavailable' : 'rule skipped'})`;
+    rule = validate(rule, ruleSchema, {
       diagnostics: bus, sourceMap, path: rulePath, context, v3Keys: false, rootLabel: 'the rule level',
     });
-    checkRuleValues(rule, PACK_SCHEMA.keys.rules.of, rulePath, sourceMap, bus, context);
+    checkRuleValues(rule, ruleSchema, rulePath, sourceMap, bus, context);
     diagnostics.merge(bus);
     if (bus.hasErrors()) continue;
+    if (!Object.entries(ruleSchema.keys).some(([key, schema]) => schema.packCheck && Object.hasOwn(rule, key))) {
+      diagnostics.error(CODES.PACK_RULE_INVALID,
+        `No check is declared in ${context}; add forbid, require, requireCard, schema, budget, count, or mutexHint.`,
+        sourceMap.nearest(rulePath));
+      continue;
+    }
     const id = rule.id !== undefined ? String(rule.id) : String(i + 1);
+    const code = `CL-${name}/${id.padStart(4, '0')}`;
+    const foldedCode = code.toLowerCase();
+    const ruleLoc = sourceMap.nearest(rule.id !== undefined ? [...rulePath, 'id'] : rulePath);
+    const first = issuedCodes.get(foldedCode);
+    if (first) {
+      diagnostics.error(CODES.PACK_RULE_INVALID,
+        `Diagnostic code "${code}" is already defined as "${first.code}" in ${context}; give this rule a unique id.`,
+        ruleLoc, { related: [{ label: 'first definition', ...first.loc }] });
+      continue;
+    }
+    issuedCodes.set(foldedCode, { code, loc: ruleLoc });
     const severity = rule.severity === 'warn' ? 'warn' : 'error';
     normalized.push({
       id,
-      code: `CL-${name}/${id.padStart(4, '0')}`,
+      code,
       severity,
       appliesTo: rule.appliesTo || null,
       forbid: rule.forbid || null,
@@ -104,7 +123,7 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
     });
   }
 
-  return { name, rules: normalized };
+  return unavailable ? null : { name, rules: normalized };
 }
 
 function checkRuleValues(node, descriptor, at, sourceMap, diagnostics, context) {
@@ -134,15 +153,14 @@ function checkRuleValues(node, descriptor, at, sourceMap, diagnostics, context) 
       }
       continue;
     }
-    if (['notesMatch', 'bodyMatch', 'match', 'titleMatch', 'keyPattern', 'pattern'].includes(key)
-      && typeof child === 'string') {
+    if (childDescriptor.packRegex && typeof child === 'string') {
       try { new RegExp(child); } catch (error) {
-        diagnostics.error(CODES.PACK_MALFORMED,
+        diagnostics.error(CODES.PACK_RULE_INVALID,
           `Invalid ${key} regex ${JSON.stringify(child)} in ${context} — ${error.message.split('\n')[0]}.`,
           sourceMap.nearest(childPath));
       }
     }
-    if (key === 'type') {
+    if (childDescriptor.packType) {
       if (Array.isArray(child) && child.length === 0) {
         diagnostics.error(CODES.VALUE_NOT_ALLOWED, `Descriptor type union must not be empty in ${context}.`,
           sourceMap.nearest(childPath));

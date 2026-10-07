@@ -736,6 +736,12 @@ still fail a normal compile; preview returns cards and diagnostics, and skipped 
 not contribute to its dropped-key count.
 Names in `hasKey`, `equals.key`, and budget role lookup match in any capitalization;
 equality values remain exact after string conversion. These lookups preserve card data.
+Every rule must declare a check, and its final padded code must be unique within the
+pack without regard to capitalization. The first valid rule retains its emitted code
+spelling; later duplicates are skipped with the first definition as a related location.
+`CL0121` reports duplicate codes, absent checks, and invalid regexes; `CL0117` reports
+pack-loading failures. When the rules list is readable, validation reports its errors
+even if the envelope or declared name disables the entire pack.
 
 ### §8.4 `encapsulate` and `wrapper` are the same operation
 

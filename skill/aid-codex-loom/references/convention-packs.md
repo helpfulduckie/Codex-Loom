@@ -169,12 +169,23 @@ capitalization, including members of a type union.
 **An invalid rule is skipped whole while valid sibling rules run.** Pack files report
 unknown or misplaced keys (`CL0201` / `CL0210`), wrong types (`CL0202`), invalid values
 (`CL0206`), and capitalization collisions (`CL0211`) at their authored source positions.
-Every invalid regex in predicates, `keyPattern`, or `pattern` is reported as `CL0117`.
+Every invalid regex in predicates, `keyPattern`, or `pattern` is reported as `CL0121`.
 Pack-level errors disable the entire pack, including unreadable YAML, a missing rules
 list, an unknown envelope key, or a name mismatch. A normal compile fails on these
 errors; offline lint uses the same recovery boundary. Preview returns cards and findings
 with invalid rules skipped, in either tolerant mode. Skipped rules do not count toward
 `droppedKeys`.
+
+**Rules require a check and a unique final code.** Declare at least one of `forbid`,
+`require`, `requireCard`, `schema`, `budget`, `count`, or `mutexHint`. `forbid: {}` is a
+valid predicate that matches every card. `CL0121` also reports a rule with no check or a
+duplicate padded code, including positional defaults and capitalization differences.
+The first valid rule retains the code's authored spelling; the later duplicate is skipped
+with the first definition's location. An invalid rule does not reserve a code.
+
+Even when an envelope error or name mismatch makes the pack unavailable, every rule in
+a readable `rules:` list is validated and its errors are reported with that pack-level
+context. None of the pack's rules run. `CL0117` remains a pack-loading failure.
 
 **A pack re-parses `notes:` itself**, since the compiler emits it as a flat string. A
 `notes:` block that is prose, or a bare marker like `[e]`, parses to `{}` — so a `hasKey`

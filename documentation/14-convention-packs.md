@@ -118,8 +118,20 @@ any `CL-` code, and every report renders it as free text; nothing groups or sort
 prefix.
 
 The loader's own two codes are core, in the loading band: `CL0117` for a malformed pack
-(missing file, bad YAML, no `rules:` list, or an invalid rule regex), `CL0119` for the name mismatch above. Neither
+(missing file, bad YAML, no `rules:` list), `CL0119` for the name mismatch above. Neither
 is ever a crash or a silent skip.
+
+**`CL0121` identifies an invalid rule definition.** An invalid predicate or descriptor
+regex, a repeated final diagnostic code, or a rule with no check raises this error and
+skips that rule. A rule must declare at least one of `forbid`, `require`, `requireCard`,
+`schema`, `budget`, `count`, or `mutexHint`. An empty predicate such as `forbid: {}` is a
+valid check that matches every card.
+
+**Final rule codes must be unique within a pack, ignoring capitalization.** Padding and
+positional defaults are included: `id: 2`, `id: "0002"`, and a second rule with no `id`
+all produce `CL-<pack>/0002`. The first valid rule keeps the code; a later duplicate is
+skipped with both definition locations. Code spelling is preserved, so this comparison
+does not rewrite emitted codes. Invalid rules do not reserve codes.
 
 **Pack files validate their compiler-defined keys in any capitalization.** This includes
 the pack envelope, rules, recursive predicates, recursive schema descriptors, and per-item
@@ -135,6 +147,10 @@ mismatch, makes the whole pack unavailable. These errors fail a normal compile e
 the remaining rules produce useful findings. Offline lint uses the same recovery boundary.
 Preview returns cards and diagnostics with the same rule skips, whether tolerant mode is
 on or off; skipped rules do not count toward `droppedKeys`.
+
+When `rules:` is a list, every rule is validated even if an envelope error or name
+mismatch disables the pack. The diagnostics identify that pack-level unavailability;
+the author sees all definition errors in one pass, and none of the pack's rules run.
 
 ---
 

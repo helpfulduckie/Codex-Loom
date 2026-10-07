@@ -172,6 +172,17 @@ siblings and each rule's original positional default id. Null structural values 
 rejected because packs have no deletion operations. Regex and descriptor-type checks run
 after key normalization and collect every failure, including nested `pattern` and
 `keyPattern` expressions. Author-keyed records preserve spelling and check collisions.
+The supplemental walk uses schema-entry marks `packRegex` and `packType`, so author-keyed
+records cannot trigger checks merely by sharing a compiler property name. `packCheck`
+marks the seven properties that satisfy the rule's check requirement.
+
+**Envelope failures do not hide rule findings.** When `rules` is a list, `loadPack`
+validates every rule before returning null for an invalid envelope or name mismatch.
+Rule diagnostics then use the pack-unavailable context. `CL0117` is reserved for
+unloadable packs; `CL0121` covers invalid regexes, repeated final codes, and absent checks.
+An issued-code map compares padded codes without regard to capitalization, preserves
+their emitted spelling, and records the first valid rule's location for a later duplicate.
+Rules rejected by schema or value validation do not reserve a code.
 
 **Pack recovery is identical in compile, offline lint, and tolerant preview.** Dropping a
 broken selector or predicate would change a rule's meaning, so tolerance never deletes a

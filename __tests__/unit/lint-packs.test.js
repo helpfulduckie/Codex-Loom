@@ -60,7 +60,7 @@ describe('loadPack', () => {
   });
 
   test('a source: path is resolved relative to baseDir and loaded', () => {
-    writePack('local', 'name: local\nrules:\n  - id: 1\n    message: hi\n');
+    writePack('local', 'name: local\nrules:\n  - id: 1\n    message: hi\n    forbid: {}\n');
     const diag = new Diagnostics();
     const pack = loadPack('local', { source: './local.cl.yaml' }, { baseDir: TMP, diagnostics: diag });
     expect(diag.errors).toHaveLength(0);
@@ -91,12 +91,12 @@ describe('loadPack', () => {
     ['at root', 'type: record\n      keyPattern: "["'],
     ['under keys', 'type: map\n      keys: { child: { type: record, keyPattern: "[" } }'],
     ['under of', 'type: record\n      of: { type: record, keys: { child: { type: record, keyPattern: "[" } } }'],
-  ])('a malformed keyPattern nested %s skips the rule as CL0117', (_where, schemaPart) => {
+  ])('a malformed keyPattern nested %s skips the rule as CL0121', (_where, schemaPart) => {
     writePack('bad-key-pattern', `name: bad-key-pattern\nrules:\n  - schema:\n      ${schemaPart}\n`);
     const diag = new Diagnostics();
     expect(loadPack('bad-key-pattern', { source: './bad-key-pattern.cl.yaml' },
       { baseDir: TMP, diagnostics: diag }).rules).toEqual([]);
-    expect(diag.errors[0].code).toBe(CODES.PACK_MALFORMED);
+    expect(diag.errors[0].code).toBe(CODES.PACK_RULE_INVALID);
     expect(diag.errors[0].message).toContain('Invalid keyPattern regex');
   });
 
@@ -137,7 +137,7 @@ describe('loadPack', () => {
   });
 
   test('rule id and severity default sanely', () => {
-    writePack('defaults', 'name: defaults\nrules:\n  - message: a\n  - id: 7\n    severity: warn\n    message: b\n');
+    writePack('defaults', 'name: defaults\nrules:\n  - message: a\n    forbid: {}\n  - id: 7\n    severity: warn\n    message: b\n    forbid: {}\n');
     const pack = loadPack('defaults', { source: './defaults.cl.yaml' }, { baseDir: TMP, diagnostics: new Diagnostics() });
     expect(pack.rules[0].code).toBe('CL-defaults/0001');
     expect(pack.rules[0].severity).toBe('error');
