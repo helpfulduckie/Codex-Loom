@@ -62,15 +62,27 @@ const REMOVED = Object.freeze({
   },
 });
 
-function suggestFor(key, ownPath, declaredHere, keyIndex) {
+// How many leading segments of an indexed path the authored position already sits inside.
+function sharedDepth(indexedPath, relativePath) {
+  const segments = indexedPath.split('.');
+  let depth = 0;
+  while (depth < relativePath.length && depth < segments.length - 1) {
+    const segment = segments[depth];
+    if (segment !== '*' && segment !== '[]' && segment.toLowerCase() !== relativePath[depth].toLowerCase()) break;
+    depth += 1;
+  }
+  return depth;
+}
+
+function suggestFor(key, ownPath, declaredHere, keyIndex, { v3Keys = true, rootLabel = 'the top level', relativePath = [] } = {}) {
   const lower = key.toLowerCase();
-  const removed = REMOVED[lower];
+  const removed = v3Keys ? REMOVED[lower] : undefined;
   if (removed !== undefined) {
     return { code: CODES.UNKNOWN_KEY, hint: removed.hint };
   }
 
   const renamedKey = Object.keys(RENAMED).find((candidate) => candidate.toLowerCase() === lower);
-  const renamedTo = RENAMED[renamedKey];
+  const renamedTo = v3Keys ? RENAMED[renamedKey] : undefined;
   if (renamedTo !== undefined) {
     return {
       code: CODES.UNKNOWN_KEY,
@@ -82,12 +94,18 @@ function suggestFor(key, ownPath, declaredHere, keyIndex) {
   const indexedKey = [...keyIndex.keys()].find((candidate) => candidate.toLowerCase() === lower);
   const elsewhere = (keyIndex.get(indexedKey) || []).filter((p) => p.toLowerCase() !== [...ownPath, key].join('.').toLowerCase());
   if (elsewhere.length > 0) {
-    const owner = elsewhere[0].split('.').slice(0, -1).join('.');
+    // A key valid in several places is most likely meant for the one nearest where it was
+    // written; the first indexed path wins a tie.
+    let nearest = elsewhere[0];
+    for (const candidate of elsewhere) {
+      if (sharedDepth(candidate, relativePath) > sharedDepth(nearest, relativePath)) nearest = candidate;
+    }
+    const owner = nearest.split('.').slice(0, -1).join('.');
     return {
       code: CODES.MISPLACED_KEY,
       hint: owner
         ? `"${key}" is valid under "${owner}:" — move it there so the compiler reads it; until then, it is ignored here.`
-        : `"${key}" is valid at the top level — move it there so the compiler reads it; until then, it is ignored here.`,
+        : `"${key}" is valid at ${rootLabel} — move it there so the compiler reads it; until then, it is ignored here.`,
     };
   }
 
@@ -230,6 +248,7 @@ function validate(value, schema, options = {}) {
   const {
     diagnostics, sourceMap, path = [], keyIndex = buildKeyIndex(schema),
     displayOffset = 0, context = null, dropUnknown = false,
+    v3Keys = true, rootLabel = 'the top level',
   } = options;
 
   normalizeSchemaKeys(value, schema, { diagnostics, sourceMap, path, originRoot: value, originPath: [] });
@@ -338,7 +357,9 @@ function validate(value, schema, options = {}) {
 
           const child = descriptor.keys[key];
           if (!child) {
-            const { code, hint } = suggestFor(key, currentPath.slice(displayOffset), declared, keyIndex);
+            // The index is built from `schema`, whose root sits at `path` in the document.
+            const { code, hint } = suggestFor(key, currentPath.slice(displayOffset), declared, keyIndex,
+              { v3Keys, rootLabel, relativePath: currentPath.slice(path.length) });
             const shown = display(currentPath);
             const where = shown ? `under "${shown}"` : 'at the top level';
             diagnostics.error(code, `Unknown key "${key}" ${where}${inContext}; remove it or rename/move it to a supported location, or it is ignored.`, locate([...currentPath, key]), { hint });

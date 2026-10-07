@@ -91,6 +91,29 @@ test.each(['forbid: null', 'schema: {type: nonsense}', 'schema: {}', 'schema: {t
   expect(evaluatePack(pack, [card]).map(f => f.code)).toEqual(['CL-test/0002']);
 });
 
+test('hints describe the pack, not a v3 project or the nearest unrelated key', () => {
+  const envelope = load('description: mine\nrules: [{forbid: {}}]\n').diagnostics;
+  expect(envelope.all.map(d => d.hint)).toEqual([null]);
+
+  const { diagnostics } = load([
+    'rules:',
+    '  - forbid: {severity: warn}',
+    '  - count: {max: 5}',
+    '  - schema: {type: map, keys: {rank: }}',
+  ].join('\n'));
+  const hintFor = key => diagnostics.all.find(d => d.message.includes(`"${key}"`)).hint;
+  expect(hintFor('severity')).toContain('valid at the rule level');
+  expect(hintFor('max')).toContain('valid under "count.fields.*:"');
+  expect(diagnostics.all.find(d => d.line === 4).message).toContain('write {type: any}');
+});
+
+test('a card key that shares a v3 project key name gets no migration hint', () => {
+  const pack = { name: 'test', rules: [{ code: 'CL-test/0001', severity: 'error', schema: { type: 'map', keys: { rank: { type: 'string' } } } }] };
+  const [finding] = evaluatePack(pack, [{ ...card, notes: 'description: text' }]);
+  expect(finding.detail).toContain('Unknown key "description"');
+  expect(finding.detail).not.toContain('--migrate');
+});
+
 test.each(['name: other\nrules: [{forbid: {}}]', 'name: null\nrules: [{forbid: {}}]', 'extra: value\nrules: [{forbid: {}}]',
   'rules: nope', '[]'])('invalid pack structure or identity makes the pack unavailable: %s', text => {
   const { pack, diagnostics } = load(text);

@@ -56,7 +56,7 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
   const envelope = new Diagnostics();
   const envelopeSchema = { ...PACK_SCHEMA, keys: { ...PACK_SCHEMA.keys, rules: { type: TYPES.ANY } } };
   validate(doc, envelopeSchema,
-    { diagnostics: envelope, sourceMap, context: `convention pack "${name}" (pack unavailable)` });
+    { diagnostics: envelope, sourceMap, context: `convention pack "${name}" (pack unavailable)`, v3Keys: false });
   checkRuleValues(doc, envelopeSchema,
     [], sourceMap, envelope, `convention pack "${name}" (pack unavailable)`);
   diagnostics.merge(envelope);
@@ -79,7 +79,9 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
     const bus = new Diagnostics();
     const rulePath = ['rules', String(i)];
     const context = `convention pack "${name}" rule ${i + 1} (rule skipped)`;
-    rule = validate(rule, PACK_SCHEMA.keys.rules.of, { diagnostics: bus, sourceMap, path: rulePath, context });
+    rule = validate(rule, PACK_SCHEMA.keys.rules.of, {
+      diagnostics: bus, sourceMap, path: rulePath, context, v3Keys: false, rootLabel: 'the rule level',
+    });
     checkRuleValues(rule, PACK_SCHEMA.keys.rules.of, rulePath, sourceMap, bus, context);
     diagnostics.merge(bus);
     if (bus.hasErrors()) continue;
@@ -109,7 +111,11 @@ function checkRuleValues(node, descriptor, at, sourceMap, diagnostics, context) 
   if (!descriptor || descriptor.type === TYPES.ANY) return;
   // Shared schemas allow null for deletion; packs have no deletion operations.
   if (node === null || node === undefined) {
-    diagnostics.error(CODES.WRONG_TYPE, `"${at.join('.')}" must not be null in ${context}.`, sourceMap.nearest(at));
+    const expectsDescriptor = !!(descriptor.keys && descriptor.keys.type && descriptor.keys.type.required);
+    diagnostics.error(CODES.WRONG_TYPE, expectsDescriptor
+      ? `"${at.join('.')}" has no descriptor in ${context}; write {type: any} to accept any value, or give it the type it must have.`
+      : `"${at.join('.')}" has no value in ${context}; give it a value or remove it.`,
+    sourceMap.nearest(at));
     return;
   }
   if (Array.isArray(node)) {
@@ -208,7 +214,8 @@ function evalPredicate(pred, view) {
 
 function runSchemaCheck(rule, notes, view, emit) {
   const bus = new Diagnostics();
-  validate(structuredClone(notes), buildDescriptor(rule.schema), { diagnostics: bus, context: `card "${view.title}"` });
+  validate(structuredClone(notes), buildDescriptor(rule.schema),
+    { diagnostics: bus, context: `card "${view.title}"`, v3Keys: false });
   for (const d of bus.all) {
     emit({
       severity: d.severity === 'error' ? rule.severity : 'warn',

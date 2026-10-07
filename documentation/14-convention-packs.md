@@ -266,7 +266,7 @@ pack would read `meta.statTracker.*`, and the two never collide.
 `notes:` mapping; `over: body` validates the card entry; `over: meta` validates
 `meta[<thisPack>]` — the pack's own sub-namespace, reached automatically. A rule cannot
 assert about another pack's `meta` sub-namespace through the bare route. `duckieConv`'s role
-rule is `{ over: meta, schema: { type: map, keys: { role: { values: [anchor, major,
+rule is `{ over: meta, schema: { type: map, keys: { role: { type: string, values: [anchor, major,
 standard, minor] } } } }` — a closed `map`, so a typo'd sub-key is a stray-key finding and a bad
 `role` value is an out-of-set finding, both re-coded to `CL-duckieConv/NNNN`.
 
