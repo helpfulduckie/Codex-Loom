@@ -16,9 +16,9 @@
 #      are present on one card. The rule is unscoped because no non-faction template
 #      exposes all four fields.
 #   4. role — `meta.duckieConv.role`, if set, must be one of anchor / major / standard /
-#      minor.
+#      minor, matched by a case-insensitive pattern.
 #      A closed `map` over the `meta` sub-namespace (`over: meta`), so a typo'd key is a
-#      stray-key WARN and a bad value is an out-of-set WARN, both re-coded here.
+#      stray-key WARN and a bad value is a pattern-mismatch WARN, both re-coded here.
 
 name: duckieConv
 rules:
@@ -74,15 +74,16 @@ rules:
   #
   # `meta.duckieConv.role` drives rule 1's budget lookup. A closed `map` over the pack's
   # own `meta` sub-namespace: an unrecognized key is CL0201 (with a typo suggestion), a
-  # `role` value outside the set is CL0206 — both demoted to WARN and re-coded here. The
-  # key is optional; a card with no `meta:` at all is silently measured as `standard`.
+  # `role` value failing the case-insensitive pattern is CL0208 — both demoted to WARN
+  # and re-coded here. The key is optional; a card with no `meta:` at all is silently
+  # measured as `standard`.
   - id: 4
     severity: warn
     over: meta
     schema:
       type: map
       keys:
-        role: { type: string, values: [anchor, major, standard, minor] }
+        role: { type: string, pattern: '^(anchor|major|standard|minor)$' }
     message: >-
       `meta.duckieConv.role` must be one of anchor / major / standard / minor — it
       selects the character budget rule 1 measures this card against.

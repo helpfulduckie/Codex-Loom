@@ -3,7 +3,7 @@
 const { CODES } = require('./diag');
 const { VAR_ALIASES, NOTES_ALIASES, ITEM_DELTA_KEYS, findKey, getCI } = require('./util');
 
-const CONTENT_FIELDS = new Set(['body', ...VAR_ALIASES, ...NOTES_ALIASES]);
+const CONTENT_FIELDS = new Set(['body', 'meta', ...VAR_ALIASES, ...NOTES_ALIASES]);
 const STRUCTURAL_FIELDS = new Set(Object.keys(ITEM_DELTA_KEYS).map(key => key.toLowerCase()));
 
 const mapping = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);

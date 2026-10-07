@@ -184,6 +184,15 @@ An issued-code map compares padded codes without regard to capitalization, prese
 their emitted spelling, and records the first valid rule's location for a later duplicate.
 Rules rejected by schema or value validation do not reserve a code.
 
+**Card-side pack metadata uses one folded namespace lookup.** `packMetadata` obtains the
+namespace for both `over: meta` and the budget check; budget then uses `getCI` for `role`.
+Schema checks clone the namespace before validation, so neither path rewrites card data.
+`checkItemKeys` recursively checks authored `meta` on base items and variant deltas for
+`CL0211` collisions. Across layers, field operations already fold namespace and nested
+keys, update the existing spelling, and do not create a second case variant. The bundled
+`duckieConv` role schema uses an anchored case-insensitive pattern to agree with budget
+role lookup.
+
 **Pack recovery is identical in compile, offline lint, and tolerant preview.** Dropping a
 broken selector or predicate would change a rule's meaning, so tolerance never deletes a
 pack key and runs the remainder. Pack-load diagnostics remain errors: normal compile

@@ -19,6 +19,8 @@ test.each([
   ['nested body fields', 'body: {Traits: {Hair: a, hair: b}}', ITEM_SCHEMA],
   ['item variables', 'v: {Mood: a, mood: b}', ITEM_SCHEMA],
   ['notes fields', 'notes: {Mood: a, mood: b}', ITEM_SCHEMA],
+  ['item metadata', 'meta: {Mood: a, mood: b}', ITEM_SCHEMA],
+  ['variant metadata', 'variants: {day: {meta: {Mood: a, mood: b}}}', ITEM_SCHEMA],
   ['array member fields', 'body: {entries: [{Mood: a, mood: b}]}', ITEM_SCHEMA],
   ['variant selectors', 'variants: {Day: {}, day: {}}', ITEM_SCHEMA],
   ['nested variant selectors', 'variants: {day: {variants: {Wet: {}, wet: {}}}}', ITEM_SCHEMA],
@@ -49,7 +51,6 @@ test('declarations in separate namespaces and item layers do not collide', () =>
   expect(findings('body: {Hair: a}\nvariants: {day: {hair: b}}', ITEM_SCHEMA)).toEqual([]);
 });
 
-test('metadata keeps case-distinct keys in base items, variants and components', () => {
-  expect(findings('meta: {Mood: a, mood: b}\nvariants: {day: {meta: {Mood: a, mood: b}}}', ITEM_SCHEMA)).toEqual([]);
+test('component metadata keeps case-distinct keys', () => {
   expect(findings('metadata: {Mood: a, mood: b}', COMPONENT_SCHEMA)).toEqual([]);
 });

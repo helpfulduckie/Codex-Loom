@@ -742,6 +742,12 @@ spelling; later duplicates are skipped with the first definition as a related lo
 `CL0121` reports duplicate codes, absent checks, and invalid regexes; `CL0117` reports
 pack-loading failures. When the rules list is readable, validation reports its errors
 even if the envelope or declared name disables the entire pack.
+Card-side pack namespaces and role keys also match in any capitalization without
+rewriting the card data. Authored item `meta` mappings reject sibling capitalization
+collisions recursively on base items and variant deltas. Across layers, the existing
+field-operation merge updates the stored spelling rather than creating a second key.
+The bundled `duckieConv` role check accepts its known roles through a case-insensitive
+pattern, so its value validation agrees with budget lookup.
 
 ### §8.4 `encapsulate` and `wrapper` are the same operation
 

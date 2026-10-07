@@ -382,16 +382,41 @@ describe('case-insensitive key identity across YAML source layers', () => {
     expect(diagnosticsWith(result, CODES.DUPLICATE_KEY_CASE)).toHaveLength(1);
   });
 
-  test('case-distinct metadata keys are not treated as identities', () => {
-    const { result } = previewProject({
-      'items/items.yaml': [
-        '- id: item', '  name: Item', '  aid: {type: Item}',
-        '  meta: {Color: blue, color: green}',
-      ].join('\n'),
+  test.each([
+    ['base namespaces', ['  meta:', '    duckieConv: {role: minor}', '    DuckieConv: {role: major}'], 5, 6],
+    ['variant roles', ['  variants:', '    alt:', '      meta:', '        duckieConv:', '          role: minor', '          Role: major'], 8, 9],
+    ['unused variant namespaces', ['  variants:', '    alt:', '      meta:', '        duckieConv: {role: minor}', '        DuckieConv: {role: major}'], 7, 8],
+  ])('colliding item meta %s block preview at the second authored key', (_label, metaLines, first, second) => {
+    const { dir, result } = previewProject({
+      'items/items.yaml': ['- id: item', '  name: Item', '  aid: {type: Item}', ...metaLines].join('\n'),
       'templates/Item.template': '{$body.Name}',
       'compile.yaml': config(),
     });
-    expect(diagnosticsWith(result, CODES.DUPLICATE_KEY_CASE)).toHaveLength(0);
+    const file = path.join(dir, 'items/items.yaml');
+    expect(result.status).toBe('blocked');
+    expect(diagnosticsWith(result, CODES.DUPLICATE_KEY_CASE)).toEqual([
+      expect.objectContaining({ file, line: second,
+        related: [expect.objectContaining({ label: 'first definition', file, line: first })] }),
+    ]);
+  });
+
+  test('a differently capitalized variant meta update merges into one namespace and one role', () => {
+    const { parseCards } = require('../../src/emit/vl');
+    const { result } = previewProject({
+      'items/items.yaml': [
+        '- id: item', '  name: Item', '  aid: {type: Item}', '  render: {template: Item}',
+        '  body: {Name: NPC}', '  meta: {duckieConv: {role: minor}}',
+        '  variants:', '    alt:', '      meta: {DuckieConv: {Role: Major}}',
+        '  branches: {chosen: alt}',
+      ].join('\n'),
+      'templates/Item.template': 'x'.repeat(450),
+      'compile.yaml': config(['lint: {packs: {duckieConv: {}}}', 'branches: {chosen: {}}']),
+    });
+    expect(result.status).toBe('ok');
+    expectNoErrors(result);
+    const rendered = parseCards(result.cards[0].rendered)[0];
+    expect(rendered.meta.meta).toEqual({ duckieConv: { role: 'Major' } });
+    expect(result.diagnostics.filter(d => d.code.startsWith('CL-duckieConv/'))).toEqual([]);
   });
 
   test('same-spelling duplicates remain YAML parse errors', () => {

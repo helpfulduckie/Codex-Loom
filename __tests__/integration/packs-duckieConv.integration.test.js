@@ -53,6 +53,18 @@ const item = ({ id, title = id, text = 'body', meta = null, fields = '' }) => [
 
 const ENABLED = ['lint: {packs: {duckieConv: {}}}'];
 
+test.each(['duckieConv:\n  Role: major', 'DuckieConv:\n  role: major', 'DUCKIECONV:\n  ROLE: Major'])
+('compiled metadata casing is consistent between the budget and role checks: %s', meta => {
+  const { diagnostics, threw } = compileProject({
+    ...TEMPLATE,
+    'compile.yaml': config(ENABLED),
+    'Codex/items.yaml': item({ id: 'npc', text: 'x'.repeat(450), meta }),
+  });
+  expect(threw).toBeNull();
+  expect(find(diagnostics, BUDGET)).toEqual([]);
+  expect(find(diagnostics, ROLE)).toEqual([]);
+});
+
 // ── CL-duckieConv/0001 — the per-role budget ────────────────────────────────
 
 describe('CL-duckieConv/0001 — per-role character budget', () => {

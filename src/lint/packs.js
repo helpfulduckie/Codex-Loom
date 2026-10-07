@@ -187,6 +187,10 @@ function plainObjOrEmpty(value) {
   return (value && typeof value === 'object' && !Array.isArray(value)) ? value : {};
 }
 
+function packMetadata(view, name) {
+  return getCI(view.meta, name) || {};
+}
+
 function evalPredicate(pred, view) {
   if (pred === null || pred === undefined) return true;
   if (typeof pred !== 'object') return false;
@@ -271,6 +275,7 @@ function evaluatePack(pack, cards) {
       notes,
       meta: plainObjOrEmpty(card.meta && card.meta.meta),
     };
+    const metadata = packMetadata(view, pack.name);
 
     for (const rule of pack.rules) {
       if (!evalPredicate(rule.appliesTo, view)) continue;
@@ -293,12 +298,12 @@ function evaluatePack(pack, cards) {
       }
       if (rule.schema) {
         const input = rule.over === 'meta'
-          ? ((view.meta && view.meta[pack.name]) || {})
+          ? metadata
           : rule.over === 'body' ? parseSettingsBlock(card.body) : notes;
         runSchemaCheck(rule, input, view, emit);
       }
       if (rule.budget) {
-        const rawRole = String((view.meta[pack.name] || {}).role || 'standard');
+        const rawRole = String(getCI(metadata, 'role') || 'standard');
         const role = findKey(rule.budget, rawRole) ?? findKey(rule.budget, 'standard') ?? 'standard';
         const cap = rule.budget[role];
         if (typeof cap === 'number' && view.body.length > cap) {

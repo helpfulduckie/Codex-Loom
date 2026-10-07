@@ -266,8 +266,9 @@ uses) is stripped before the parse.
 
 ### The `meta:` channel and `over: meta`
 
-**`meta:` is an item key for tooling — an unvalidated annotation channel, parallel to
-`v:`.** The loader accepts any shape under it and never proposes it as a relocation target;
+**`meta:` is an item key for tooling — an annotation channel, parallel to
+`v:`.** The loader accepts any value shape under it, checks sibling capitalization
+collisions recursively on base items and variant deltas, and never proposes it as a relocation target;
 it is distinct from `v:` in that no template ever reads it. The compiler writes it into the
 card's `~~~` fence when it is a non-empty mapping, so a pack sees it in both the inline
 compile pass and the offline `--lint` arm — and, like `kind: reference`, it reaches AID
@@ -277,14 +278,17 @@ nowhere: Velvet Lattice forwards only title / type / keys / value / description.
 pack's declared `name:` — the same binding that ties the `lint.packs` key and the
 `CL-<name>/NNNN` code prefix. `duckieConv` reads `meta.duckieConv.role`; a `stat-tracker`
 pack would read `meta.statTracker.*`, and the two never collide.
+The card-side namespace and its `role` key match in any capitalization without rewriting
+the metadata. This lookup leaves the exact pack-declaration name rule unchanged.
 
 **`over: meta` is the third schema route.** `over: notes` (default) validates the parsed
 `notes:` mapping; `over: body` validates the card entry; `over: meta` validates
 `meta[<thisPack>]` — the pack's own sub-namespace, reached automatically. A rule cannot
 assert about another pack's `meta` sub-namespace through the bare route. `duckieConv`'s role
-rule is `{ over: meta, schema: { type: map, keys: { role: { type: string, values: [anchor, major,
-standard, minor] } } } }` — a closed `map`, so a typo'd sub-key is a stray-key finding and a bad
-`role` value is an out-of-set finding, both re-coded to `CL-duckieConv/NNNN`.
+rule is `{ over: meta, schema: { type: map, keys: { role: { type: string,
+pattern: '^(anchor|major|standard|minor)$' } } } }` — a closed `map`, so a typo'd sub-key
+is a stray-key finding and a bad `role` value is a case-insensitive pattern-mismatch
+finding, both re-coded to `CL-duckieConv/NNNN`.
 
 ### Per-item rules — `budget`, `count`, `mutexHint`
 
@@ -380,6 +384,7 @@ expected to drift as those conventions do. All four rules are WARN — a convent
   is to audit for redundancy and merge down. A `mutexHint:` rule — inline only. Unscoped,
   which is safe: no non-faction template exposes all four.
 - **`CL-duckieConv/0004` — the role annotation is a known value.** `meta.duckieConv.role`,
-  if set, must be `anchor` / `major` / `standard` / `minor`. An `over: meta` closed-`map` schema.
+  if set, must match `anchor` / `major` / `standard` / `minor` in any capitalization.
+  An invalid value is a pattern-mismatch finding from an `over: meta` closed-`map` schema.
 
 Enable it with `lint: { packs: { duckieConv: {} } }`.

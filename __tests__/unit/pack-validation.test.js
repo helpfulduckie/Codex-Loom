@@ -216,3 +216,31 @@ test('author-chosen card keys named type, pattern and match remain ordinary desc
   expect(diagnostics.all).toEqual([]);
   expect(evaluatePack(pack, [{ ...card, notes: 'type: big\npattern: "["\nmatch: "("' }])).toEqual([]);
 });
+
+test.each([
+  ['duckieConv', 'role', 'major'],
+  ['duckieConv', 'Role', 'major'],
+  ['DuckieConv', 'role', 'major'],
+  ['DUCKIECONV', 'ROLE', 'Major'],
+])('metadata %s.%s budgets and validates role %s consistently without rewriting it', (namespace, key, role) => {
+  const diagnostics = new Diagnostics();
+  const pack = loadPack('duckieConv', {}, { diagnostics });
+  expect(diagnostics.all).toEqual([]);
+  const meta = { meta: { [namespace]: { [key]: role }, other: { role: 'boss' } } };
+  const original = structuredClone(meta);
+  Object.freeze(meta.meta[namespace]);
+  Object.freeze(meta.meta);
+  expect(evaluatePack(pack, [{ ...card, body: 'x'.repeat(450), meta }])).toEqual([]);
+  expect(meta).toEqual(original);
+  expect(evaluatePack(pack, [{ ...card, body: 'x'.repeat(550), meta }]).map(f => f.code))
+    .toEqual(['CL-duckieConv/0001']);
+  expect(meta).toEqual(original);
+});
+
+test('a bad role in a differently capitalized metadata namespace produces a pattern finding', () => {
+  const pack = loadPack('duckieConv', {}, { diagnostics: new Diagnostics() });
+  const findings = evaluatePack(pack, [{ ...card, body: 'short', meta: { meta: { DuckieConv: { Role: 'boss' } } } }]);
+  expect(findings).toHaveLength(1);
+  expect(findings[0]).toMatchObject({ code: 'CL-duckieConv/0004', severity: 'warn' });
+  expect(findings[0].detail).toContain('must match');
+});

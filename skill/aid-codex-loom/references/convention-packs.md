@@ -193,7 +193,7 @@ rule correctly does not fire. A uniform `> ` blockquote prefix is stripped befor
 
 ### The `meta:` channel
 
-**`meta:` is an item key for tooling** — an unvalidated annotation channel parallel to `v:`,
+**`meta:` is an item key for tooling** — an annotation channel parallel to `v:`,
 which no template ever reads. The compiler writes it into the card's `~~~` fence when it is
 a non-empty mapping, and it reaches AID nowhere.
 
@@ -201,6 +201,12 @@ a non-empty mapping, and it reaches AID nowhere.
 `meta.duckieConv.role`; a `stat-tracker` pack would read `meta.statTracker.*`, and the two
 never collide. `over: meta` validates the pack's own sub-namespace automatically — a rule
 cannot assert about another pack's.
+Namespaces and `role` keys match in any capitalization without rewriting metadata.
+Base items and variant deltas reject recursive sibling capitalization collisions as
+`CL0211`; cross-layer updates use the existing folded merge and retain the stored key
+spelling. The exact match between the pack's declared name and config key still applies.
+`duckieConv` validates role values with the case-insensitive pattern
+`^(anchor|major|standard|minor)$`; an invalid role is a pattern-mismatch finding.
 
 **`meta:` is branch-addressable** — a variant may set `meta.<packName>.role` on one branch
 and leave it default on another.
