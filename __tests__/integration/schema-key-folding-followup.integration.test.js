@@ -41,3 +41,17 @@ test('templateFor validation reports nested canonical paths at authored key loca
   expect(finding).toMatchObject({ file: path.join(dir, 'templates/tier.cl.yaml'), line: 4, col: 7 });
   expect(finding.message).toContain('templates.Item.0.label');
 });
+
+test('an unknown key in a templateFor file is reported once and counted once', () => {
+  const dir = withTmpDir();
+  writeTree(dir, {
+    'compile.yaml': `${CONFIG}\nbranches: {one: {}, two: {}}`,
+    'items/items.cl.yaml': '- id: Hero\n  name: Hero\n  aid: {type: Item}\n  body: {Name: hero}\n',
+    'templates/fields.cl.yaml': 'fields: {name: {from: Name}}\ntemplates: {Item: [name]}\n',
+    'templates/tier.cl.yaml': 'Templates:\n  Item:\n    - Field: name\n      Bogus: 1\n',
+  });
+  const result = preview(path.join(dir, 'compile.yaml'));
+  expect(result.status).toBe('ok');
+  expect(result.diagnostics.filter((d) => d.code === CODES.UNKNOWN_KEY)).toHaveLength(1);
+  expect(result.droppedKeys).toBe(1);
+});

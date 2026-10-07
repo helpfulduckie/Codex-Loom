@@ -84,8 +84,10 @@ for (const alias of ['var', 'vars', 'variable', 'variables']) {
 }
 
 ITEM_SCHEMA.keys.branches = { ...ANY, normalizeAs: DISPATCH };
+// Unsupported names are left out so `CL0329` can quote the spelling the author wrote.
 const DELTA_SCHEMA = { type: TYPES.MAP, keys: Object.fromEntries(
-  Object.keys(ITEM_DELTA_KEYS).filter(key => Object.prototype.hasOwnProperty.call(ITEM_SCHEMA.keys, key))
+  Object.keys(ITEM_DELTA_KEYS)
+    .filter(key => ITEM_DELTA_KEYS[key] !== 'unsupported' && Object.prototype.hasOwnProperty.call(ITEM_SCHEMA.keys, key))
     .map(key => [key, ITEM_SCHEMA.keys[key]])
 ) };
 ITEM_SCHEMA.keys.variants = { ...ANY, normalizeAs: { type: TYPES.RECORD, of: DELTA_SCHEMA } };

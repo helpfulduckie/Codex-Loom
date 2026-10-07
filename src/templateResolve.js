@@ -9,7 +9,7 @@ const { FIELD_TABLE_SCHEMA } = require('./loader/field-table-schema');
 const { walkBranchTree } = require('./model/branches');
 const { render } = require('./template');
 const { renderFieldList } = require('./render/field-list');
-const { CODES } = require('./diag');
+const { CODES, Diagnostics } = require('./diag');
 
 function checkConfigNotesTemplates(config, templates, diagnostics, configPath, fieldTable) {
   const fieldListTemplates = (fieldTable && fieldTable.templates) || {};
@@ -72,7 +72,11 @@ function findTemplateForFile(spec, templateDirs, base) {
   return null;
 }
 
-function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostics, configPath) {
+// Each call reloads its slot files, so each must validate to normalize their keys. A caller
+// that resolves slots `gatherTierTemplates` already reported on passes `reportSchema: false`,
+// or a tolerated finding repeats once per leaf.
+function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostics, configPath, { reportSchema = true } = {}) {
+  const schemaDiagnostics = reportSchema ? diagnostics : new Diagnostics();
   const roleMaps = {};
   for (const [role, spec] of Object.entries(slots || {})) {
     if (spec === null || spec === undefined) continue;
@@ -102,7 +106,7 @@ function resolveTemplateForMaps(slots, templateDirs, base, variables, diagnostic
           { hint: `YAML error: ${err.cause ? err.cause.message : err.message}` });
         continue;
       }
-      validate(doc, FIELD_TABLE_SCHEMA, { diagnostics, sourceMap, context: path.basename(abs) });
+      validate(doc, FIELD_TABLE_SCHEMA, { diagnostics: schemaDiagnostics, sourceMap, context: path.basename(abs) });
       if (doc && doc.templates && typeof doc.templates === 'object') {
         for (const [name, list] of Object.entries(doc.templates)) setCI(merged, name, list);
       }

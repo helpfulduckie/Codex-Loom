@@ -75,6 +75,7 @@ function buildCompileContext(config, branchPath, options = {}) {
       variables,
       options.diagnostics,
       options.configPath || null,
+      { reportSchema: false },
     );
     for (const [role, typeMap] of Object.entries(resolved)) {
       const merged = getCI(templateFor, role) || {};

@@ -27,7 +27,8 @@ test.each(['import', 'Import', 'include', 'Include', 'branches', 'Branches'])(
     const warnings = result.diagnostics.filter(d => d.code === CODES.VARIANT_RESERVED_KEY);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatchObject({ severity: 'warn', line: 7, col: 7 });
-    expect(warnings[0].message).toContain(`body: {${key.toLowerCase()}: ...}`);
+    expect(warnings[0].message).toContain(`Key "${key}"`);
+    expect(warnings[0].message).toContain(`body: {${key}: ...}`);
     expect(result.cards[0].rendered).toContain('base|changed');
     expect(result.items[0].fields.find(field => field.path.join('.') === 'body.Unreserved'))
       .toMatchObject({ value: 'changed' });

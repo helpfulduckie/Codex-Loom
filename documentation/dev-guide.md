@@ -101,7 +101,10 @@ so that the version gate follows the same capitalization rule.
 discovery normalizes each entry's top-level keys before component detection, include
 identity checks, and diagnostic labels; `sections` detection uses a folded lookup because
 the item schema does not declare that key. `templateFor` files validate against the field
-table schema before their templates are read. Migration's version gates use folded lookup
+table schema before their templates are read. Every `resolveTemplateForMaps` call reloads
+and validates its slot files, but only the load-time pass in `gatherTierTemplates` reports
+the findings; the per-leaf pass in `buildCompileContext` validates silently so a tolerated
+finding is not repeated for each leaf. Migration's version gates use folded lookup
 while the remaining v3 grammar stays exact.
 
 **An opaque delta can declare a normalization view without becoming a closed schema.**
@@ -116,7 +119,8 @@ capitalized property that downstream reads miss.
 The item normalization view selects its declared keys from it, `keyIdentity` uses it to
 distinguish structural content, and `applyFieldsDelta` uses it to route or ignore writes.
 Reserved `import`, `include`, and `branches` warn with `CL0329` at load and never become
-bare body fields. Explicit `body:` content remains author-keyed. Both item and component
+bare body fields. The normalization view omits those three, so the warning quotes the
+authored spelling. Explicit `body:` content remains author-keyed. Both item and component
 schemas use the recursive dispatch view from `loader/dispatch-schema.js`.
 
 **A schema descriptor declares which author-keyed mappings the rule covers.** `caseInsensitiveKeys:
