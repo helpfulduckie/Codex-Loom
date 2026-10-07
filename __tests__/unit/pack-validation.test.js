@@ -82,7 +82,8 @@ test('all malformed regexes are reported after key normalization', () => {
   expect(evaluatePack(pack, [card]).map(f => f.code)).toEqual(['CL-test/0002']);
 });
 
-test.each(['forbid: null', 'schema: {type: nonsense}', 'require: {equals: {value: high}}',
+test.each(['forbid: null', 'schema: {type: nonsense}', 'schema: {}', 'schema: {type: []}',
+  'require: {all: [null]}', '_extra: ignored', 'require: {equals: {value: high}}',
   'count: {fields: {vibe: {max: bad}}}', 'budget: {major: 10, MAJOR: 20}'])
 ('invalid nested rule data cannot disable a valid sibling: %s', bad => {
   const { pack, diagnostics } = load(`rules:\n  - ${bad}\n  - forbid: {}\n`);
@@ -90,7 +91,7 @@ test.each(['forbid: null', 'schema: {type: nonsense}', 'require: {equals: {value
   expect(evaluatePack(pack, [card]).map(f => f.code)).toEqual(['CL-test/0002']);
 });
 
-test.each(['name: other\nrules: [{forbid: {}}]', 'extra: value\nrules: [{forbid: {}}]',
+test.each(['name: other\nrules: [{forbid: {}}]', 'name: null\nrules: [{forbid: {}}]', 'extra: value\nrules: [{forbid: {}}]',
   'rules: nope', '[]'])('invalid pack structure or identity makes the pack unavailable: %s', text => {
   const { pack, diagnostics } = load(text);
   expect(pack).toBeNull();

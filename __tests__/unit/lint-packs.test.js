@@ -88,11 +88,11 @@ describe('loadPack', () => {
   });
 
   test.each([
-    ['at root', 'keyPattern: "["'],
-    ['under keys', 'keys: { child: { type: record, keyPattern: "[" } }'],
-    ['under of', 'of: { type: record, keys: { child: { type: record, keyPattern: "[" } } }'],
+    ['at root', 'type: record\n      keyPattern: "["'],
+    ['under keys', 'type: map\n      keys: { child: { type: record, keyPattern: "[" } }'],
+    ['under of', 'type: record\n      of: { type: record, keys: { child: { type: record, keyPattern: "[" } } }'],
   ])('a malformed keyPattern nested %s skips the rule as CL0117', (_where, schemaPart) => {
-    writePack('bad-key-pattern', `name: bad-key-pattern\nrules:\n  - schema:\n      type: record\n      ${schemaPart}\n`);
+    writePack('bad-key-pattern', `name: bad-key-pattern\nrules:\n  - schema:\n      ${schemaPart}\n`);
     const diag = new Diagnostics();
     expect(loadPack('bad-key-pattern', { source: './bad-key-pattern.cl.yaml' },
       { baseDir: TMP, diagnostics: diag }).rules).toEqual([]);

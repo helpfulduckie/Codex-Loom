@@ -210,7 +210,7 @@ lines (an optional `>` prefix stripped, first colon splits, first occurrence of 
 wins) — the shape a mod reads a settings card in. The descriptor keys the engine
 understands:
 
-- **`type`** — `map`, `record`, `seq`, `string`, `number`, `boolean`, `any` (or a list of
+- **`type`** — required: `map`, `record`, `seq`, `string`, `number`, `boolean`, `any` (or a nonempty list of
   them for a union).
 - **`keys`** — for `map`: the declared key set is the whole set; an undeclared key is a
   `CL0201` ERROR with a Damerau-Levenshtein typo suggestion. Declared `map` keys match in

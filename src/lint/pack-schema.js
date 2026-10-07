@@ -25,7 +25,7 @@ Object.assign(predicate.keys, {
 const descriptor = { type: TYPES.MAP, keys: {} };
 Object.assign(descriptor.keys, {
   // Type names already accept capitalization; union members keep that same grammar.
-  type: { type: [TYPES.STRING, TYPES.SEQ], of: string },
+  type: { type: [TYPES.STRING, TYPES.SEQ], of: string, required: true },
   keys: { type: TYPES.RECORD, of: descriptor, caseInsensitiveKeys: true },
   of: descriptor,
   keyPattern: string,

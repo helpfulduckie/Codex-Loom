@@ -54,9 +54,10 @@ function loadPack(name, entry, { baseDir, variables = {}, diagnostics, loc = {} 
 
   // Validate the envelope separately so one rule's errors cannot disable its siblings.
   const envelope = new Diagnostics();
-  validate(doc, { ...PACK_SCHEMA, keys: { ...PACK_SCHEMA.keys, rules: { type: TYPES.ANY } } },
+  const envelopeSchema = { ...PACK_SCHEMA, keys: { ...PACK_SCHEMA.keys, rules: { type: TYPES.ANY } } };
+  validate(doc, envelopeSchema,
     { diagnostics: envelope, sourceMap, context: `convention pack "${name}" (pack unavailable)` });
-  checkRuleValues(doc, { ...PACK_SCHEMA, keys: { ...PACK_SCHEMA.keys, rules: { type: TYPES.ANY } } },
+  checkRuleValues(doc, envelopeSchema,
     [], sourceMap, envelope, `convention pack "${name}" (pack unavailable)`);
   diagnostics.merge(envelope);
   if (!Array.isArray(doc.rules)) return fail('declares no rules: list', sourceMap.nearest('rules'));
@@ -136,6 +137,10 @@ function checkRuleValues(node, descriptor, at, sourceMap, diagnostics, context) 
       }
     }
     if (key === 'type') {
+      if (Array.isArray(child) && child.length === 0) {
+        diagnostics.error(CODES.VALUE_NOT_ALLOWED, `Descriptor type union must not be empty in ${context}.`,
+          sourceMap.nearest(childPath));
+      }
       for (const [i, value] of (Array.isArray(child) ? child : [child]).entries()) {
         if (typeof value === 'string' && !Object.values(TYPES).includes(value.toLowerCase())) {
           diagnostics.error(CODES.VALUE_NOT_ALLOWED,

@@ -138,7 +138,7 @@ Notes or metadata.
 
 `schema:` is a descriptor tree evaluated over a mapping recovered from the card.
 
-- **`type`** — `map`, `record`, `seq`, `string`, `number`, `boolean`, `any`, or a list for
+- **`type`** — required: `map`, `record`, `seq`, `string`, `number`, `boolean`, `any`, or a nonempty list for
   a union.
 - **`keys`** — on `map`, the declared key set is the *whole* set and an undeclared key is an
   ERROR with a typo suggestion. Declared `map` keys match in any capitalization; two
