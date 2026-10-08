@@ -416,6 +416,7 @@ function preview(configPath, options = {}) {
       items: [...run.config._resolvedItems],
       templates: [...run.config._resolvedTemplates],
       output: run.config._resolvedOutput,
+      reports: run.config._resolvedReports || null,
       snapshot: run.config._resolvedSnapshot || null,
     },
     sourceFiles: tables.sourceFiles.values,

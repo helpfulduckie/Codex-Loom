@@ -150,6 +150,7 @@ describe('preview records around the items', () => {
       items: [proj.file('items')],
       templates: [proj.file('templates')],
       output: proj.file('output'),
+      reports: null,
       snapshot: null,
     });
   });
