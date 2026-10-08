@@ -328,9 +328,10 @@ function compileRun(configPath, options, buses) {
 
   const packLoadFindings = runPackChecks(config, deferredCardLeaves, configPath, compileDiagnostics);
 
+  const cardPlacements = options.capture ? [] : null;
   totalFiles += placeInheritedFiles({
     deferredComponents, deferredScripts, deferredCardLeaves,
-    leaves, config, diagnostics: compileDiagnostics, log,
+    leaves, config, diagnostics: compileDiagnostics, log, cardPlacements,
   });
 
   writeTreeFiles({
@@ -371,7 +372,7 @@ function compileRun(configPath, options, buses) {
       : 0;
     return {
       config, leaves, leafData, inventoryData, deferredCardLeaves, captured, droppedKeys,
-      componentDetails,
+      componentDetails, cardPlacements, canonRegistry, registry, allItemDefs,
     };
   }
 
@@ -396,4 +397,5 @@ module.exports = {
   // Required on first use: preview.js requires this module, so a top-level require here
   // would make the two load each other.
   get preview() { return require('./preview').preview; },
+  get comparePreviews() { return require('./previewCompare').comparePreviews; },
 };

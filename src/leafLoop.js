@@ -18,6 +18,7 @@ const { checkUndeclaredPlaceholders } = require('./emit/placeholders');
 const { LIMITS, checkLimit } = require('./limits');
 const { questionsForMeasurement } = require('./treeWrite');
 const { buildBranchOutputDir } = require('./outputPaths');
+const { describeSections } = require('./componentView');
 
 const LIFT_EXCLUDED_COMPONENTS = new Set(['opening', 'adventureDescription']);
 
@@ -51,8 +52,10 @@ function compileLeaf(branchPath, ctx) {
   });
   const branchProtagonist = cctx.branchProtagonist;
 
+  const excludedItems = options.capture ? [] : null;
   const resolvedItems = resolveBranchItems(
-    allItemDefs, registry, branchPath, cctx.variables, diagnostics, { layers: !!options.capture },
+    allItemDefs, registry, branchPath, cctx.variables, diagnostics,
+    { layers: !!options.capture, excluded: excludedItems },
   );
 
   for (const item of resolvedItems) {
@@ -80,7 +83,7 @@ function compileLeaf(branchPath, ctx) {
   );
   deferredCardLeaves.push({
     branchPath, folderPath, outputDir, grouped: leafCardGroups,
-    lint: cctx.lint, variables: cctx.variables, resolvedItems,
+    lint: cctx.lint, variables: cctx.variables, resolvedItems, excludedItems,
   });
 
   if (options.inventory) {
@@ -100,6 +103,7 @@ function compileLeaf(branchPath, ctx) {
     let text;
     let segments;
     let excluded = false;
+    let shown = null;
     if (passthrough !== null && passthrough !== undefined) {
       const prose = resolveVariables(passthrough, cctx.variables, {
         diagnostics, location: textAt,
@@ -121,6 +125,7 @@ function compileLeaf(branchPath, ctx) {
         ? selectComponentSections(component, fieldVariant, null, null,
           busWarner(diagnostics, { file: String(spec), branch: label }))
         : component;
+      shown = fieldComponent;
       ({ text, segments, excluded = false } = renderSectionedComponent(
         fieldComponent, branchPath, filled,
         {
@@ -188,6 +193,10 @@ function compileLeaf(branchPath, ctx) {
       if (options.capture) {
         componentDetails.push({
           label, key: descriptor.key, source: textAt, inline: !!inline, metadata,
+          descriptor, outputDir,
+          selectedAt: origin || null,
+          selectedOn: cctx.componentNodes[descriptor.key] || [],
+          sections: shown ? describeSections(shown, branchPath, filled, segments) : null,
         });
       }
       if (descriptor.key === 'adventureDescription') descriptionLeaves.add(label);

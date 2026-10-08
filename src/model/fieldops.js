@@ -32,6 +32,10 @@ function trackOrigins(current, op, ctx) {
       layer: ctx.layer,
       op: deepClone(op),
       origin: nearestOrigin(ctx.source, ctx.sourcePath) || null,
+      // Read before the transfer below replaces it. An absent value has no origin of its
+      // own, and the nearest one would be its parent's.
+      beforeOrigin: current === undefined ? null : nearestOrigin(ctx.target, ctx.targetPath),
+      beforeAbsent: current === undefined,
       before: deepClone(current),
       after: deleted ? undefined : deepClone(after),
       deleted,

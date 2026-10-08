@@ -10,6 +10,8 @@ const { compile } = require('./compile');
 const { Diagnostics } = require('./diag');
 const { nearestOrigin } = require('./origin');
 const { ITEM_TOP_LEVEL_FIELDS, isPlainObject, findKey, pathId, pathStartsWith } = require('./util');
+const { buildBranchOutputDir, resolveBranchFolderPath } = require('./outputPaths');
+const { buildBranchTree, buildContext, buildLibraries } = require('./previewRecords');
 
 const FIELD_ROOTS = [...ITEM_TOP_LEVEL_FIELDS, 'body'];
 
@@ -85,6 +87,29 @@ function createTable(keyOf = (value) => value) {
   };
 }
 
+// Where a value was authored, as a field's `origin` is written.
+function describeOrigin(record, libraries, fileIndex) {
+  if (!record) return null;
+  return {
+    file: fileIndex(record.file),
+    line: typeof record.line === 'number' ? record.line : null,
+    col: typeof record.col === 'number' ? record.col : null,
+    authoredPath: record.path || null,
+    library: libraryOf(record.file, libraries),
+  };
+}
+
+// A position with the library that holds it, for a record that is not a field.
+function describeLocation(at, libraries, fileIndex) {
+  if (!at || !at.file) return null;
+  return {
+    file: fileIndex(at.file),
+    line: typeof at.line === 'number' ? at.line : null,
+    col: typeof at.col === 'number' ? at.col : null,
+    library: libraryOf(at.file, libraries),
+  };
+}
+
 function layersAt(item, fieldPath, libraries, fileIndex) {
   const layers = Array.isArray(item._layers) ? item._layers : [];
   return layers.filter((entry) => isPrefix(entry.path || [], fieldPath)).map((entry) => {
@@ -98,6 +123,8 @@ function layersAt(item, fieldPath, libraries, fileIndex) {
       line: at && typeof at.line === 'number' ? at.line : null,
       col: at && typeof at.col === 'number' ? at.col : null,
       before: plain(entry.before),
+      beforeAbsent: !!entry.beforeAbsent,
+      beforeOrigin: describeOrigin(entry.beforeOrigin, libraries, fileIndex),
       after: entry.deleted ? null : plain(entry.after),
       deleted: !!entry.deleted,
     };
@@ -115,13 +142,7 @@ function buildFields(item, libraries, fileIndex) {
     return {
       path: fieldPath,
       value: plain(value),
-      origin: record ? {
-        file: fileIndex(record.file),
-        line: typeof record.line === 'number' ? record.line : null,
-        col: typeof record.col === 'number' ? record.col : null,
-        authoredPath: record.path || null,
-        library: libraryOf(record.file, libraries),
-      } : null,
+      origin: describeOrigin(record, libraries, fileIndex),
       layers: layersAt(item, fieldPath, libraries, fileIndex),
     };
   });
@@ -168,13 +189,46 @@ function buildCards(grouped, cardTable) {
   return cards;
 }
 
-function buildComponents(components, details, fileIndex) {
+const relativeTo = (root, file) => path.relative(root, file).replace(/\\/g, '/');
+
+// A leaf's component is the nearest copy on its path, so the owner is the deepest node at
+// or above the leaf that the compile wrote the file to.
+function componentOutput(detail, leaf, run) {
+  const root = run.config._resolvedOutput;
+  const { descriptor } = detail;
+  for (let depth = leaf.folderPath.length; depth >= 0; depth -= 1) {
+    const dir = buildBranchOutputDir(root, leaf.folderPath.slice(0, depth));
+    const file = path.resolve(descriptor.dir ? path.join(dir, descriptor.dir) : dir, descriptor.file);
+    if (run.captured.has(file)) {
+      return { path: relativeTo(root, file), branchPath: leaf.branchPath.slice(0, depth) };
+    }
+  }
+  return null;
+}
+
+function describeSectionRecords(sections, describe, table) {
+  if (!sections) return null;
+  return sections.map((section) => table.indexOf({
+    ...section,
+    source: describe(section.source),
+    settings: section.settings.map((setting) => ({
+      path: setting.path, value: plain(setting.value), origin: describe(setting.origin),
+    })),
+  }));
+}
+
+function buildComponents(components, details, fileIndex, { leaf, run, describe, tables }) {
   const out = {};
   for (const [key, segments] of Object.entries(components || {})) {
     const list = (segments || []).map((s) => ({ key: s.key, text: s.text }));
     const detail = details.get(key);
     const at = detail && detail.source ? detail.source : null;
+    const output = detail ? componentOutput(detail, leaf, run) : null;
     out[key] = {
+      selectedAt: detail ? describe(detail.selectedAt) : null,
+      selectedOn: detail ? [...detail.selectedOn] : [],
+      output: output ? tables.outputs.indexOf(output) : null,
+      sections: detail ? describeSectionRecords(detail.sections, describe, tables.sections) : null,
       text: list.map((s) => s.text).join('\n\n'),
       segments: list,
       source: at ? {
@@ -198,27 +252,83 @@ function buildLeaves(run, libraries, tables) {
     detailsByLabel.get(detail.label).set(detail.key, detail);
   }
   const fileIndex = (file) => (file ? tables.sourceFiles.indexOf(file) : null);
+  const describe = (at) => describeLocation(at, libraries, fileIndex);
   return run.deferredCardLeaves.map((leaf) => {
     const label = leaf.branchPath.length > 0 ? leaf.branchPath.join('/') : '(root)';
     const data = dataByLabel.get(label);
+    const cards = buildCards(leaf.grouped, tables.cards);
+    const context = plain(buildContext(
+      run.config, leaf.branchPath, leaf.variables, data ? data.roles : null, describe,
+    ));
     return {
       label,
       branchPath: [...leaf.branchPath],
       folderPath: plain(leaf.folderPath),
       roles: plain(data ? data.roles : {}),
+      context: {
+        variables: context.variables.map((row) => tables.bindings.indexOf(row)),
+        roles: context.roles.map((row) => tables.bindings.indexOf(row)),
+      },
       items: leaf.resolvedItems.map((item) => tables.items.indexOf({
         id: item.id === undefined ? null : item.id,
         source: fileIndex(item._source),
+        ...describeDefinition(item, describe),
         fields: buildFields(item, libraries, fileIndex),
         removedFields: buildRemovedFields(item, libraries, fileIndex),
       })),
-      cards: buildCards(leaf.grouped, tables.cards),
+      excluded: (leaf.excludedItems || []).map((entry) => ({
+        id: excludedId(entry.itemDef),
+        source: fileIndex(entry.itemDef._source),
+        reason: entry.reason,
+        variant: entry.variant || null,
+        at: describe(entry.loc),
+      })),
+      cards,
+      cardFiles: cards.map(
+        (index) => tables.outputs.indexOf(cardFile(tables.cards.values[index], leaf, run)),
+      ),
       components: buildComponents(
         data && data.components, detailsByLabel.get(label) || new Map(), fileIndex,
+        { leaf, run, describe, tables },
       ),
       slots: plain(slotsByLabel.get(label) || null),
     };
   });
+}
+
+// Where an item's base definition is authored, and the project entry that imports it.
+function describeDefinition(item, describe) {
+  const trace = item._definition;
+  if (!trace) return { definition: null, importedAt: null, included: false };
+  const definition = describe(trace.definedAt);
+  if (definition && trace.library) definition.library = trace.library;
+  return { definition, importedAt: describe(trace.importedAt), included: trace.included };
+}
+
+function excludedId(itemDef) {
+  if (typeof itemDef.id === 'string' && itemDef.id) return itemDef.id;
+  if (typeof itemDef.import === 'string') return itemDef.import.split(':').pop();
+  return typeof itemDef.name === 'string' ? itemDef.name : null;
+}
+
+// The file a leaf reads a card from: the deepest node on its path that holds the name. A
+// single-leaf compile places nothing by name, so the card is in the leaf's own folder.
+function cardFile(card, leaf, run) {
+  let owner = leaf.branchPath;
+  let best = -1;
+  for (const placed of run.cardPlacements || []) {
+    if (placed.name !== card.name || placed.type !== card.type) continue;
+    if (placed.node.length <= best || placed.node.length > leaf.branchPath.length) continue;
+    if (!placed.node.every((segment, i) => leaf.branchPath[i] === segment)) continue;
+    owner = placed.node;
+    best = placed.node.length;
+  }
+  const root = run.config._resolvedOutput;
+  const dir = buildBranchOutputDir(root, resolveBranchFolderPath(run.config.branches, owner));
+  return {
+    path: relativeTo(root, path.join(dir, 'Story Cards', card.type, `${card.type}.md`)),
+    branchPath: [...owner],
+  };
 }
 
 function buildFiles(captured, outputDir) {
@@ -269,7 +379,8 @@ function preview(configPath, options = {}) {
     }
     return {
       status: 'blocked', droppedKeys: 0, diagnostics: describeDiagnostics(diagnostics),
-      sourceFiles: [], items: [], cards: [], leaves: [], files: [],
+      sourceFiles: [], items: [], cards: [], sections: [], bindings: [], outputs: [],
+      branches: [], libraries: [], leaves: [], files: [],
     };
   }
 
@@ -280,8 +391,12 @@ function preview(configPath, options = {}) {
     sourceFiles: createTable(),
     items: createTable(JSON.stringify),
     cards: createTable(JSON.stringify),
+    sections: createTable(JSON.stringify),
+    bindings: createTable(JSON.stringify),
+    outputs: createTable(JSON.stringify),
   };
   const leaves = buildLeaves(run, libraries, tables);
+  const libraryRecords = buildLibraries(run, (file) => tables.sourceFiles.indexOf(file));
   return {
     status: 'ok',
     droppedKeys: run.droppedKeys,
@@ -289,6 +404,11 @@ function preview(configPath, options = {}) {
     sourceFiles: tables.sourceFiles.values,
     items: tables.items.values,
     cards: tables.cards.values,
+    sections: tables.sections.values,
+    bindings: tables.bindings.values,
+    outputs: tables.outputs.values,
+    branches: buildBranchTree(run.config.branches),
+    libraries: libraryRecords,
     leaves,
     files: buildFiles(run.captured, run.config._resolvedOutput),
   };
