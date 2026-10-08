@@ -8,6 +8,7 @@
 const { sectionsForBranch } = require('./model/component');
 const { sortOccupants } = require('./emit/components');
 const { originAt } = require('./origin');
+const { findKey, isPlainObject } = require('./util');
 
 // Normalized section field → the path an author writes it at.
 const SETTINGS = [
@@ -19,7 +20,45 @@ const SETTINGS = [
 
 const SECTION_KEY = 'section:';
 
-function describeSections(component, branchPath, filled, segments) {
+function valueAt(def, authoredPath) {
+  let node = def;
+  for (const part of authoredPath) {
+    if (!isPlainObject(node)) return undefined;
+    const key = findKey(node, part);
+    if (key === null) return undefined;
+    node = node[key];
+  }
+  return node;
+}
+
+// Each record that wrote one setting of one section, in the order they applied: the files
+// merged through `imports:`, then the variants dispatched on this leaf. `value` is as
+// authored, so a text operation appears as written rather than as its result.
+function settingLayers(contributions, declared, applied, authoredPath) {
+  let layers = [];
+  for (const { file, variant, sections } of contributions || []) {
+    const key = isPlainObject(sections) ? findKey(sections, declared.name) : null;
+    if (key === null) continue;
+    const def = sections[key];
+    // A `~` deletes what the imports provided; a later record starts the section again.
+    if (def === null || def === undefined) { layers = []; continue; }
+    const value = valueAt(def, authoredPath);
+    if (value === undefined) continue;
+    layers.push({ file, variant, value, at: originAt(def, authoredPath) });
+  }
+  for (const name of applied) {
+    const key = isPlainObject(declared.variants) ? findKey(declared.variants, String(name)) : null;
+    if (key === null) continue;
+    const value = valueAt(declared.variants[key], authoredPath);
+    if (value === undefined) continue;
+    const at = originAt(declared, ['variants', key, ...authoredPath]);
+    layers.push({ file: at ? at.file : null, variant: name, value, at });
+  }
+  // One record is the setting's origin, which the setting already names.
+  return layers.length > 1 ? layers : [];
+}
+
+function describeSections(component, branchPath, filled, segments, contributions = null) {
   const applicable = sectionsForBranch(component, branchPath, null);
   if (applicable === null) return [];
 
@@ -53,7 +92,10 @@ function describeSections(component, branchPath, filled, segments) {
       settings: SETTINGS
         .filter(([field]) => section[field] !== undefined && section[field] !== null)
         .map(([field, authoredPath]) => ({
-          path: authoredPath, value: section[field], origin: originAt(section, [field]),
+          path: authoredPath,
+          value: section[field],
+          origin: originAt(section, [field]),
+          layers: settingLayers(contributions, declared, entry ? entry.variants : [], authoredPath),
         })),
       occupants,
       text,

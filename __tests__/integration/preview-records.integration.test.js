@@ -52,7 +52,10 @@ const FILES = {
     '    render: {position: 1}',
     '  party:',
     '    slot: true',
-    '    render: {position: 2}',
+    '    render: {position: 2, wrapper: curly}',
+    '    branches: {A: {branches: {y: tight}}}',
+    '    variants:',
+    '      tight: {render: {wrapper: square}}',
     '  extras:',
     '    slot: true',
     '    render: {position: 3}',
@@ -292,6 +295,29 @@ describe('preview component records', () => {
     expect(baseOf(result, position.origin)).toBe('pe-b.yaml');
     const wrap = intro.settings.find((s) => s.path.join('.') === 'render.wrap');
     expect(wrap).toMatchObject({ value: 'each', origin: null });
+  });
+
+  const setting = (label, name, dotted) => section(label, name).settings
+    .find((s) => s.path.join('.') === dotted);
+  const layersOf = (s) => s.layers.map((layer) => [baseOf(result, layer.at), layer.variant, layer.value]);
+
+  test('a setting an importing component overrides lists the imported value before its own', () => {
+    expect(layersOf(setting('B', 'intro', 'render.position'))).toEqual([
+      ['pe.yaml', null, 1], ['pe-b.yaml', null, 9],
+    ]);
+    expect(setting('B', 'intro', 'render.position').layers[0].at).toMatchObject({ line: 4 });
+  });
+
+  test('a setting a section variant changes on the leaf lists the variant after the declaration', () => {
+    expect(setting('A/y', 'party', 'render.wrapper')).toMatchObject({ value: 'square' });
+    expect(layersOf(setting('A/y', 'party', 'render.wrapper'))).toEqual([
+      ['pe.yaml', null, 'curly'], ['pe.yaml', 'tight', 'square'],
+    ]);
+  });
+
+  test('a setting only one record writes has no layers', () => {
+    expect(setting('A/x', 'intro', 'render.position').layers).toEqual([]);
+    expect(setting('A/x', 'party', 'render.wrapper')).toMatchObject({ value: 'curly', layers: [] });
   });
 });
 

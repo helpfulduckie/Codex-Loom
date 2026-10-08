@@ -196,7 +196,8 @@ function compileLeaf(branchPath, ctx) {
           descriptor, outputDir,
           selectedAt: origin || null,
           selectedOn: cctx.componentNodes[descriptor.key] || [],
-          sections: shown ? describeSections(shown, branchPath, filled, segments) : null,
+          sections: shown
+            ? describeSections(shown, branchPath, filled, segments, component.contributions) : null,
         });
       }
       if (descriptor.key === 'adventureDescription') descriptionLeaves.add(label);

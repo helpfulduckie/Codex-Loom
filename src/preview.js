@@ -212,7 +212,14 @@ function describeSectionRecords(sections, describe, table) {
     ...section,
     source: describe(section.source),
     settings: section.settings.map((setting) => ({
-      path: setting.path, value: plain(setting.value), origin: describe(setting.origin),
+      path: setting.path,
+      value: plain(setting.value),
+      origin: describe(setting.origin),
+      layers: setting.layers.map((layer) => ({
+        variant: layer.variant || null,
+        value: plain(layer.value),
+        at: describe(layer.at || (layer.file ? { file: layer.file } : null)),
+      })),
     })),
   }));
 }

@@ -9,7 +9,7 @@ const { readSource } = require('../sources');
 const { validate } = require('../schema');
 const { COMPONENT_SCHEMA } = require('./component-schema');
 const { normalizeComponent, mergeSectionRecords, applySectionSelector } = require('../model/component');
-const { resolveVariables } = require('../util');
+const { resolveVariables, findKey } = require('../util');
 const { runExtractor } = require('../extract');
 const { CODES, Diagnostics, busWarner } = require('../diag');
 const {
@@ -87,7 +87,14 @@ function loadComponentDocument(spec, options = {}) {
     diagnostics, label, variables, base, stack, onWarn, dependencyLedger, document, tolerant,
   });
   const local = localSections(doc.sections, document);
-  const sections = inherited === null ? local : mergeSectionRecords(inherited, local, onWarn);
+  const sections = inherited === null
+    ? local : mergeSectionRecords(inherited.sections, local, onWarn);
+  // Every record merged into `sections`, in merge order, so a caller can show what each
+  // file contributed to a section before the next one overrode it.
+  const contributions = [
+    ...(inherited === null ? [] : inherited.contributions),
+    { file: spec, variant: null, sections: local },
+  ];
 
   const sourced = resolveSectionSources(sections, {
     spec, base, variables, diagnostics,
@@ -96,7 +103,7 @@ function loadComponentDocument(spec, options = {}) {
   const component = normalizeComponent({ ...doc, sections: sourced }, { onWarn });
   if (component.sections.length === 0) return null;
   return attachOrigins(
-    { ...component, rawSections: sourced, source: spec },
+    { ...component, rawSections: sourced, source: spec, contributions },
     sourceMap.exportOrigins(),
   );
 }
@@ -158,6 +165,7 @@ function resolveImports(doc, spec, options) {
 
   const chain = [...stack, path.resolve(spec)];
   let sections = {};
+  const contributions = [];
 
   entries.forEach((entry, index) => {
     if (!entry || typeof entry !== 'object' || !entry.from) return;
@@ -192,7 +200,9 @@ function resolveImports(doc, spec, options) {
     if (!imported) return;
 
     let contributed = tagSectionOrigins(imported.rawSections, path.basename(resolved));
+    contributions.push(...imported.contributions);
     for (const { name, path: selectorPath } of parseSelectorList(entry.importVariants)) {
+      contributions.push({ file: resolved, variant: name, sections: sectionVariantDeltas(contributed, name) });
       const applied = applySectionSelector(contributed, name, onWarn);
       contributed = applied.sections;
       if (applied.matched === 0) {
@@ -208,7 +218,19 @@ function resolveImports(doc, spec, options) {
     sections = mergeSectionRecords(sections, contributed, onWarn);
   });
 
-  return sections;
+  return { sections, contributions };
+}
+
+// The delta a selector applies to each section that defines the variant, read on its own.
+function sectionVariantDeltas(sections, name) {
+  const out = {};
+  for (const [sectionName, def] of Object.entries(sections || {})) {
+    const variants = isMapping(def) && isMapping(def.variants) ? def.variants : null;
+    const key = variants ? findKey(variants, String(name)) : null;
+    if (key === null || !isMapping(variants[key])) continue;
+    out[sectionName] = transferOrigins(def, { ...variants[key] }, ['variants', key], []);
+  }
+  return out;
 }
 
 // `__importedFrom` only lets a merged copy's message defer to the imported file's own
