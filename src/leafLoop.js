@@ -19,6 +19,7 @@ const { LIMITS, checkLimit } = require('./limits');
 const { questionsForMeasurement } = require('./treeWrite');
 const { buildBranchOutputDir } = require('./outputPaths');
 const { describeSections } = require('./componentView');
+const { withUsage } = require('./usage');
 
 const LIFT_EXCLUDED_COMPONENTS = new Set(['opening', 'adventureDescription']);
 
@@ -104,17 +105,21 @@ function compileLeaf(branchPath, ctx) {
     let segments;
     let excluded = false;
     let shown = null;
+    const sectionUsage = new Map();
+    const proseUsage = { variables: new Set(), roles: new Set() };
     if (passthrough !== null && passthrough !== undefined) {
-      const prose = resolveVariables(passthrough, cctx.variables, {
-        diagnostics, location: textAt,
+      text = withUsage(proseUsage, () => {
+        const prose = resolveVariables(passthrough, cctx.variables, {
+          diagnostics, location: textAt,
+        });
+        return descriptor.inlineProse
+          ? applyTokenPass(prose, {
+            item: {}, registry, branchProtagonist,
+            roles: cctx.roles, onRoleUsed: roleState.onUsed,
+            onWarn: busWarner(diagnostics, { ...textAt, branch: label }),
+          })
+          : prose;
       });
-      text = descriptor.inlineProse
-        ? applyTokenPass(prose, {
-          item: {}, registry, branchProtagonist,
-          roles: cctx.roles, onRoleUsed: roleState.onUsed,
-          onWarn: busWarner(diagnostics, { ...textAt, branch: label }),
-        })
-        : prose;
       segments = [{ key: descriptor.label, text }];
     } else {
       warnEmptySlots(descriptor, slotIndex, filled, label, diagnostics, spec);
@@ -133,7 +138,7 @@ function compileLeaf(branchPath, ctx) {
           variables: cctx.variables, registry, branchProtagonist,
           roles: cctx.roles, onRoleUsed: roleState.onUsed,
           onWarn: busWarner(diagnostics, { file: String(spec), branch: label }),
-          diagnostics, file: String(spec),
+          diagnostics, file: String(spec), sectionUsage,
         },
       ));
     }
@@ -197,7 +202,9 @@ function compileLeaf(branchPath, ctx) {
           selectedAt: origin || null,
           selectedOn: cctx.componentNodes[descriptor.key] || [],
           sections: shown
-            ? describeSections(shown, branchPath, filled, segments, component.contributions) : null,
+            ? describeSections(shown, branchPath, filled, segments, component.contributions, sectionUsage) : null,
+          uses: shown ? null : proseUsage,
+          pathVariables: cctx.componentPathUses[descriptor.key].variables,
         });
       }
       if (descriptor.key === 'adventureDescription') descriptionLeaves.add(label);

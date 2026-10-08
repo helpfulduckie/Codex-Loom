@@ -58,7 +58,7 @@ function settingLayers(contributions, declared, applied, authoredPath) {
   return layers.length > 1 ? layers : [];
 }
 
-function describeSections(component, branchPath, filled, segments, contributions = null) {
+function describeSections(component, branchPath, filled, segments, contributions = null, sectionUsage = null) {
   const applicable = sectionsForBranch(component, branchPath, null);
   if (applicable === null) return [];
 
@@ -98,6 +98,7 @@ function describeSections(component, branchPath, filled, segments, contributions
           layers: settingLayers(contributions, declared, entry ? entry.variants : [], authoredPath),
         })),
       occupants,
+      uses: (entry && sectionUsage && sectionUsage.get(lower)) || { variables: new Set(), roles: new Set() },
       text,
     };
   });

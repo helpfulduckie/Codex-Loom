@@ -2,6 +2,7 @@
 
 const { walkItemTextFields, findKey } = require('../util');
 const { CODES } = require('../diag');
+const { usageOf, withUsage, noteRole } = require('../usage');
 
 
 
@@ -174,6 +175,7 @@ function resolveRole(leading, { roles, registry, resolvedById, onWarn, onRoleUse
     return null;
   }
 
+  noteRole(roleKey);
   if (onRoleUsed) onRoleUsed(roleKey);
   return boundId;
 }
@@ -199,7 +201,7 @@ function applyRolePass(resolvedItems, { registry, roles, resolvedById, onRoleUse
     return roleId !== null ? `{$${roleId}${trailing}}` : match;
   });
   for (const item of resolvedItems) {
-    walkItemTextFields(item, rewrite);
+    withUsage(usageOf(item), () => walkItemTextFields(item, rewrite));
   }
 }
 

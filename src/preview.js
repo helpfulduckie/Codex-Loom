@@ -12,6 +12,7 @@ const { nearestOrigin } = require('./origin');
 const { ITEM_TOP_LEVEL_FIELDS, isPlainObject, findKey, pathId, pathStartsWith } = require('./util');
 const { buildBranchOutputDir, resolveBranchFolderPath } = require('./outputPaths');
 const { buildBranchTree, buildContext, buildLibraries } = require('./previewRecords');
+const { usageOf } = require('./usage');
 
 const FIELD_ROOTS = [...ITEM_TOP_LEVEL_FIELDS, 'body'];
 
@@ -85,6 +86,13 @@ function createTable(keyOf = (value) => value) {
       return index.get(key);
     },
   };
+}
+
+// The variables and roles a record read, as sorted names.
+function describeUses(usage) {
+  if (!usage) return null;
+  const names = (set) => [...set].sort((a, b) => a.localeCompare(b));
+  return { variables: names(usage.variables), roles: names(usage.roles) };
 }
 
 // Where a value was authored, as a field's `origin` is written.
@@ -210,6 +218,7 @@ function describeSectionRecords(sections, describe, table) {
   if (!sections) return null;
   return sections.map((section) => table.indexOf({
     ...section,
+    uses: describeUses(section.uses),
     source: describe(section.source),
     settings: section.settings.map((setting) => ({
       path: setting.path,
@@ -236,6 +245,8 @@ function buildComponents(components, details, fileIndex, { leaf, run, describe, 
       selectedOn: detail ? [...detail.selectedOn] : [],
       output: output ? tables.outputs.indexOf(output) : null,
       sections: detail ? describeSectionRecords(detail.sections, describe, tables.sections) : null,
+      uses: detail ? describeUses(detail.uses) : null,
+      pathVariables: detail ? [...detail.pathVariables].sort((a, b) => a.localeCompare(b)) : [],
       text: list.map((s) => s.text).join('\n\n'),
       segments: list,
       source: at ? {
@@ -280,6 +291,7 @@ function buildLeaves(run, libraries, tables) {
         id: item.id === undefined ? null : item.id,
         source: fileIndex(item._source),
         ...describeDefinition(item, describe),
+        uses: describeUses(usageOf(item)),
         fields: buildFields(item, libraries, fileIndex),
         removedFields: buildRemovedFields(item, libraries, fileIndex),
       })),

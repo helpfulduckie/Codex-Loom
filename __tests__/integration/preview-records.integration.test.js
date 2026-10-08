@@ -40,7 +40,7 @@ const FILES = {
     '  name: Ghost',
     '  aid: {type: Item, title: Ghost}',
     '  render: {template: Item}',
-    '  body: {Desc: pale, Rank: none}',
+    "  body: {Desc: 'pale; {%greeting}', Rank: none}",
     '  branches: {B: gone}',
     '  variants:',
     '    gone: ~',
@@ -60,7 +60,7 @@ const FILES = {
     '    slot: true',
     '    render: {position: 3}',
     '  secret:',
-    '    text: hidden',
+    "    text: 'hidden from {$guide.display}'",
     '    branches: {A: {branches: {y: ~}}}',
     '    render: {position: 4}',
   ].join('\n'),
@@ -246,6 +246,31 @@ describe('preview records around the items', () => {
       [[], 'Hero'], [['A', 'y'], 'Sidekick'],
     ]);
     expect(contextOf(result, 'A/x').roles[0]).toMatchObject({ resolved: 'Hero' });
+  });
+
+  test('an item names the variables it reads, including one read through another', () => {
+    expect(itemOf(result, 'A/x', 'Ghost').uses).toEqual({ variables: ['greeting', 'place'], roles: [] });
+    expect(itemOf(result, 'A/x', 'Sidekick').uses).toEqual({ variables: [], roles: [] });
+  });
+
+  test('a section names the variables and roles its own text reads', () => {
+    const uses = (label, name) => componentOf(result, label, 'plotEssential').sections
+      .find((section) => section.name === name).uses;
+    expect(uses('A/x', 'intro')).toEqual({ variables: ['place'], roles: [] });
+    expect(uses('A/x', 'secret')).toEqual({ variables: [], roles: ['guide'] });
+    expect(uses('A/x', 'party')).toEqual({ variables: [], roles: [] });
+    // A gated section renders nothing, so it reads nothing.
+    expect(uses('A/y', 'secret')).toEqual({ variables: [], roles: [] });
+  });
+
+  test('a component names the variables in the path that selects its file', () => {
+    expect(leafOf(result, 'A/x').components.plotEssential.pathVariables).toEqual([]);
+    const example = preview(path.resolve(__dirname, '../../examples/variants-and-fieldops', CONFIG_NAME), { live: true });
+    const [leaf] = example.leaves;
+    expect(leaf.components.plotEssential.pathVariables).toEqual(['core']);
+    // Inline prose has no sections, so the component itself carries what the prose reads.
+    expect(leaf.components.opening).toMatchObject({ sections: null, uses: { variables: [], roles: [] } });
+    expect(leaf.components.plotEssential.uses).toBeNull();
   });
 
   test('a binding that is the same on several leaves is held once', () => {

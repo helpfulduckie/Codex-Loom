@@ -24,6 +24,7 @@ const { checkUndeclaredPlaceholders, checkPlaceholderContext } = require('./emit
 const { checkTargetSlot } = require('./slots');
 const { resolveComponentSpec, questionsForMeasurement } = require('./treeWrite');
 const { resolveScriptFiles } = require('./scripts');
+const { usageOf, withUsage } = require('./usage');
 
 function buildCompileContext(config, branchPath, options = {}) {
   const chain = walkBranchChain(config.branches, branchPath, {
@@ -48,14 +49,18 @@ function buildCompileContext(config, branchPath, options = {}) {
   ];
   const componentRefs = {};
   const componentOrigins = {};
+  const componentPathUses = {};
   const configFile = { file: options.configPath || undefined };
   for (const type of componentTypes) {
     const spec = components[type] !== undefined ? components[type] : null;
     const authored = chain.paths.components[type] || ['components', type];
     componentOrigins[type] = originLocation(config, authored, configFile);
-    componentRefs[type] = resolveComponentSpec(spec, config._base, variables, {
-      diagnostics: options.diagnostics, location: componentOrigins[type],
-    });
+    // The variables in a component's path decide which file a leaf reads.
+    componentPathUses[type] = { variables: new Set(), roles: new Set() };
+    componentRefs[type] = withUsage(componentPathUses[type], () => resolveComponentSpec(
+      spec, config._base, variables,
+      { diagnostics: options.diagnostics, location: componentOrigins[type] },
+    ));
   }
 
   const resolvedScripts = resolveScriptFiles(config, chain, variables, {
@@ -91,7 +96,8 @@ function buildCompileContext(config, branchPath, options = {}) {
   }
 
   return {
-    variables, componentRefs, componentOrigins, componentNodes, scriptFiles: resolvedScripts,
+    variables, componentRefs, componentOrigins, componentNodes, componentPathUses,
+    scriptFiles: resolvedScripts,
     render, templateFor, placeholders: chain.placeholders, roles,
     branchProtagonist: roleInfo ? roleInfo.protagonist : null,
     lint: chain.lint,
@@ -193,7 +199,9 @@ function resolveBranchItems(allItemDefs, registry, branchPath, variables, diagno
     }
 
     applyFieldInterpolation(item);
-    applyVariableInterpolation(item, variables, { diagnostics, file: item._source });
+    withUsage(usageOf(item), () => {
+      applyVariableInterpolation(item, variables, { diagnostics, file: item._source });
+    });
     resolvedItems.push(item);
   }
 
@@ -296,7 +304,8 @@ function renderBranchItems(resolvedItems, registry, templates, partials, branchP
   const seenNames = new Map();
   const reportedCollisions = new Set(); // name
 
-  for (const item of resolvedItems) {
+  // Everything rendered for one item is noted as that item's use of variables and roles.
+  for (const item of resolvedItems) withUsage(usageOf(item), () => {
     applyPronounPasses(item, {
       registry, branchProtagonist, resolvedById,
       roles, onWarn: busWarner(diagnostics, { branch: branchLabel }), onRoleUsed,
@@ -311,14 +320,14 @@ function renderBranchItems(resolvedItems, registry, templates, partials, branchP
       occupants, placeholderNoise,
     });
 
-    if (!placement.storyCard) continue;
+    if (!placement.storyCard) return;
 
     renderStoryCard(item, itemId, questions, {
       templates, partials, variables, diagnostics, branchLabel, projectNotesTemplate,
       fieldTable, templateFor, fieldAudit, cardTypeAudit, placeholders, usage, usagePath,
       grouped, renderedById, seenNames, reportedCollisions,
     });
-  }
+  });
 
   return { grouped, occupants, placeholderNoise };
 }
