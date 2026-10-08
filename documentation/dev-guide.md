@@ -19,7 +19,7 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/config/schema.js` | The `compile.cl.yaml` key surface, validated by `src/schema.js` |
 | `src/keyIdentity.js` | Selected authored mapping key validation, driven by schema descriptor flags |
 | `src/snapshot.js` | `--snapshot`: the library freeze (copy + hash + manifest write) and the compile-time drift notice (§11) |
-| `src/loader/preparse.js` | Rescues leading `{$…}`/`{%…}` tokens YAML would swallow (§4.1) |
+| `src/loader/preparse.js` | Rescues leading `{$…}`/`{%…}` tokens YAML would swallow (§4.1). `preparse` is also exported from `src/compile.js`, so an editor's highlighter can be tested against it |
 | `src/loader/yaml.js` | YAML parsing with a source map, so diagnostics carry positions |
 | `src/loader/registry.js` | Item loading, `ItemRegistry`, library merge, overlays, includes |
 | `src/loader/schema.js` | The item key surface (§4.3) |

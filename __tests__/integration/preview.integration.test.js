@@ -486,4 +486,10 @@ describe('the compile module exports', () => {
     expect(typeof exported.compile).toBe('function');
     expect(typeof exported.preview).toBe('function');
   });
+
+  test('exposes the pre-pass that quotes token-led values', () => {
+    const { preparse } = require('../../src/compile');
+    expect(preparse('path: {%root}/items  # where')).toBe("path: '{%root}/items'  # where");
+    expect(preparse('plain: text')).toBe('plain: text');
+  });
 });

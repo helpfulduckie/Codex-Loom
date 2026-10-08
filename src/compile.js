@@ -398,4 +398,7 @@ module.exports = {
   // would make the two load each other.
   get preview() { return require('./preview').preview; },
   get comparePreviews() { return require('./previewCompare').comparePreviews; },
+  // The text the YAML parser is given in place of a source file's, for a tool that must
+  // agree with the compiler about which unquoted values are token text.
+  get preparse() { return require('./loader/preparse').preparse; },
 };
