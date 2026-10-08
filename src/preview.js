@@ -386,6 +386,7 @@ function preview(configPath, options = {}) {
     }
     return {
       status: 'blocked', droppedKeys: 0, diagnostics: describeDiagnostics(diagnostics),
+      project: null,
       sourceFiles: [], items: [], cards: [], sections: [], bindings: [], outputs: [],
       branches: [], libraries: [], leaves: [], files: [],
     };
@@ -408,6 +409,15 @@ function preview(configPath, options = {}) {
     status: 'ok',
     droppedKeys: run.droppedKeys,
     diagnostics: describeDiagnostics(diagnostics),
+    project: {
+      config: path.resolve(configPath),
+      title: run.config.title,
+      base: run.config._base,
+      items: [...run.config._resolvedItems],
+      templates: [...run.config._resolvedTemplates],
+      output: run.config._resolvedOutput,
+      snapshot: run.config._resolvedSnapshot || null,
+    },
     sourceFiles: tables.sourceFiles.values,
     items: tables.items.values,
     cards: tables.cards.values,

@@ -142,6 +142,18 @@ describe('preview records around the items', () => {
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
   });
 
+  test('project names the config and the directories it resolves to', () => {
+    expect(result.project).toEqual({
+      config: proj.config,
+      title: null,
+      base: proj.dir,
+      items: [proj.file('items')],
+      templates: [proj.file('templates')],
+      output: proj.file('output'),
+      snapshot: null,
+    });
+  });
+
   test('branches is the branch tree with a path on every node', () => {
     expect(result.branches).toEqual([
       {
@@ -362,7 +374,7 @@ describe('preview of a blocked project', () => {
     const result = preview(proj.config, { sources: { [proj.file('items/items.yaml')]: '- [unclosed' } });
     expect(result.status).toBe('blocked');
     expect(result).toMatchObject({
-      branches: [], libraries: [], sections: [], bindings: [], outputs: [],
+      project: null, branches: [], libraries: [], sections: [], bindings: [], outputs: [],
     });
   });
 });
