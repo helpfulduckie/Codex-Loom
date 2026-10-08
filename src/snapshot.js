@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const { loadManifest, isOutOfBase } = require('./config/load');
+const { loadManifest, isOutOfBase, loadCompileConfig } = require('./config/load');
 const { buildCanonRegistry } = require('./loader/registry');
 const { Diagnostics, CODES } = require('./diag');
 const { NULL_LOG } = require('./log');
@@ -125,30 +125,34 @@ function entryLabel(entry) {
   return `${entry.kind === 'library' ? 'Library' : 'Template'} "${entry.name}"`;
 }
 
-function diffEntryLines(entry, prevSection, liveHashes) {
-  const label = entryLabel(entry);
+// What a freeze changes in one entry, against the manifest of the freeze before it.
+function diffEntry(entry, prevSection, liveHashes) {
+  const diff = { name: entry.name, kind: entry.kind, isNew: !prevSection, added: [], removed: [], changed: [] };
   if (!prevSection) {
-    const count = Object.keys(liveHashes).length;
-    return [`${label}: ${count} file(s), all new (no previous snapshot entry).`];
+    diff.added = Object.keys(liveHashes);
+    return diff;
   }
   const prevFiles = prevSection.files || {};
-  const added = [];
-  const removed = [];
-  const changed = [];
   for (const rel of Object.keys(liveHashes)) {
-    if (!(rel in prevFiles)) added.push(rel);
-    else if (prevFiles[rel] !== liveHashes[rel]) changed.push({ rel, from: prevFiles[rel], to: liveHashes[rel] });
+    if (!(rel in prevFiles)) diff.added.push(rel);
+    else if (prevFiles[rel] !== liveHashes[rel]) diff.changed.push({ rel, from: prevFiles[rel], to: liveHashes[rel] });
   }
   for (const rel of Object.keys(prevFiles)) {
-    if (!(rel in liveHashes)) removed.push(rel);
+    if (!(rel in liveHashes)) diff.removed.push(rel);
   }
-  if (added.length === 0 && removed.length === 0 && changed.length === 0) {
+  return diff;
+}
+
+function diffEntryLines(entry, diff) {
+  const label = entryLabel(entry);
+  if (diff.isNew) return [`${label}: ${diff.added.length} file(s), all new (no previous snapshot entry).`];
+  if (diff.added.length === 0 && diff.removed.length === 0 && diff.changed.length === 0) {
     return [`${label}: no changes.`];
   }
   const lines = [`${label}:`];
-  for (const rel of added) lines.push(`  added:   ${rel}`);
-  for (const rel of removed) lines.push(`  removed: ${rel}`);
-  for (const c of changed) lines.push(`  changed: ${c.rel} (${c.from} -> ${c.to})`);
+  for (const rel of diff.added) lines.push(`  added:   ${rel}`);
+  for (const rel of diff.removed) lines.push(`  removed: ${rel}`);
+  for (const c of diff.changed) lines.push(`  changed: ${c.rel} (${c.from} -> ${c.to})`);
   return lines;
 }
 
@@ -168,6 +172,7 @@ function syncLibrary(config, options = {}) {
   if (hasTemplates) newManifest.templates = {};
 
   const reportLines = [];
+  const changes = [];
   let filesWritten = 0;
 
   const collected = entries.map((entry) => {
@@ -182,7 +187,9 @@ function syncLibrary(config, options = {}) {
     const prevSection = previousManifest
       ? (entry.kind === 'library' ? previousManifest.library : previousManifest.templates || {})[entry.name]
       : undefined;
-    reportLines.push(...diffEntryLines(entry, prevSection, fileHashes));
+    const diff = diffEntry(entry, prevSection, fileHashes);
+    changes.push(diff);
+    reportLines.push(...diffEntryLines(entry, diff));
 
     const destDir = path.join(snapshotDir, entry.name);
     for (const rel of files) {
@@ -228,7 +235,44 @@ function syncLibrary(config, options = {}) {
   fs.mkdirSync(snapshotDir, { recursive: true });
   fs.writeFileSync(manifestPath, JSON.stringify(newManifest, null, 2), 'utf8');
 
-  return { entries, filesWritten, manifestPath };
+  return { entries, filesWritten, manifestPath, changes };
+}
+
+/**
+ * The library freeze as a call that returns data, for a caller that is not the CLI. Reads
+ * the live libraries from disk, replaces the project's frozen copy with them, and says what
+ * changed. See "Freezing libraries" in the dev guide.
+ */
+function freezeLibraries(configPath) {
+  const diagnostics = new Diagnostics();
+  const describe = () => diagnostics.all.map((d) => ({
+    code: d.code, severity: d.severity, message: d.message, file: d.file, line: d.line, col: d.col,
+  }));
+  const blocked = (reason) => ({
+    status: 'blocked', reason, diagnostics: describe(), snapshot: null, manifest: null, filesWritten: 0, entries: [],
+  });
+
+  const config = loadCompileConfig(configPath, { diagnostics, live: true });
+  if (!config || diagnostics.hasErrors()) return blocked('The compile config does not load.');
+  if (!config._resolvedSnapshot) return blocked('structure.input.snapshot is not set, so there is nothing to freeze.');
+
+  const result = syncLibrary(config, { diagnostics });
+  return {
+    status: 'ok',
+    reason: null,
+    diagnostics: describe(),
+    snapshot: config._resolvedSnapshot,
+    manifest: result.manifestPath,
+    filesWritten: result.filesWritten,
+    entries: result.changes.map((diff) => ({
+      name: diff.name,
+      kind: diff.kind,
+      isNew: diff.isNew,
+      added: diff.added,
+      removed: diff.removed,
+      changed: diff.changed.map((c) => c.rel),
+    })),
+  };
 }
 
 function checkDrift(config, diagnostics, log) {
@@ -305,5 +349,5 @@ function checkDrift(config, diagnostics, log) {
 }
 
 module.exports = {
-  syncLibrary, checkDrift, hashTree, collectEntries, entryLabel,
+  syncLibrary, freezeLibraries, checkDrift, hashTree, collectEntries, entryLabel,
 };

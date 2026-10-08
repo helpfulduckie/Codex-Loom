@@ -18,7 +18,7 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/config/load.js` | Loads and resolves `compile.cl.yaml`: variables, paths, library names |
 | `src/config/schema.js` | The `compile.cl.yaml` key surface, validated by `src/schema.js` |
 | `src/keyIdentity.js` | Selected authored mapping key validation, driven by schema descriptor flags |
-| `src/snapshot.js` | `--snapshot`: the library freeze (copy + hash + manifest write) and the compile-time drift notice (§11) |
+| `src/snapshot.js` | `--snapshot`: the library freeze (copy + hash + manifest write) and the compile-time drift notice (§11); `freezeLibraries` is the same freeze as a call (see Freezing libraries) |
 | `src/loader/preparse.js` | Rescues leading `{$…}`/`{%…}` tokens YAML would swallow (§4.1). `preparse` is also exported from `src/compile.js`, so an editor's highlighter can be tested against it |
 | `src/loader/yaml.js` | YAML parsing with a source map, so diagnostics carry positions |
 | `src/loader/registry.js` | Item loading, `ItemRegistry`, library merge, overlays, includes |
@@ -583,6 +583,14 @@ Library path resolution no longer needs a bespoke two-pass. v3 resolved plain-pa
 - `items` gathers the per-leaf rows by item: `{ id, outputLeaves, fieldLeaves }`, each a list of leaf pairs. An item is in `outputLeaves` for a pair where its output differs and in `fieldLeaves` where only resolved fields do.
 - `libraries` lists each library item whose `digest` differs, or that only one side has: `{ library, id, change, fileA, fileB, imported, compiledAs, reachesOutput }`. `compiledAs` holds the ids the item compiles under in either preview, matched by where the definition sits, so an import under a new id is found. `reachesOutput` is true when one of those ids is in some pair's `outputLeaves`; false marks an edit that changes nothing this project compiles.
 - `files` is `{ changed, added, removed }`, lists of output paths. `library-dependencies.json` records a time and absolute paths, so it is in `changed` for any two previews.
+
+### Freezing libraries
+
+**`freezeLibraries(configPath)` is `--snapshot` as a call that returns data.** It is exported from `src/compile.js`. It reads every declared library, and every template directory outside the project, from its live location on disk, replaces the project's frozen copy with them, removes frozen files that no longer exist live, and rewrites the manifest. It does not compile, and it takes no source overrides: what is frozen is what is saved.
+
+**The result is `{ status, reason, diagnostics, snapshot, manifest, filesWritten, entries }`.** `status` is `'blocked'`, with `reason` saying why and nothing written, when the config does not load or declares no `structure.input.snapshot`. Otherwise `entries` has one `{ name, kind, isNew, added, removed, changed }` per frozen entry, `kind` being `'library'` or `'template'` and the three lists holding paths relative to the entry, compared against the manifest of the freeze before. `isNew` marks an entry with no earlier freeze, whose files are all in `added`.
+
+**The previous frozen copy is not kept.** A caller that wants an undo has to arrange it, for example by relying on the project's version control.
 
 **Field comparison is by value, not origin.** A snapshot preview and a live one read the same library from different directories, so every origin differs between them where nothing an author wrote does.
 

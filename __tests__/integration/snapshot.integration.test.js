@@ -259,3 +259,60 @@ describe('snapshot-preferring resolution (--live escape hatch)', () => {
     expect(plotEssentials).not.toContain('Edited');
   });
 });
+
+describe('freezeLibraries (the freeze as a call)', () => {
+  const { freezeLibraries } = require('../../src/compile');
+
+  test('the first freeze copies every library file and reports the entry as new', () => {
+    const configPath = buildProject();
+    const result = freezeLibraries(configPath);
+    expect(result).toMatchObject({
+      status: 'ok', reason: null, filesWritten: 1, snapshot: path.join(tmpDir, 'snapshot'),
+      entries: [{ name: 'main', kind: 'library', isNew: true, added: ['note.cl.yaml'], removed: [], changed: [] }],
+    });
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot', 'main', 'note.cl.yaml'))).toBe(true);
+    expect(fs.existsSync(result.manifest)).toBe(true);
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+  });
+
+  test('a later freeze names the files that changed, appeared and went', () => {
+    const configPath = buildProject();
+    freezeLibraries(configPath);
+    const note = path.join(tmpDir, 'main-lib', 'note.cl.yaml');
+    fs.writeFileSync(note, fs.readFileSync(note, 'utf8').replace('Original', 'Revised'), 'utf8');
+    writeFile('main-lib/extra.cl.yaml', '- id: Extra\n  aid: {type: Character, title: Extra}\n  render: {template: Character}\n');
+    expect(freezeLibraries(configPath).entries).toEqual([
+      { name: 'main', kind: 'library', isNew: false, added: ['extra.cl.yaml'], removed: [], changed: ['note.cl.yaml'] },
+    ]);
+    expect(fs.readFileSync(path.join(tmpDir, 'snapshot', 'main', 'note.cl.yaml'), 'utf8')).toContain('Revised');
+
+    fs.rmSync(path.join(tmpDir, 'main-lib', 'extra.cl.yaml'));
+    expect(freezeLibraries(configPath).entries[0]).toMatchObject({ added: [], removed: ['extra.cl.yaml'], changed: [] });
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot', 'main', 'extra.cl.yaml'))).toBe(false);
+  });
+
+  test('a freeze with nothing to adopt changes no entry', () => {
+    const configPath = buildProject();
+    freezeLibraries(configPath);
+    expect(freezeLibraries(configPath).entries).toEqual([
+      { name: 'main', kind: 'library', isNew: false, added: [], removed: [], changed: [] },
+    ]);
+  });
+
+  test('a project that declares no snapshot is blocked and nothing is written', () => {
+    const configPath = buildProject();
+    fs.writeFileSync(configPath, fs.readFileSync(configPath, 'utf8').replace('    snapshot: ./snapshot\n', ''), 'utf8');
+    const result = freezeLibraries(configPath);
+    expect(result).toMatchObject({ status: 'blocked', entries: [], filesWritten: 0 });
+    expect(result.reason).toMatch(/snapshot is not set/);
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot'))).toBe(false);
+  });
+
+  test('a config that does not load is blocked with its diagnostics', () => {
+    const configPath = buildProject();
+    fs.writeFileSync(configPath, 'version: [4', 'utf8');
+    const result = freezeLibraries(configPath);
+    expect(result.status).toBe('blocked');
+    expect(result.diagnostics.some((d) => d.code === 'CL0101')).toBe(true);
+  });
+});
