@@ -18,7 +18,7 @@ in one mapping that differ only by capitalization are an ERROR (`CL0211`). See
     full: Aness Rozen
   pronouns: female
   aid:
-    type: Character
+    type: character
     triggers: [Aness, Rozen]
   notes: {known: true}
   render:
@@ -143,7 +143,7 @@ AID-specific metadata. All fields are optional.
 ```yaml surface=item
 aid:
   title: The Stranger       # card name in AID; defaults to name.full
-  type: Character           # item type — determines output folder and default template
+  type: character           # item type — determines output folder and default template
   triggers: [Aness, Rozen]  # trigger keywords (sequence or single string)
 ```
 

@@ -403,7 +403,7 @@ templates:
 ```yaml surface=item
 # the one NPC who stays detailed even in the low-context tier
 - id: Grand
-  aid: { type: Character }
+  aid: { type: character }
   render: { template: CharacterFull }
 ```
 

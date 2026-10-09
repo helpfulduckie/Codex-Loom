@@ -42,7 +42,7 @@ And the item side, in the item's own file:
 ```yaml
 - id: Aness
   name: {display: Aness, full: Aness Vale}
-  aid: {type: Character, triggers: [Aness, Vale]}
+  aid: {type: character, triggers: [Aness, Vale]}
   render:
     template: Character
     storyCard: false                # lives in Plot Essentials, not in a story card

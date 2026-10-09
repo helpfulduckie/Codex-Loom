@@ -165,7 +165,7 @@ And the item side, which lives in the item's own file:
 ```yaml surface=item
 - id: Aness
   name: {display: Aness, full: Aness Vale}
-  aid: {type: Character, triggers: [Aness, Vale]}
+  aid: {type: character, triggers: [Aness, Vale]}
   render:
     template: Character
     storyCard: false                # this item lives in PE, not in a story card
@@ -360,7 +360,7 @@ sections:
   branches: {researcher: ~}
 
 - id: Kaiden
-  aid: {type: Character, triggers: [Kaiden]}
+  aid: {type: character, triggers: [Kaiden]}
   render:
     template: Character
     plotEssential: {slot: cast, order: 1, template: CharacterBrief}

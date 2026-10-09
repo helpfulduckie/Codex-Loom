@@ -92,7 +92,7 @@ templates:
 ```yaml
 # the one NPC who must stay detailed even in the low-context tier
 - id: Grand
-  aid: { type: Character }
+  aid: { type: character }
   render: { template: CharacterFull }
 ```
 

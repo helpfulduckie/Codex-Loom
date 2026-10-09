@@ -151,7 +151,7 @@ branches:
   pronouns: female
   aid:
     title: Aria Voss
-    type: Character
+    type: character
     triggers: [Aria, Voss]
   render:
     template: Character
@@ -257,7 +257,7 @@ Then run: `codex-loom ./my-project`
   pronouns: male
   aid:
     title: Elder Roshan
-    type: Character
+    type: character
     triggers: [Roshan, Elder]
   render:
     template: Character
@@ -289,7 +289,7 @@ Then name it on each item that belongs there:
 
 ```yaml
 - id: Mentor
-  aid: {type: Character, triggers: [Roshan]}
+  aid: {type: character, triggers: [Roshan]}
   render:
     template: Character
     plotEssential: {slot: cast, order: 2, template: CharacterBrief}

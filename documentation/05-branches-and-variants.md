@@ -310,7 +310,7 @@ dispatch, is `Felicia` in `examples/showcase/Codex/characters.cl.yaml`.
 ```yaml surface=item from=showcase/Codex/characters.cl.yaml key=Felicia
   name: {display: Felicia, full: Felicia Grayls}
   pronouns: female
-  aid: {title: Felicia Grayls, type: Character, triggers: [Felicia, Grayls]}
+  aid: {title: Felicia Grayls, type: character, triggers: [Felicia, Grayls]}
   render: {template: Character}
   body:
     Tagline: [Academy researcher, minor nobility]

@@ -21,7 +21,7 @@ regard to capitalization.** A variant that sets `hair` overrides a body field wr
   pronouns: female                 # female | male | nonbinary | they
   aid:
     title: Aness Rozen             # AID display title (may differ from name)
-    type: Character                # output folder; default template name
+    type: character                # output folder; default template name
     triggers: [Aness, Rozen]       # trigger keywords (sequence or single string)
   notes:                           # the AID description field; story-card output only
     Aness is a healer.
