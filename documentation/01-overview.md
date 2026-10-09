@@ -226,16 +226,16 @@ For a project with two branch leaves `subject` and `researcher` that share most 
 ```
 output/
   Story Cards/                   ← every card identical across both leaves
-    Character/
-      Character.md
+    character/
+      character.md
   Components/
     AI Instructions.md           ← identical at both leaves, so written once here
   Label.md                       ← only when it differs from the directory name
   Branches/
     subject/
       Story Cards/
-        Character/
-          Character.md           ← only the cards this leaf renders differently
+        character/
+          character.md           ← only the cards this leaf renders differently
       Components/
         Opening.md               ← per-leaf: this branch's first move
         Plot Essentials.md       ← per-leaf: slots filled by per-branch items
@@ -247,6 +247,8 @@ output/
         Plot Essentials.md
       Description.md
 ```
+
+**A card's `aid.type` names both its folder and its file: `Story Cards/{type}/{type}.md`.** The five AI Dungeon built-in types (`character`, `class`, `race`, `location`, `faction`) are written in lowercase however the item spells them, so `type: Character` lands in `character/character.md`. Any other type keeps the case it was authored in.
 
 For nested branches (e.g. branch `A` with children `X` and `Y`), the path is `Branches/A/Branches/X/`.
 
