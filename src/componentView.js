@@ -6,17 +6,10 @@
  */
 
 const { sectionsForBranch } = require('./model/component');
+const { SECTION_SETTINGS } = require('./model/componentSettings');
 const { sortOccupants } = require('./emit/components');
 const { originAt } = require('./origin');
 const { findKey, isPlainObject } = require('./util');
-
-// Normalized section field → the path an author writes it at.
-const SETTINGS = [
-  ['isSlot', ['slot']], ['heading', ['heading']], ['headingLevel', ['headingLevel']],
-  ['position', ['render', 'position']], ['wrapper', ['render', 'wrapper']],
-  ['wrap', ['render', 'wrap']], ['compact', ['render', 'compact']],
-  ['bullet', ['render', 'bullet']], ['text', ['text']],
-];
 
 const SECTION_KEY = 'section:';
 
@@ -89,9 +82,9 @@ function describeSections(component, branchPath, filled, segments, contributions
       index: section.index,
       variants: entry ? entry.variants : [],
       source: originAt(section, []),
-      settings: SETTINGS
-        .filter(([field]) => section[field] !== undefined && section[field] !== null)
-        .map(([field, authoredPath]) => ({
+      settings: SECTION_SETTINGS
+        .filter(({ field, visible }) => visible && section[field] !== undefined && section[field] !== null)
+        .map(({ field, authoredPath }) => ({
           path: authoredPath,
           value: section[field],
           origin: originAt(section, [field]),

@@ -3,10 +3,12 @@
 /** The preview records that describe a project around its items, and `comparePreviews`. */
 
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 const { withTmpDir, writeTree } = require('../helpers/project');
 const { PROJECTS, CONFIG_NAME } = require('../../examples/projects');
 
-const { preview, comparePreviews } = require('../../src/compile');
+const { preview, comparePreviews, freezeLibraries } = require('../../src/compile');
 
 const LIBRARY = [
   '- id: Hero',
@@ -149,6 +151,10 @@ describe('preview records around the items', () => {
       base: proj.dir,
       items: [proj.file('items')],
       templates: [proj.file('templates')],
+      inputRoots: [
+        { kind: 'library', name: 'core', path: proj.file('library'), sourcePath: proj.file('library'), frozen: false },
+        { kind: 'template', name: '0', path: proj.file('templates'), sourcePath: proj.file('templates'), frozen: false },
+      ],
       output: proj.file('output'),
       reports: null,
       snapshot: null,
@@ -484,5 +490,103 @@ describe('comparePreviews', () => {
   test('a blocked preview on either side blocks the comparison', () => {
     const blocked = preview(proj.config, { sources: { [proj.file('items/items.yaml')]: '- [unclosed' } });
     expect(comparePreviews(base, blocked).status).toBe('blocked');
+  });
+});
+
+describe('preview comparison of output metadata and opaque files', () => {
+  test('a metadata-only edit changes the resolved component and its output file', () => {
+    const proj = project();
+    const component = proj.file('components/pe.yaml');
+    const authored = 'metadata: {category: "{%place}", tags: [harbor]}\n' + FILES['components/pe.yaml'];
+    const before = preview(proj.config, { sources: { [component]: authored } });
+    const after = preview(proj.config, {
+      sources: { [component]: authored.replace('tags: [harbor]', 'tags: [mountain]') },
+    });
+    expect(before.status).toBe('ok');
+    expect(after.status).toBe('ok');
+    expect(leafOf(before, 'A/x').components.plotEssential.metadata.category).toBe('Summit');
+    expect(leafOf(before, 'A/x').components.plotEssential.text)
+      .toBe(leafOf(after, 'A/x').components.plotEssential.text);
+    const diff = comparePreviews(before, after);
+    expect(diff.leaves[0].components).toEqual([{ key: 'plotEssential', change: 'changed', sections: [] }]);
+    expect(diff.files.changed).toContain(before.outputs[leafOf(before, 'A/x').components.plotEssential.output].path);
+    expect(diff.leaves[0].items).toEqual([]);
+    expect(diff.leaves[0].cards).toEqual([]);
+
+    const reordered = preview(proj.config, {
+      sources: { [component]: authored.replace('category: "{%place}", tags: [harbor]', 'tags: [harbor], category: "{%place}"') },
+    });
+    expect(comparePreviews(before, reordered).leaves[0].components).toEqual([]);
+  });
+
+  test('equal-length script edits compare by their captured bytes', () => {
+    const proj = project();
+    writeTree(proj.dir, {
+      'input.js': 'return 1;',
+      'compile.yaml': FILES['compile.yaml'] + '\nscripts: {input: ./input.js}\n',
+    });
+    const before = preview(proj.config);
+    fs.writeFileSync(proj.file('input.js'), 'return 2;', 'utf8');
+    const after = preview(proj.config);
+    const script = (result) => result.files.find((file) => file.path === 'Scripts/input.js');
+    expect(before.status).toBe('ok');
+    expect(after.status).toBe('ok');
+    expect(script(before)).toEqual({
+      path: 'Scripts/input.js', binary: true, bytes: 9,
+      digest: `sha256:${crypto.createHash('sha256').update('return 1;').digest('hex')}`,
+    });
+    expect(script(after).bytes).toBe(script(before).bytes);
+    expect(script(after).digest).not.toBe(script(before).digest);
+    expect(comparePreviews(before, after).files.changed).toContain('Scripts/input.js');
+    expect(JSON.parse(JSON.stringify(after))).toEqual(after);
+  });
+});
+
+describe('preview input root mappings', () => {
+  test('all template roots map the active frozen directory to the declared live directory without writes', () => {
+    const dir = withTmpDir();
+    const base = path.join(dir, 'project');
+    writeTree(base, {
+      ...FILES,
+      'templates/Item.template': '{$body.Desc}',
+      'compile.yaml': FILES['compile.yaml']
+        .replace('templates: [%TMP%/templates]', 'templates: [./templates, ../external-templates]')
+        .replace('  output:', '    snapshot: ./snapshot\n  output:'),
+    });
+    writeTree(dir, { 'external-templates/Extra.template': '{$body.Rank}' });
+    const config = path.join(base, 'compile.yaml');
+    expect(freezeLibraries(config).status).toBe('ok');
+    const writes = ['writeFileSync', 'mkdirSync', 'copyFileSync', 'rmSync', 'unlinkSync']
+      .map((method) => jest.spyOn(fs, method));
+    let frozen;
+    let live;
+    try {
+      frozen = preview(config);
+      live = preview(config, { live: true });
+      expect(comparePreviews(frozen, live).status).toBe('ok');
+      for (const write of writes) expect(write).not.toHaveBeenCalled();
+    } finally {
+      for (const write of writes) write.mockRestore();
+    }
+    expect(frozen.status).toBe('ok');
+    expect(frozen.project.inputRoots).toEqual([
+      {
+        kind: 'library', name: 'core', path: path.join(base, 'snapshot', 'core'),
+        sourcePath: path.join(base, 'library'), frozen: true,
+      },
+      {
+        kind: 'template', name: '0', path: path.join(base, 'templates'),
+        sourcePath: path.join(base, 'templates'), frozen: false,
+      },
+      {
+        kind: 'template', name: '1', path: path.join(base, 'snapshot', '1'),
+        sourcePath: path.join(dir, 'external-templates'), frozen: true,
+      },
+    ]);
+    expect(live.project.inputRoots).toEqual(frozen.project.inputRoots.map((root) => ({
+      ...root, path: root.sourcePath, frozen: false,
+    })));
+    expect(fs.existsSync(path.join(base, 'output'))).toBe(false);
+    expect(JSON.parse(JSON.stringify(frozen))).toEqual(frozen);
   });
 });

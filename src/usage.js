@@ -10,11 +10,28 @@
  */
 
 let current = null;
+let enabled = false;
 const bySubject = new WeakMap();
+
+function createUsage() {
+  return enabled ? { variables: new Set(), roles: new Set() } : null;
+}
+
+function withUsageCapture(capture, fn) {
+  const outer = enabled;
+  const outerCurrent = current;
+  enabled = !!capture;
+  current = null;
+  try { return fn(); } finally { enabled = outer; current = outerCurrent; }
+}
 
 /** The usage record for an item or other object, made on first request. */
 function usageOf(subject) {
-  if (!bySubject.has(subject)) bySubject.set(subject, { variables: new Set(), roles: new Set() });
+  if (!bySubject.has(subject)) {
+    const record = createUsage();
+    if (!record) return null;
+    bySubject.set(subject, record);
+  }
   return bySubject.get(subject);
 }
 
@@ -37,4 +54,10 @@ function noteRole(name) {
   if (current) current.roles.add(String(name));
 }
 
-module.exports = { usageOf, withUsage, noteVariable, noteRole };
+function serializeUsage(usage) {
+  if (!usage) return null;
+  const names = (set) => [...set].sort((a, b) => a.localeCompare(b));
+  return { variables: names(usage.variables), roles: names(usage.roles) };
+}
+
+module.exports = { createUsage, withUsageCapture, usageOf, withUsage, noteVariable, noteRole, serializeUsage };

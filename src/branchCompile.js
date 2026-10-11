@@ -24,7 +24,7 @@ const { checkUndeclaredPlaceholders, checkPlaceholderContext } = require('./emit
 const { checkTargetSlot } = require('./slots');
 const { resolveComponentSpec, questionsForMeasurement } = require('./treeWrite');
 const { resolveScriptFiles } = require('./scripts');
-const { usageOf, withUsage } = require('./usage');
+const { usageOf, withUsage, createUsage } = require('./usage');
 
 function buildCompileContext(config, branchPath, options = {}) {
   const chain = walkBranchChain(config.branches, branchPath, {
@@ -56,7 +56,7 @@ function buildCompileContext(config, branchPath, options = {}) {
     const authored = chain.paths.components[type] || ['components', type];
     componentOrigins[type] = originLocation(config, authored, configFile);
     // The variables in a component's path decide which file a leaf reads.
-    componentPathUses[type] = { variables: new Set(), roles: new Set() };
+    componentPathUses[type] = createUsage();
     componentRefs[type] = withUsage(componentPathUses[type], () => resolveComponentSpec(
       spec, config._base, variables,
       { diagnostics: options.diagnostics, location: componentOrigins[type] },

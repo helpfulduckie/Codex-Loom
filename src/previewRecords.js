@@ -162,4 +162,18 @@ function buildLibraries(run, fileIndex) {
   });
 }
 
-module.exports = { buildBranchTree, buildContext, buildLibraries };
+function buildInputRoots(config) {
+  const sources = config._resolvedLibrarySource || new Map();
+  const libraries = [...(config._resolvedLibrary || new Map())].map(([name, dir]) => ({
+    kind: 'library', name: String(name), path: dir,
+    sourcePath: sources.get(name) || dir,
+    frozen: sources.has(name) && sources.get(name) !== dir,
+  }));
+  const templates = (config._resolvedTemplates || []).map((dir, index) => {
+    const sourcePath = (config._resolvedTemplatesSource || [])[index] || dir;
+    return { kind: 'template', name: String(index), path: dir, sourcePath, frozen: sourcePath !== dir };
+  });
+  return [...libraries, ...templates];
+}
+
+module.exports = { buildBranchTree, buildContext, buildLibraries, buildInputRoots };

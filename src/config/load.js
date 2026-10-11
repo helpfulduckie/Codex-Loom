@@ -90,7 +90,9 @@ function normalize(p) {
 }
 
 function isOutOfBase(resolvedPath, base) {
-  return !normalize(resolvedPath).startsWith(normalize(base));
+  const target = normalize(path.resolve(resolvedPath));
+  const root = normalize(path.resolve(base)).replace(/\/+$/, '');
+  return target !== root && !target.startsWith(`${root}/`);
 }
 
 function loadManifest(manifestPath, diagnostics) {
@@ -290,6 +292,7 @@ function loadCompileConfig(configPath, options = {}) {
     : config.storyCardType || null;
 
   return attachOrigins({
+    _configPath: path.resolve(configPath),
     _base: base,
     _resolvedOutput: resolvedOutput,
     _resolvedReports: resolvedReports,

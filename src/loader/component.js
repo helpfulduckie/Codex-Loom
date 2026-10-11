@@ -23,7 +23,7 @@ function isMapping(value) {
 function loadComponentDocument(spec, options = {}) {
   const {
     diagnostics, label = 'component', variables = null, base = null, stack = [],
-    dependencyLedger = null, requestedAt = null, tolerant = false,
+    dependencyLedger = null, requestedAt = null, tolerant = false, captureHistory = false,
   } = options;
 
   if (!spec || typeof spec !== 'string') return null;
@@ -84,17 +84,17 @@ function loadComponentDocument(spec, options = {}) {
   const document = attachOrigins({}, sourceMap.exportOrigins());
 
   const inherited = resolveImports(doc, spec, {
-    diagnostics, label, variables, base, stack, onWarn, dependencyLedger, document, tolerant,
+    diagnostics, label, variables, base, stack, onWarn, dependencyLedger, document, tolerant, captureHistory,
   });
   const local = localSections(doc.sections, document);
   const sections = inherited === null
     ? local : mergeSectionRecords(inherited.sections, local, onWarn);
   // Every record merged into `sections`, in merge order, so a caller can show what each
   // file contributed to a section before the next one overrode it.
-  const contributions = [
+  const contributions = captureHistory ? [
     ...(inherited === null ? [] : inherited.contributions),
     { file: spec, variant: null, sections: local },
-  ];
+  ] : null;
 
   const sourced = resolveSectionSources(sections, {
     spec, base, variables, diagnostics,
@@ -158,14 +158,14 @@ function localSections(sections, document) {
 
 function resolveImports(doc, spec, options) {
   const {
-    diagnostics, label, variables, base, stack, onWarn, dependencyLedger, document, tolerant,
+    diagnostics, label, variables, base, stack, onWarn, dependencyLedger, document, tolerant, captureHistory,
   } = options;
   const entries = Array.isArray(doc.imports) ? doc.imports : [];
   if (entries.length === 0) return null;
 
   const chain = [...stack, path.resolve(spec)];
   let sections = {};
-  const contributions = [];
+  const contributions = captureHistory ? [] : null;
 
   entries.forEach((entry, index) => {
     if (!entry || typeof entry !== 'object' || !entry.from) return;
@@ -195,14 +195,14 @@ function resolveImports(doc, spec, options) {
     }
 
     const imported = loadComponentDocument(resolved, {
-      diagnostics, label, variables, base, stack: chain, dependencyLedger, tolerant,
+      diagnostics, label, variables, base, stack: chain, dependencyLedger, tolerant, captureHistory,
     });
     if (!imported) return;
 
     let contributed = tagSectionOrigins(imported.rawSections, path.basename(resolved));
-    contributions.push(...imported.contributions);
+    if (captureHistory) contributions.push(...imported.contributions);
     for (const { name, path: selectorPath } of parseSelectorList(entry.importVariants)) {
-      contributions.push({ file: resolved, variant: name, sections: sectionVariantDeltas(contributed, name) });
+      if (captureHistory) contributions.push({ file: resolved, variant: name, sections: sectionVariantDeltas(contributed, name) });
       const applied = applySectionSelector(contributed, name, onWarn);
       contributed = applied.sections;
       if (applied.matched === 0) {

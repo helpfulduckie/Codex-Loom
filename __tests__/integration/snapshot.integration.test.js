@@ -316,3 +316,87 @@ describe('freezeLibraries (the freeze as a call)', () => {
     expect(result.diagnostics.some((d) => d.code === 'CL0101')).toBe(true);
   });
 });
+
+describe('saved snapshot inspection and confirmation', () => {
+  const { inspectSnapshot, freezeLibraries } = require('../../src/compile');
+  const { listFilesRelative } = require('../../src/util');
+  const diskState = () => listFilesRelative(tmpDir).map((rel) => {
+    const file = path.join(tmpDir, rel);
+    return [rel, fs.readFileSync(file).toString('hex'), fs.statSync(file).mtimeMs];
+  });
+
+  test('inspection reads actual frozen files without writing and a true no-op writes nothing', () => {
+    const config = buildProject();
+    const before = diskState();
+    const first = inspectSnapshot(config);
+    expect(first).toMatchObject({ status: 'ok', hasChanges: true, manifestChanged: true });
+    expect(first.entries[0]).toMatchObject({ added: ['note.cl.yaml'], frozen: {} });
+    expect(diskState()).toEqual(before);
+    expect(inspectSnapshot(config).fingerprint).toBe(first.fingerprint);
+    freezeLibraries(config, { expectedState: first.fingerprint });
+    const saved = diskState();
+    const same = inspectSnapshot(config);
+    expect(same).toMatchObject({ status: 'ok', hasChanges: false, manifestChanged: false });
+    expect(freezeLibraries(config, { expectedState: same.fingerprint }).filesWritten).toBe(0);
+    expect(diskState()).toEqual(saved);
+
+    writeFile('snapshot/main/note.cl.yaml', 'manually changed frozen content');
+    writeFile('snapshot/main/untracked.js', '1');
+    const edited = diskState();
+    const actual = inspectSnapshot(config);
+    expect(actual.entries[0]).toMatchObject({ changed: ['note.cl.yaml'], removed: ['untracked.js'] });
+    expect(actual.fingerprint).not.toBe(same.fingerprint);
+    expect(diskState()).toEqual(edited);
+    expect(freezeLibraries(config, { expectedState: same.fingerprint })).toMatchObject({ status: 'blocked', filesWritten: 0 });
+    expect(diskState()).toEqual(edited);
+  });
+
+  test.each(['config', 'live script', 'manifest', 'frozen file'])('%s changes invalidate confirmation before any write', (target) => {
+    const config = buildProject();
+    writeFile('main-lib/scripts/input.js', '1');
+    freezeLibraries(config);
+    const expectedState = inspectSnapshot(config).fingerprint;
+    if (target === 'config') {
+      fs.appendFileSync(config, '\n# saved config edit\n');
+    } else if (target === 'live script') writeFile('main-lib/scripts/input.js', '2');
+    else if (target === 'manifest') fs.appendFileSync(path.join(tmpDir, 'snapshot/manifest.json'), '\n');
+    else writeFile('snapshot/main/scripts/input.js', '2');
+    const changed = diskState();
+    expect(freezeLibraries(config, { expectedState })).toMatchObject({ status: 'blocked', filesWritten: 0 });
+    expect(diskState()).toEqual(changed);
+  });
+
+  test('script and external template changes are visible independently of item definitions', () => {
+    const config = buildProject();
+    const templates = path.join(tmpDir, '../' + path.basename(tmpDir) + '-templates');
+    fs.mkdirSync(templates);
+    try {
+      fs.writeFileSync(path.join(templates, 'Character.template'), 'one');
+      fs.writeFileSync(config, fs.readFileSync(config, 'utf8').replace(path.join(tmpDir, 'templates'), templates));
+      writeFile('main-lib/scripts/input.js', '1');
+      freezeLibraries(config);
+      const before = inspectSnapshot(config);
+      writeFile('main-lib/scripts/input.js', '2');
+      fs.writeFileSync(path.join(templates, 'Character.template'), 'two');
+      const after = inspectSnapshot(config);
+      expect(after.fingerprint).not.toBe(before.fingerprint);
+      expect(after.entries).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'library', changed: ['scripts/input.js'] }),
+        expect.objectContaining({ kind: 'template', changed: ['Character.template'] }),
+      ]));
+      expect(freezeLibraries(config, { expectedState: before.fingerprint }).status).toBe('blocked');
+    } finally { fs.rmSync(templates, { recursive: true, force: true }); }
+  });
+
+  test('removing a library declaration reports and removes its owned frozen files', () => {
+    const config = buildProject();
+    freezeLibraries(config);
+    fs.writeFileSync(config, fs.readFileSync(config, 'utf8').replace(`      main: ${path.join(tmpDir, 'main-lib')}\n`, ''));
+    const inspection = inspectSnapshot(config);
+    expect(inspection).toMatchObject({ status: 'ok', hasChanges: true, manifestChanged: true });
+    expect(inspection.entries[0]).toMatchObject({ name: 'main', removed: ['note.cl.yaml'] });
+    expect(freezeLibraries(config, { expectedState: inspection.fingerprint }).status).toBe('ok');
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot/main'))).toBe(false);
+    expect(inspectSnapshot(config).hasChanges).toBe(false);
+  });
+});

@@ -5,6 +5,8 @@
  * the dev guide for the result layout.
  */
 
+const { isDeepStrictEqual } = require('util');
+
 const lower = (value) => String(value).toLowerCase();
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const sectionsOf = (result, component) => (component.sections || []).map((index) => result.sections[index]);
@@ -128,13 +130,15 @@ function compareComponents(a, leafA, b, leafB) {
         change: !sA ? 'added' : !sB ? 'removed' : 'changed',
       });
     }
-    if (inA.text !== inB.text || sections.length > 0) rows.push({ key, change: 'changed', sections });
+    if (inA.text !== inB.text || sections.length > 0 || !isDeepStrictEqual(inA.metadata, inB.metadata)) {
+      rows.push({ key, change: 'changed', sections });
+    }
   }
   return rows;
 }
 
 function compareFiles(a, b) {
-  const content = (file) => (file.binary ? `binary:${file.bytes}` : file.content);
+  const content = (file) => (file.binary ? `binary:${file.digest}` : file.content);
   const filesA = new Map(a.files.map((file) => [file.path, content(file)]));
   const filesB = new Map(b.files.map((file) => [file.path, content(file)]));
   const out = { changed: [], added: [], removed: [] };

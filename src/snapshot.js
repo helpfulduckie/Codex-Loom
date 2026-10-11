@@ -156,16 +156,109 @@ function diffEntryLines(entry, diff) {
   return lines;
 }
 
+const canonical = (value) => {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+};
+const sameState = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+
+function snapshotState(config, diagnostics) {
+  const snapshot = config._resolvedSnapshot;
+  const manifest = path.join(snapshot, 'manifest.json');
+  const previous = loadManifest(manifest, diagnostics);
+  const entries = collectEntries(config);
+  const collected = entries.map((entry) => {
+    const snapshotPath = path.join(snapshot, entry.name);
+    const live = hashTree(entry.sourcePath);
+    const frozen = hashTree(snapshotPath);
+    const section = (previous && (entry.kind === 'library' ? previous.library : previous.templates)) || {};
+    const diff = diffEntry(entry, { files: frozen }, live);
+    return {
+      ...entry, snapshotPath, live, frozen, isNew: !section[entry.name],
+      added: diff.added, removed: diff.removed, changed: diff.changed.map((c) => c.rel),
+    };
+  });
+  const hashes = new Map(collected.filter((e) => e.kind === 'library').map((e) => [e.name, e.live]));
+  const roles = computeRequiresRoles(entries, hashes);
+  const next = { manifestVersion: 2, library: {} };
+  if (entries.some((e) => e.kind === 'template')) next.templates = {};
+  for (const entry of collected) {
+    const section = { source: entry.sourcePath, files: entry.live };
+    const roleResult = entry.kind === 'library' ? roles.get(entry.name) : null;
+    if (roleResult && roleResult.roles) section.requiresRoles = roleResult.roles;
+    (entry.kind === 'library' ? next.library : next.templates)[entry.name] = section;
+  }
+  // Retired manifest entries still own frozen files which replacement must remove.
+  for (const kind of ['library', 'template']) {
+    const old = (previous && (kind === 'library' ? previous.library : previous.templates)) || {};
+    for (const [name, section] of Object.entries(old)) {
+      if (entries.some((e) => e.kind === kind && e.name === name)) continue;
+      const snapshotPath = path.resolve(snapshot, name);
+      if (isOutOfBase(snapshotPath, snapshot) || snapshotPath === path.resolve(snapshot)) {
+        throw new Error('Snapshot manifest entry is outside its destination.');
+      }
+      const frozen = hashTree(snapshotPath);
+      collected.push({ name, kind, sourcePath: section.source, snapshotPath, live: {}, frozen,
+        isNew: false, added: [], removed: Object.keys(frozen), changed: [] });
+    }
+  }
+  const { syncedAt, ...previousContent } = previous || {};
+  const manifestChanged = !sameState(previousContent, next);
+  const configFile = config._configPath;
+  const fingerprint = 'sha256:' + crypto.createHash('sha256').update(JSON.stringify(canonical({
+    config: configFile, configHash: hashFile(configFile), snapshot, entries: collected,
+    manifestHash: fs.existsSync(manifest) ? hashFile(manifest) : null,
+    snapshotFiles: hashTree(snapshot),
+  }))).digest('hex');
+  return { entries, collected, roles, next, manifest, fingerprint, manifestChanged,
+    hasChanges: manifestChanged || collected.some((e) => e.added.length || e.removed.length || e.changed.length) };
+}
+
+function snapshotDiagnostics(diagnostics) {
+  return diagnostics.all.map((d) => ({
+    code: d.code, severity: d.severity, message: d.message, file: d.file, line: d.line, col: d.col,
+  }));
+}
+
+function inspectSnapshot(configPath) {
+  const diagnostics = new Diagnostics();
+  const blocked = (reason) => ({ status: 'blocked', reason, diagnostics: snapshotDiagnostics(diagnostics),
+    config: path.resolve(configPath), snapshot: null, manifest: null, fingerprint: null,
+    hasChanges: false, manifestChanged: false, entries: [] });
+  const config = loadCompileConfig(configPath, { diagnostics, live: true });
+  if (!config || diagnostics.hasErrors()) return blocked('The compile config does not load.');
+  if (!config._resolvedSnapshot) return blocked('structure.input.snapshot is not set, so there is nothing to freeze.');
+  const state = snapshotState(config, diagnostics);
+  if (diagnostics.hasErrors()) return blocked('The snapshot manifest does not load.');
+  return { status: 'ok', reason: null, diagnostics: snapshotDiagnostics(diagnostics),
+    config: path.resolve(configPath), snapshot: config._resolvedSnapshot, manifest: state.manifest,
+    fingerprint: state.fingerprint, hasChanges: state.hasChanges, manifestChanged: state.manifestChanged,
+    entries: state.collected };
+}
+
 function syncLibrary(config, options = {}) {
-  const { log = NULL_LOG, diagnostics } = options;
+  const { log = NULL_LOG, diagnostics = new Diagnostics() } = options;
   const snapshotDir = config._resolvedSnapshot;
   if (!snapshotDir) {
     throw new Error('structure.input.snapshot is not set; nothing to sync.');
   }
 
+  const state = snapshotState(config, diagnostics);
+  if (options.expectedState !== undefined && options.expectedState !== state.fingerprint) {
+    const error = new Error('Snapshot inputs changed since inspection; inspect and confirm again.');
+    error.staleSnapshot = true;
+    throw error;
+  }
+
   const entries = collectEntries(config);
   const manifestPath = path.join(snapshotDir, 'manifest.json');
   const previousManifest = loadManifest(manifestPath, diagnostics);
+
+  if (!state.hasChanges) {
+    return { entries: state.entries, filesWritten: 0, manifestPath,
+      changes: state.collected.map((e) => ({ ...e, changed: [] })) };
+  }
 
   const newManifest = { manifestVersion: 2, syncedAt: new Date().toISOString(), library: {} };
   const hasTemplates = entries.some((e) => e.kind === 'template');
@@ -176,18 +269,18 @@ function syncLibrary(config, options = {}) {
   let filesWritten = 0;
 
   const collected = entries.map((entry) => {
-    const files = listFilesRelative(entry.sourcePath);
-    const fileHashes = hashTree(entry.sourcePath);
-    return { entry, files, fileHashes };
+    const inspected = state.collected.find((e) => e.kind === entry.kind && e.name === entry.name);
+    return { entry, files: Object.keys(inspected.live), fileHashes: inspected.live };
   });
-  const fileHashesByName = new Map(collected.map((c) => [c.entry.name, c.fileHashes]));
-  const requiresRolesByName = computeRequiresRoles(entries, fileHashesByName);
+  const requiresRolesByName = state.roles;
 
   for (const { entry, files, fileHashes } of collected) {
     const prevSection = previousManifest
       ? (entry.kind === 'library' ? previousManifest.library : previousManifest.templates || {})[entry.name]
       : undefined;
-    const diff = diffEntry(entry, prevSection, fileHashes);
+    const inspected = state.collected.find((e) => e.kind === entry.kind && e.name === entry.name);
+    const diff = diffEntry(entry, { files: inspected.frozen }, fileHashes);
+    diff.isNew = !prevSection;
     changes.push(diff);
     reportLines.push(...diffEntryLines(entry, diff));
 
@@ -209,7 +302,7 @@ function syncLibrary(config, options = {}) {
     }
 
     const section = { source: entry.sourcePath, files: fileHashes };
-    const roleResult = requiresRolesByName.get(entry.name);
+    const roleResult = entry.kind === 'library' ? requiresRolesByName.get(entry.name) : null;
     if (roleResult && roleResult.refused) {
       diagnostics.error(
         CODES.LIBRARY_ROLE_SCAN_REFUSED,
@@ -224,6 +317,15 @@ function syncLibrary(config, options = {}) {
     else newManifest.templates[entry.name] = section;
 
     log.verbose(`  synced ${entryLabel(entry)}: ${files.length} file(s)`);
+  }
+
+  for (const retired of state.collected.filter((e) => !entries.some(
+    (entry) => entry.kind === e.kind && entry.name === e.name,
+  ))) {
+    // An active entry may reuse a retired entry's destination under another kind.
+    if (entries.some((entry) => entry.name === retired.name)) continue;
+    if (fs.existsSync(retired.snapshotPath)) fs.rmSync(retired.snapshotPath, { recursive: true });
+    changes.push({ ...retired, changed: [] });
   }
 
   if (config._resolvedReports) {
@@ -243,7 +345,7 @@ function syncLibrary(config, options = {}) {
  * the live libraries from disk, replaces the project's frozen copy with them, and says what
  * changed. See "Freezing libraries" in the dev guide.
  */
-function freezeLibraries(configPath) {
+function freezeLibraries(configPath, options = {}) {
   const diagnostics = new Diagnostics();
   const describe = () => diagnostics.all.map((d) => ({
     code: d.code, severity: d.severity, message: d.message, file: d.file, line: d.line, col: d.col,
@@ -256,7 +358,13 @@ function freezeLibraries(configPath) {
   if (!config || diagnostics.hasErrors()) return blocked('The compile config does not load.');
   if (!config._resolvedSnapshot) return blocked('structure.input.snapshot is not set, so there is nothing to freeze.');
 
-  const result = syncLibrary(config, { diagnostics });
+  let result;
+  try {
+    result = syncLibrary(config, { diagnostics, expectedState: options.expectedState });
+  } catch (error) {
+    if (!error.staleSnapshot) throw error;
+    return blocked(error.message);
+  }
   return {
     status: 'ok',
     reason: null,
@@ -349,5 +457,5 @@ function checkDrift(config, diagnostics, log) {
 }
 
 module.exports = {
-  syncLibrary, freezeLibraries, checkDrift, hashTree, collectEntries, entryLabel,
+  syncLibrary, freezeLibraries, inspectSnapshot, checkDrift, hashTree, collectEntries, entryLabel,
 };

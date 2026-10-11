@@ -6,13 +6,14 @@
  */
 
 const path = require('path');
+const crypto = require('crypto');
 const { compile } = require('./compile');
 const { Diagnostics } = require('./diag');
 const { nearestOrigin } = require('./origin');
 const { ITEM_TOP_LEVEL_FIELDS, isPlainObject, findKey, pathId, pathStartsWith } = require('./util');
 const { buildBranchOutputDir, resolveBranchFolderPath } = require('./outputPaths');
-const { buildBranchTree, buildContext, buildLibraries } = require('./previewRecords');
-const { usageOf } = require('./usage');
+const { buildBranchTree, buildContext, buildLibraries, buildInputRoots } = require('./previewRecords');
+const { usageOf, serializeUsage: describeUses } = require('./usage');
 
 const FIELD_ROOTS = [...ITEM_TOP_LEVEL_FIELDS, 'body'];
 
@@ -86,13 +87,6 @@ function createTable(keyOf = (value) => value) {
       return index.get(key);
     },
   };
-}
-
-// The variables and roles a record read, as sorted names.
-function describeUses(usage) {
-  if (!usage) return null;
-  const names = (set) => [...set].sort((a, b) => a.localeCompare(b));
-  return { variables: names(usage.variables), roles: names(usage.roles) };
 }
 
 // Where a value was authored, as a field's `origin` is written.
@@ -357,7 +351,10 @@ function buildFiles(captured, outputDir) {
   })).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)).map(({ path: p, content }) => (
     typeof content === 'string'
       ? { path: p, content }
-      : { path: p, binary: true, bytes: content.length }
+      : {
+        path: p, binary: true, bytes: content.length,
+        digest: `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`,
+      }
   ));
 }
 
@@ -427,6 +424,7 @@ function preview(configPath, options = {}) {
       base: run.config._base,
       items: [...run.config._resolvedItems],
       templates: [...run.config._resolvedTemplates],
+      inputRoots: buildInputRoots(run.config),
       output: run.config._resolvedOutput,
       reports: run.config._resolvedReports || null,
       snapshot: run.config._resolvedSnapshot || null,

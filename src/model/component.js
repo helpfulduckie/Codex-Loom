@@ -5,6 +5,7 @@ const { resolveBranchSpec } = require('./branches');
 const { applyFieldOp } = require('./fieldops');
 const { findKey, setCI } = require('../util');
 const { CODES } = require('../diag');
+const { SECTION_SETTINGS } = require('./componentSettings');
 const {
   transferOrigins, copyOrigins, originAt, originLocation, getOrigins,
 } = require('../origin');
@@ -25,16 +26,6 @@ function originView(owner, path, value) {
 function sectionVariant(section, key) {
   return originView(section, ['variants', key], section.variants[key]);
 }
-
-// Authored path → normalized field. A default has no authored path, so its lookup
-// falls back to the section key.
-const NORMALIZED_ORIGINS = [
-  [['slot'], ['isSlot']], [['text'], ['text']], [['heading'], ['heading']],
-  [['headingLevel'], ['headingLevel']], [['render', 'position'], ['position']],
-  [['render', 'wrapper'], ['wrapper']], [['render', 'wrap'], ['wrap']],
-  [['render', 'compact'], ['compact']], [['render', 'bullet'], ['bullet']],
-  [['branches'], ['branches']], [['variants'], ['variants']],
-];
 
 const VARIANT_RENDER_KEYS = ['position', 'wrapper', 'wrap', 'compact', 'bullet'];
 
@@ -122,8 +113,8 @@ function normalizeSection(name, def, index, onWarn) {
   };
   if (getOrigins(raw)) {
     transferOrigins(raw, section, [], [], { replace: false, descendants: false });
-    for (const [from, to] of NORMALIZED_ORIGINS) {
-      if (originAt(raw, from)) transferOrigins(raw, section, from, to);
+    for (const { authoredPath, field } of SECTION_SETTINGS) {
+      if (originAt(raw, authoredPath)) transferOrigins(raw, section, authoredPath, [field]);
     }
   }
   return section;

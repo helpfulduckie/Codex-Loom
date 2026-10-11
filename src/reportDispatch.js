@@ -38,11 +38,16 @@ function buildLibraryManifest(config) {
 
 function runReports({
   config, configPath, options, log, registry, rootDirName,
-  fieldTable, tierTemplates, captureReports, leafData, inventoryData, allItemDefs,
+  fieldTable, tierTemplates, captureReports, leafData, inventoryData, allItemDefs, usageData,
 }) {
   const reportBase = config._resolvedReports || path.join(config._resolvedOutput, 'Overview');
   const reportSummary = [];
   const identity = reportIdentity(config.title, rootDirName);
+
+  if (options.usage) {
+    const result = require('./usageReport').runUsageMode(usageData || [], path.join(reportBase, 'usage'), identity);
+    reportSummary.push(`${result.written.length} usage file(s)`);
+  }
 
   const { runProvenanceMode } = require('./provenance');
   const provenanceResult = runProvenanceMode(
@@ -97,7 +102,7 @@ function finalizeDiagnostics({
   allItemIds, totalFiles, componentLoader,
   roleState, placeholderState, gaps, fieldAudit, cardTypeAudit,
   registry, rootDirName, fieldTable, tierTemplates,
-  captureReports, leafData, inventoryData, allItemDefs,
+  captureReports, leafData, inventoryData, allItemDefs, usageData,
   writeReports = true,
 }) {
   for (const leafLabel of descriptionLeaves) {
@@ -188,7 +193,7 @@ function finalizeDiagnostics({
   if (writeReports) {
     runReports({
       config, configPath, options, log, registry, rootDirName,
-      fieldTable, tierTemplates, captureReports, leafData, inventoryData, allItemDefs,
+      fieldTable, tierTemplates, captureReports, leafData, inventoryData, allItemDefs, usageData,
     });
   }
 

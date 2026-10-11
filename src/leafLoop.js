@@ -19,7 +19,7 @@ const { LIMITS, checkLimit } = require('./limits');
 const { questionsForMeasurement } = require('./treeWrite');
 const { buildBranchOutputDir } = require('./outputPaths');
 const { describeSections } = require('./componentView');
-const { withUsage } = require('./usage');
+const { withUsage, usageOf, createUsage, serializeUsage } = require('./usage');
 
 const LIFT_EXCLUDED_COMPONENTS = new Set(['opening', 'adventureDescription']);
 
@@ -33,7 +33,7 @@ function compileLeaf(branchPath, ctx) {
     placeholderState, roleState, gaps, componentLoader, roleStateByPath,
     deferredComponents, deferredScripts, deferredCardLeaves,
     descriptionLeaves, openingLeaves,
-    leafData, inventoryData, componentDetails, leafSummaries, allItemIds,
+    leafData, inventoryData, componentDetails, leafSummaries, allItemIds, usageData,
   } = ctx;
 
   let leafFiles = 0;
@@ -105,8 +105,12 @@ function compileLeaf(branchPath, ctx) {
     let segments;
     let excluded = false;
     let shown = null;
-    const sectionUsage = new Map();
-    const proseUsage = { variables: new Set(), roles: new Set() };
+    const sectionUsage = options.capture || options.usage ? new Map() : null;
+    const proseUsage = createUsage();
+    // Inline specs were expanded while selecting components, before prose rendering.
+    if (inline && proseUsage) {
+      for (const name of cctx.componentPathUses[descriptor.key].variables) proseUsage.variables.add(name);
+    }
     if (passthrough !== null && passthrough !== undefined) {
       text = withUsage(proseUsage, () => {
         const prose = resolveVariables(passthrough, cctx.variables, {
@@ -141,6 +145,13 @@ function compileLeaf(branchPath, ctx) {
           diagnostics, file: String(spec), sectionUsage,
         },
       ));
+    }
+    if (usageData) {
+      const add = (kind, id, usage) => usageData.push({ leaf: label, kind, id, uses: serializeUsage(usage) });
+      if (!inline) add('component-path', descriptor.key, cctx.componentPathUses[descriptor.key]);
+      if (shown) {
+        for (const [name, usage] of sectionUsage) add('section', descriptor.key + '/' + name, usage);
+      } else add('prose', descriptor.key, proseUsage);
     }
     checkUndeclaredPlaceholders(text, cctx.placeholders, {
       diagnostics,
@@ -229,6 +240,11 @@ function compileLeaf(branchPath, ctx) {
         storyCardType: config.storyCardType,
         spec, branchLabel: label, cardTypeAudit,
       });
+    }
+  }
+  if (usageData) {
+    for (const item of resolvedItems) {
+      usageData.push({ leaf: label, kind: 'item', id: item.id, uses: serializeUsage(usageOf(item)) });
     }
   }
   const hasPE = !!sectionedWritten.plotEssential;

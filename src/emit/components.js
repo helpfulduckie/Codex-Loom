@@ -9,7 +9,7 @@ const { applyWrapper } = require('../template');
 const { applyTokenPass } = require('../model/pronouns');
 const { writeOutputFile } = require('../outputLedger');
 const { readSource } = require('../sources');
-const { withUsage } = require('../usage');
+const { withUsage, createUsage } = require('../usage');
 const {
   resolveVariables, transformStringValues, checkUnexpandedVariables, checkUnresolvedFieldTokens, checkMechanicalArtifacts,
 } = require('../util');
@@ -183,7 +183,7 @@ function renderSectionedComponent(component, branchPath, occupants, options = {}
     const placed = section.isSlot ? sortOccupants(occupants.get(section.name.toLowerCase())) : [];
     // A fresh record per render: one section object serves every leaf it is unchanged on,
     // and a variable it reads can lead to different variables on different leaves.
-    const usage = { variables: new Set(), roles: new Set() };
+    const usage = createUsage();
     const text = withUsage(usage, () => renderSection(section, placed, options));
     if (options.sectionUsage) options.sectionUsage.set(section.name.toLowerCase(), usage);
     if (text && text.trim()) segments.push({ key: `section:${section.name}`, text });
