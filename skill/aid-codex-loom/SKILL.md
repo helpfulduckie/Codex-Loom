@@ -505,6 +505,8 @@ trigger set → separate item (see Single-Home Principle in the scenario design 
 
 ## Reference Index
 
+**Use `--with-usage` to inspect observed variable and role reads on each leaf.** It forces compilation and writes `<reports>/usage/<reportStem>.usage.md`, using the authored root title or output-folder fallback. Rows list the binding, branches, and item, section, prose, or component-path readers; identical reader sets share a row. Item interpolation can read fields no output template uses. Cross-item dependencies, internal component import/file paths, interior framing, and the scenario blurb are not fully traced. An absent read does not establish that a binding is unused or safe to delete. Usage collection is opt-in; preview collects it together with contribution histories, while this report collects usage alone.
+
 Read these reference files when you need schema detail:
 
 | File | Read when you need... |
