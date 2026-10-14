@@ -314,7 +314,7 @@ The final merged registry is passed to every downstream function. It is **read-o
 
 For local (non-import) items, steps 2–5 are skipped. `_include_variants` and `_include_branch_spec` are attached by `resolveIncludes()` to carry include-directive settings.
 
-After resolution, `aid.type` and `render.template` are cross-defaulted: each is filled in from the other if absent.
+After resolution, `aid.type` and `render.template` are cross-defaulted: each is filled in from the other if absent. `aid.title` and `name` are cross-filled the same way, after name normalization: a missing `aid.title` takes `name.full`, and a missing `name` becomes `{display: first word, full: title}`, with origins carried from the authored key.
 
 ---
 

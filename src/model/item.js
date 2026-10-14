@@ -319,6 +319,20 @@ function resolveItem(itemDef, registry, branchPath, onWarn, options = {}) {
     }
   }
 
+  // Runs after name normalization so name.full is settled, and after variant merging so
+  // each resolved branch fills from its own authored key.
+  const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
+  const nameObj = item.name && typeof item.name === 'object' && !Array.isArray(item.name) ? item.name : null;
+  if (isBlank(item.aid.title) && nameObj && !isBlank(nameObj.full)) {
+    item.aid.title = String(nameObj.full);
+    transferOrigins(item, item, ['name', 'full'], ['aid', 'title']);
+  } else if (!isBlank(item.aid.title) && (!nameObj || (isBlank(nameObj.full) && isBlank(nameObj.display)))) {
+    const title = String(item.aid.title);
+    item.name = { display: title.trim().split(/\s+/)[0], full: title };
+    transferOrigins(item, item, ['aid', 'title'], ['name', 'display'], { descendants: false });
+    transferOrigins(item, item, ['aid', 'title'], ['name', 'full'], { descendants: false });
+  }
+
   return item;
 }
 
