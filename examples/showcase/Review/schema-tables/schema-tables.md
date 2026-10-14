@@ -8,6 +8,8 @@ and template order. Document authoring conventions and budgets separately._
 
 | Field | Label | Renders | Reads |
 |---|---|---|---|
+| `cardName` | — | bare | `cardName` |
+| `youLine` | — | bare | `youLine` |
 | `Tagline` | Tagline | bare | `Tagline` |
 | `vibe` | Vibe | join "; " | `vibe` _(wrap [])_ |
 | `appearance` | Current Appearance / Appearance _(conditional)_ | join "; " | `Physical Traits.gender`, `Physical Traits.age`, `Physical Traits.hair`, `Physical Traits.other` |
@@ -38,7 +40,7 @@ _Every field a template renders, in order. A group name expands to its members._
 
 ### `Character`
 
-- _(include: cardName)_
+- `cardName`
 - **core** _(group)_: `vibe`, `appearance`, `originalAppearance`, `personality`, `personalityExpanded`
 - `Magic`
 - `Background`
@@ -47,14 +49,14 @@ _Every field a template renders, in order. A group name expands to its members._
 
 ### `Location`
 
-- _(include: cardName)_
+- `cardName`
 - `vibe` _(override)_
 - `landmarks`
 - `pantheon`
 
 ### `Faction`
 
-- _(include: cardName)_
+- `cardName`
 - `overview`
 - `purpose`
 - `structure`
@@ -63,13 +65,13 @@ _Every field a template renders, in order. A group name expands to its members._
 
 ### `CharacterBrief`
 
-- _(include: cardName)_
+- `cardName`
 - `appearance`
 - `personality`
 
 ### `Player`
 
-- _(include: youLine)_
+- `youLine`
 - `appearance`
 - `personality`
 - `personalityExpanded`
@@ -84,7 +86,7 @@ into with `render.template`. Each list expands one level of groups, like the tab
 
 #### `Character`
 
-- _(include: cardName)_
+- `cardName`
 - **core** _(group)_: `vibe`, `appearance`, `originalAppearance`, `personality`, `personalityExpanded`
 - `Magic`
 - `Background`
@@ -93,14 +95,14 @@ into with `render.template`. Each list expands one level of groups, like the tab
 
 #### `Location`
 
-- _(include: cardName)_
+- `cardName`
 - `vibe` _(override)_
 - `landmarks`
 - `pantheon`
 
 #### `Faction`
 
-- _(include: cardName)_
+- `cardName`
 - `overview`
 - `purpose`
 - `structure`
@@ -109,13 +111,13 @@ into with `render.template`. Each list expands one level of groups, like the tab
 
 #### `CharacterBrief`
 
-- _(include: cardName)_
+- `cardName`
 - `appearance`
 - `personality`
 
 #### `Player`
 
-- _(include: youLine)_
+- `youLine`
 - `appearance`
 - `personality`
 - `personalityExpanded`
@@ -124,23 +126,23 @@ into with `render.template`. Each list expands one level of groups, like the tab
 
 #### `Character`
 
-- _(include: cardName)_
+- `cardName`
 - `appearance`
 - `personality`
 
 #### `Location`
 
-- _(include: cardName)_
+- `cardName`
 
 #### `Faction`
 
-- _(include: cardName)_
+- `cardName`
 - `purpose`
 - `status`
 
 #### `CharacterFull`
 
-- _(include: cardName)_
+- `cardName`
 - `vibe`
 - `appearance`
 - `personality`

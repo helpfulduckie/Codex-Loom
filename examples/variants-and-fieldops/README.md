@@ -57,10 +57,10 @@ different — `medievalFlavor` is not `sciFiFlavor`. `Aness` shows both; `Zephon
 show the tone-only one-liner.
 
 **Every rendered body leads with the item's own name.** The library's field table carries
-three partials for the shapes a field list cannot express: `cardName` (`{$aid.title} -
-{tagline}`) on story cards and the World block, `rosterLine` (`{$aid.title} - {role};
-{gender}; {age}; {hair}`) for the one-line cast roster, and `youLine` (`You:
-{$name.display}`) for the player. The Story Card *title* is invisible to the AI
+three `parts:` fields for the shapes a plain field cannot say: `cardName` (title, then
+the tagline) on story cards and the World block, `rosterLine` (title, then role and the
+physical traits) for the one-line cast roster, and `youLine` (`You:` and the display name)
+for the player. The Story Card *title* is invisible to the AI
 storyteller, so the name has to be a rendered line.
 
 ---
