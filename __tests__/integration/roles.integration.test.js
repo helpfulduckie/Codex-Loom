@@ -311,7 +311,7 @@ describe('the roles gap — branchFraming and the root Description', () => {
     expect(occurrences(output, 'CL0540')).toEqual([]);
     const description = fs.readFileSync(
       path.join(tmpDir, 'output', 'Description.md'), 'utf8',
-    ).trim();
+    ).replace(/^---\n[\s\S]*?\n---\n\n/, '').trim();
     expect(description).toBe('Rumors mention Malcolm.');
   });
 

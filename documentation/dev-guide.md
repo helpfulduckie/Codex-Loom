@@ -62,7 +62,8 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/model/componentSettings.js` | Authored paths and normalized section fields, with visibility for the preview settings list |
 | `src/previewCompare.js` | `comparePreviews`: what differs between two preview results (see Comparing two previews) |
 | `src/sources.js` | Text overrides for the files a compile reads (`options.sources`), consulted by the six text readers through `readSource` |
-| `src/treeWrite.js` | Recursive writers for interior-node framing, labels, placeholders and descriptions; component-spec resolution |
+| `src/treeWrite.js` | Recursive writers for interior-node framing, labels, placeholders and descriptions; component-spec resolution; adds the generated plain `description:` to the root Description.md frontmatter (`withPlainDescription`) |
+| `src/emit/plainText.js` | `stripMarkdown`, the markdown-to-plain-text pass behind that generated description |
 | `src/compiledTree.js` | The one compiled-output-tree traversal `seedmap`/`bodysize`/`overview` are built from — child lists, ancestor walk, per-node merge (§7.3a). `resolveAt` reads through a source: the disk by default, or `memorySource(map)` over a capturing compile's path-to-content map |
 | `src/reportDispatch.js` | End-of-compile report dispatch and the load-diagnostic replay; the `CL0545` unused-role check |
 | `src/extract.js` | Named transforms for a section's `from:` source — `scriptBanner` (§7.7) |

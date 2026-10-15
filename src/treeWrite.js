@@ -15,6 +15,7 @@ const {
   renderSectionedComponent, writeSectionedComponent, resolveComponentMetadata,
 } = require('./emit/components');
 const { applyTokenPass } = require('./model/pronouns');
+const { stripMarkdown } = require('./emit/plainText');
 const {
   checkUndeclaredPlaceholders, checkPlaceholderContext, writeNodePlaceholders, localKeysOf,
   expandQuestions,
@@ -363,6 +364,27 @@ function writeTreeFiles({
   });
 }
 
+/**
+ * Velvet Lattice ships an empty plain description when the root Description.md has neither
+ * `description:` nor `advanced:`. Fill it with the stripped body, but only as a floor: an
+ * authored `description:` wins, and `advanced: false` already makes the body the plain field.
+ * Returns a new object so the cached component metadata is never mutated.
+ */
+function withPlainDescription(metadata, body) {
+  if (!body) return metadata;
+  // A passthrough file is never parsed, so a leading fence is the author's own frontmatter
+  // and a second block above it would demote theirs into the body.
+  if (/^---\r?\n/.test(body)) return metadata;
+  const authored = metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {};
+  if (Object.prototype.hasOwnProperty.call(authored, 'description')) return metadata;
+  const advanced = authored.advanced;
+  if (advanced === false || (typeof advanced === 'string' && advanced.trim().toLowerCase() === 'false')) {
+    return metadata;
+  }
+  const plain = stripMarkdown(body);
+  return plain ? { ...authored, description: plain } : metadata;
+}
+
 function writeScenarioBlurb({
   config, configPath, log, diagnostics,
   rootVariables, registry, placeholderState, roleState, roleStateByPath, componentLoader, gaps, descriptionLeaves,
@@ -430,7 +452,7 @@ function writeScenarioBlurb({
     });
     const descPath = writeSectionedComponent(
       config._resolvedOutput, DESCRIPTION_DESCRIPTOR, combined,
-      { diagnostics }, descMetadata,
+      { diagnostics }, withPlainDescription(descMetadata, combined),
     );
     if (descPath) {
       log.verbose(`  OK: Description → ${descPath}`);
