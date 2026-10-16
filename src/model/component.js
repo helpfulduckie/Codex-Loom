@@ -27,6 +27,111 @@ function sectionVariant(section, key) {
   return originView(section, ['variants', key], section.variants[key]);
 }
 
+// A preview compile gives each section record a `_layers` list, and every step that changes
+// a section appends what it did, so the history is the merge's own account rather than a
+// reconstruction of it. Records without a list are an ordinary compile and record nothing.
+function layersOf(def) {
+  return isMapping(def) && Array.isArray(def._layers) ? def._layers : null;
+}
+
+function withLayers(target, layers) {
+  if (layers) {
+    Object.defineProperty(target, '_layers', {
+      value: layers, enumerable: false, configurable: true, writable: true,
+    });
+  }
+  return target;
+}
+
+function valueAt(def, authoredPath) {
+  let node = def;
+  for (const part of authoredPath) {
+    if (!isMapping(node)) return undefined;
+    const key = findKey(node, part);
+    if (key === null) return undefined;
+    node = node[key];
+  }
+  return node;
+}
+
+// `text`, `file` and `from` are one setting: a section's content, whichever key holds it.
+function contentOf(def) {
+  if (!isMapping(def)) return undefined;
+  if (def.text !== undefined) return def.text;
+  if (def.file !== undefined) return { file: def.file };
+  if (def.from !== undefined) return { from: def.from };
+  return undefined;
+}
+
+function contentKey(def) {
+  return isMapping(def) ? CONTENT_KEYS.find((key) => def[key] !== undefined) || null : null;
+}
+
+const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
+
+function layerEntry({ path, layer, op, origin, before, beforeOrigin, after }) {
+  return {
+    path: [...path],
+    layer,
+    op: clone(op),
+    origin: origin || null,
+    beforeOrigin: before === undefined ? null : beforeOrigin || null,
+    beforeAbsent: before === undefined,
+    before: clone(before),
+    after: after === undefined || after === null ? undefined : clone(after),
+    deleted: after === undefined || after === null,
+  };
+}
+
+// What one authored overlay (`over`, as written) did to each visible setting of `from`.
+function recordDefLayers(from, over, result, layer) {
+  const entries = [];
+  for (const { authoredPath, visible } of SECTION_SETTINGS) {
+    if (!visible) continue;
+    if (authoredPath.length === 1 && authoredPath[0] === 'text') {
+      const key = contentKey(over);
+      if (!key) continue;
+      const fromKey = contentKey(from);
+      entries.push(layerEntry({
+        path: authoredPath, layer,
+        op: key === 'text' ? over.text : { [key]: over[key] },
+        origin: originAt(over, [key]),
+        before: contentOf(from), beforeOrigin: fromKey ? originAt(from, [fromKey]) : null,
+        after: contentOf(result),
+      }));
+      continue;
+    }
+    const op = valueAt(over, authoredPath);
+    if (op === undefined) continue;
+    entries.push(layerEntry({
+      path: authoredPath, layer, op,
+      origin: originAt(over, authoredPath),
+      before: valueAt(from, authoredPath), beforeOrigin: originAt(from, authoredPath),
+      after: valueAt(result, authoredPath),
+    }));
+  }
+  return entries;
+}
+
+// The same for a variant delta applied to a normalized section, whose settings sit under
+// their field names rather than their authored paths.
+function recordSectionLayers(section, delta, result, layer) {
+  const entries = [];
+  const present = (value) => (value === null ? undefined : value);
+  for (const { field, authoredPath, visible } of SECTION_SETTINGS) {
+    if (!visible) continue;
+    const op = valueAt(delta, authoredPath);
+    if (op === undefined) continue;
+    entries.push(layerEntry({
+      path: authoredPath, layer, op,
+      origin: originAt(delta, authoredPath),
+      before: present(section[field]), beforeOrigin: originAt(section, [field]),
+      after: present(result[field]),
+    }));
+  }
+  return entries;
+}
+
 const VARIANT_RENDER_KEYS = ['position', 'wrapper', 'wrap', 'compact', 'bullet'];
 
 const WRAP = Object.freeze({
@@ -117,15 +222,24 @@ function normalizeSection(name, def, index, onWarn) {
       if (originAt(raw, authoredPath)) transferOrigins(raw, section, authoredPath, [field]);
     }
   }
-  return section;
+  const layers = layersOf(raw);
+  return withLayers(section, layers && [...layers]);
 }
 
 function sectionOpLabel(name, path) {
   return [name ? `section "${name}"` : 'section', ...path].join('.');
 }
 
-function applySectionVariant(section, delta, onWarn = null) {
+function applySectionVariant(section, delta, onWarn = null, variantName = null) {
   if (!delta || typeof delta !== 'object' || Array.isArray(delta)) return section;
+  const result = applyVariantDelta(section, delta, onWarn);
+  const layers = layersOf(section);
+  return withLayers(result, layers && [
+    ...layers, ...recordSectionLayers(section, delta, result, { kind: 'variant', name: variantName }),
+  ]);
+}
+
+function applyVariantDelta(section, delta, onWarn) {
   const result = copyOrigins(section, { ...section });
   const take = (from, to = from) => transferOrigins(delta, result, from, to);
   const opCtx = (path, targetPath = path) => ({
@@ -175,9 +289,17 @@ function applySectionVariant(section, delta, onWarn = null) {
 
 const CONTENT_KEYS = ['text', 'file', 'from'];
 
-function layerSectionDef(base, over, { onWarn = null, name = null } = {}) {
+function layerSectionDef(base, over, { onWarn = null, name = null, layer = null } = {}) {
   const from = (base && typeof base === 'object' && !Array.isArray(base)) ? base : {};
   const raw = (over && typeof over === 'object' && !Array.isArray(over)) ? over : {};
+  const result = overlaySectionDef(from, raw, onWarn, name);
+  const layers = layersOf(from);
+  return withLayers(result, layers && [
+    ...layers, ...recordDefLayers(from, raw, result, layer || { kind: 'override', name: null }),
+  ]);
+}
+
+function overlaySectionDef(from, raw, onWarn, name) {
   const result = copyOrigins(from, { ...from });
   // The section key stays with the base: an overlay changes the paths it names, not the
   // section it lands on.
@@ -226,7 +348,7 @@ function layerSectionDef(base, over, { onWarn = null, name = null } = {}) {
   return result;
 }
 
-function mergeSectionRecords(base, over, onWarn = () => {}) {
+function mergeSectionRecords(base, over, onWarn = () => {}, layer = null) {
   const merged = {};
   const keyOf = new Map();
   for (const [name, def] of Object.entries(base || {})) {
@@ -252,7 +374,7 @@ function mergeSectionRecords(base, over, onWarn = () => {}) {
     }
 
     if (existing !== undefined) {
-      merged[existing] = layerSectionDef(merged[existing], def, { onWarn, name: existing });
+      merged[existing] = layerSectionDef(merged[existing], def, { onWarn, name: existing, layer });
     } else {
       merged[name] = def;
       keyOf.set(name.toLowerCase(), name);
@@ -262,7 +384,7 @@ function mergeSectionRecords(base, over, onWarn = () => {}) {
   return merged;
 }
 
-function applySectionSelector(sections, name, onWarn = null) {
+function applySectionSelector(sections, name, onWarn = null, kind = 'import-variant') {
   const result = {};
   let matched = 0;
 
@@ -277,7 +399,7 @@ function applySectionSelector(sections, name, onWarn = null) {
     }
     matched += 1;
     result[sectionName] = layerSectionDef(def, originView(def, ['variants', key], variants[key]),
-      { onWarn, name: sectionName });
+      { onWarn, name: sectionName, layer: { kind, name: String(name) } });
   }
 
   return { sections: result, matched };
@@ -323,7 +445,7 @@ function sectionsForBranch(component, branchPath, onWarn = null) {
     for (const name of fanned) {
       const key = findSectionVariant(section, name);
       if (key === undefined) continue;
-      resolved = applySectionVariant(resolved, sectionVariant(section, key), onWarn);
+      resolved = applySectionVariant(resolved, sectionVariant(section, key), onWarn, name);
     }
 
     variants.forEach((name, i) => {
@@ -334,7 +456,7 @@ function sectionsForBranch(component, branchPath, onWarn = null) {
           sectionSelections[i] && sectionSelections[i].loc);
         return;
       }
-      resolved = applySectionVariant(resolved, sectionVariant(section, key), onWarn);
+      resolved = applySectionVariant(resolved, sectionVariant(section, key), onWarn, name);
     });
     applicable.push({ section: resolved, variants: [...fanned, ...variants] });
   }
@@ -352,6 +474,8 @@ function slotsForBranch(component, branchPath) {
 }
 
 module.exports = {
+  layersOf,
+  withLayers,
   normalizeComponent,
   applySectionVariant,
   layerSectionDef,

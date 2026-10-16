@@ -343,25 +343,66 @@ describe('preview component records', () => {
 
   const setting = (label, name, dotted) => section(label, name).settings
     .find((s) => s.path.join('.') === dotted);
-  const layersOf = (s) => s.layers.map((layer) => [baseOf(result, layer.at), layer.variant, layer.value]);
+  const layersOf = (s) => s.layers.map((layer) => [
+    layer.kind, layer.name, baseOf(result, { file: layer.file }), layer.before, layer.after,
+  ]);
 
-  test('a setting an importing component overrides lists the imported value before its own', () => {
+  test('a setting an importing component overrides records the change, naming the imported value it replaced', () => {
     expect(layersOf(setting('B', 'intro', 'render.position'))).toEqual([
-      ['pe.yaml', null, 1], ['pe-b.yaml', null, 9],
+      ['override', null, 'pe-b.yaml', 1, 9],
     ]);
-    expect(setting('B', 'intro', 'render.position').layers[0].at).toMatchObject({ line: 4 });
+    const [layer] = setting('B', 'intro', 'render.position').layers;
+    expect(layer).toMatchObject({ op: 9, beforeAbsent: false, deleted: false });
+    expect(baseOf(result, layer.beforeOrigin)).toBe('pe.yaml');
+    expect(layer.beforeOrigin).toMatchObject({ line: 4, authoredPath: ['render', 'position'] });
   });
 
-  test('a setting a section variant changes on the leaf lists the variant after the declaration', () => {
+  test('a setting a section variant changes on the leaf records the variant as a layer', () => {
     expect(setting('A/y', 'party', 'render.wrapper')).toMatchObject({ value: 'square' });
     expect(layersOf(setting('A/y', 'party', 'render.wrapper'))).toEqual([
-      ['pe.yaml', null, 'curly'], ['pe.yaml', 'tight', 'square'],
+      ['variant', 'tight', 'pe.yaml', 'curly', 'square'],
     ]);
   });
 
   test('a setting only one record writes has no layers', () => {
     expect(setting('A/x', 'intro', 'render.position').layers).toEqual([]);
     expect(setting('A/x', 'party', 'render.wrapper')).toMatchObject({ value: 'curly', layers: [] });
+  });
+});
+
+describe('preview section history through a content-key switch', () => {
+  // Three files layer one section: text, then a file in its place, then an append. `text`,
+  // `file` and `from` replace one another, so the append extends the file's text, not Alpha.
+  let result;
+  beforeAll(() => {
+    const dir = withTmpDir();
+    writeTree(dir, {
+      'items/items.yaml': '[]',
+      'components/base.yaml': "sections:\n  intro:\n    text: 'Alpha.'\n",
+      'components/mid.md': 'Middle.',
+      'components/mid.yaml': 'imports:\n  - from: %TMP%/components/base.yaml\nsections:\n  intro:\n    file: %TMP%/components/mid.md\n',
+      'components/top.yaml': "imports:\n  - from: %TMP%/components/mid.yaml\nsections:\n  intro:\n    text: '+{ Omega.}'\n",
+      'compile.yaml': [
+        'version: 4', 'structure:', '  input:', '    items: [%TMP%/items]', '  output: %TMP%/output',
+        'components:', '  plotEssential: %TMP%/components/top.yaml', 'branches:', '  A: {}',
+      ].join('\n'),
+    });
+    result = preview(path.join(dir, 'compile.yaml'));
+  });
+
+  test('the text layers follow the merge, each starting from the one before', () => {
+    const intro = componentOf(result, 'A', 'plotEssential').sections.find((s) => s.name === 'intro');
+    expect(intro.text).toBe('Middle.\nOmega.');
+    const layers = intro.settings.find((s) => s.path.join('.') === 'text').layers;
+    expect(layers.map((layer) => [layer.kind, baseOf(result, { file: layer.file })])).toEqual([
+      ['override', 'mid.yaml'], ['source', 'mid.yaml'], ['override', 'top.yaml'],
+    ]);
+    expect(layers[0].before).toBe('Alpha.');
+    expect(baseOf(result, layers[0].beforeOrigin)).toBe('base.yaml');
+    expect(Object.keys(layers[0].after)).toEqual(['file']);
+    expect(layers[1].after).toBe('Middle.');
+    expect(layers[2].op).toBe('+{ Omega.}');
+    for (let i = 1; i < layers.length; i += 1) expect(layers[i].before).toEqual(layers[i - 1].after);
   });
 });
 

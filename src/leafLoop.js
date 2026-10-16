@@ -213,7 +213,7 @@ function compileLeaf(branchPath, ctx) {
           selectedAt: origin || null,
           selectedOn: cctx.componentNodes[descriptor.key] || [],
           sections: shown
-            ? describeSections(shown, branchPath, filled, segments, component.contributions, sectionUsage) : null,
+            ? describeSections(shown, branchPath, filled, segments, sectionUsage) : null,
           uses: shown ? null : proseUsage,
           pathVariables: cctx.componentPathUses[descriptor.key].variables,
         });

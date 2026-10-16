@@ -5,53 +5,24 @@
  * than writes it. See "Preview API" in the dev guide for the record layout.
  */
 
-const { sectionsForBranch } = require('./model/component');
+const { sectionsForBranch, layersOf } = require('./model/component');
 const { SECTION_SETTINGS } = require('./model/componentSettings');
 const { sortOccupants } = require('./emit/components');
 const { originAt } = require('./origin');
-const { findKey, isPlainObject } = require('./util');
 
 const SECTION_KEY = 'section:';
 
-function valueAt(def, authoredPath) {
-  let node = def;
-  for (const part of authoredPath) {
-    if (!isPlainObject(node)) return undefined;
-    const key = findKey(node, part);
-    if (key === null) return undefined;
-    node = node[key];
-  }
-  return node;
+const samePath = (a, b) => a.length === b.length && a.every((part, i) => String(part).toLowerCase() === String(b[i]).toLowerCase());
+
+// The steps that changed one setting of a section, in the order the merge applied them:
+// later files through `imports:`, `importVariants:` selections, a file read for `file:` or
+// `from:`, then the variants dispatched on this leaf. The first record is the setting's
+// base, named by each first layer's `beforeOrigin`, so a setting written once has none.
+function settingLayers(section, authoredPath) {
+  return (layersOf(section) || []).filter((entry) => samePath(entry.path, authoredPath));
 }
 
-// Each record that wrote one setting of one section, in the order they applied: the files
-// merged through `imports:`, then the variants dispatched on this leaf. `value` is as
-// authored, so a text operation appears as written rather than as its result.
-function settingLayers(contributions, declared, applied, authoredPath) {
-  let layers = [];
-  for (const { file, variant, sections } of contributions || []) {
-    const key = isPlainObject(sections) ? findKey(sections, declared.name) : null;
-    if (key === null) continue;
-    const def = sections[key];
-    // A `~` deletes what the imports provided; a later record starts the section again.
-    if (def === null || def === undefined) { layers = []; continue; }
-    const value = valueAt(def, authoredPath);
-    if (value === undefined) continue;
-    layers.push({ file, variant, value, at: originAt(def, authoredPath) });
-  }
-  for (const name of applied) {
-    const key = isPlainObject(declared.variants) ? findKey(declared.variants, String(name)) : null;
-    if (key === null) continue;
-    const value = valueAt(declared.variants[key], authoredPath);
-    if (value === undefined) continue;
-    const at = originAt(declared, ['variants', key, ...authoredPath]);
-    layers.push({ file: at ? at.file : null, variant: name, value, at });
-  }
-  // One record is the setting's origin, which the setting already names.
-  return layers.length > 1 ? layers : [];
-}
-
-function describeSections(component, branchPath, filled, segments, contributions = null, sectionUsage = null) {
+function describeSections(component, branchPath, filled, segments, sectionUsage = null) {
   const applicable = sectionsForBranch(component, branchPath, null);
   if (applicable === null) return [];
 
@@ -88,7 +59,7 @@ function describeSections(component, branchPath, filled, segments, contributions
           path: authoredPath,
           value: section[field],
           origin: originAt(section, [field]),
-          layers: settingLayers(contributions, declared, entry ? entry.variants : [], authoredPath),
+          layers: settingLayers(section, authoredPath),
         })),
       occupants,
       uses: (entry && sectionUsage && sectionUsage.get(lower)) || { variables: new Set(), roles: new Set() },

@@ -39,8 +39,7 @@ export interface PreviewItem {
 export interface Card { type: string; name: string; rendered: string; itemId: string | null }
 export interface Output { path: string; branchPath: string[] }
 export interface SectionSetting {
-  path: FieldPath; value: JsonValue; origin: Location | null;
-  layers: { variant: string | null; value: JsonValue; at: Location | null }[];
+  path: FieldPath; value: JsonValue; origin: Location | null; layers: FieldLayer[];
 }
 export interface Occupant { id: string; order: number; template: string | null; text: string }
 export interface Section {
@@ -112,13 +111,13 @@ export interface PreviewComparison {
     fileB: string | null; imported: boolean; compiledAs: string[]; reachesOutput: boolean }[];
   files: { changed: string[]; added: string[]; removed: string[] };
 }
-export interface FreezeEntry { name: string; kind: 'library' | 'template'; isNew: boolean; added: string[]; removed: string[]; changed: string[] }
-export interface FreezeData { diagnostics: SnapshotDiagnostic[]; filesWritten: number; entries: FreezeEntry[] }
+export interface FreezeEntry { name: string; kind: 'library' | 'template' | 'leftover'; isNew: boolean; added: string[]; removed: string[]; changed: string[] }
+export interface FreezeData { diagnostics: SnapshotDiagnostic[]; filesWritten: number; removedFolders: string[]; entries: FreezeEntry[] }
 export interface OkFreeze extends FreezeData { status: 'ok'; reason: null; snapshot: string; manifest: string }
 export interface BlockedFreeze extends FreezeData { status: 'blocked'; reason: string; snapshot: null; manifest: null }
 export type FreezeResult = OkFreeze | BlockedFreeze;
 export interface SnapshotInspectionEntry extends FreezeEntry {
-  sourcePath: string; snapshotPath: string; live: Record<string, string>; frozen: Record<string, string>;
+  sourcePath: string | null; snapshotPath: string; live: Record<string, string>; frozen: Record<string, string>;
 }
 export interface SnapshotInspectionData {
   diagnostics: SnapshotDiagnostic[]; config: string; hasChanges: boolean; manifestChanged: boolean;

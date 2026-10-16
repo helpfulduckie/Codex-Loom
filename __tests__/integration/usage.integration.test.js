@@ -55,6 +55,11 @@ body: {Desc: 'Lives in {%place}.'}
 });
 afterEach(() => spies.forEach((spy) => spy.mockRestore()));
 
+// A preview gives each loaded section record a `_layers` history; an ordinary compile gives none.
+const sectionRecords = (component) => Object.values(component.rawSections || {}).filter((def) => def && typeof def === 'object');
+const hasHistory = (component) => sectionRecords(component).some((def) => Array.isArray(def._layers));
+const layersRecorded = (component) => sectionRecords(component).reduce((n, def) => n + (def._layers || []).length, 0);
+
 test.each([{}, { diff: true, annotate: true, variance: true, inventory: true, schemaTables: true }])('ordinary compilation and existing reports do not allocate usage or histories (%j)', (options) => {
   compile(config, options);
   expect(usage.createUsage).toHaveBeenCalled();
@@ -62,7 +67,7 @@ test.each([{}, { diff: true, annotate: true, variance: true, inventory: true, sc
   expect(loadComponentDocument).toHaveBeenCalled();
   expect(usage.createUsage.mock.results.every((r) => r.value === null)).toBe(true);
   expect(usage.usageOf.mock.results.every((r) => r.value === null)).toBe(true);
-  expect(loadComponentDocument.mock.results.filter((r) => r.value).every((r) => r.value.contributions === null)).toBe(true);
+  expect(loadComponentDocument.mock.results.filter((r) => r.value).every((r) => !hasHistory(r.value))).toBe(true);
   expect(fs.existsSync(path.join(root, 'reports/usage'))).toBe(false);
 });
 
@@ -70,7 +75,7 @@ test('preview retains usage and recursive component histories', () => {
   const result = preview(config);
   expect(result.status).toBe('ok');
   expect(usage.createUsage.mock.results.some((r) => r.value !== null)).toBe(true);
-  expect(loadComponentDocument.mock.results.some((r) => r.value && r.value.contributions.length === 2)).toBe(true);
+  expect(loadComponentDocument.mock.results.some((r) => r.value && hasHistory(r.value) && layersRecorded(r.value) > 0)).toBe(true);
   expect(fs.existsSync(path.join(root, 'output'))).toBe(false);
 });
 
@@ -83,7 +88,7 @@ test('standalone usage CLI captures exact reads, groups leaves, and keeps histor
     '| variable | place | A, B | item: Hero; prose: opening; section: plotEssential/intro |',
   ]);
   expect(report).toContain('An absent read does not establish');
-  expect(loadComponentDocument.mock.results.filter((r) => r.value).every((r) => r.value.contributions === null)).toBe(true);
+  expect(loadComponentDocument.mock.results.filter((r) => r.value).every((r) => !hasHistory(r.value))).toBe(true);
   expect(fs.existsSync(path.join(root, 'output'))).toBe(true);
 });
 

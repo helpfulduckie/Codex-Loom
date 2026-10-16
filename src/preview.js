@@ -208,6 +208,26 @@ function componentOutput(detail, leaf, run) {
   return null;
 }
 
+// A section setting's layer has the shape of an item field's, so one display reads both.
+function sectionLayer(entry, describe) {
+  const at = describe(entry.origin);
+  const before = describe(entry.beforeOrigin);
+  return {
+    kind: entry.layer.kind,
+    name: entry.layer.name === undefined ? null : entry.layer.name,
+    library: at ? at.library : null,
+    op: plain(entry.op),
+    file: at ? at.file : null,
+    line: at ? at.line : null,
+    col: at ? at.col : null,
+    before: plain(entry.before),
+    beforeAbsent: !!entry.beforeAbsent,
+    beforeOrigin: before ? { ...before, authoredPath: [...entry.path] } : null,
+    after: entry.deleted ? null : plain(entry.after),
+    deleted: !!entry.deleted,
+  };
+}
+
 function describeSectionRecords(sections, describe, table) {
   if (!sections) return null;
   return sections.map((section) => table.indexOf({
@@ -218,11 +238,7 @@ function describeSectionRecords(sections, describe, table) {
       path: setting.path,
       value: plain(setting.value),
       origin: describe(setting.origin),
-      layers: setting.layers.map((layer) => ({
-        variant: layer.variant || null,
-        value: plain(layer.value),
-        at: describe(layer.at || (layer.file ? { file: layer.file } : null)),
-      })),
+      layers: setting.layers.map((entry) => sectionLayer(entry, describe)),
     })),
   }));
 }

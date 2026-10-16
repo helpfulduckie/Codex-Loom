@@ -28,7 +28,7 @@ function selectComponentSections(component, variant, entrySections, onUnknownSec
   }
 
   if (typeof variant === 'string' && variant.trim() !== '') {
-    raw = applySectionSelector(raw, variant.trim(), onWarn).sections;
+    raw = applySectionSelector(raw, variant.trim(), onWarn, 'variant').sections;
   }
 
   return copyOrigins(component,
