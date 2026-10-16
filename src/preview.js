@@ -11,7 +11,8 @@ const { compile } = require('./compile');
 const { Diagnostics } = require('./diag');
 const { nearestOrigin } = require('./origin');
 const { ITEM_TOP_LEVEL_FIELDS, isPlainObject, findKey, pathId, pathStartsWith } = require('./util');
-const { buildBranchOutputDir, resolveBranchFolderPath } = require('./outputPaths');
+const { buildBranchOutputDir } = require('./outputPaths');
+const { memorySource, resolveAt } = require('./compiledTree');
 const { buildBranchTree, buildContext, buildLibraries, buildInputRoots } = require('./previewRecords');
 const { usageOf, serializeUsage: describeUses } = require('./usage');
 
@@ -193,19 +194,42 @@ function buildCards(grouped, cardTable) {
 
 const relativeTo = (root, file) => path.relative(root, file).replace(/\\/g, '/');
 
+// What a leaf reads is whatever the compiled tree would give it, so the captured output is
+// resolved by the same rule as a tree on disk. One resolution is kept per leaf, since every
+// component and card of the leaf reads from it.
+const resolutions = new WeakMap();
+
+function resolveLeaf(leaf, run) {
+  if (!resolutions.has(run)) resolutions.set(run, { source: memorySource(run.captured), byLeaf: new Map() });
+  const cache = resolutions.get(run);
+  if (!cache.byLeaf.has(leaf)) {
+    const leafDir = path.resolve(buildBranchOutputDir(run.config._resolvedOutput, leaf.folderPath));
+    cache.byLeaf.set(leaf, resolveAt(leafDir, cache.source));
+  }
+  return cache.byLeaf.get(leaf);
+}
+
 // A leaf's component is the nearest copy on its path, so the owner is the deepest node at
-// or above the leaf that the compile wrote the file to.
+// or above the leaf that the compile wrote the file to. A file outside Components/ is read
+// from the leaf's own folder alone.
 function componentOutput(detail, leaf, run) {
   const root = run.config._resolvedOutput;
   const { descriptor } = detail;
-  for (let depth = leaf.folderPath.length; depth >= 0; depth -= 1) {
-    const dir = buildBranchOutputDir(root, leaf.folderPath.slice(0, depth));
-    const file = path.resolve(descriptor.dir ? path.join(dir, descriptor.dir) : dir, descriptor.file);
-    if (run.captured.has(file)) {
-      return { path: relativeTo(root, file), branchPath: leaf.branchPath.slice(0, depth) };
+  const { chain } = resolveLeaf(leaf, run);
+  let depth = -1;
+  if (descriptor.dir === 'Components') {
+    const name = path.basename(descriptor.file, '.md');
+    for (let i = chain.length - 1; i >= 0 && depth < 0; i -= 1) {
+      if (chain[i].own.components[name] !== undefined) depth = i;
     }
+  } else if (descriptor.dir === undefined) {
+    const last = chain.length - 1;
+    if (run.captured.has(path.resolve(chain[last].dir, descriptor.file))) depth = last;
   }
-  return null;
+  if (depth < 0) return null;
+  const dir = chain[depth].dir;
+  const file = path.join(descriptor.dir ? path.join(dir, descriptor.dir) : dir, descriptor.file);
+  return { path: relativeTo(root, file), branchPath: leaf.branchPath.slice(0, depth) };
 }
 
 // A section setting's layer has the shape of an item field's, so one display reads both.
@@ -340,24 +364,28 @@ function excludedId(itemDef) {
   return typeof itemDef.name === 'string' ? itemDef.name : null;
 }
 
-// The file a leaf reads a card from: the deepest node on its path that holds the name. A
-// single-leaf compile places nothing by name, so the card is in the leaf's own folder.
+// The file a leaf reads a card from: the nearest ancestor copy of the name. A card whose
+// name another type also uses on the leaf (CL0622) is looked up by type as well, since the
+// merge by name keeps only one of the two.
 function cardFile(card, leaf, run) {
-  let owner = leaf.branchPath;
-  let best = -1;
-  for (const placed of run.cardPlacements || []) {
-    if (placed.name !== card.name || placed.type !== card.type) continue;
-    if (placed.node.length <= best || placed.node.length > leaf.branchPath.length) continue;
-    if (!placed.node.every((segment, i) => leaf.branchPath[i] === segment)) continue;
-    owner = placed.node;
-    best = placed.node.length;
-  }
   const root = run.config._resolvedOutput;
-  const dir = buildBranchOutputDir(root, resolveBranchFolderPath(run.config.branches, owner));
-  return {
-    path: relativeTo(root, path.join(dir, 'Story Cards', card.type, `${card.type}.md`)),
-    branchPath: [...owner],
-  };
+  const { resolved, chain } = resolveLeaf(leaf, run);
+  let found = resolved.cards.find((c) => c.title === card.name && c.type === card.type);
+  if (!found) {
+    for (let i = chain.length - 1; i >= 0 && !found; i -= 1) {
+      found = chain[i].own.cards.find((c) => c.title === card.name && c.type === card.type);
+    }
+  }
+  if (!found) {
+    // A single-leaf compile places nothing by name, so the card is in the leaf's own folder.
+    const dir = buildBranchOutputDir(root, leaf.folderPath);
+    return {
+      path: relativeTo(root, path.join(dir, 'Story Cards', card.type, `${card.type}.md`)),
+      branchPath: [...leaf.branchPath],
+    };
+  }
+  const depth = chain.findIndex((c) => c.own.cards.includes(found));
+  return { path: relativeTo(root, found.file), branchPath: leaf.branchPath.slice(0, depth) };
 }
 
 function buildFiles(captured, outputDir) {

@@ -333,10 +333,9 @@ function compileRun(configPath, options, buses) {
 
   const packLoadFindings = runPackChecks(config, deferredCardLeaves, configPath, compileDiagnostics);
 
-  const cardPlacements = options.capture ? [] : null;
   totalFiles += placeInheritedFiles({
     deferredComponents, deferredScripts, deferredCardLeaves,
-    leaves, config, diagnostics: compileDiagnostics, log, cardPlacements,
+    leaves, config, diagnostics: compileDiagnostics, log,
   });
 
   writeTreeFiles({
@@ -377,7 +376,7 @@ function compileRun(configPath, options, buses) {
       : 0;
     return {
       config, leaves, leafData, inventoryData, deferredCardLeaves, captured, droppedKeys,
-      componentDetails, cardPlacements, canonRegistry, registry, allItemDefs,
+      componentDetails, canonRegistry, registry, allItemDefs,
     };
   }
 

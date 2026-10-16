@@ -83,7 +83,7 @@ function placeWithOverrides(tree, leafVersion, versionCount) {
 
 function placeInheritedFiles({
   deferredComponents, deferredScripts, deferredCardLeaves,
-  leaves, config, diagnostics, log, cardPlacements = null,
+  leaves, config, diagnostics, log,
 }) {
   let filesWritten = 0;
 
@@ -246,7 +246,6 @@ function placeInheritedFiles({
         for (const v of rec.versions) {
           for (const node of frontier([], v.carry)) {
             putOwned(node, v.type, v.sortKey, v.text);
-            if (cardPlacements) cardPlacements.push({ name, type: v.type, node });
           }
         }
         continue;
@@ -254,7 +253,6 @@ function placeInheritedFiles({
       for (const { path: node, version } of placeWithOverrides(tree, rec.leafVersion, rec.versions.length)) {
         const v = rec.versions[version];
         putOwned(node, v.type, v.sortKey, v.text);
-        if (cardPlacements) cardPlacements.push({ name, type: v.type, node });
       }
     }
 
