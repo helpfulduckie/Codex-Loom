@@ -122,6 +122,7 @@ function collectEntries(config) {
 }
 
 function entryLabel(entry) {
+  if (entry.kind === 'leftover') return `Unlisted folder "${entry.name}"`;
   return `${entry.kind === 'library' ? 'Library' : 'Template'} "${entry.name}"`;
 }
 
@@ -203,6 +204,18 @@ function snapshotState(config, diagnostics) {
         isNew: false, added: [], removed: Object.keys(frozen), changed: [] });
     }
   }
+  // The freeze owns the whole snapshot folder, so a folder no manifest names (left by an older
+  // freeze) is removed too. Files at the top level, manifest.json among them, are not folders.
+  const owned = new Set(collected.map((e) => e.name));
+  if (fs.existsSync(snapshot)) {
+    for (const dirent of fs.readdirSync(snapshot, { withFileTypes: true })) {
+      if (!dirent.isDirectory() || owned.has(dirent.name)) continue;
+      const snapshotPath = path.join(snapshot, dirent.name);
+      const frozen = hashTree(snapshotPath);
+      collected.push({ name: dirent.name, kind: 'leftover', sourcePath: null, snapshotPath, live: {}, frozen,
+        isNew: false, added: [], removed: Object.keys(frozen), changed: [] });
+    }
+  }
   const { syncedAt, ...previousContent } = previous || {};
   const manifestChanged = !sameState(previousContent, next);
   const configFile = config._configPath;
@@ -212,7 +225,7 @@ function snapshotState(config, diagnostics) {
     snapshotFiles: hashTree(snapshot),
   }))).digest('hex');
   return { entries, collected, roles, next, manifest, fingerprint, manifestChanged,
-    hasChanges: manifestChanged || collected.some((e) => e.added.length || e.removed.length || e.changed.length) };
+    hasChanges: manifestChanged || collected.some((e) => e.kind === 'leftover' || e.added.length || e.removed.length || e.changed.length) };
 }
 
 function snapshotDiagnostics(diagnostics) {
@@ -266,6 +279,7 @@ function syncLibrary(config, options = {}) {
 
   const reportLines = [];
   const changes = [];
+  const removedFolders = []; // every folder deleted whole, so a caller can name each one
   let filesWritten = 0;
 
   const collected = entries.map((entry) => {
@@ -326,8 +340,13 @@ function syncLibrary(config, options = {}) {
   ))) {
     // An active entry may reuse a retired entry's destination under another kind.
     if (entries.some((entry) => entry.name === retired.name)) continue;
-    if (fs.existsSync(retired.snapshotPath)) fs.rmSync(retired.snapshotPath, { recursive: true });
+    if (fs.existsSync(retired.snapshotPath)) {
+      fs.rmSync(retired.snapshotPath, { recursive: true });
+      removedFolders.push(path.basename(retired.snapshotPath));
+    }
     changes.push({ ...retired, changed: [] });
+    reportLines.push(`${entryLabel(retired)}: removed, no longer used by this project.`,
+      ...retired.removed.map((rel) => `  removed: ${rel}`));
   }
 
   if (config._resolvedReports) {
@@ -341,7 +360,7 @@ function syncLibrary(config, options = {}) {
     fs.writeFileSync(manifestPath, JSON.stringify(newManifest, null, 2), 'utf8');
   }
 
-  return { entries, filesWritten, manifestPath, changes };
+  return { entries, filesWritten, manifestPath, changes, removedFolders };
 }
 
 /**
@@ -355,7 +374,7 @@ function freezeLibraries(configPath, options = {}) {
     code: d.code, severity: d.severity, message: d.message, file: d.file, line: d.line, col: d.col,
   }));
   const blocked = (reason) => ({
-    status: 'blocked', reason, diagnostics: describe(), snapshot: null, manifest: null, filesWritten: 0, entries: [],
+    status: 'blocked', reason, diagnostics: describe(), snapshot: null, manifest: null, filesWritten: 0, removedFolders: [], entries: [],
   });
 
   const config = loadCompileConfig(configPath, { diagnostics, live: true });
@@ -376,6 +395,7 @@ function freezeLibraries(configPath, options = {}) {
     snapshot: config._resolvedSnapshot,
     manifest: result.manifestPath,
     filesWritten: result.filesWritten,
+    removedFolders: result.removedFolders,
     entries: result.changes.map((diff) => ({
       name: diff.name,
       kind: diff.kind,

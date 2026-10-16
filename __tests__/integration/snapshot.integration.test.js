@@ -150,6 +150,19 @@ describe('--snapshot (CLI mode)', () => {
   });
 });
 
+describe('--snapshot (CLI mode) deletions', () => {
+  test('the CLI names every folder it deleted, retired entries and unlisted folders alike', () => {
+    const configPath = buildProject();
+    spawnSync(process.execPath, [CLI, '--snapshot', configPath], { encoding: 'utf8', cwd: tmpDir });
+    writeFile('snapshot/old-lib/a.txt', 'a');
+    fs.writeFileSync(configPath, fs.readFileSync(configPath, 'utf8').replace(`      main: ${path.join(tmpDir, 'main-lib')}\n`, ''), 'utf8');
+    const result = spawnSync(process.execPath, [CLI, '--snapshot', configPath], { encoding: 'utf8', cwd: tmpDir });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Removed snapshot/main/ (no longer used by this project)');
+    expect(result.stdout).toContain('Removed snapshot/old-lib/ (no longer used by this project)');
+  });
+});
+
 describe('drift notice at compile time', () => {
   test('a normal compile against a populated, unmodified snapshot prints nothing about drift', () => {
     const configPath = buildProject();
@@ -395,6 +408,53 @@ describe('saved snapshot inspection and confirmation', () => {
       ]));
       expect(freezeLibraries(config, { expectedState: before.fingerprint }).status).toBe('blocked');
     } finally { fs.rmSync(templates, { recursive: true, force: true }); }
+  });
+
+  test('a folder no manifest names is listed by inspection and deleted, with its report line, by the next freeze', () => {
+    const config = buildProject();
+    freezeLibraries(config);
+    writeFile('snapshot/old-lib/a.cl.yaml', 'a');
+    writeFile('snapshot/old-lib/deep/b.txt', 'b');
+    writeFile('snapshot/stray-note.txt', 'files at the top level are not folders');
+    const before = diskState();
+
+    const inspection = inspectSnapshot(config);
+    expect(inspection.hasChanges).toBe(true);
+    expect(inspection.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'old-lib', kind: 'leftover', removed: ['a.cl.yaml', 'deep/b.txt'] }),
+    ]));
+    expect(diskState()).toEqual(before);
+
+    const result = freezeLibraries(config, { expectedState: inspection.fingerprint });
+    expect(result).toMatchObject({ status: 'ok', removedFolders: ['old-lib'] });
+    expect(result.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'old-lib', kind: 'leftover', removed: ['a.cl.yaml', 'deep/b.txt'] }),
+    ]));
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot/old-lib'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot/stray-note.txt'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot/main/note.cl.yaml'))).toBe(true);
+    expect(inspectSnapshot(config).hasChanges).toBe(false);
+  });
+
+  test('an empty folder no manifest names is still a change and is deleted', () => {
+    const config = buildProject();
+    freezeLibraries(config);
+    fs.mkdirSync(path.join(tmpDir, 'snapshot/empty-dir'));
+    expect(inspectSnapshot(config).hasChanges).toBe(true);
+    expect(freezeLibraries(config).removedFolders).toEqual(['empty-dir']);
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot/empty-dir'))).toBe(false);
+  });
+
+  test('a manifest entry whose name escapes the snapshot folder is refused and nothing is deleted', () => {
+    const config = buildProject();
+    freezeLibraries(config);
+    writeFile('victim/keep.txt', 'keep');
+    const manifestPath = path.join(tmpDir, 'snapshot/manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    manifest.library['../victim'] = { source: path.join(tmpDir, 'victim'), files: {} };
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest), 'utf8');
+    expect(() => freezeLibraries(config)).toThrow(/outside its destination/);
+    expect(fs.readFileSync(path.join(tmpDir, 'victim/keep.txt'), 'utf8')).toBe('keep');
   });
 
   test('removing a library declaration reports and removes its owned frozen files', () => {

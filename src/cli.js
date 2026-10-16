@@ -377,6 +377,10 @@ function main(rawArgs) {
           + `(${result.filesWritten} file(s)) to:\n  ${config._resolvedSnapshot}\n`
           + `Manifest: ${result.manifestPath}\n`
         );
+        // The freeze deletes without confirmation, so every deleted folder is named.
+        for (const name of result.removedFolders) {
+          console.log(`Removed snapshot/${name}/ (no longer used by this project)`);
+        }
         if (snapshotDiagnostics.hasErrors()) return 1;
       } catch (err) {
         console.error(`\nFatal: ${err.message}`);

@@ -56,6 +56,13 @@ hash of every file. Both `snapshot/` and its manifest are meant to be committed:
 that only ever exists in a temp directory proves nothing about whether a frozen compile
 matches a live one.
 
+**The freeze manages the whole snapshot folder.** Afterward it holds `manifest.json` and one
+folder per library, or external template directory, the project uses, and nothing else.
+Any other folder under `snapshot/` is removed on the next freeze, whether it belongs to an
+entry the project dropped or was left by an older freeze that no manifest lists. The CLI
+prints each removed folder by name, and `sync-diff.txt` lists the files in it. Files at the
+top level of `snapshot/` are left alone.
+
 **A project-relative template directory is never frozen.** `structure.input.templates` is a
 list, and `--snapshot` only copies the entries that resolve outside the project's own base
 directory — a local `./templates` is already version-controlled with the project, and

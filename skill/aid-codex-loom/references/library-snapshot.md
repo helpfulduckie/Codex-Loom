@@ -48,6 +48,11 @@ This copies every `library:` entry, and every `templates:` entry resolving **out
 project base**, into `snapshot/<name>/` as raw bytes, then writes `snapshot/manifest.json`
 with a `syncedAt` timestamp and a `sha256:` hash per file.
 
+**The freeze manages the whole `snapshot/` folder.** Afterward it holds `manifest.json` plus
+one folder per library or external template directory in use. Any other folder is removed on
+the next freeze (the CLI names each one, and `sync-diff.txt` lists its files); top-level
+files are left alone.
+
 **Commit both `snapshot/` and its manifest.** A snapshot that exists only in a temp
 directory proves nothing about whether a frozen compile matches a live one.
 

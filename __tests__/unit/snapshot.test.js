@@ -134,6 +134,23 @@ describe('syncLibrary — the freeze', () => {
     expect(diagnostics.all.some((d) => d.code === CODES.LIBRARY_ROLE_SCAN_REFUSED)).toBe(true);
   });
 
+  test('a freeze deletes a folder no manifest names and lists it in the report and the returned changes', () => {
+    const { config } = buildProject();
+    syncLibrary(config);
+    writeFile('snapshot/old-lib/a.txt', 'a');
+
+    const result = syncLibrary(config);
+
+    expect(fs.existsSync(path.join(config._resolvedSnapshot, 'old-lib'))).toBe(false);
+    expect(result.removedFolders).toEqual(['old-lib']);
+    expect(result.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'old-lib', kind: 'leftover', removed: ['a.txt'] }),
+    ]));
+    const report = fs.readFileSync(path.join(config._resolvedReports, 'snapshot', 'sync-diff.txt'), 'utf8');
+    expect(report).toContain('Unlisted folder "old-lib": removed, no longer used by this project.');
+    expect(report).toContain('  removed: a.txt');
+  });
+
   test('a re-sync after a source file is removed prunes it from snapshot/<name>/ and the manifest', () => {
     writeFile('main-lib/extra.cl.yaml', 'id: Extra\nname: Extra\n');
     const { config } = buildProject();
