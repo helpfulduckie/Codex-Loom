@@ -139,6 +139,15 @@ describe('--snapshot (CLI mode)', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(tmpDir, 'snapshot', 'manifest.json'), 'utf8'));
     expect(manifest.library.main).not.toHaveProperty('requiresRoles');
   });
+
+  test('a second freeze with nothing to change still exits non-zero for a library whose items do not validate', () => {
+    const configPath = buildProject();
+    fs.writeFileSync(path.join(tmpDir, 'main-lib', 'note.cl.yaml'), '- id: Note\n  weird: nope\n', 'utf8');
+    spawnSync(process.execPath, [CLI, '--snapshot', configPath], { encoding: 'utf8', cwd: tmpDir });
+    const again = spawnSync(process.execPath, [CLI, '--snapshot', configPath], { encoding: 'utf8', cwd: tmpDir });
+    expect(again.status).not.toBe(0);
+    expect(again.stderr).toContain('CL0116');
+  });
 });
 
 describe('drift notice at compile time', () => {

@@ -255,10 +255,10 @@ function syncLibrary(config, options = {}) {
   const manifestPath = path.join(snapshotDir, 'manifest.json');
   const previousManifest = loadManifest(manifestPath, diagnostics);
 
-  if (!state.hasChanges) {
-    return { entries: state.entries, filesWritten: 0, manifestPath,
-      changes: state.collected.map((e) => ({ ...e, changed: [] })) };
-  }
+  // A freeze with nothing to change writes no frozen bytes and no manifest (so syncedAt stays
+  // put), but still rewrites the report and still checks library items; otherwise the report
+  // would keep describing an earlier sync as if it had just happened.
+  const writeFrozen = state.hasChanges;
 
   const newManifest = { manifestVersion: 2, syncedAt: new Date().toISOString(), library: {} };
   const hasTemplates = entries.some((e) => e.kind === 'template');
@@ -285,20 +285,22 @@ function syncLibrary(config, options = {}) {
     reportLines.push(...diffEntryLines(entry, diff));
 
     const destDir = path.join(snapshotDir, entry.name);
-    for (const rel of files) {
-      const from = path.join(entry.sourcePath, rel);
-      const to = path.join(destDir, rel);
-      fs.mkdirSync(path.dirname(to), { recursive: true });
-      fs.copyFileSync(from, to);
-      filesWritten += 1;
-    }
-
-    if (fs.existsSync(destDir)) {
-      const keep = new Set(files);
-      for (const rel of listFilesRelative(destDir)) {
-        if (!keep.has(rel)) fs.rmSync(path.join(destDir, rel));
+    if (writeFrozen) {
+      for (const rel of files) {
+        const from = path.join(entry.sourcePath, rel);
+        const to = path.join(destDir, rel);
+        fs.mkdirSync(path.dirname(to), { recursive: true });
+        fs.copyFileSync(from, to);
+        filesWritten += 1;
       }
-      removeEmptyDirs(destDir);
+
+      if (fs.existsSync(destDir)) {
+        const keep = new Set(files);
+        for (const rel of listFilesRelative(destDir)) {
+          if (!keep.has(rel)) fs.rmSync(path.join(destDir, rel));
+        }
+        removeEmptyDirs(destDir);
+      }
     }
 
     const section = { source: entry.sourcePath, files: fileHashes };
@@ -334,8 +336,10 @@ function syncLibrary(config, options = {}) {
     fs.writeFileSync(path.join(reportDir, 'sync-diff.txt'), reportLines.join('\n') + '\n', 'utf8');
   }
 
-  fs.mkdirSync(snapshotDir, { recursive: true });
-  fs.writeFileSync(manifestPath, JSON.stringify(newManifest, null, 2), 'utf8');
+  if (writeFrozen) {
+    fs.mkdirSync(snapshotDir, { recursive: true });
+    fs.writeFileSync(manifestPath, JSON.stringify(newManifest, null, 2), 'utf8');
+  }
 
   return { entries, filesWritten, manifestPath, changes };
 }

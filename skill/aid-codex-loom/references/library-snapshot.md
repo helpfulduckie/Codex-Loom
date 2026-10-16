@@ -91,6 +91,10 @@ exists, the sync writes a file-level change summary (added, removed, changed-by-
 entry) to `<reports>/snapshot/sync-diff.txt`, so you can see what a re-sync is about to
 pull in before committing it.
 
+**A freeze with nothing to change writes no frozen bytes, but still reports and still
+checks.** `syncedAt` does not move, `sync-diff.txt` is rewritten to say "no changes." per
+entry, and an entry whose own items do not validate still raises `CL0116` and exits non-zero.
+
 ---
 
 ## `requiresRoles`

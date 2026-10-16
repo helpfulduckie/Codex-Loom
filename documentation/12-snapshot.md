@@ -109,6 +109,12 @@ summary — added, removed, and changed-by-hash, per entry — to
 `<reports>/snapshot/sync-diff.txt`, so an author can see what a re-sync is about to pull in
 before committing it.
 
+**A freeze with nothing to change writes no frozen bytes, but still reports and still
+checks.** The snapshot files and `manifest.json` stay as they are, so `syncedAt` does not
+move. `sync-diff.txt` is rewritten to say "no changes." for each entry, so it never keeps
+describing an earlier sync, and a library whose own items do not validate still raises
+`CL0116` and exits non-zero.
+
 ---
 
 ## `requiresRoles` — a library entry's role contract, computed
