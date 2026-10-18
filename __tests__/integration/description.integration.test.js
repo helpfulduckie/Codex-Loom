@@ -27,6 +27,9 @@ const exists = (p) => fs.existsSync(p);
 const read = (p) => fs.readFileSync(p, 'utf8');
 
 const rootDesc = (tmpDir) => path.join(tmpDir, 'output', 'Description.md');
+// The root file without its frontmatter block, for tests about the body rather than the
+// generated description: key.
+const rootBody = (tmpDir) => read(rootDesc(tmpDir)).replace(/^---\n[\s\S]*?\n---\n\n/, '');
 const leafDesc = (tmpDir, branch) => path.join(tmpDir, 'output', 'Branches', branch, 'Description.md');
 const leafOpening = (tmpDir, branch) => path.join(tmpDir, 'output', 'Branches', branch, 'Opening.md');
 
@@ -71,7 +74,7 @@ describe('description: and adventureDescription: are two keys at two levels', ()
       'components/desc.cl.yaml': 'sections:\n  pitch:\n    text: A story about a harbor.\n',
     });
 
-    expect(read(rootDesc(tmpDir)).trim()).toBe('A story about a harbor.');
+    expect(rootBody(tmpDir).trim()).toBe('A story about a harbor.');
     // The whole reason the two are separate keys: inheriting the blurb would copy one
     // store listing into every leaf, which is what the goldens must never start doing.
     expect(exists(leafDesc(tmpDir, 'calm'))).toBe(false);
@@ -101,7 +104,7 @@ describe('description: and adventureDescription: are two keys at two levels', ()
       'components/adv.cl.yaml': 'sections:\n  pitch:\n    text: You wake on the docks.\n',
     });
 
-    expect(read(rootDesc(tmpDir)).trim()).toBe('A story about a harbor.');
+    expect(rootBody(tmpDir).trim()).toBe('A story about a harbor.');
     expect(read(leafDesc(tmpDir, 'calm')).trim()).toBe('You wake on the docks.');
   });
 
@@ -221,7 +224,7 @@ describe('sections take their text from a file or from a named transform', () =>
     expect(codes(diagnostics, CODES.SECTION_SOURCE_NOT_FOUND)).toHaveLength(0);
     // Two sections, joined as blocks — which reproduces v3's body-then-banner layout
     // exactly, and is why converting the goldens moved no bytes.
-    expect(read(rootDesc(tmpDir))).toBe(
+    expect(rootBody(tmpDir)).toBe(
       'A story about a harbor.\n\n=== Standard Build - 1.2.3 - library ===\n- HarborMod@1.0.0\n',
     );
   });
@@ -241,7 +244,7 @@ describe('sections take their text from a file or from a named transform', () =>
         'sections:\n  modBanner:\n    from: {script: ./scripts/library.js, extract: scriptBanner}\n',
     });
 
-    expect(read(rootDesc(tmpDir))).toBe('- ModA@1.0.0\n');
+    expect(rootBody(tmpDir)).toBe('- ModA@1.0.0\n');
   });
 
   test('a banner whose last group is itself a list keeps every group', () => {
@@ -255,7 +258,7 @@ describe('sections take their text from a file or from a named transform', () =>
         'sections:\n  modBanner:\n    from: {script: ./scripts/library.js, extract: scriptBanner}\n',
     });
 
-    expect(read(rootDesc(tmpDir))).toBe('- ModA@1.0.0\n- ModB@2.0.0\n');
+    expect(rootBody(tmpDir)).toBe('- ModA@1.0.0\n- ModB@2.0.0\n');
   });
 
   test('a source that does not resolve is CL0617, reported once rather than once per leaf', () => {
@@ -293,7 +296,7 @@ describe('sections take their text from a file or from a named transform', () =>
     });
 
     expect(codes(diagnostics, CODES.SECTION_TEXT_AND_SOURCE)).toHaveLength(1);
-    expect(read(rootDesc(tmpDir)).trim()).toBe('From the document.');
+    expect(rootBody(tmpDir).trim()).toBe('From the document.');
   });
 
   test('an import supplying file: is overridden by a local text:, without CL0619', () => {
@@ -314,7 +317,7 @@ describe('sections take their text from a file or from a named transform', () =>
     });
 
     expect(codes(diagnostics, CODES.SECTION_TEXT_AND_SOURCE)).toHaveLength(0);
-    expect(read(rootDesc(tmpDir)).trim()).toBe('From this project.');
+    expect(rootBody(tmpDir).trim()).toBe('From this project.');
   });
 
   test('a field op against an inherited file: applies to the file\'s contents', () => {
@@ -335,7 +338,7 @@ describe('sections take their text from a file or from a named transform', () =>
     });
 
     // `+{}` appends on its own line, which is what it does everywhere else.
-    expect(read(rootDesc(tmpDir)).trim()).toBe('From the shared file.\nAnd from this project.');
+    expect(rootBody(tmpDir).trim()).toBe('From the shared file.\nAnd from this project.');
   });
 });
 
@@ -358,7 +361,7 @@ describe('metadata: becomes Description.md frontmatter', () => {
     // A list has to arrive as a list: `scenario.py:193` reads scenario tags from here, and
     // a re-quoted string would be a silent failure at the far end.
     expect(read(rootDesc(tmpDir))).toBe(
-      '---\ntags:\n  - thriller\n  - dark\n---\n\nA story about a harbor.\n',
+      '---\ntags:\n  - thriller\n  - dark\ndescription: A story about a harbor.\n---\n\nA story about a harbor.\n',
     );
   });
 
@@ -474,6 +477,110 @@ describe('metadata: becomes Description.md frontmatter', () => {
   });
 });
 
+// ── The generated plain description ──────────────────────────────────────────
+
+describe('the scenario blurb gets a markdown-stripped description: in its frontmatter', () => {
+  const blurb = (metadata) => ({
+    ...BASE,
+    'compile.yaml': config(['description: ./components/desc.cl.yaml']),
+    'components/desc.cl.yaml': [
+      ...(metadata ? ['metadata:', ...metadata.map((line) => `  ${line}`)] : []),
+      'sections:',
+      '  pitch:',
+      '    text: A **story** about a [harbor](http://example.com).',
+    ].join('\n'),
+  });
+
+  test('a blurb with no metadata gains description: holding the stripped body', () => {
+    const { tmpDir } = compileProject(blurb(null));
+    const out = read(rootDesc(tmpDir));
+
+    expect(out).toMatch(/^---\ndescription: A story about a harbor\.\n---\n\n/);
+    expect(out).toContain('A **story** about a [harbor](http://example.com).');
+  });
+
+  test('a passthrough markdown blurb gains description: too', () => {
+    const { tmpDir } = compileProject({
+      ...BASE,
+      'compile.yaml': config(['description: ./desc.md']),
+      'desc.md': '# Harbor\n\nA *quiet* town.\n',
+    });
+
+    expect(read(rootDesc(tmpDir))).toMatch(/^---\ndescription: \|?-?\n?\s*Harbor\n\s*\n?\s*A quiet town\./);
+  });
+
+  test('a passthrough file carrying its own frontmatter is written byte-identical', () => {
+    const source = '---\ndescription: Mine.\ntags: [thriller]\n---\n\nA *quiet* town.\n';
+    const { tmpDir } = compileProject({
+      ...BASE,
+      'compile.yaml': config(['description: ./desc.md']),
+      'desc.md': source,
+    });
+    const out = read(rootDesc(tmpDir));
+
+    expect(out).toBe(source);
+    expect(out.match(/^---$/gm)).toHaveLength(2);
+  });
+
+  test('other authored metadata keys are kept alongside the generated description', () => {
+    const { tmpDir } = compileProject(blurb(['tags: [thriller]']));
+    const out = read(rootDesc(tmpDir));
+
+    expect(out).toContain('tags:');
+    expect(out).toContain('description: A story about a harbor.');
+  });
+
+  test('an authored description: is left exactly as written', () => {
+    const { tmpDir } = compileProject(blurb(['description: Hand-written blurb.']));
+    const out = read(rootDesc(tmpDir));
+
+    expect(out).toContain('description: Hand-written blurb.');
+    expect(out).not.toContain('A story about a harbor.\n---');
+    expect(out.match(/^description:/gm)).toHaveLength(1);
+  });
+
+  test('advanced: false suppresses generation because the body is already the plain field', () => {
+    const { tmpDir } = compileProject(blurb(['advanced: false']));
+    const out = read(rootDesc(tmpDir));
+
+    expect(out).toContain('advanced: false');
+    expect(out).not.toMatch(/^description:/m);
+  });
+
+  test('advanced: true still gains a generated description', () => {
+    const { tmpDir } = compileProject(blurb(['advanced: true']));
+
+    expect(read(rootDesc(tmpDir))).toMatch(/^description: A story about a harbor\.$/m);
+  });
+
+  test('an adventureDescription leaf gains no frontmatter at all', () => {
+    const { tmpDir } = compileProject({
+      ...BASE,
+      'compile.yaml': config(['adventureDescription: ./components/adv.cl.yaml', 'opening: ./openings/calm.md']),
+      'components/adv.cl.yaml': 'sections:\n  pitch:\n    text: A **quiet** harbor town.\n',
+    });
+    const out = read(leafDesc(tmpDir, 'calm'));
+
+    expect(out).not.toContain('---');
+    expect(out).not.toMatch(/^(description|advanced):/m);
+  });
+
+  test('a blurb and an adventureDescription together leave the leaf files without the key', () => {
+    const { tmpDir } = compileProject({
+      ...BASE,
+      'compile.yaml': config([
+        'description: ./components/desc.cl.yaml',
+        'adventureDescription: ./components/adv.cl.yaml',
+      ]),
+      'components/desc.cl.yaml': 'sections:\n  pitch:\n    text: The *blurb*.\n',
+      'components/adv.cl.yaml': 'sections:\n  pitch:\n    text: You wake.\n',
+    });
+
+    expect(read(rootDesc(tmpDir))).toContain('description: The blurb.');
+    expect(read(leafDesc(tmpDir, 'calm'))).not.toMatch(/^description:/m);
+  });
+});
+
 // ── §7.7's opening guard ─────────────────────────────────────────────────────
 
 describe('a leaf description with no opening is CL0616', () => {
@@ -551,7 +658,7 @@ describe('an unbranched project is its own leaf, so both keys aim at one file', 
     });
 
     expect(codes(diagnostics, CODES.DESCRIPTION_KEYS_COLLIDE)).toHaveLength(1);
-    expect(read(rootDesc(tmpDir)).trim()).toBe('A story about a harbor.');
+    expect(rootBody(tmpDir).trim()).toBe('A story about a harbor.');
   });
 
   test('either one alone is silent', () => {

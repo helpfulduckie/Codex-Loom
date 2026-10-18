@@ -14,16 +14,24 @@
 #
 # Every rendered body leads with the item's own name. The Story Card *title* (`## Name`)
 # is invisible to the AI storyteller — it only ever reads the body — so the name has to be
-# a rendered line. Three partials carry the three shapes a field list cannot express:
+# a rendered line. Three `parts:` fields carry the shapes a plain field cannot say, and
+# each renders bare (no label) as the first entry of a template list:
 #
-#   cardName.partial    `{$aid.title} - {tagline}`   — story cards, and the World slot
-#   rosterLine.partial  `{$aid.title} - {role}; {gender}; {age}; {hair}` — the cast roster
-#   youLine.partial     `You: {$name.display}`       — the player, in the You slot
+#   cardName    title, then the tagline  — story cards, and the World slot
+#   rosterLine  title, then role and the physical traits — the cast roster
+#   youLine     `You: ` and the display name — the player, in the You slot
 #
 fields:
-  # These fields are read through name-led partials and intentionally have no list stanza.
-  Tagline:     { label: Tagline }
-  role:        { label: Role }
+  # The name lines. A literal drops with its neighbor, so a missing tagline drops the
+  # " - " too; the roster's role and traits drop together as one nested group.
+  cardName:    { parts: [$aid.title, " - ", { from: Tagline, join: "" }] }
+  rosterLine:  { parts: [$aid.title, " - ",
+                         { parts: [{ from: role }, "; ",
+                                   { from: [Physical Traits.gender, Physical Traits.age,
+                                            Physical Traits.hair], join: "; " }] }] }
+  youLine:     { parts: ["You: ", $name.display] }
+
+  # `Tagline` and `role` are read by the name lines above and carry no stanza of their own.
   vibe:        { label: Vibe, join: "; ", wrap: "[]" }
   appearance:  { label: Appearance,
                  from: [Physical Traits.gender, Physical Traits.age,
@@ -56,16 +64,16 @@ groups:
 
 templates:
   # Story cards and the World slot: the name line, then the fields.
-  Character:   [{ include: cardName }, core, Magic, Background, relationships, secret]
-  Location:    [{ include: cardName }, vibe, era, technology, landmarks, factions]
-  MagicSystem: [{ include: cardName }, source, cost, limits, practitioners]
+  Character:   [cardName, core, Magic, Background, relationships, secret]
+  Location:    [cardName, vibe, era, technology, landmarks, factions]
+  MagicSystem: [cardName, source, cost, limits, practitioners]
 
   # The Plot Essentials cast roster — one terse line per character, all inside one [ ]
-  # block. A slot-only template, never audited, so the partial may read a subset.
-  CharacterRoster: [{ include: rosterLine }]
+  # block. A slot-only template, never audited, so the field may read a subset.
+  CharacterRoster: [rosterLine]
 
   # The Plot Essentials You block — the player, addressed as "You".
-  Player: [{ include: youLine }, personality, Magic]
+  Player: [youLine, personality, Magic]
 
   # A one-line entry for the Summary component's open-threads slot — name line only.
-  Thread: [{ include: cardName }]
+  Thread: [cardName]

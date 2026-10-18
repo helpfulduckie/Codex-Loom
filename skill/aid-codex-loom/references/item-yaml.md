@@ -85,6 +85,8 @@ regard to capitalization.** A variant that sets `hair` overrides a body field wr
 
 Every semantic item string value expands `{%variable}`, including nested values in `body`, `v`, `notes`, `meta`, and `pronouns`; mapping keys and branch/variant selectors remain literal.
 
+`aid.title` and `name` fill each other: when `aid.title` is unset, `{$aid.title}` renders `name.full`, and when `name` is unset, `{$name.full}` and `{$name.display}` render from `aid.title` (the first word becomes the display name). When both are set, neither changes. The fill runs on each resolved variant branch separately.
+
 **Names, `aid.title`, and trigger values accept numbers as text, including in variants.** Scalar names and explicit `display`/`full` values keep a number as the text you typed: `1.50` stays `1.50`, `007` stays `007`, and a long integer keeps every digit.
 
 **Numbers in `body:`, `v:` and its aliases, `notes:`, and `pronouns:` also render as typed.** `gpa: 3.30` renders `3.30` and `schoolId: 0107420` renders `0107420`, with no quotes needed. `meta:` is the exception: it is data for tools and never card text, so its numbers stay parsed numbers a convention pack can check. A number reached through a YAML alias renders in its parsed form. Item `v:` supports nested mappings, lists, numbers, and booleans; config `variables:` is a flat table of strings and numbers used as replacement text, with null unbinding inherited entries.

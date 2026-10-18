@@ -665,6 +665,15 @@ its `metadata:` (`CL0629`): those belong to the scenario blurb, and the risk of 
 them onto a player's own adventure with no way to edit it back is asymmetric enough to be
 an ERROR.
 
+**The root `Description.md` gains a generated plain `description:`.** Velvet Lattice reads
+a plain field from `description:` and an advanced field from the body; with neither
+`description:` nor `advanced:` it ships the plain field empty. When the scenario blurb's
+metadata has no own `description` key and is not `advanced: false` (boolean, or the string
+`false`), the compiler writes `description:` holding the body with markdown stripped
+(`src/emit/plainText.js`). It is a floor: an authored `description:` wins, and
+`advanced: false` already makes the body the plain field. Only the scenario blurb is
+affected, never `adventureDescription`.
+
 **A leaf with an adventure description and no `Opening.md` is `CL0616`.** Velvet Lattice
 sets a node's prompt to `components["Opening"] or node.description`, so the pairing opens
 the adventure on the blurb, as though the store listing were the first scene. It is an

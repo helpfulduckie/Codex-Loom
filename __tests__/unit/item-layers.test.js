@@ -99,6 +99,26 @@ describe('layer record for a project-local item', () => {
     expect(entries[1].before).toBe('first');
     expect(item.body.mood).toBe(entries[1].after);
   });
+
+  test('a nested variant chain names each step by the chain up to it', () => {
+    const def = authored(lines(
+      'id: Fox',
+      'name: Fox',
+      'aid: {type: Character}',
+      'body: {mood: calm}',
+      'branches: {main: major/anchor}',
+      'variants:',
+      '  major:',
+      '    mood: major',
+      '    variants:',
+      '      anchor:',
+      '        mood: anchor',
+    ), 'fox.yaml');
+    const item = resolveItem(def, new Map(), ['main'], null, { layers: true });
+    const entries = at(item, 'body', 'mood');
+    expect(entries.map((e) => e.layer.name)).toEqual(['major', 'major/anchor']);
+    expect(entries.map((e) => e.origin.line)).toEqual([8, 11]);
+  });
 });
 
 describe('layer record for an imported item', () => {

@@ -11,8 +11,8 @@ templates:
   # Omission only: the terse crew card drops vibe, the expanded personality line,
   # Magic, Background, relationships and the secret. The name line and the two lines
   # a card cannot be read without stay, in their original order.
-  Character: [{ include: cardName }, appearance, personality]
+  Character: [cardName, appearance, personality]
 
   # Pattern 2 — a free-standing name, reachable only through templateFor. The one
   # crew member who stays detailed in the tier writes `render.template: CharacterFull`.
-  CharacterFull: [{ include: cardName }, vibe, appearance, personality, personalityExpanded, Magic, Background, relationships, secret]
+  CharacterFull: [cardName, vibe, appearance, personality, personalityExpanded, Magic, Background, relationships, secret]

@@ -155,6 +155,8 @@ aid:
 
 `aid.type` and `render.template` default to each other — if one is set the other is filled in automatically. If neither is set, the item cannot be rendered and a warning is emitted.
 
+`aid.title` and `name` fill each other: when `aid.title` is unset, `{$aid.title}` renders `name.full`, and when `name` is unset, `{$name.full}` and `{$name.display}` render from `aid.title` (the first word becomes the display name). When both are set, neither changes. The fill runs on each resolved variant branch separately.
+
 String values in `aid:` (e.g. `title`, `triggers`) support `{%variable}` expansion, the same as `body:`. **`aid.type` is validated after expansion** — since it becomes a folder and filename, an illegal path segment (`< > : " / \ | ? *`, control chars, `.`/`..`, or a trailing space/period) aborts the compile.
 
 **Names, `aid.title`, and trigger values accept numbers as text, including in variants.** The text is the number as you typed it: `1.50` stays `1.50`, `007` stays `007`, and a long integer keeps every digit.

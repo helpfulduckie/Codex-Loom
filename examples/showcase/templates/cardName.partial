@@ -1,1 +1,0 @@
-{$aid.title} - {join("; ", $body.Tagline)}

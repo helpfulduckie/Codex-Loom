@@ -124,7 +124,7 @@
     triggers: ['%heroName%']
   notes: The player character, named at adventure start.
   render:
-    # `Player` renders `You: %heroName%` from `youLine.partial`, then personality and magic.
+    # `Player` renders `You: %heroName%` from the `youLine` field, then personality and magic.
     # It never reads `Tagline`, so this item does not carry one.
     template: Player
     storyCard: false

@@ -62,7 +62,8 @@ The codebase is one file per concern (§3.2). `compile.js` orchestrates the pipe
 | `src/model/componentSettings.js` | Authored paths and normalized section fields, with visibility for the preview settings list |
 | `src/previewCompare.js` | `comparePreviews`: what differs between two preview results (see Comparing two previews) |
 | `src/sources.js` | Text overrides for the files a compile reads (`options.sources`), consulted by the six text readers through `readSource` |
-| `src/treeWrite.js` | Recursive writers for interior-node framing, labels, placeholders and descriptions; component-spec resolution |
+| `src/treeWrite.js` | Recursive writers for interior-node framing, labels, placeholders and descriptions; component-spec resolution; adds the generated plain `description:` to the root Description.md frontmatter (`withPlainDescription`) |
+| `src/emit/plainText.js` | `stripMarkdown`, the markdown-to-plain-text pass behind that generated description |
 | `src/compiledTree.js` | The one compiled-output-tree traversal `seedmap`/`bodysize`/`overview` are built from — child lists, ancestor walk, per-node merge (§7.3a). `resolveAt` reads through a source: the disk by default, or `memorySource(map)` over a capturing compile's path-to-content map |
 | `src/reportDispatch.js` | End-of-compile report dispatch and the load-diagnostic replay; the `CL0545` unused-role check |
 | `src/extract.js` | Named transforms for a section's `from:` source — `scriptBanner` (§7.7) |
@@ -314,7 +315,7 @@ The final merged registry is passed to every downstream function. It is **read-o
 
 For local (non-import) items, steps 2–5 are skipped. `_include_variants` and `_include_branch_spec` are attached by `resolveIncludes()` to carry include-directive settings.
 
-After resolution, `aid.type` and `render.template` are cross-defaulted: each is filled in from the other if absent.
+After resolution, `aid.type` and `render.template` are cross-defaulted: each is filled in from the other if absent. `aid.title` and `name` are cross-filled the same way, after name normalization: a missing `aid.title` takes `name.full`, and a missing `name` becomes `{display: first word, full: title}`, with origins carried from the authored key.
 
 ---
 
@@ -617,7 +618,7 @@ Library path resolution no longer needs a bespoke two-pass. v3 resolved plain-pa
 
 **A rename-on-import item's row is `project`, not `library:<set>`.** `id: dragon` over `import: wyvern` registers under `dragon` with `_source` pointing at the project file that declared the rename (`buildRegistry` only stamps `_canonSource` on library-loaded items); `Via` carries `wyvern` so the row still answers "where did this come from" despite the local id having moved. A bare `import:` with no local `id:` never gets its own registry row at all — it resolves at render time to the library item, whose row already carries its own library provenance.
 
-**Not the same question as `library-dependencies.json`** (`compile.js`, written to `config._resolvedOutput`). That manifest is per-library-*directory*, keyed by library name; this report is per-*item*. The manifest existing does not mean this report is redundant with it.
+**Not the same question as `library-dependencies.json`** (`compile.js`, written to `config._resolvedOutput`). That manifest is per-library-*directory*, keyed by library name; this report is per-*item*. The manifest also carries a top-level `templates` array, one `{ expression, resolvedPath, files }` entry (plus `missing: true` when absent) per template dir outside the project's base, in config order, so a consumer comparing file times against `generatedAt` sees an edit to a shared template dir. `files` lists the `.template`, `.partial` and `.cl.yaml`/`.cl.yml` files the template loader reads, sorted; `resolvedPath` is the path the compile read (inside the snapshot for a frozen project). The key is absent when no template dir is out of base, and the manifest is written when either `library` or `templates` is non-empty. The manifest existing does not mean this report is redundant with it.
 
 ---
 

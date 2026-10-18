@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-11T04:27:42.434Z",
+  "generatedAt": "2026-10-15T00:08:32.238Z",
   "compileYaml": "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\roles-and-pronouns\\compile.cl.yaml",
   "variables": {
     "genre": "Low fantasy",
@@ -19,5 +19,14 @@
         "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\core\\settings.cl.yaml"
       ]
     }
-  }
+  },
+  "templates": [
+    {
+      "expression": "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\templates",
+      "resolvedPath": "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\templates",
+      "files": [
+        "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\templates\\fields.cl.yaml"
+      ]
+    }
+  ]
 }

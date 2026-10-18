@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-11T04:27:42.106Z",
+  "generatedAt": "2026-10-15T00:08:31.884Z",
   "compileYaml": "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\variants-and-fieldops\\compile.cl.yaml",
   "variables": {
     "genre": "Low fantasy",
@@ -27,5 +27,14 @@
         "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\grimwood\\places.cl.yaml"
       ]
     }
-  }
+  },
+  "templates": [
+    {
+      "expression": "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\templates",
+      "resolvedPath": "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\templates",
+      "files": [
+        "C:\\Users\\blues\\Workshop\\4 Code\\4.3 AID Tools\\4.3.11 Codex Loom\\Codex-Loom\\examples\\library\\templates\\fields.cl.yaml"
+      ]
+    }
+  ]
 }

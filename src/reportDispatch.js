@@ -36,6 +36,26 @@ function buildLibraryManifest(config) {
   return manifest;
 }
 
+// Same files loadTemplates reads, so a change the compile would notice is a change here.
+const TEMPLATE_DIR_SUFFIXES = ['.template', '.partial', '.cl.yaml', '.cl.yml'];
+
+// Only out-of-base dirs: an in-base template dir sits under the project's own tree, which
+// consumers already watch. Order follows the config, and indexes of the two arrays align.
+function buildTemplatesManifest(config) {
+  const { findFiles } = require('./util');
+  const sources = config._resolvedTemplatesSource || [];
+  const read = config._resolvedTemplates || [];
+  const entries = [];
+  sources.forEach((source, i) => {
+    if (!isOutOfBase(source, config._base)) return;
+    const resolvedPath = read[i];
+    const missing = !fs.existsSync(resolvedPath);
+    const files = missing ? [] : findFiles(resolvedPath, TEMPLATE_DIR_SUFFIXES).sort();
+    entries.push({ expression: resolvedPath, resolvedPath, files, ...(missing ? { missing: true } : {}) });
+  });
+  return entries;
+}
+
 function runReports({
   config, configPath, options, log, registry, rootDirName,
   fieldTable, tierTemplates, captureReports, leafData, inventoryData, allItemDefs, usageData,
@@ -158,13 +178,15 @@ function finalizeDiagnostics({
   log.info(`\n${allItemIds.size} unique items across project. Wrote ${totalFiles} file(s).`);
 
   const libraryManifest = buildLibraryManifest(config);
-  if (Object.keys(libraryManifest).length > 0) {
+  const templatesManifest = buildTemplatesManifest(config);
+  if (Object.keys(libraryManifest).length > 0 || templatesManifest.length > 0) {
     const manifestPath = path.join(config._resolvedOutput, 'library-dependencies.json');
     const manifestData = {
       generatedAt: new Date().toISOString(),
       compileYaml: path.resolve(configPath),
       variables: config.variables || {},
       library: libraryManifest,
+      ...(templatesManifest.length > 0 ? { templates: templatesManifest } : {}),
     };
     writeOutputFile(manifestPath, JSON.stringify(manifestData, null, 2));
     log.verbose(`  OK: Library manifest → ${manifestPath}`);

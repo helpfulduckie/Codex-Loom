@@ -2,6 +2,8 @@
 # doc: 10-field-declarations.md#declaration-keys
 
 fields:
+  cardName:    { parts: [$aid.title, " - ", { from: Tagline, join: "; " }] }
+  youLine:     { parts: ["You: ", { from: Tagline, join: "; " }] }
   Tagline:     { label: Tagline }
   vibe:        { label: Vibe, join: "; ", wrap: "[]" }
   appearance:  { label: Appearance,
@@ -28,15 +30,15 @@ groups:
   core: [vibe, appearance, originalAppearance, personality, personalityExpanded]
 
 templates:
-  Character: [{ include: cardName }, core, Magic, Background, relationships, secret]
+  Character: [cardName, core, Magic, Background, relationships, secret]
 
   # An inline override: `vibe` renders under a different label and without the join.
-  Location: [{ include: cardName }, { field: vibe, label: Culture Vibe, render: bare }, landmarks, pantheon]
+  Location: [cardName, { field: vibe, label: Culture Vibe, render: bare }, landmarks, pantheon]
 
-  Faction: [{ include: cardName }, overview, purpose, structure, methods, status]
+  Faction: [cardName, overview, purpose, structure, methods, status]
 
   # A brief list for the Plot Essentials cast slot — still name-led.
-  CharacterBrief: [{ include: cardName }, appearance, personality]
+  CharacterBrief: [cardName, appearance, personality]
 
   # The Plot Essentials You block — the player, addressed as "You".
-  Player: [{ include: youLine }, appearance, personality, personalityExpanded]
+  Player: [youLine, appearance, personality, personalityExpanded]

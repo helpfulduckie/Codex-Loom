@@ -119,6 +119,12 @@ function resolveItem(itemDef, registry, branchPath, onWarn, options = {}) {
   const record = options.layers ? [] : null;
   const traceOf = (kind, name, library) => (record
     ? { layer: { kind, name, library: library || null }, record } : undefined);
+  // A selector like `major/anchor` applies one delta per step, and each step's layer is named
+  // by the chain up to it: `major`'s fields read `major`, `anchor`'s read `major/anchor`.
+  const stepTraces = (kind, vPath, library) => {
+    const parts = vPath.split('/').map(p => p.trim()).filter(Boolean);
+    return (i) => traceOf(kind, parts.slice(0, i + 1).join('/'), library);
+  };
   // Every exclusion returns through here so a caller can learn which key caused it.
   const exclude = (reason, variant, loc) => {
     if (options.onExclude) options.onExclude({ reason, variant, loc });
@@ -143,9 +149,9 @@ function resolveItem(itemDef, registry, branchPath, onWarn, options = {}) {
     for (const { name: vPath, loc } of variantSelectors(itemDef, 'importVariants')) {
       const ivDeltas = collectVariantDeltas(canonItem, vPath, onWarn, { loc });
       if (ivDeltas === null) return exclude('variant', vPath, loc);
-      const ivTrace = traceOf('library-variant', vPath, canonItem._canonSource);
-      for (const delta of ivDeltas) {
-        applyDelta(item, delta, onWarn, ivTrace);
+      const ivTrace = stepTraces('library-variant', vPath, canonItem._canonSource);
+      for (const [i, delta] of ivDeltas.entries()) {
+        applyDelta(item, delta, onWarn, ivTrace(i));
       }
     }
 
@@ -186,20 +192,20 @@ function resolveItem(itemDef, registry, branchPath, onWarn, options = {}) {
       const deltas = collectVariantDeltas(variantSource, vName, onWarn, { loc });
       if (deltas === null) return exclude('variant', vName, loc);
       const variantTrace = variantSource === itemDef
-        ? traceOf('project-variant', vName, null)
-        : traceOf('library-variant', vName, canonItem._canonSource);
-      for (const delta of deltas) {
+        ? stepTraces('project-variant', vName, null)
+        : stepTraces('library-variant', vName, canonItem._canonSource);
+      for (const [i, delta] of deltas.entries()) {
         if (delta.importVariants && canonItem) {
           for (const { name: cvPath, loc: canonLoc } of variantSelectors(delta, 'importVariants')) {
             const canonDeltas = collectVariantDeltas(canonItem, cvPath, onWarn, { loc: canonLoc });
             if (canonDeltas === null) return exclude('variant', cvPath, canonLoc);
-            const canonTrace = traceOf('library-variant', cvPath, canonItem._canonSource);
-            for (const canonDelta of canonDeltas) {
-              applyDelta(item, canonDelta, onWarn, canonTrace);
+            const canonTrace = stepTraces('library-variant', cvPath, canonItem._canonSource);
+            for (const [j, canonDelta] of canonDeltas.entries()) {
+              applyDelta(item, canonDelta, onWarn, canonTrace(j));
             }
           }
         }
-        applyDelta(item, delta, onWarn, variantTrace);
+        applyDelta(item, delta, onWarn, variantTrace(i));
       }
       if (variantSource === itemDef) recordProjectBodyEdits();
       else bodySnap = bodyLeafValues(item.body);
@@ -218,9 +224,9 @@ function resolveItem(itemDef, registry, branchPath, onWarn, options = {}) {
       for (const vPath of parseVariantsList(itemDef._include_variants)) {
         const incDeltas = collectVariantDeltas(itemDef, vPath, onWarn, { silent: true });
         if (incDeltas === null) return exclude('variant', vPath, originLocation(itemDef, ['_include_variants']));
-        const incTrace = traceOf(variantKind, vPath, null);
-        for (const delta of incDeltas) {
-          applyDelta(item, delta, onWarn, incTrace);
+        const incTrace = stepTraces(variantKind, vPath, null);
+        for (const [i, delta] of incDeltas.entries()) {
+          applyDelta(item, delta, onWarn, incTrace(i));
         }
       }
     }
@@ -233,9 +239,9 @@ function resolveItem(itemDef, registry, branchPath, onWarn, options = {}) {
     for (const { name: vName, loc } of branchVariantNames) {
       const localDeltas = collectVariantDeltas(sourceItemForVariants, vName, onWarn, { silent: fannedOut, loc });
       if (localDeltas === null) return exclude('variant', vName, loc);
-      const localTrace = traceOf(variantKind, vName, null);
-      for (const delta of localDeltas) {
-        applyDelta(item, delta, onWarn, localTrace);
+      const localTrace = stepTraces(variantKind, vName, null);
+      for (const [i, delta] of localDeltas.entries()) {
+        applyDelta(item, delta, onWarn, localTrace(i));
       }
     }
 
@@ -317,6 +323,20 @@ function resolveItem(itemDef, registry, branchPath, onWarn, options = {}) {
       rawName.full = first;
       transferOrigins(item, item, firstPath, ['name', 'full']);
     }
+  }
+
+  // Runs after name normalization so name.full is settled, and after variant merging so
+  // each resolved branch fills from its own authored key.
+  const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
+  const nameObj = item.name && typeof item.name === 'object' && !Array.isArray(item.name) ? item.name : null;
+  if (isBlank(item.aid.title) && nameObj && !isBlank(nameObj.full)) {
+    item.aid.title = String(nameObj.full);
+    transferOrigins(item, item, ['name', 'full'], ['aid', 'title']);
+  } else if (!isBlank(item.aid.title) && (!nameObj || (isBlank(nameObj.full) && isBlank(nameObj.display)))) {
+    const title = String(item.aid.title);
+    item.name = { display: title.trim().split(/\s+/)[0], full: title };
+    transferOrigins(item, item, ['aid', 'title'], ['name', 'display'], { descendants: false });
+    transferOrigins(item, item, ['aid', 'title'], ['name', 'full'], { descendants: false });
   }
 
   return item;

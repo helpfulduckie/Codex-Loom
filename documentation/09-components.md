@@ -697,10 +697,13 @@ produces:
 tags:
   - thriller
   - dark
+description: A psychological thriller.
 ---
 
 A psychological thriller.
 ```
+
+The `description:` line is generated, not authored; see [the plain description](#the-plain-description-is-generated-for-you).
 
 The frontmatter block alone, from the `metadata:` mapping:
 
@@ -722,6 +725,16 @@ The key is declared on every component, but only the two description components 
 **`metadata:` is taken whole from the document that declares it.** It is never merged: `imports:` brings in sections only, so an imported document's `metadata:` is not carried over, even when the importing document declares none. A branch that names a different description document gets that document's `metadata:` and nothing from its parent's.
 
 **Its keys are written exactly as authored.** They are Velvet Lattice's keys, so the compiler does not match them by capitalization or check them for collisions: `Tags` and `tags` are two keys, and both are written. `{%variables}` expand in the values, never in the keys. This is the opposite of an item's `meta:`, whose keys match in any capitalization because Codex Loom's own tooling reads them.
+
+### The plain description is generated for you
+
+Velvet Lattice fills the scenario's plain description from `description:` in the root `Description.md` frontmatter, and the advanced field from the body. A file with neither `description:` nor `advanced:` ships the plain field empty. So when the scenario blurb's `metadata:` declares no `description:`, Codex Loom writes one: the body with markdown stripped (emphasis, links, images, headings, list and quote markers, code fences and backticks, HTML tags and rules). Line breaks and blank lines between paragraphs stay.
+
+**The generated key is a floor, not an override.** Declare `description:` in `metadata:` and your text is written untouched and nothing is generated. Declare `advanced: false` and nothing is generated either, because Velvet Lattice already uses the body as the plain field. Only the exact lowercase key `description` counts as authored; `Description:` is a different key, written as-is, and does not suppress generation.
+
+**A passthrough `.md` or `.txt` file that carries its own frontmatter is left alone.** Nothing is generated, and the file is written as authored.
+
+**Only the scenario blurb gets it.** `adventureDescription` and its per-leaf `Description.md` files never gain `description:` or `advanced:`, and declaring them there is `CL0629`.
 
 ### Prose descriptions still work
 

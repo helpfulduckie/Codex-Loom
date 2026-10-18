@@ -200,6 +200,8 @@ branches:
 
 `components.description` points at a `.md` or a `.yaml`, and writes `Description.md` at the node root — the AID scenario description field.
 
+**The root `Description.md` gets a plain `description:` generated into its frontmatter.** Velvet Lattice ships an empty plain field when the file has neither `description:` nor `advanced:`, so Codex Loom writes `description:` holding the body with markdown stripped (emphasis, links, headings, list and quote markers, code, HTML). It is a floor, not an override: an authored `metadata.description` is left alone, and `advanced: false` (already "body is the plain field") suppresses it. Only the exact lowercase key counts as authored. `adventureDescription` leaves never get it. A passthrough file that carries its own frontmatter is left alone.
+
 ---
 
 ## Scripts
