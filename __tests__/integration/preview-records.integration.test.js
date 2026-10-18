@@ -1,0 +1,633 @@
+'use strict';
+
+/** The preview records that describe a project around its items, and `comparePreviews`. */
+
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+const { withTmpDir, writeTree } = require('../helpers/project');
+const { PROJECTS, CONFIG_NAME } = require('../../examples/projects');
+
+const { preview, comparePreviews, freezeLibraries } = require('../../src/compile');
+
+const LIBRARY = [
+  '- id: Hero',
+  '  name: Hero',
+  '  aid: {type: Item, title: Hero}',
+  '  render: {template: Item}',
+  '  body: {Desc: library hero, Rank: captain}',
+  '- id: Spare',
+  '  name: Spare',
+  '  aid: {type: Item, title: Spare}',
+  '  render: {template: Item}',
+  '  body: {Desc: never imported, Rank: none}',
+].join('\n');
+
+const FILES = {
+  'templates/Item.template': '{$body.Desc}/{$body.Rank}',
+  'library/lib.yaml': LIBRARY,
+  'items/items.yaml': [
+    '- import: core:Hero',
+    '  body: {Desc: project hero, Motto: onward}',
+    '  branches: {A: {branches: {x: bold}}}',
+    '  variants:',
+    '    bold: {body: {Desc: bold hero}}',
+    '- id: Sidekick',
+    '  name: Sidekick',
+    '  aid: {type: Item, title: Sidekick}',
+    '  render: {template: Item, plotEssential: {slot: party}}',
+    '  body: {Desc: side, Rank: squire}',
+    '  branches: {B: ~}',
+    '- id: Ghost',
+    '  name: Ghost',
+    '  aid: {type: Item, title: Ghost}',
+    '  render: {template: Item}',
+    "  body: {Desc: 'pale; {%greeting}', Rank: none}",
+    '  branches: {B: gone}',
+    '  variants:',
+    '    gone: ~',
+  ].join('\n'),
+  'components/pe.yaml': [
+    'sections:',
+    '  intro:',
+    "    text: 'Set in {%place}.'",
+    '    render: {position: 1}',
+    '  party:',
+    '    slot: true',
+    '    render: {position: 2, wrapper: curly}',
+    '    branches: {A: {branches: {y: tight}}}',
+    '    variants:',
+    '      tight: {render: {wrapper: square}}',
+    '  extras:',
+    '    slot: true',
+    '    render: {position: 3}',
+    '  secret:',
+    "    text: 'hidden from {$guide.display}'",
+    '    branches: {A: {branches: {y: ~}}}',
+    '    render: {position: 4}',
+  ].join('\n'),
+  'components/pe-b.yaml': [
+    'imports:',
+    '  - from: %TMP%/components/pe.yaml',
+    'sections:',
+    '  intro:',
+    '    render: {position: 9}',
+  ].join('\n'),
+  'compile.yaml': [
+    'version: 4',
+    'structure:',
+    '  input:',
+    '    items: [%TMP%/items]',
+    '    library: {core: %TMP%/library}',
+    '    templates: [%TMP%/templates]',
+    '  output: %TMP%/output',
+    'variables:',
+    '  place: Harbor',
+    "  greeting: 'Welcome to {%place}'",
+    'roles:',
+    '  guide: Hero',
+    'components:',
+    '  plotEssential: %TMP%/components/pe.yaml',
+    'branches:',
+    '  A:',
+    '    variables: {place: Summit}',
+    '    branches:',
+    '      x: {}',
+    '      y:',
+    '        roles: {guide: Sidekick}',
+    '  B:',
+    '    components:',
+    '      plotEssential: %TMP%/components/pe-b.yaml',
+  ].join('\n'),
+};
+
+function project() {
+  const dir = withTmpDir();
+  writeTree(dir, FILES);
+  return {
+    dir,
+    config: path.join(dir, 'compile.yaml'),
+    file: (rel) => path.join(dir, ...rel.split('/')),
+  };
+}
+
+const leafOf = (result, label) => result.leaves.find((leaf) => leaf.label === label);
+const itemOf = (result, label, id) => leafOf(result, label).items
+  .map((index) => result.items[index]).find((item) => item.id === id);
+const fieldOf = (item, dotted) => item.fields.find((field) => field.path.join('.') === dotted);
+const baseOf = (result, at) => path.basename(result.sourceFiles[at.file]);
+// Bindings, sections and output files are tables; these read a leaf's entries through them.
+const contextOf = (result, label) => {
+  const { variables, roles } = leafOf(result, label).context;
+  const rows = (indexes) => indexes.map((index) => result.bindings[index]);
+  return { variables: rows(variables), roles: rows(roles) };
+};
+const componentOf = (result, label, key) => {
+  const component = leafOf(result, label).components[key];
+  return {
+    ...component,
+    sections: component.sections.map((index) => result.sections[index]),
+    output: result.outputs[component.output],
+  };
+};
+
+describe('preview records around the items', () => {
+  let proj;
+  let result;
+  beforeAll(() => {
+    proj = project();
+    result = preview(proj.config);
+  });
+
+  test('the result compiles and survives a JSON round trip', () => {
+    expect(result.status).toBe('ok');
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+  });
+
+  test('project names the config and the directories it resolves to', () => {
+    expect(result.project).toEqual({
+      config: proj.config,
+      title: null,
+      base: proj.dir,
+      items: [proj.file('items')],
+      templates: [proj.file('templates')],
+      inputRoots: [
+        { kind: 'library', name: 'core', path: proj.file('library'), sourcePath: proj.file('library'), frozen: false },
+        { kind: 'template', name: '0', path: proj.file('templates'), sourcePath: proj.file('templates'), frozen: false },
+      ],
+      output: proj.file('output'),
+      reports: null,
+      snapshot: null,
+    });
+  });
+
+  test('branches is the branch tree with a path on every node', () => {
+    expect(result.branches).toEqual([
+      {
+        name: 'A', branchPath: ['A'], leaf: false, children: [
+          { name: 'x', branchPath: ['A', 'x'], leaf: true, children: [] },
+          { name: 'y', branchPath: ['A', 'y'], leaf: true, children: [] },
+        ],
+      },
+      { name: 'B', branchPath: ['B'], leaf: true, children: [] },
+    ]);
+  });
+
+  test('libraries lists every library item and whether the project imports it', () => {
+    expect(result.libraries).toHaveLength(1);
+    const [core] = result.libraries;
+    expect(core).toMatchObject({ name: 'core', frozen: false });
+    expect(core.files).toHaveLength(1);
+    expect(baseOf(result, core.files[0])).toBe('lib.yaml');
+    expect(core.files[0].items).toEqual([
+      expect.objectContaining({ id: 'Hero', name: 'Hero', line: 1, imported: true }),
+      expect.objectContaining({ id: 'Spare', name: 'Spare', line: 6, imported: false }),
+    ]);
+  });
+
+  test('an imported item names its library definition and the project entry that imports it', () => {
+    const hero = itemOf(result, 'A/x', 'Hero');
+    expect(hero.definition).toMatchObject({ line: 1, library: 'core' });
+    expect(baseOf(result, hero.definition)).toBe('lib.yaml');
+    expect(hero.importedAt).toMatchObject({ line: 1, library: null });
+    expect(baseOf(result, hero.importedAt)).toBe('items.yaml');
+
+    const sidekick = itemOf(result, 'A/x', 'Sidekick');
+    expect(sidekick.definition).toMatchObject({ line: 6, library: null });
+    expect(sidekick.importedAt).toBeNull();
+  });
+
+  test('a layer names where the value it replaced was authored', () => {
+    const layers = fieldOf(itemOf(result, 'A/x', 'Hero'), 'body.Desc').layers;
+    expect(layers.map((layer) => layer.kind)).toEqual(['project', 'project-variant']);
+    expect(layers[0]).toMatchObject({ before: 'library hero', beforeAbsent: false });
+    expect(layers[0].beforeOrigin).toMatchObject({ line: 5, library: 'core' });
+    expect(baseOf(result, layers[0].beforeOrigin)).toBe('lib.yaml');
+    expect(layers[1]).toMatchObject({ before: 'project hero', beforeAbsent: false });
+    expect(layers[1].beforeOrigin).toMatchObject({ line: 2, library: null });
+  });
+
+  test('a layer that adds a field says the field was absent before it', () => {
+    const [layer] = fieldOf(itemOf(result, 'A/x', 'Hero'), 'body.Motto').layers;
+    expect(layer).toMatchObject({ before: null, beforeAbsent: true, beforeOrigin: null });
+  });
+
+  test('a leaf lists the items excluded on it, with the reason and the key that excluded them', () => {
+    expect(leafOf(result, 'A/x').excluded).toEqual([]);
+    const excluded = leafOf(result, 'B').excluded;
+    expect(excluded).toEqual([
+      expect.objectContaining({ id: 'Sidekick', reason: 'branches', variant: null }),
+      expect.objectContaining({ id: 'Ghost', reason: 'variant', variant: 'gone' }),
+    ]);
+    expect(excluded[0].at).toMatchObject({ line: 11 });
+    expect(baseOf(result, excluded[0].at)).toBe('items.yaml');
+  });
+
+  test('context gives each variable its bindings from the root down and its resolved text', () => {
+    const { variables } = contextOf(result, 'A/x');
+    const place = variables.find((row) => row.name === 'place');
+    expect(place).toMatchObject({ value: 'Summit', resolved: 'Summit', bound: true, derived: false });
+    expect(place.layers).toEqual([
+      expect.objectContaining({ branchPath: [], before: null, after: 'Harbor', removed: false }),
+      expect.objectContaining({ branchPath: ['A'], before: 'Harbor', after: 'Summit', removed: false }),
+    ]);
+    expect(place.layers[0].at).toMatchObject({ line: 9 });
+    expect(place.layers[1].at).toMatchObject({ line: 17 });
+
+    const greeting = variables.find((row) => row.name === 'greeting');
+    expect(greeting).toMatchObject({ value: 'Welcome to {%place}', resolved: 'Welcome to Summit' });
+    expect(contextOf(result, 'B').variables.find((row) => row.name === 'greeting').resolved)
+      .toBe('Welcome to Harbor');
+  });
+
+  test('context marks a variable the compiler supplies as derived', () => {
+    const core = contextOf(result, 'B').variables.find((row) => row.name === 'core');
+    expect(core).toMatchObject({ derived: true, layers: [], resolved: proj.file('library') });
+  });
+
+  test('context gives each role its bindings and the item it resolves to', () => {
+    const [guide] = contextOf(result, 'A/y').roles;
+    expect(guide).toMatchObject({ name: 'guide', value: 'Sidekick', resolved: 'Sidekick' });
+    expect(guide.layers.map((layer) => [layer.branchPath, layer.after])).toEqual([
+      [[], 'Hero'], [['A', 'y'], 'Sidekick'],
+    ]);
+    expect(contextOf(result, 'A/x').roles[0]).toMatchObject({ resolved: 'Hero' });
+  });
+
+  test('an item names the variables it reads, including one read through another', () => {
+    expect(itemOf(result, 'A/x', 'Ghost').uses).toEqual({ variables: ['greeting', 'place'], roles: [] });
+    expect(itemOf(result, 'A/x', 'Sidekick').uses).toEqual({ variables: [], roles: [] });
+  });
+
+  test('a section names the variables and roles its own text reads', () => {
+    const uses = (label, name) => componentOf(result, label, 'plotEssential').sections
+      .find((section) => section.name === name).uses;
+    expect(uses('A/x', 'intro')).toEqual({ variables: ['place'], roles: [] });
+    expect(uses('A/x', 'secret')).toEqual({ variables: [], roles: ['guide'] });
+    expect(uses('A/x', 'party')).toEqual({ variables: [], roles: [] });
+    // A gated section renders nothing, so it reads nothing.
+    expect(uses('A/y', 'secret')).toEqual({ variables: [], roles: [] });
+  });
+
+  test('a component names the variables in the path that selects its file', () => {
+    expect(leafOf(result, 'A/x').components.plotEssential.pathVariables).toEqual([]);
+    const example = preview(path.resolve(__dirname, '../../examples/variants-and-fieldops', CONFIG_NAME), { live: true });
+    const [leaf] = example.leaves;
+    expect(leaf.components.plotEssential.pathVariables).toEqual(['core']);
+    // Inline prose has no sections, so the component itself carries what the prose reads.
+    expect(leaf.components.opening).toMatchObject({ sections: null, uses: { variables: [], roles: [] } });
+    expect(leaf.components.plotEssential.uses).toBeNull();
+  });
+
+  test('a binding that is the same on several leaves is held once', () => {
+    const greeting = (label) => leafOf(result, label).context.variables
+      .find((index) => result.bindings[index].name === 'greeting');
+    expect(greeting('A/x')).toBe(greeting('A/y'));
+    expect(greeting('A/x')).not.toBe(greeting('B'));
+  });
+});
+
+describe('preview component records', () => {
+  let result;
+  const pe = (label) => componentOf(result, label, 'plotEssential');
+  const section = (label, name) => pe(label).sections.find((s) => s.name === name);
+  beforeAll(() => { result = preview(project().config); });
+
+  test('a component names the branch node whose components entry selects it', () => {
+    expect(pe('A/x').selectedOn).toEqual([]);
+    expect(pe('A/x').selectedAt).toMatchObject({ line: 14 });
+    expect(pe('B').selectedOn).toEqual(['B']);
+    expect(pe('B').selectedAt).toMatchObject({ line: 24 });
+  });
+
+  test('a component names the output file the leaf reads and the node that owns it', () => {
+    expect(pe('A/x').output).toEqual({
+      path: 'Branches/A/Branches/x/Components/Plot Essentials.md', branchPath: ['A', 'x'],
+    });
+    const paths = new Set(result.files.map((file) => file.path));
+    for (const leaf of result.leaves) expect(paths.has(pe(leaf.label).output.path)).toBe(true);
+  });
+
+  test('a section that is the same on several leaves is held once', () => {
+    const extras = (label) => leafOf(result, label).components.plotEssential.sections
+      .find((index) => result.sections[index].name === 'extras');
+    expect(extras('A/x')).toBe(extras('A/y'));
+  });
+
+  test('sections come in render order with their state on the leaf', () => {
+    expect(pe('A/x').sections.map((s) => [s.name, s.state])).toEqual([
+      ['intro', 'rendered'], ['party', 'rendered'], ['extras', 'empty'], ['secret', 'rendered'],
+    ]);
+    expect(section('A/y', 'secret')).toMatchObject({ state: 'gated', text: null });
+    expect(section('B', 'party')).toMatchObject({ state: 'empty', occupants: [] });
+    expect(pe('B').sections.map((s) => s.name)).toEqual(['party', 'extras', 'secret', 'intro']);
+  });
+
+  test('a slot lists its occupants with the text each contributes', () => {
+    expect(section('A/x', 'party')).toMatchObject({
+      slot: true,
+      occupants: [{ id: 'Sidekick', order: 5, template: 'Item', text: 'side/squire' }],
+    });
+    expect(section('A/x', 'intro')).toMatchObject({ slot: false, text: 'Set in Summit.' });
+  });
+
+  test('a setting an importing component overrides names the importing file, and the section its own', () => {
+    const intro = section('B', 'intro');
+    expect(baseOf(result, intro.source)).toBe('pe.yaml');
+    const position = intro.settings.find((s) => s.path.join('.') === 'render.position');
+    expect(position).toMatchObject({ value: 9 });
+    expect(baseOf(result, position.origin)).toBe('pe-b.yaml');
+    const wrap = intro.settings.find((s) => s.path.join('.') === 'render.wrap');
+    expect(wrap).toMatchObject({ value: 'each', origin: null });
+  });
+
+  const setting = (label, name, dotted) => section(label, name).settings
+    .find((s) => s.path.join('.') === dotted);
+  const layersOf = (s) => s.layers.map((layer) => [
+    layer.kind, layer.name, baseOf(result, { file: layer.file }), layer.before, layer.after,
+  ]);
+
+  test('a setting an importing component overrides records the change, naming the imported value it replaced', () => {
+    expect(layersOf(setting('B', 'intro', 'render.position'))).toEqual([
+      ['override', null, 'pe-b.yaml', 1, 9],
+    ]);
+    const [layer] = setting('B', 'intro', 'render.position').layers;
+    expect(layer).toMatchObject({ op: 9, beforeAbsent: false, deleted: false });
+    expect(baseOf(result, layer.beforeOrigin)).toBe('pe.yaml');
+    expect(layer.beforeOrigin).toMatchObject({ line: 4, authoredPath: ['render', 'position'] });
+  });
+
+  test('a setting a section variant changes on the leaf records the variant as a layer', () => {
+    expect(setting('A/y', 'party', 'render.wrapper')).toMatchObject({ value: 'square' });
+    expect(layersOf(setting('A/y', 'party', 'render.wrapper'))).toEqual([
+      ['variant', 'tight', 'pe.yaml', 'curly', 'square'],
+    ]);
+  });
+
+  test('a setting only one record writes has no layers', () => {
+    expect(setting('A/x', 'intro', 'render.position').layers).toEqual([]);
+    expect(setting('A/x', 'party', 'render.wrapper')).toMatchObject({ value: 'curly', layers: [] });
+  });
+});
+
+describe('preview section history through a content-key switch', () => {
+  // Three files layer one section: text, then a file in its place, then an append. `text`,
+  // `file` and `from` replace one another, so the append extends the file's text, not Alpha.
+  let result;
+  beforeAll(() => {
+    const dir = withTmpDir();
+    writeTree(dir, {
+      'items/items.yaml': '[]',
+      'components/base.yaml': "sections:\n  intro:\n    text: 'Alpha.'\n",
+      'components/mid.md': 'Middle.',
+      'components/mid.yaml': 'imports:\n  - from: %TMP%/components/base.yaml\nsections:\n  intro:\n    file: %TMP%/components/mid.md\n',
+      'components/top.yaml': "imports:\n  - from: %TMP%/components/mid.yaml\nsections:\n  intro:\n    text: '+{ Omega.}'\n",
+      'compile.yaml': [
+        'version: 4', 'structure:', '  input:', '    items: [%TMP%/items]', '  output: %TMP%/output',
+        'components:', '  plotEssential: %TMP%/components/top.yaml', 'branches:', '  A: {}',
+      ].join('\n'),
+    });
+    result = preview(path.join(dir, 'compile.yaml'));
+  });
+
+  test('the text layers follow the merge, each starting from the one before', () => {
+    const intro = componentOf(result, 'A', 'plotEssential').sections.find((s) => s.name === 'intro');
+    expect(intro.text).toBe('Middle.\nOmega.');
+    const layers = intro.settings.find((s) => s.path.join('.') === 'text').layers;
+    expect(layers.map((layer) => [layer.kind, baseOf(result, { file: layer.file })])).toEqual([
+      ['override', 'mid.yaml'], ['source', 'mid.yaml'], ['override', 'top.yaml'],
+    ]);
+    expect(layers[0].before).toBe('Alpha.');
+    expect(baseOf(result, layers[0].beforeOrigin)).toBe('base.yaml');
+    expect(Object.keys(layers[0].after)).toEqual(['file']);
+    expect(layers[1].after).toBe('Middle.');
+    expect(layers[2].op).toBe('+{ Omega.}');
+    for (let i = 1; i < layers.length; i += 1) expect(layers[i].before).toEqual(layers[i - 1].after);
+  });
+});
+
+describe('preview card files', () => {
+  test('a card names the file its leaf reads it from, at the node that owns it', () => {
+    const result = preview(project().config);
+    const fileOf = (label, name) => {
+      const leaf = leafOf(result, label);
+      return result.outputs[leaf.cardFiles[leaf.cards.findIndex((index) => result.cards[index].name === name)]];
+    };
+    expect(fileOf('A/x', 'Hero')).toEqual({
+      path: 'Branches/A/Branches/x/Story Cards/Item/Item.md', branchPath: ['A', 'x'],
+    });
+    expect(fileOf('B', 'Hero')).toEqual({ path: 'Story Cards/Item/Item.md', branchPath: [] });
+    expect(fileOf('A/y', 'Sidekick')).toEqual({
+      path: 'Branches/A/Story Cards/Item/Item.md', branchPath: ['A'],
+    });
+  });
+
+  test.each(PROJECTS.map((p) => p.dir))('every card of %s is in the file its leaf names', (dir) => {
+    const result = preview(path.resolve(__dirname, '../../examples', dir, CONFIG_NAME), { live: true });
+    expect(result.status).toBe('ok');
+    const content = new Map(result.files.map((file) => [file.path, file.content]));
+    let checked = 0;
+    for (const leaf of result.leaves) {
+      expect(leaf.cardFiles).toHaveLength(leaf.cards.length);
+      leaf.cards.forEach((index, i) => {
+        expect(content.get(result.outputs[leaf.cardFiles[i]].path)).toContain(result.cards[index].rendered);
+        checked += 1;
+      });
+      for (const component of Object.values(leaf.components)) {
+        expect(content.has(result.outputs[component.output].path)).toBe(true);
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+});
+
+describe('preview of a blocked project', () => {
+  test('the records around the items are empty', () => {
+    const proj = project();
+    const result = preview(proj.config, { sources: { [proj.file('items/items.yaml')]: '- [unclosed' } });
+    expect(result.status).toBe('blocked');
+    expect(result).toMatchObject({
+      project: null, branches: [], libraries: [], sections: [], bindings: [], outputs: [],
+    });
+  });
+});
+
+describe('comparePreviews', () => {
+  let proj;
+  let base;
+  const withLibrary = (text) => preview(proj.config, { sources: { [proj.file('library/lib.yaml')]: text } });
+  beforeAll(() => {
+    proj = project();
+    base = preview(proj.config);
+  });
+
+  test('a preview compared with itself differs in nothing', () => {
+    const diff = comparePreviews(base, base);
+    expect(diff.status).toBe('ok');
+    expect(diff.leaves.map((leaf) => [leaf.a, leaf.b])).toEqual([['A/x', 'A/x'], ['A/y', 'A/y'], ['B', 'B']]);
+    for (const leaf of diff.leaves) {
+      expect(leaf).toMatchObject({ items: [], cards: [], components: [] });
+    }
+    expect(diff).toMatchObject({ items: [], libraries: [], unpaired: { a: [], b: [] } });
+  });
+
+  test('a library edit that reaches a card is counted on the item and marked as reaching output', () => {
+    const diff = comparePreviews(base, withLibrary(LIBRARY.replace('captain', 'major')));
+    expect(diff.items).toEqual([
+      { id: 'Hero', outputLeaves: [['A/x', 'A/x'], ['A/y', 'A/y'], ['B', 'B']], fieldLeaves: [] },
+    ]);
+    expect(diff.leaves[0].items).toEqual([
+      { id: 'Hero', change: 'changed', fields: [['body', 'Rank']], output: true },
+    ]);
+    expect(diff.leaves[0].cards).toEqual([
+      { name: 'Hero', type: 'Item', itemId: 'Hero', change: 'changed' },
+    ]);
+    expect(diff.libraries).toEqual([
+      expect.objectContaining({
+        library: 'core', id: 'Hero', change: 'changed', imported: true,
+        compiledAs: ['hero'], reachesOutput: true,
+      }),
+    ]);
+    expect(diff.files.changed).toContain('Story Cards/Item/Item.md');
+  });
+
+  test('a library edit the project overrides or never imports changes no item and reaches nothing', () => {
+    const edited = LIBRARY.replace('library hero', 'library champion').replace('never imported', 'still unused');
+    const diff = comparePreviews(base, withLibrary(edited));
+    expect(diff.items).toEqual([]);
+    expect(diff.libraries).toEqual([
+      expect.objectContaining({ id: 'Hero', change: 'changed', imported: true, reachesOutput: false }),
+      expect.objectContaining({ id: 'Spare', change: 'changed', imported: false, compiledAs: [], reachesOutput: false }),
+    ]);
+  });
+
+  test('a field change that moves no output is listed apart from one that does', () => {
+    const items = proj.file('items/items.yaml');
+    const edited = FILES['items/items.yaml'].replace('Motto: onward', 'Motto: forward');
+    const diff = comparePreviews(base, preview(proj.config, { sources: { [items]: edited } }));
+    expect(diff.items).toEqual([
+      { id: 'Hero', outputLeaves: [], fieldLeaves: [['A/x', 'A/x'], ['A/y', 'A/y'], ['B', 'B']] },
+    ]);
+  });
+
+  test('two leaves of one preview compare through pairs', () => {
+    const diff = comparePreviews(base, base, { pairs: [['A/x', 'B']] });
+    expect(diff.unpaired).toEqual({ a: ['A/y', 'B'], b: ['A/x', 'A/y'] });
+    const [leaf] = diff.leaves;
+    expect(leaf.items).toEqual(expect.arrayContaining([
+      { id: 'Hero', change: 'changed', fields: [['body', 'Desc']], output: true },
+      { id: 'Sidekick', change: 'removed', fields: [], output: true },
+      { id: 'Ghost', change: 'removed', fields: [], output: true },
+    ]));
+    expect(leaf.cards).toEqual(expect.arrayContaining([
+      { name: 'Sidekick', type: 'Item', itemId: 'Sidekick', change: 'removed' },
+    ]));
+    expect(leaf.components).toEqual([{
+      key: 'plotEssential', change: 'changed',
+      sections: [{ name: 'intro', change: 'changed' }, { name: 'party', change: 'changed' }],
+    }]);
+  });
+
+  test('a blocked preview on either side blocks the comparison', () => {
+    const blocked = preview(proj.config, { sources: { [proj.file('items/items.yaml')]: '- [unclosed' } });
+    expect(comparePreviews(base, blocked).status).toBe('blocked');
+  });
+});
+
+describe('preview comparison of output metadata and opaque files', () => {
+  test('a metadata-only edit changes the resolved component and its output file', () => {
+    const proj = project();
+    const component = proj.file('components/pe.yaml');
+    const authored = 'metadata: {category: "{%place}", tags: [harbor]}\n' + FILES['components/pe.yaml'];
+    const before = preview(proj.config, { sources: { [component]: authored } });
+    const after = preview(proj.config, {
+      sources: { [component]: authored.replace('tags: [harbor]', 'tags: [mountain]') },
+    });
+    expect(before.status).toBe('ok');
+    expect(after.status).toBe('ok');
+    expect(leafOf(before, 'A/x').components.plotEssential.metadata.category).toBe('Summit');
+    expect(leafOf(before, 'A/x').components.plotEssential.text)
+      .toBe(leafOf(after, 'A/x').components.plotEssential.text);
+    const diff = comparePreviews(before, after);
+    expect(diff.leaves[0].components).toEqual([{ key: 'plotEssential', change: 'changed', sections: [] }]);
+    expect(diff.files.changed).toContain(before.outputs[leafOf(before, 'A/x').components.plotEssential.output].path);
+    expect(diff.leaves[0].items).toEqual([]);
+    expect(diff.leaves[0].cards).toEqual([]);
+
+    const reordered = preview(proj.config, {
+      sources: { [component]: authored.replace('category: "{%place}", tags: [harbor]', 'tags: [harbor], category: "{%place}"') },
+    });
+    expect(comparePreviews(before, reordered).leaves[0].components).toEqual([]);
+  });
+
+  test('equal-length script edits compare by their captured bytes', () => {
+    const proj = project();
+    writeTree(proj.dir, {
+      'input.js': 'return 1;',
+      'compile.yaml': FILES['compile.yaml'] + '\nscripts: {input: ./input.js}\n',
+    });
+    const before = preview(proj.config);
+    fs.writeFileSync(proj.file('input.js'), 'return 2;', 'utf8');
+    const after = preview(proj.config);
+    const script = (result) => result.files.find((file) => file.path === 'Scripts/input.js');
+    expect(before.status).toBe('ok');
+    expect(after.status).toBe('ok');
+    expect(script(before)).toEqual({
+      path: 'Scripts/input.js', binary: true, bytes: 9,
+      digest: `sha256:${crypto.createHash('sha256').update('return 1;').digest('hex')}`,
+    });
+    expect(script(after).bytes).toBe(script(before).bytes);
+    expect(script(after).digest).not.toBe(script(before).digest);
+    expect(comparePreviews(before, after).files.changed).toContain('Scripts/input.js');
+    expect(JSON.parse(JSON.stringify(after))).toEqual(after);
+  });
+});
+
+describe('preview input root mappings', () => {
+  test('all template roots map the active frozen directory to the declared live directory without writes', () => {
+    const dir = withTmpDir();
+    const base = path.join(dir, 'project');
+    writeTree(base, {
+      ...FILES,
+      'templates/Item.template': '{$body.Desc}',
+      'compile.yaml': FILES['compile.yaml']
+        .replace('templates: [%TMP%/templates]', 'templates: [./templates, ../external-templates]')
+        .replace('  output:', '    snapshot: ./snapshot\n  output:'),
+    });
+    writeTree(dir, { 'external-templates/Extra.template': '{$body.Rank}' });
+    const config = path.join(base, 'compile.yaml');
+    expect(freezeLibraries(config).status).toBe('ok');
+    const writes = ['writeFileSync', 'mkdirSync', 'copyFileSync', 'rmSync', 'unlinkSync']
+      .map((method) => jest.spyOn(fs, method));
+    let frozen;
+    let live;
+    try {
+      frozen = preview(config);
+      live = preview(config, { live: true });
+      expect(comparePreviews(frozen, live).status).toBe('ok');
+      for (const write of writes) expect(write).not.toHaveBeenCalled();
+    } finally {
+      for (const write of writes) write.mockRestore();
+    }
+    expect(frozen.status).toBe('ok');
+    expect(frozen.project.inputRoots).toEqual([
+      {
+        kind: 'library', name: 'core', path: path.join(base, 'snapshot', 'core'),
+        sourcePath: path.join(base, 'library'), frozen: true,
+      },
+      {
+        kind: 'template', name: '0', path: path.join(base, 'templates'),
+        sourcePath: path.join(base, 'templates'), frozen: false,
+      },
+      {
+        kind: 'template', name: '1', path: path.join(base, 'snapshot', '1'),
+        sourcePath: path.join(dir, 'external-templates'), frozen: true,
+      },
+    ]);
+    expect(live.project.inputRoots).toEqual(frozen.project.inputRoots.map((root) => ({
+      ...root, path: root.sourcePath, frozen: false,
+    })));
+    expect(fs.existsSync(path.join(base, 'output'))).toBe(false);
+    expect(JSON.parse(JSON.stringify(frozen))).toEqual(frozen);
+  });
+});

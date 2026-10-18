@@ -5,6 +5,7 @@ const path = require('path');
 const { loadYaml } = require('./loader/yaml');
 const { CODES: DIAG_CODES, severityOf } = require('./diag');
 const { FUNCTION_NAMES } = require('./render/parse');
+const { noteVariable } = require('./usage');
 
 const YAML_SUFFIXES = Object.freeze(['.cl.yaml', '.cl.yml', '.yaml', '.yml']);
 
@@ -216,6 +217,8 @@ function resolveVariables(text, variables, sink = {}) {
       return match;
     }
 
+    // A variable read through another is noted too, since the text depends on both.
+    noteVariable(actualKey);
     return expand(String(declared[actualKey]), [...chain, lower]);
   });
 

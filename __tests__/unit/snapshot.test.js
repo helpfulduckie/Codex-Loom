@@ -106,6 +106,51 @@ describe('syncLibrary — the freeze', () => {
     expect(diffReport).toContain('all new (no previous snapshot entry)');
   });
 
+  test('a freeze with nothing to change rewrites the report to say so and leaves the manifest untouched', () => {
+    const { config } = buildProject();
+    syncLibrary(config);
+    fs.writeFileSync(path.join(tmpDir, 'main-lib', 'thing.cl.yaml'), 'id: Thing\nname: Changed\n', 'utf8');
+    syncLibrary(config);
+    const report = path.join(config._resolvedReports, 'snapshot', 'sync-diff.txt');
+    expect(fs.readFileSync(report, 'utf8')).toContain('changed: thing.cl.yaml');
+    const manifestPath = path.join(config._resolvedSnapshot, 'manifest.json');
+    const manifestBefore = fs.readFileSync(manifestPath, 'utf8');
+
+    const result = syncLibrary(config);
+
+    expect(fs.readFileSync(report, 'utf8')).toBe('Library "main": no changes.\n');
+    expect(fs.readFileSync(manifestPath, 'utf8')).toBe(manifestBefore);
+    expect(result.filesWritten).toBe(0);
+  });
+
+  test('a freeze with nothing to change still raises CL0116 for a library whose items do not validate', () => {
+    const { config } = buildProject();
+    writeFile('main-lib/thing.cl.yaml', 'id: Thing\nname: Thing\nweird: nope\n');
+    syncLibrary(config, { diagnostics: new Diagnostics() });
+
+    const diagnostics = new Diagnostics();
+    syncLibrary(config, { diagnostics });
+
+    expect(diagnostics.all.some((d) => d.code === CODES.LIBRARY_ROLE_SCAN_REFUSED)).toBe(true);
+  });
+
+  test('a freeze deletes a folder no manifest names and lists it in the report and the returned changes', () => {
+    const { config } = buildProject();
+    syncLibrary(config);
+    writeFile('snapshot/old-lib/a.txt', 'a');
+
+    const result = syncLibrary(config);
+
+    expect(fs.existsSync(path.join(config._resolvedSnapshot, 'old-lib'))).toBe(false);
+    expect(result.removedFolders).toEqual(['old-lib']);
+    expect(result.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'old-lib', kind: 'leftover', removed: ['a.txt'] }),
+    ]));
+    const report = fs.readFileSync(path.join(config._resolvedReports, 'snapshot', 'sync-diff.txt'), 'utf8');
+    expect(report).toContain('Unlisted folder "old-lib": removed, no longer used by this project.');
+    expect(report).toContain('  removed: a.txt');
+  });
+
   test('a re-sync after a source file is removed prunes it from snapshot/<name>/ and the manifest', () => {
     writeFile('main-lib/extra.cl.yaml', 'id: Extra\nname: Extra\n');
     const { config } = buildProject();

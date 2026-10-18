@@ -163,6 +163,7 @@ function main(rawArgs) {
     ['variance',   ['--with-variance', '--variance', '-V']],
     ['inventory',  ['--with-inventory', '--inventory', '-i']],
     ['schemaTables', ['--schema-tables']],
+    ['usage', ['--with-usage']],
     // Accepted so existing invocations keep working; every compile now sweeps its output.
     ['clean',      ['--clean',      '-c']],
     ['verbose',    ['--verbose',    '-v']],
@@ -221,7 +222,7 @@ function main(rawArgs) {
   }
 
   const doCompile    = flags.compile || flags.diff || flags.annotate || flags.variance || flags.inventory ||
-    flags.schemaTables ||
+    flags.schemaTables || flags.usage ||
     (!flags.leafReview && !flags.overview && !flags.seedMap && !flags.bodySizes && !flags.lint &&
       !flags.snapshot && !flags.migrate);
   const doLeafReview = flags.leafReview;
@@ -232,13 +233,13 @@ function main(rawArgs) {
   const doSnapshot   = flags.snapshot;
 
   if (positional.length === 0 && !flags.compile && !flags.diff && !flags.annotate && !flags.variance &&
-      !flags.inventory && !flags.schemaTables &&
+      !flags.inventory && !flags.schemaTables && !flags.usage &&
       !flags.leafReview && !flags.overview && !flags.seedMap && !flags.bodySizes && !flags.lint &&
       !flags.snapshot && !flags.migrate && !flags.renameToCl) {
     console.error(
       'Usage: codex-loom [mode flags] [compile options] [<folder | compile.yaml>]\n' +
       '  Modes (what runs):     --compile|-C  --leafReview|-l  --overview|-o  --seed-map|-s  --body-sizes|-b  --lint|-L  --snapshot  --migrate  --rename-cl\n' +
-      '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-variance|-V  --with-inventory|-i  --schema-tables  --verbose|-v  --live\n' +
+      '  Compile options:       --with-diff|-d  --with-annotate|-a  --with-variance|-V  --with-inventory|-i  --schema-tables  --with-usage  --verbose|-v  --live\n' +
       '  Migrate options:       --rename-cl  (renames the whole project to .cl.yaml / .cl.yml; also runs standalone on a v4 project)\n' +
       '  Diagnostics:           --lint-level=off|error|warn  (overrides lint.level; reaches the opinion layer only)\n' +
       '  No mode flag compiles. Report modes read the existing output tree; compile options force a compile.\n' +
@@ -337,7 +338,7 @@ function main(rawArgs) {
         compile(configPath, {
           log,
           diff: flags.diff, annotate: flags.annotate, variance: flags.variance, inventory: flags.inventory,
-          schemaTables: flags.schemaTables,
+          schemaTables: flags.schemaTables, usage: flags.usage,
           lintLevel, live: flags.live,
           diagnostics: compileDiagnostics,
         });
@@ -376,6 +377,10 @@ function main(rawArgs) {
           + `(${result.filesWritten} file(s)) to:\n  ${config._resolvedSnapshot}\n`
           + `Manifest: ${result.manifestPath}\n`
         );
+        // The freeze deletes without confirmation, so every deleted folder is named.
+        for (const name of result.removedFolders) {
+          console.log(`Removed snapshot/${name}/ (no longer used by this project)`);
+        }
         if (snapshotDiagnostics.hasErrors()) return 1;
       } catch (err) {
         console.error(`\nFatal: ${err.message}`);

@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const { loadManifest, isOutOfBase } = require('./config/load');
+const { loadManifest, isOutOfBase, loadCompileConfig } = require('./config/load');
 const { buildCanonRegistry } = require('./loader/registry');
 const { Diagnostics, CODES } = require('./diag');
 const { NULL_LOG } = require('./log');
@@ -122,87 +122,203 @@ function collectEntries(config) {
 }
 
 function entryLabel(entry) {
+  if (entry.kind === 'leftover') return `Unlisted folder "${entry.name}"`;
   return `${entry.kind === 'library' ? 'Library' : 'Template'} "${entry.name}"`;
 }
 
-function diffEntryLines(entry, prevSection, liveHashes) {
-  const label = entryLabel(entry);
+// What a freeze changes in one entry, against the manifest of the freeze before it.
+function diffEntry(entry, prevSection, liveHashes) {
+  const diff = { name: entry.name, kind: entry.kind, isNew: !prevSection, added: [], removed: [], changed: [] };
   if (!prevSection) {
-    const count = Object.keys(liveHashes).length;
-    return [`${label}: ${count} file(s), all new (no previous snapshot entry).`];
+    diff.added = Object.keys(liveHashes);
+    return diff;
   }
   const prevFiles = prevSection.files || {};
-  const added = [];
-  const removed = [];
-  const changed = [];
   for (const rel of Object.keys(liveHashes)) {
-    if (!(rel in prevFiles)) added.push(rel);
-    else if (prevFiles[rel] !== liveHashes[rel]) changed.push({ rel, from: prevFiles[rel], to: liveHashes[rel] });
+    if (!(rel in prevFiles)) diff.added.push(rel);
+    else if (prevFiles[rel] !== liveHashes[rel]) diff.changed.push({ rel, from: prevFiles[rel], to: liveHashes[rel] });
   }
   for (const rel of Object.keys(prevFiles)) {
-    if (!(rel in liveHashes)) removed.push(rel);
+    if (!(rel in liveHashes)) diff.removed.push(rel);
   }
-  if (added.length === 0 && removed.length === 0 && changed.length === 0) {
+  return diff;
+}
+
+function diffEntryLines(entry, diff) {
+  const label = entryLabel(entry);
+  if (diff.isNew) return [`${label}: ${diff.added.length} file(s), all new (no previous snapshot entry).`];
+  if (diff.added.length === 0 && diff.removed.length === 0 && diff.changed.length === 0) {
     return [`${label}: no changes.`];
   }
   const lines = [`${label}:`];
-  for (const rel of added) lines.push(`  added:   ${rel}`);
-  for (const rel of removed) lines.push(`  removed: ${rel}`);
-  for (const c of changed) lines.push(`  changed: ${c.rel} (${c.from} -> ${c.to})`);
+  for (const rel of diff.added) lines.push(`  added:   ${rel}`);
+  for (const rel of diff.removed) lines.push(`  removed: ${rel}`);
+  for (const c of diff.changed) lines.push(`  changed: ${c.rel} (${c.from} -> ${c.to})`);
   return lines;
 }
 
+const canonical = (value) => {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+};
+const sameState = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+
+function snapshotState(config, diagnostics) {
+  const snapshot = config._resolvedSnapshot;
+  const manifest = path.join(snapshot, 'manifest.json');
+  const previous = loadManifest(manifest, diagnostics);
+  const entries = collectEntries(config);
+  const collected = entries.map((entry) => {
+    const snapshotPath = path.join(snapshot, entry.name);
+    const live = hashTree(entry.sourcePath);
+    const frozen = hashTree(snapshotPath);
+    const section = (previous && (entry.kind === 'library' ? previous.library : previous.templates)) || {};
+    const diff = diffEntry(entry, { files: frozen }, live);
+    return {
+      ...entry, snapshotPath, live, frozen, isNew: !section[entry.name],
+      added: diff.added, removed: diff.removed, changed: diff.changed.map((c) => c.rel),
+    };
+  });
+  const hashes = new Map(collected.filter((e) => e.kind === 'library').map((e) => [e.name, e.live]));
+  const roles = computeRequiresRoles(entries, hashes);
+  const next = { manifestVersion: 2, library: {} };
+  if (entries.some((e) => e.kind === 'template')) next.templates = {};
+  for (const entry of collected) {
+    const section = { source: entry.sourcePath, files: entry.live };
+    const roleResult = entry.kind === 'library' ? roles.get(entry.name) : null;
+    if (roleResult && roleResult.roles) section.requiresRoles = roleResult.roles;
+    (entry.kind === 'library' ? next.library : next.templates)[entry.name] = section;
+  }
+  // Retired manifest entries still own frozen files which replacement must remove.
+  for (const kind of ['library', 'template']) {
+    const old = (previous && (kind === 'library' ? previous.library : previous.templates)) || {};
+    for (const [name, section] of Object.entries(old)) {
+      if (entries.some((e) => e.kind === kind && e.name === name)) continue;
+      const snapshotPath = path.resolve(snapshot, name);
+      if (isOutOfBase(snapshotPath, snapshot) || snapshotPath === path.resolve(snapshot)) {
+        throw new Error('Snapshot manifest entry is outside its destination.');
+      }
+      const frozen = hashTree(snapshotPath);
+      collected.push({ name, kind, sourcePath: section.source, snapshotPath, live: {}, frozen,
+        isNew: false, added: [], removed: Object.keys(frozen), changed: [] });
+    }
+  }
+  // The freeze owns the whole snapshot folder, so a folder no manifest names (left by an older
+  // freeze) is removed too. Files at the top level, manifest.json among them, are not folders.
+  const owned = new Set(collected.map((e) => e.name));
+  if (fs.existsSync(snapshot)) {
+    for (const dirent of fs.readdirSync(snapshot, { withFileTypes: true })) {
+      if (!dirent.isDirectory() || owned.has(dirent.name)) continue;
+      const snapshotPath = path.join(snapshot, dirent.name);
+      const frozen = hashTree(snapshotPath);
+      collected.push({ name: dirent.name, kind: 'leftover', sourcePath: null, snapshotPath, live: {}, frozen,
+        isNew: false, added: [], removed: Object.keys(frozen), changed: [] });
+    }
+  }
+  const { syncedAt, ...previousContent } = previous || {};
+  const manifestChanged = !sameState(previousContent, next);
+  const configFile = config._configPath;
+  const fingerprint = 'sha256:' + crypto.createHash('sha256').update(JSON.stringify(canonical({
+    config: configFile, configHash: hashFile(configFile), snapshot, entries: collected,
+    manifestHash: fs.existsSync(manifest) ? hashFile(manifest) : null,
+    snapshotFiles: hashTree(snapshot),
+  }))).digest('hex');
+  return { entries, collected, roles, next, manifest, fingerprint, manifestChanged,
+    hasChanges: manifestChanged || collected.some((e) => e.kind === 'leftover' || e.added.length || e.removed.length || e.changed.length) };
+}
+
+function snapshotDiagnostics(diagnostics) {
+  return diagnostics.all.map((d) => ({
+    code: d.code, severity: d.severity, message: d.message, file: d.file, line: d.line, col: d.col,
+  }));
+}
+
+function inspectSnapshot(configPath) {
+  const diagnostics = new Diagnostics();
+  const blocked = (reason) => ({ status: 'blocked', reason, diagnostics: snapshotDiagnostics(diagnostics),
+    config: path.resolve(configPath), snapshot: null, manifest: null, fingerprint: null,
+    hasChanges: false, manifestChanged: false, entries: [] });
+  const config = loadCompileConfig(configPath, { diagnostics, live: true });
+  if (!config || diagnostics.hasErrors()) return blocked('The compile config does not load.');
+  if (!config._resolvedSnapshot) return blocked('structure.input.snapshot is not set, so there is nothing to freeze.');
+  const state = snapshotState(config, diagnostics);
+  if (diagnostics.hasErrors()) return blocked('The snapshot manifest does not load.');
+  return { status: 'ok', reason: null, diagnostics: snapshotDiagnostics(diagnostics),
+    config: path.resolve(configPath), snapshot: config._resolvedSnapshot, manifest: state.manifest,
+    fingerprint: state.fingerprint, hasChanges: state.hasChanges, manifestChanged: state.manifestChanged,
+    entries: state.collected };
+}
+
 function syncLibrary(config, options = {}) {
-  const { log = NULL_LOG, diagnostics } = options;
+  const { log = NULL_LOG, diagnostics = new Diagnostics() } = options;
   const snapshotDir = config._resolvedSnapshot;
   if (!snapshotDir) {
     throw new Error('structure.input.snapshot is not set; nothing to sync.');
+  }
+
+  const state = snapshotState(config, diagnostics);
+  if (options.expectedState !== undefined && options.expectedState !== state.fingerprint) {
+    const error = new Error('Snapshot inputs changed since inspection; inspect and confirm again.');
+    error.staleSnapshot = true;
+    throw error;
   }
 
   const entries = collectEntries(config);
   const manifestPath = path.join(snapshotDir, 'manifest.json');
   const previousManifest = loadManifest(manifestPath, diagnostics);
 
+  // A freeze with nothing to change writes no frozen bytes and no manifest (so syncedAt stays
+  // put), but still rewrites the report and still checks library items; otherwise the report
+  // would keep describing an earlier sync as if it had just happened.
+  const writeFrozen = state.hasChanges;
+
   const newManifest = { manifestVersion: 2, syncedAt: new Date().toISOString(), library: {} };
   const hasTemplates = entries.some((e) => e.kind === 'template');
   if (hasTemplates) newManifest.templates = {};
 
   const reportLines = [];
+  const changes = [];
+  const removedFolders = []; // every folder deleted whole, so a caller can name each one
   let filesWritten = 0;
 
   const collected = entries.map((entry) => {
-    const files = listFilesRelative(entry.sourcePath);
-    const fileHashes = hashTree(entry.sourcePath);
-    return { entry, files, fileHashes };
+    const inspected = state.collected.find((e) => e.kind === entry.kind && e.name === entry.name);
+    return { entry, files: Object.keys(inspected.live), fileHashes: inspected.live };
   });
-  const fileHashesByName = new Map(collected.map((c) => [c.entry.name, c.fileHashes]));
-  const requiresRolesByName = computeRequiresRoles(entries, fileHashesByName);
+  const requiresRolesByName = state.roles;
 
   for (const { entry, files, fileHashes } of collected) {
     const prevSection = previousManifest
       ? (entry.kind === 'library' ? previousManifest.library : previousManifest.templates || {})[entry.name]
       : undefined;
-    reportLines.push(...diffEntryLines(entry, prevSection, fileHashes));
+    const inspected = state.collected.find((e) => e.kind === entry.kind && e.name === entry.name);
+    const diff = diffEntry(entry, { files: inspected.frozen }, fileHashes);
+    diff.isNew = !prevSection;
+    changes.push(diff);
+    reportLines.push(...diffEntryLines(entry, diff));
 
     const destDir = path.join(snapshotDir, entry.name);
-    for (const rel of files) {
-      const from = path.join(entry.sourcePath, rel);
-      const to = path.join(destDir, rel);
-      fs.mkdirSync(path.dirname(to), { recursive: true });
-      fs.copyFileSync(from, to);
-      filesWritten += 1;
-    }
-
-    if (fs.existsSync(destDir)) {
-      const keep = new Set(files);
-      for (const rel of listFilesRelative(destDir)) {
-        if (!keep.has(rel)) fs.rmSync(path.join(destDir, rel));
+    if (writeFrozen) {
+      for (const rel of files) {
+        const from = path.join(entry.sourcePath, rel);
+        const to = path.join(destDir, rel);
+        fs.mkdirSync(path.dirname(to), { recursive: true });
+        fs.copyFileSync(from, to);
+        filesWritten += 1;
       }
-      removeEmptyDirs(destDir);
+
+      if (fs.existsSync(destDir)) {
+        const keep = new Set(files);
+        for (const rel of listFilesRelative(destDir)) {
+          if (!keep.has(rel)) fs.rmSync(path.join(destDir, rel));
+        }
+        removeEmptyDirs(destDir);
+      }
     }
 
     const section = { source: entry.sourcePath, files: fileHashes };
-    const roleResult = requiresRolesByName.get(entry.name);
+    const roleResult = entry.kind === 'library' ? requiresRolesByName.get(entry.name) : null;
     if (roleResult && roleResult.refused) {
       diagnostics.error(
         CODES.LIBRARY_ROLE_SCAN_REFUSED,
@@ -219,16 +335,76 @@ function syncLibrary(config, options = {}) {
     log.verbose(`  synced ${entryLabel(entry)}: ${files.length} file(s)`);
   }
 
+  for (const retired of state.collected.filter((e) => !entries.some(
+    (entry) => entry.kind === e.kind && entry.name === e.name,
+  ))) {
+    // An active entry may reuse a retired entry's destination under another kind.
+    if (entries.some((entry) => entry.name === retired.name)) continue;
+    if (fs.existsSync(retired.snapshotPath)) {
+      fs.rmSync(retired.snapshotPath, { recursive: true });
+      removedFolders.push(path.basename(retired.snapshotPath));
+    }
+    changes.push({ ...retired, changed: [] });
+    reportLines.push(`${entryLabel(retired)}: removed, no longer used by this project.`,
+      ...retired.removed.map((rel) => `  removed: ${rel}`));
+  }
+
   if (config._resolvedReports) {
     const reportDir = path.join(config._resolvedReports, 'snapshot');
     fs.mkdirSync(reportDir, { recursive: true });
     fs.writeFileSync(path.join(reportDir, 'sync-diff.txt'), reportLines.join('\n') + '\n', 'utf8');
   }
 
-  fs.mkdirSync(snapshotDir, { recursive: true });
-  fs.writeFileSync(manifestPath, JSON.stringify(newManifest, null, 2), 'utf8');
+  if (writeFrozen) {
+    fs.mkdirSync(snapshotDir, { recursive: true });
+    fs.writeFileSync(manifestPath, JSON.stringify(newManifest, null, 2), 'utf8');
+  }
 
-  return { entries, filesWritten, manifestPath };
+  return { entries, filesWritten, manifestPath, changes, removedFolders };
+}
+
+/**
+ * The library freeze as a call that returns data, for a caller that is not the CLI. Reads
+ * the live libraries from disk, replaces the project's frozen copy with them, and says what
+ * changed. See "Freezing libraries" in the dev guide.
+ */
+function freezeLibraries(configPath, options = {}) {
+  const diagnostics = new Diagnostics();
+  const describe = () => diagnostics.all.map((d) => ({
+    code: d.code, severity: d.severity, message: d.message, file: d.file, line: d.line, col: d.col,
+  }));
+  const blocked = (reason) => ({
+    status: 'blocked', reason, diagnostics: describe(), snapshot: null, manifest: null, filesWritten: 0, removedFolders: [], entries: [],
+  });
+
+  const config = loadCompileConfig(configPath, { diagnostics, live: true });
+  if (!config || diagnostics.hasErrors()) return blocked('The compile config does not load.');
+  if (!config._resolvedSnapshot) return blocked('structure.input.snapshot is not set, so there is nothing to freeze.');
+
+  let result;
+  try {
+    result = syncLibrary(config, { diagnostics, expectedState: options.expectedState });
+  } catch (error) {
+    if (!error.staleSnapshot) throw error;
+    return blocked(error.message);
+  }
+  return {
+    status: 'ok',
+    reason: null,
+    diagnostics: describe(),
+    snapshot: config._resolvedSnapshot,
+    manifest: result.manifestPath,
+    filesWritten: result.filesWritten,
+    removedFolders: result.removedFolders,
+    entries: result.changes.map((diff) => ({
+      name: diff.name,
+      kind: diff.kind,
+      isNew: diff.isNew,
+      added: diff.added,
+      removed: diff.removed,
+      changed: diff.changed.map((c) => c.rel),
+    })),
+  };
 }
 
 function checkDrift(config, diagnostics, log) {
@@ -305,5 +481,5 @@ function checkDrift(config, diagnostics, log) {
 }
 
 module.exports = {
-  syncLibrary, checkDrift, hashTree, collectEntries, entryLabel,
+  syncLibrary, freezeLibraries, inspectSnapshot, checkDrift, hashTree, collectEntries, entryLabel,
 };

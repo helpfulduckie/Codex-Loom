@@ -239,12 +239,14 @@ function placeInheritedFiles({
       byType.get(type).push({ sortKey, rendered });
     };
     const tree = buildPlacementTree(leafPaths);
-    for (const rec of byName.values()) {
+    for (const [name, rec] of byName) {
       if (rec.clash) {
         // One leaf carries two cards of this name (CL0622). Override placement would be
         // ambiguous, so each version keeps the placement it would have on its own.
         for (const v of rec.versions) {
-          for (const node of frontier([], v.carry)) putOwned(node, v.type, v.sortKey, v.text);
+          for (const node of frontier([], v.carry)) {
+            putOwned(node, v.type, v.sortKey, v.text);
+          }
         }
         continue;
       }

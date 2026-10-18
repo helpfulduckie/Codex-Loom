@@ -139,6 +139,28 @@ describe('--snapshot (CLI mode)', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(tmpDir, 'snapshot', 'manifest.json'), 'utf8'));
     expect(manifest.library.main).not.toHaveProperty('requiresRoles');
   });
+
+  test('a second freeze with nothing to change still exits non-zero for a library whose items do not validate', () => {
+    const configPath = buildProject();
+    fs.writeFileSync(path.join(tmpDir, 'main-lib', 'note.cl.yaml'), '- id: Note\n  weird: nope\n', 'utf8');
+    spawnSync(process.execPath, [CLI, '--snapshot', configPath], { encoding: 'utf8', cwd: tmpDir });
+    const again = spawnSync(process.execPath, [CLI, '--snapshot', configPath], { encoding: 'utf8', cwd: tmpDir });
+    expect(again.status).not.toBe(0);
+    expect(again.stderr).toContain('CL0116');
+  });
+});
+
+describe('--snapshot (CLI mode) deletions', () => {
+  test('the CLI names every folder it deleted, retired entries and unlisted folders alike', () => {
+    const configPath = buildProject();
+    spawnSync(process.execPath, [CLI, '--snapshot', configPath], { encoding: 'utf8', cwd: tmpDir });
+    writeFile('snapshot/old-lib/a.txt', 'a');
+    fs.writeFileSync(configPath, fs.readFileSync(configPath, 'utf8').replace(`      main: ${path.join(tmpDir, 'main-lib')}\n`, ''), 'utf8');
+    const result = spawnSync(process.execPath, [CLI, '--snapshot', configPath], { encoding: 'utf8', cwd: tmpDir });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Removed snapshot/main/ (no longer used by this project)');
+    expect(result.stdout).toContain('Removed snapshot/old-lib/ (no longer used by this project)');
+  });
 });
 
 describe('drift notice at compile time', () => {
@@ -257,5 +279,193 @@ describe('snapshot-preferring resolution (--live escape hatch)', () => {
     const plotEssentials = read(tmpDir, 'Branches', 'main', 'Components', 'Plot Essentials.md');
     expect(plotEssentials).toContain('Original');
     expect(plotEssentials).not.toContain('Edited');
+  });
+});
+
+describe('freezeLibraries (the freeze as a call)', () => {
+  const { freezeLibraries } = require('../../src/compile');
+
+  test('the first freeze copies every library file and reports the entry as new', () => {
+    const configPath = buildProject();
+    const result = freezeLibraries(configPath);
+    expect(result).toMatchObject({
+      status: 'ok', reason: null, filesWritten: 1, snapshot: path.join(tmpDir, 'snapshot'),
+      entries: [{ name: 'main', kind: 'library', isNew: true, added: ['note.cl.yaml'], removed: [], changed: [] }],
+    });
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot', 'main', 'note.cl.yaml'))).toBe(true);
+    expect(fs.existsSync(result.manifest)).toBe(true);
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+  });
+
+  test('a later freeze names the files that changed, appeared and went', () => {
+    const configPath = buildProject();
+    freezeLibraries(configPath);
+    const note = path.join(tmpDir, 'main-lib', 'note.cl.yaml');
+    fs.writeFileSync(note, fs.readFileSync(note, 'utf8').replace('Original', 'Revised'), 'utf8');
+    writeFile('main-lib/extra.cl.yaml', '- id: Extra\n  aid: {type: Character, title: Extra}\n  render: {template: Character}\n');
+    expect(freezeLibraries(configPath).entries).toEqual([
+      { name: 'main', kind: 'library', isNew: false, added: ['extra.cl.yaml'], removed: [], changed: ['note.cl.yaml'] },
+    ]);
+    expect(fs.readFileSync(path.join(tmpDir, 'snapshot', 'main', 'note.cl.yaml'), 'utf8')).toContain('Revised');
+
+    fs.rmSync(path.join(tmpDir, 'main-lib', 'extra.cl.yaml'));
+    expect(freezeLibraries(configPath).entries[0]).toMatchObject({ added: [], removed: ['extra.cl.yaml'], changed: [] });
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot', 'main', 'extra.cl.yaml'))).toBe(false);
+  });
+
+  test('a freeze with nothing to adopt changes no entry', () => {
+    const configPath = buildProject();
+    freezeLibraries(configPath);
+    expect(freezeLibraries(configPath).entries).toEqual([
+      { name: 'main', kind: 'library', isNew: false, added: [], removed: [], changed: [] },
+    ]);
+  });
+
+  test('a project that declares no snapshot is blocked and nothing is written', () => {
+    const configPath = buildProject();
+    fs.writeFileSync(configPath, fs.readFileSync(configPath, 'utf8').replace('    snapshot: ./snapshot\n', ''), 'utf8');
+    const result = freezeLibraries(configPath);
+    expect(result).toMatchObject({ status: 'blocked', entries: [], filesWritten: 0 });
+    expect(result.reason).toMatch(/snapshot is not set/);
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot'))).toBe(false);
+  });
+
+  test('a config that does not load is blocked with its diagnostics', () => {
+    const configPath = buildProject();
+    fs.writeFileSync(configPath, 'version: [4', 'utf8');
+    const result = freezeLibraries(configPath);
+    expect(result.status).toBe('blocked');
+    expect(result.diagnostics.some((d) => d.code === 'CL0101')).toBe(true);
+  });
+});
+
+describe('saved snapshot inspection and confirmation', () => {
+  const { inspectSnapshot, freezeLibraries } = require('../../src/compile');
+  const { listFilesRelative } = require('../../src/util');
+  const diskState = () => listFilesRelative(tmpDir).map((rel) => {
+    const file = path.join(tmpDir, rel);
+    return [rel, fs.readFileSync(file).toString('hex'), fs.statSync(file).mtimeMs];
+  });
+
+  test('inspection reads actual frozen files without writing and a true no-op writes nothing', () => {
+    const config = buildProject();
+    const before = diskState();
+    const first = inspectSnapshot(config);
+    expect(first).toMatchObject({ status: 'ok', hasChanges: true, manifestChanged: true });
+    expect(first.entries[0]).toMatchObject({ added: ['note.cl.yaml'], frozen: {} });
+    expect(diskState()).toEqual(before);
+    expect(inspectSnapshot(config).fingerprint).toBe(first.fingerprint);
+    freezeLibraries(config, { expectedState: first.fingerprint });
+    const saved = diskState();
+    const same = inspectSnapshot(config);
+    expect(same).toMatchObject({ status: 'ok', hasChanges: false, manifestChanged: false });
+    expect(freezeLibraries(config, { expectedState: same.fingerprint }).filesWritten).toBe(0);
+    expect(diskState()).toEqual(saved);
+
+    writeFile('snapshot/main/note.cl.yaml', 'manually changed frozen content');
+    writeFile('snapshot/main/untracked.js', '1');
+    const edited = diskState();
+    const actual = inspectSnapshot(config);
+    expect(actual.entries[0]).toMatchObject({ changed: ['note.cl.yaml'], removed: ['untracked.js'] });
+    expect(actual.fingerprint).not.toBe(same.fingerprint);
+    expect(diskState()).toEqual(edited);
+    expect(freezeLibraries(config, { expectedState: same.fingerprint })).toMatchObject({ status: 'blocked', filesWritten: 0 });
+    expect(diskState()).toEqual(edited);
+  });
+
+  test.each(['config', 'live script', 'manifest', 'frozen file'])('%s changes invalidate confirmation before any write', (target) => {
+    const config = buildProject();
+    writeFile('main-lib/scripts/input.js', '1');
+    freezeLibraries(config);
+    const expectedState = inspectSnapshot(config).fingerprint;
+    if (target === 'config') {
+      fs.appendFileSync(config, '\n# saved config edit\n');
+    } else if (target === 'live script') writeFile('main-lib/scripts/input.js', '2');
+    else if (target === 'manifest') fs.appendFileSync(path.join(tmpDir, 'snapshot/manifest.json'), '\n');
+    else writeFile('snapshot/main/scripts/input.js', '2');
+    const changed = diskState();
+    expect(freezeLibraries(config, { expectedState })).toMatchObject({ status: 'blocked', filesWritten: 0 });
+    expect(diskState()).toEqual(changed);
+  });
+
+  test('script and external template changes are visible independently of item definitions', () => {
+    const config = buildProject();
+    const templates = path.join(tmpDir, '../' + path.basename(tmpDir) + '-templates');
+    fs.mkdirSync(templates);
+    try {
+      fs.writeFileSync(path.join(templates, 'Character.template'), 'one');
+      fs.writeFileSync(config, fs.readFileSync(config, 'utf8').replace(path.join(tmpDir, 'templates'), templates));
+      writeFile('main-lib/scripts/input.js', '1');
+      freezeLibraries(config);
+      const before = inspectSnapshot(config);
+      writeFile('main-lib/scripts/input.js', '2');
+      fs.writeFileSync(path.join(templates, 'Character.template'), 'two');
+      const after = inspectSnapshot(config);
+      expect(after.fingerprint).not.toBe(before.fingerprint);
+      expect(after.entries).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'library', changed: ['scripts/input.js'] }),
+        expect.objectContaining({ kind: 'template', changed: ['Character.template'] }),
+      ]));
+      expect(freezeLibraries(config, { expectedState: before.fingerprint }).status).toBe('blocked');
+    } finally { fs.rmSync(templates, { recursive: true, force: true }); }
+  });
+
+  test('a folder no manifest names is listed by inspection and deleted, with its report line, by the next freeze', () => {
+    const config = buildProject();
+    freezeLibraries(config);
+    writeFile('snapshot/old-lib/a.cl.yaml', 'a');
+    writeFile('snapshot/old-lib/deep/b.txt', 'b');
+    writeFile('snapshot/stray-note.txt', 'files at the top level are not folders');
+    const before = diskState();
+
+    const inspection = inspectSnapshot(config);
+    expect(inspection.hasChanges).toBe(true);
+    expect(inspection.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'old-lib', kind: 'leftover', removed: ['a.cl.yaml', 'deep/b.txt'] }),
+    ]));
+    expect(diskState()).toEqual(before);
+
+    const result = freezeLibraries(config, { expectedState: inspection.fingerprint });
+    expect(result).toMatchObject({ status: 'ok', removedFolders: ['old-lib'] });
+    expect(result.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'old-lib', kind: 'leftover', removed: ['a.cl.yaml', 'deep/b.txt'] }),
+    ]));
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot/old-lib'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot/stray-note.txt'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot/main/note.cl.yaml'))).toBe(true);
+    expect(inspectSnapshot(config).hasChanges).toBe(false);
+  });
+
+  test('an empty folder no manifest names is still a change and is deleted', () => {
+    const config = buildProject();
+    freezeLibraries(config);
+    fs.mkdirSync(path.join(tmpDir, 'snapshot/empty-dir'));
+    expect(inspectSnapshot(config).hasChanges).toBe(true);
+    expect(freezeLibraries(config).removedFolders).toEqual(['empty-dir']);
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot/empty-dir'))).toBe(false);
+  });
+
+  test('a manifest entry whose name escapes the snapshot folder is refused and nothing is deleted', () => {
+    const config = buildProject();
+    freezeLibraries(config);
+    writeFile('victim/keep.txt', 'keep');
+    const manifestPath = path.join(tmpDir, 'snapshot/manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    manifest.library['../victim'] = { source: path.join(tmpDir, 'victim'), files: {} };
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest), 'utf8');
+    expect(() => freezeLibraries(config)).toThrow(/outside its destination/);
+    expect(fs.readFileSync(path.join(tmpDir, 'victim/keep.txt'), 'utf8')).toBe('keep');
+  });
+
+  test('removing a library declaration reports and removes its owned frozen files', () => {
+    const config = buildProject();
+    freezeLibraries(config);
+    fs.writeFileSync(config, fs.readFileSync(config, 'utf8').replace(`      main: ${path.join(tmpDir, 'main-lib')}\n`, ''));
+    const inspection = inspectSnapshot(config);
+    expect(inspection).toMatchObject({ status: 'ok', hasChanges: true, manifestChanged: true });
+    expect(inspection.entries[0]).toMatchObject({ name: 'main', removed: ['note.cl.yaml'] });
+    expect(freezeLibraries(config, { expectedState: inspection.fingerprint }).status).toBe('ok');
+    expect(fs.existsSync(path.join(tmpDir, 'snapshot/main'))).toBe(false);
+    expect(inspectSnapshot(config).hasChanges).toBe(false);
   });
 });

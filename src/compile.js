@@ -38,6 +38,7 @@ const {
 } = require('./compileState');
 const { NULL_LOG } = require('./log');
 const { withSourceOverrides } = require('./sources');
+const { withUsageCapture } = require('./usage');
 
 
 function resolveRoles(config, configPath, diagnostics) {
@@ -187,7 +188,9 @@ function abortOnLoadErrors(diagnostics, { tolerant } = {}) {
 function compile(configPath, options = {}) {
   const buses = {};
   try {
-    return withSourceOverrides(options.sources, () => compileRun(configPath, options, buses));
+    return withSourceOverrides(options.sources, () => withUsageCapture(
+      !!(options.capture || options.usage), () => compileRun(configPath, options, buses),
+    ));
   } finally {
     takeOutputLedger(); // a run that threw before its sweep leaves no ledger behind
     if (options.diagnostics) {
@@ -294,6 +297,7 @@ function compileRun(configPath, options, buses) {
 
   const inventoryData = [];
   const componentDetails = [];
+  const usageData = options.usage ? [] : null;
 
   const gaps = new GapList();
 
@@ -301,6 +305,7 @@ function compileRun(configPath, options, buses) {
   const componentLoader = new ComponentLoader({
     diagnostics: compileDiagnostics, variables: rootVariables, base: config._base,
     tolerant: options.tolerant,
+    captureHistory: !!options.capture,
   });
 
   const descriptionLeaves = new Set();
@@ -323,7 +328,7 @@ function compileRun(configPath, options, buses) {
     placeholderState, roleState, gaps, componentLoader, roleStateByPath,
     deferredComponents, deferredScripts, deferredCardLeaves,
     descriptionLeaves, openingLeaves,
-    leafData, inventoryData, componentDetails, leafSummaries, allItemIds,
+    leafData, inventoryData, componentDetails, usageData, leafSummaries, allItemIds,
   });
 
   const packLoadFindings = runPackChecks(config, deferredCardLeaves, configPath, compileDiagnostics);
@@ -350,7 +355,7 @@ function compileRun(configPath, options, buses) {
     allItemIds, totalFiles, componentLoader,
     roleState, placeholderState, gaps, fieldAudit, cardTypeAudit,
     registry, rootDirName, fieldTable, tierTemplates,
-    captureReports, leafData, inventoryData, allItemDefs,
+    captureReports, leafData, inventoryData, allItemDefs, usageData,
     writeReports: !options.capture,
   });
 
@@ -371,7 +376,7 @@ function compileRun(configPath, options, buses) {
       : 0;
     return {
       config, leaves, leafData, inventoryData, deferredCardLeaves, captured, droppedKeys,
-      componentDetails,
+      componentDetails, canonRegistry, registry, allItemDefs,
     };
   }
 
@@ -396,4 +401,10 @@ module.exports = {
   // Required on first use: preview.js requires this module, so a top-level require here
   // would make the two load each other.
   get preview() { return require('./preview').preview; },
+  get comparePreviews() { return require('./previewCompare').comparePreviews; },
+  // The text the YAML parser is given in place of a source file's, for a tool that must
+  // agree with the compiler about which unquoted values are token text.
+  get preparse() { return require('./loader/preparse').preparse; },
+  get freezeLibraries() { return require('./snapshot').freezeLibraries; },
+  get inspectSnapshot() { return require('./snapshot').inspectSnapshot; },
 };

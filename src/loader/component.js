@@ -8,12 +8,14 @@ const { loadYamlDocument, YamlLoadError } = require('./yaml');
 const { readSource } = require('../sources');
 const { validate } = require('../schema');
 const { COMPONENT_SCHEMA } = require('./component-schema');
-const { normalizeComponent, mergeSectionRecords, applySectionSelector } = require('../model/component');
+const {
+  normalizeComponent, mergeSectionRecords, applySectionSelector, layersOf, withLayers,
+} = require('../model/component');
 const { resolveVariables } = require('../util');
 const { runExtractor } = require('../extract');
 const { CODES, Diagnostics, busWarner } = require('../diag');
 const {
-  attachOrigins, createOriginIndex, copyOrigins, transferOrigins, originLocation,
+  attachOrigins, createOriginIndex, copyOrigins, transferOrigins, originLocation, originAt,
 } = require('../origin');
 
 function isMapping(value) {
@@ -23,7 +25,7 @@ function isMapping(value) {
 function loadComponentDocument(spec, options = {}) {
   const {
     diagnostics, label = 'component', variables = null, base = null, stack = [],
-    dependencyLedger = null, requestedAt = null, tolerant = false,
+    dependencyLedger = null, requestedAt = null, tolerant = false, captureHistory = false,
   } = options;
 
   if (!spec || typeof spec !== 'string') return null;
@@ -84,10 +86,11 @@ function loadComponentDocument(spec, options = {}) {
   const document = attachOrigins({}, sourceMap.exportOrigins());
 
   const inherited = resolveImports(doc, spec, {
-    diagnostics, label, variables, base, stack, onWarn, dependencyLedger, document, tolerant,
+    diagnostics, label, variables, base, stack, onWarn, dependencyLedger, document, tolerant, captureHistory,
   });
-  const local = localSections(doc.sections, document);
-  const sections = inherited === null ? local : mergeSectionRecords(inherited, local, onWarn);
+  const local = localSections(doc.sections, document, captureHistory);
+  const sections = inherited === null
+    ? local : mergeSectionRecords(inherited, local, onWarn);
 
   const sourced = resolveSectionSources(sections, {
     spec, base, variables, diagnostics,
@@ -140,18 +143,22 @@ function checkComponentKeys(spec, options) {
 
 // Each section record carries its own origins, keyed relative to the section, so they
 // survive the import merge and overlay by value rather than by containing document.
-function localSections(sections, document) {
+// A preview starts each section's history here, empty: a section's first record is its
+// base, and only what later records change becomes a layer.
+function localSections(sections, document, captureHistory = false) {
   if (!isMapping(sections)) return sections || {};
   const out = transferOrigins(document, {}, ['sections'], []);
   for (const [name, def] of Object.entries(sections)) {
-    out[name] = isMapping(def) ? transferOrigins(document, { ...def }, ['sections', name], []) : def;
+    out[name] = isMapping(def)
+      ? withLayers(transferOrigins(document, { ...def }, ['sections', name], []), captureHistory ? [] : null)
+      : def;
   }
   return out;
 }
 
 function resolveImports(doc, spec, options) {
   const {
-    diagnostics, label, variables, base, stack, onWarn, dependencyLedger, document, tolerant,
+    diagnostics, label, variables, base, stack, onWarn, dependencyLedger, document, tolerant, captureHistory,
   } = options;
   const entries = Array.isArray(doc.imports) ? doc.imports : [];
   if (entries.length === 0) return null;
@@ -187,7 +194,7 @@ function resolveImports(doc, spec, options) {
     }
 
     const imported = loadComponentDocument(resolved, {
-      diagnostics, label, variables, base, stack: chain, dependencyLedger, tolerant,
+      diagnostics, label, variables, base, stack: chain, dependencyLedger, tolerant, captureHistory,
     });
     if (!imported) return;
 
@@ -205,7 +212,7 @@ function resolveImports(doc, spec, options) {
       }
     }
 
-    sections = mergeSectionRecords(sections, contributed, onWarn);
+    sections = mergeSectionRecords(sections, contributed, onWarn, { kind: 'import', name: null });
   });
 
   return sections;
@@ -217,7 +224,7 @@ function tagSectionOrigins(sections, fileBasename) {
   const out = {};
   for (const [name, def] of Object.entries(sections || {})) {
     if (def && typeof def === 'object' && !Array.isArray(def) && !('__importedFrom' in def)) {
-      out[name] = copyOrigins(def, { ...def, __importedFrom: fileBasename });
+      out[name] = withLayers(copyOrigins(def, { ...def, __importedFrom: fileBasename }), layersOf(def));
     } else {
       out[name] = def;
     }
@@ -258,7 +265,7 @@ function resolveOneSource(def, label, options) {
   if (!hasFile && !hasFrom) return def;
 
   const at = (...parts) => originLocation(def, parts, { file: spec });
-  const result = copyOrigins(def, { ...def });
+  const result = withLayers(copyOrigins(def, { ...def }), layersOf(def) && [...layersOf(def)]);
   delete result.file;
   delete result.from;
   transferOrigins(null, result, [], ['file']);
@@ -310,7 +317,7 @@ function resolveOneSource(def, label, options) {
 
   if (hasFile) {
     result.text = source.trimEnd();
-    return externalText(result, resolved);
+    return readLayer(def, result, 'file', resolved);
   }
 
   const { text, error } = runExtractor(def.from.extract, source);
@@ -320,7 +327,22 @@ function resolveOneSource(def, label, options) {
     return result;
   }
   result.text = text;
-  return externalText(result, resolved);
+  return readLayer(def, result, 'from', resolved);
+}
+
+// Reading the file is a step in the section's history: the `file:` or `from:` reference
+// becomes the text, which is what any later record changes.
+function readLayer(def, result, key, file) {
+  const layers = layersOf(result);
+  if (layers) {
+    layers.push({
+      path: ['text'], layer: { kind: 'source', name: null }, op: { [key]: def[key] },
+      origin: originAt(def, [key]) || null,
+      beforeOrigin: originAt(def, [key]) || null, beforeAbsent: false, before: { [key]: def[key] },
+      after: result.text, deleted: false,
+    });
+  }
+  return externalText(result, file);
 }
 
 // Loaded text has no YAML path: its origin is the file it was read from, with no line.

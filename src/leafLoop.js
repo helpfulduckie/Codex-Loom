@@ -18,6 +18,8 @@ const { checkUndeclaredPlaceholders } = require('./emit/placeholders');
 const { LIMITS, checkLimit } = require('./limits');
 const { questionsForMeasurement } = require('./treeWrite');
 const { buildBranchOutputDir } = require('./outputPaths');
+const { describeSections } = require('./componentView');
+const { withUsage, usageOf, createUsage, serializeUsage } = require('./usage');
 
 const LIFT_EXCLUDED_COMPONENTS = new Set(['opening', 'adventureDescription']);
 
@@ -31,7 +33,7 @@ function compileLeaf(branchPath, ctx) {
     placeholderState, roleState, gaps, componentLoader, roleStateByPath,
     deferredComponents, deferredScripts, deferredCardLeaves,
     descriptionLeaves, openingLeaves,
-    leafData, inventoryData, componentDetails, leafSummaries, allItemIds,
+    leafData, inventoryData, componentDetails, leafSummaries, allItemIds, usageData,
   } = ctx;
 
   let leafFiles = 0;
@@ -51,8 +53,10 @@ function compileLeaf(branchPath, ctx) {
   });
   const branchProtagonist = cctx.branchProtagonist;
 
+  const excludedItems = options.capture ? [] : null;
   const resolvedItems = resolveBranchItems(
-    allItemDefs, registry, branchPath, cctx.variables, diagnostics, { layers: !!options.capture },
+    allItemDefs, registry, branchPath, cctx.variables, diagnostics,
+    { layers: !!options.capture, excluded: excludedItems },
   );
 
   for (const item of resolvedItems) {
@@ -80,7 +84,7 @@ function compileLeaf(branchPath, ctx) {
   );
   deferredCardLeaves.push({
     branchPath, folderPath, outputDir, grouped: leafCardGroups,
-    lint: cctx.lint, variables: cctx.variables, resolvedItems,
+    lint: cctx.lint, variables: cctx.variables, resolvedItems, excludedItems,
   });
 
   if (options.inventory) {
@@ -100,17 +104,26 @@ function compileLeaf(branchPath, ctx) {
     let text;
     let segments;
     let excluded = false;
+    let shown = null;
+    const sectionUsage = options.capture || options.usage ? new Map() : null;
+    const proseUsage = createUsage();
+    // Inline specs were expanded while selecting components, before prose rendering.
+    if (inline && proseUsage) {
+      for (const name of cctx.componentPathUses[descriptor.key].variables) proseUsage.variables.add(name);
+    }
     if (passthrough !== null && passthrough !== undefined) {
-      const prose = resolveVariables(passthrough, cctx.variables, {
-        diagnostics, location: textAt,
+      text = withUsage(proseUsage, () => {
+        const prose = resolveVariables(passthrough, cctx.variables, {
+          diagnostics, location: textAt,
+        });
+        return descriptor.inlineProse
+          ? applyTokenPass(prose, {
+            item: {}, registry, branchProtagonist,
+            roles: cctx.roles, onRoleUsed: roleState.onUsed,
+            onWarn: busWarner(diagnostics, { ...textAt, branch: label }),
+          })
+          : prose;
       });
-      text = descriptor.inlineProse
-        ? applyTokenPass(prose, {
-          item: {}, registry, branchProtagonist,
-          roles: cctx.roles, onRoleUsed: roleState.onUsed,
-          onWarn: busWarner(diagnostics, { ...textAt, branch: label }),
-        })
-        : prose;
       segments = [{ key: descriptor.label, text }];
     } else {
       warnEmptySlots(descriptor, slotIndex, filled, label, diagnostics, spec);
@@ -121,6 +134,7 @@ function compileLeaf(branchPath, ctx) {
         ? selectComponentSections(component, fieldVariant, null, null,
           busWarner(diagnostics, { file: String(spec), branch: label }))
         : component;
+      shown = fieldComponent;
       ({ text, segments, excluded = false } = renderSectionedComponent(
         fieldComponent, branchPath, filled,
         {
@@ -128,9 +142,16 @@ function compileLeaf(branchPath, ctx) {
           variables: cctx.variables, registry, branchProtagonist,
           roles: cctx.roles, onRoleUsed: roleState.onUsed,
           onWarn: busWarner(diagnostics, { file: String(spec), branch: label }),
-          diagnostics, file: String(spec),
+          diagnostics, file: String(spec), sectionUsage,
         },
       ));
+    }
+    if (usageData) {
+      const add = (kind, id, usage) => usageData.push({ leaf: label, kind, id, uses: serializeUsage(usage) });
+      if (!inline) add('component-path', descriptor.key, cctx.componentPathUses[descriptor.key]);
+      if (shown) {
+        for (const [name, usage] of sectionUsage) add('section', descriptor.key + '/' + name, usage);
+      } else add('prose', descriptor.key, proseUsage);
     }
     checkUndeclaredPlaceholders(text, cctx.placeholders, {
       diagnostics,
@@ -188,6 +209,13 @@ function compileLeaf(branchPath, ctx) {
       if (options.capture) {
         componentDetails.push({
           label, key: descriptor.key, source: textAt, inline: !!inline, metadata,
+          descriptor, outputDir,
+          selectedAt: origin || null,
+          selectedOn: cctx.componentNodes[descriptor.key] || [],
+          sections: shown
+            ? describeSections(shown, branchPath, filled, segments, sectionUsage) : null,
+          uses: shown ? null : proseUsage,
+          pathVariables: cctx.componentPathUses[descriptor.key].variables,
         });
       }
       if (descriptor.key === 'adventureDescription') descriptionLeaves.add(label);
@@ -212,6 +240,11 @@ function compileLeaf(branchPath, ctx) {
         storyCardType: config.storyCardType,
         spec, branchLabel: label, cardTypeAudit,
       });
+    }
+  }
+  if (usageData) {
+    for (const item of resolvedItems) {
+      usageData.push({ leaf: label, kind: 'item', id: item.id, uses: serializeUsage(usageOf(item)) });
     }
   }
   const hasPE = !!sectionedWritten.plotEssential;
